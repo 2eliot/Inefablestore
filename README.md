@@ -1,5 +1,4 @@
-# InefableStore - Admin
-
+# InefableStore - 
 Administrador tipo "suit" con pestañas (Órdenes, Paquetes, Imágenes, Configuración) usando Flask, HTML, CSS y JS con base de datos SQLite.
 
 ## Requisitos
