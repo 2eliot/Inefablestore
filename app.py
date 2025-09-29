@@ -9,20 +9,40 @@ import smtplib
 import socket
 import threading
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 # Create Flask app
 app = Flask(__name__, instance_relative_config=True)
 load_dotenv()
 
-# Ensure instance folder exists for SQLite file
+# Ensure instance folder exists for local SQLite default
 os.makedirs(app.instance_path, exist_ok=True)
 
-# Basic configuration
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(app.instance_path, "inefablestore.sqlite")
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+# Basic configuration with DATABASE_URL (Postgres) or persistent Disk (SQLite)
+DB_URL = os.environ.get("DATABASE_URL", "").strip()
+if DB_URL:
+    # Normalize scheme for SQLAlchemy/psycopg2
+    if DB_URL.startswith("postgres://"):
+        DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+    app.config["SQLALCHEMY_DATABASE_URI"] = DB_URL
+else:
+    SQLITE_PATH = os.environ.get("SQLITE_PATH", "").strip()
+    if SQLITE_PATH:
+        try:
+            os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
+        except Exception:
+            pass
+        app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{SQLITE_PATH}"
+    else:
+        app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(app.instance_path, "inefablestore.sqlite")
+
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key")
-app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "static", "uploads")
+
+DEFAULT_UPLOAD = os.path.join(app.root_path, "static", "uploads")
+app.config["UPLOAD_FOLDER"] = os.environ.get("UPLOAD_FOLDER", DEFAULT_UPLOAD)
+try:
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+except Exception:
+    pass
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # Disable static caching in debug
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
