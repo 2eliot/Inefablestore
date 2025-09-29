@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='2') }}">
+{% endblock %}
+
+{% block header %}
+<header class="site-header">
+  <div class="container">
+    <div class="left-actions">
+      <button class="icon-btn hamburger" aria-label="Menú">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <a href="/" class="brand">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" alt="InefableStore" class="logo"/>
+      {% else %}
+        <span class="logo-text">InefableStore</span>
+      {% endif %}
+    </a>
+    <nav class="nav">
+      <div class="nav-item dropdown" id="dd-cats">
+        <button class="nav-link dd-toggle" type="button" aria-haspopup="true" aria-expanded="false">Categorías ▾</button>
+        <div class="dd-menu" role="menu" aria-label="Categorías" hidden>
+          <a href="#pkgs-gift" class="dd-item" data-cat="gift" role="menuitem">
+            <span class="dd-icon" aria-hidden="true">🎁</span>
+            <span>Gift Cards</span>
+          </a>
+          <a href="#pkgs-mobile" class="dd-item" data-cat="mobile" role="menuitem">
+            <span class="dd-icon" aria-hidden="true">✈️</span>
+            <span>Juegos Móviles</span>
+          </a>
+          <a href="#" class="dd-item" data-cat="other" role="menuitem">
+            <span class="dd-icon" aria-hidden="true">👤</span>
+            <span>Otros Servicios</span>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="right-actions">
+      <button class="icon-btn login" aria-label="Iniciar sesión">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<!-- Pay Modal moved here from header so header matches index -->
+<div id="pay-modal" class="auth-modal" hidden>
+  <div class="auth-card" style="max-width:720px;">
+    <button class="icon-btn auth-close" data-close-pay aria-label="Cerrar">✕</button>
+    <div class="auth-body">
+      <div class="auth-title" id="pay-total-title">Total a pagar</div>
+      <div class="card" style="background: rgba(2,6,23,0.6); color:#e5e7eb; border:1px solid rgba(148,163,184,0.30); border-radius:12px;">
+        <div style="padding:12px 16px; font-weight:900;">Información de pago</div>
+        <div id="pay-info" style="padding:0 16px 12px; display:grid; gap:10px;"></div>
+      </div>
+      <div class="card" style="background: rgba(2,6,23,0.6); color:#e5e7eb; border:1px solid rgba(148,163,184,0.30); border-radius:12px; margin-top:12px;">
+        <div style="padding:12px 16px; font-weight:900;">Tiempo restante para completar el pago</div>
+        <div id="pay-timer" style="padding:0 16px 12px; text-align:center; font-weight:800;">30:00</div>
+        <div style="padding:0 16px 16px;">
+          <input id="pay-ref" class="input" type="text" placeholder="Referencia (ej: últimos 6 dígitos)">
+          <button id="btn-confirm-pay" class="btn primary full" type="button">Confirmar Pago</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop"></div>
+</div>
+
+<section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}">
+  <div class="details-left">
+    <div class="game-hero">
+      <div class="banner" style="background-image:url('{{ game.image_path }}')"></div>
+      <h1 class="game-title">{{ game.name }}</h1>
+    </div>
+    <div class="pill-row">
+      <span class="pill">Pago seguro</span>
+      <span class="pill">Cash back</span>
+    </div>
+    <p class="game-desc" id="game-desc">{{ game.description }}</p>
+    <div class="selected-box" id="selected-box" hidden>
+      <div class="selected-title" id="selected-title"></div>
+      <div class="selected-price" id="selected-price"></div>
+    </div>
+  </div>
+  <div class="details-right">
+    <div class="step-card">
+      <div class="step-title">1 Ingrese sus datos</div>
+      <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID">
+    </div>
+
+    <div class="step-card">
+      <div class="step-title">2 Selecciona tu producto</div>
+      <div id="items-grid" class="items-grid"><!-- items --></div>
+      <div style="margin-top:10px; text-align:center;">
+        <button id="btn-more" class="btn" type="button" hidden>Ver más</button>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="step-title">3 Seleccione un método de pago</div>
+      <div class="pay-methods">
+        <button id="pay-bsd" class="btn pay" type="button">Pago Móvil</button>
+        <button id="pay-usd" class="btn pay" type="button">Binance</button>
+      </div>
+      <div class="summary">
+        <span>Total</span>
+        <strong id="summary-price">-</strong>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="step-title">4 Ingresa tus datos</div>
+      <input id="full-name" class="input" type="text" placeholder="Nombre y apellido">
+      <input id="email" class="input" type="email" placeholder="Correo de contacto">
+      <input id="phone" class="input" type="tel" placeholder="Número de teléfono">
+      <input id="ref-code" class="input" type="text" placeholder="CÓDIGO DE DESCUENTO (opcional)">
+      <small id="ref-status" style="color:#94a3b8;"></small>
+      <label class="check"><input id="save-data" type="checkbox"> Guardar datos para futuras compras</label>
+      <button id="btn-buy" class="btn primary full" type="button">Comprar</button>
+    </div>
+  </div>
+</section>
+<!-- Overlay and Drawer + Auth modal copied so header buttons work here too -->
+<div id="overlay" class="overlay" hidden></div>
+<aside id="left-drawer" class="drawer left" hidden>
+  <div class="drawer-header">
+    <strong>Menú</strong>
+    <button class="icon-btn close-left" aria-label="Cerrar">✕</button>
+  </div>
+  <nav class="drawer-nav" hidden></nav>
+  <div class="drawer-section">
+    <div class="drawer-title">Categorías</div>
+    <div class="drawer-list">
+      <button class="drawer-item" type="button" data-cat="gift">Gift Cards</button>
+      <button class="drawer-item" type="button" data-cat="mobile">Juegos Móviles</button>
+    </div>
+  </div>
+</aside>
+
+<div id="auth-modal" class="auth-modal" hidden>
+  <div class="auth-card">
+    <button class="icon-btn auth-close" aria-label="Cerrar">✕</button>
+    <div class="tabs-auth" role="tablist">
+      <button class="tab-auth active" data-target="#md-login" aria-selected="true">Iniciar sesión</button>
+      <button class="tab-auth" data-target="#md-register" aria-selected="false">Registrarse</button>
+    </div>
+    <div class="auth-body">
+      <div id="md-login" class="panel-auth active" role="tabpanel">
+        <div class="auth-title">Iniciar sesión</div>
+        <div class="alert" hidden></div>
+        <form onsubmit="return false;" class="form-auth">
+          <label>Email</label>
+          <input type="email" placeholder="tu@correo.com">
+          <label>Contraseña</label>
+          <div class="password-field">
+            <input type="password" placeholder="••••••••">
+            <button type="button" class="icon-eye" aria-label="Mostrar/Ocultar">👁️</button>
+          </div>
+          <div class="helper-row">
+            <a href="#" class="link">¿Olvidaste tu contraseña?</a>
+          </div>
+          <button class="btn primary full" type="button">Iniciar sesión</button>
+        </form>
+      </div>
+      <div id="md-register" class="panel-auth" role="tabpanel" hidden>
+        <div class="auth-title">Crear cuenta</div>
+        <div class="alert" hidden></div>
+        <form onsubmit="return false;" class="form-auth">
+          <label>Nombre</label>
+          <input type="text" placeholder="Nombre">
+          <label>Email</label>
+          <input type="email" placeholder="tu@correo.com">
+          <label>Teléfono</label>
+          <input type="tel" placeholder="Número de teléfono">
+          <label>Contraseña</label>
+          <input type="password" placeholder="Crea una contraseña">
+          <button class="btn primary full" type="button">Crear cuenta</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <!-- Footer inside content block -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="copyline">
+        <span>© Inefable Store</span>
+        <span>•</span>
+        <a href="/terms" target="_blank">Términos de uso</a>
+      </div>
+      <div class="contact-line">
+        <span class="label">Contactos:</span>
+        <div class="socials">
+          <a class="icon-btn" href="https://facebook.com/" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22 12.06C22 6.51 17.52 2 12 2S2 6.51 2 12.06c0 5.01 3.66 9.16 8.44 9.94v-7.03H7.9v-2.9h2.54V9.41c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.23.2 2.23.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.77l-.44 2.9h-2.33v7.03C18.34 21.22 22 17.07 22 12.06z"/></svg>
+          </a>
+          <a class="icon-btn" href="https://instagram.com/" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zm5.25-3a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25z"/></svg>
+          </a>
+          <a class="icon-btn" href="https://wa.me/" target="_blank" rel="noopener" aria-label="WhatsApp" title="WhatsApp">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.52 3.48A11.77 11.77 0 0 0 12 0 11.9 11.9 0 0 0 .11 12.26a11.75 11.75 0 0 0 1.73 6.06L0 24l5.86-1.84a11.9 11.9 0 0 0 6.06 1.63h.01A11.89 11.89 0 0 0 24 12.02a11.8 11.8 0 0 0-3.48-8.54zM12 21.26h-.01a9.86 9.86 0 0 1-5.02-1.37l-.36-.21-3.47 1.09 1.14-3.38-.24-.35a9.83 9.83 0 0 1-1.52-5.26A9.9 9.9 0 0 1 12 2.02a9.85 9.85 0 0 1 9.9 9.9 9.86 9.86 0 0 1-9.9 9.34z"/><path d="M17.27 14.16c-.27-.14-1.6-.79-1.85-.87s-.43-.14-.61.14-.7.87-.86 1.05-.32.2-.59.07a8.06 8.06 0 0 1-2.36-1.45 8.8 8.8 0 0 1-1.63-2 .51.51 0 0 1 .11-.58c.1-.1.27-.32.41-.47a1.92 1.92 0 0 0 .27-.45.52.52 0 0 0 0-.5c0-.14-.61-1.47-.84-2s-.44-.45-.61-.46h-.52a1 1 0 0 0-.73.34 3.06 3.06 0 0 0-.95 2.27 5.32 5.32 0 0 0 1.12 2.84 12.16 12.16 0 0 0 4.64 4 15.86 15.86 0 0 0 1.58.58 3.8 3.8 0 0 0 1.76.11 2.87 2.87 0 0 0 1.89-1.33 2.36 2.36 0 0 0 .16-1.33c-.06-.11-.25-.18-.52-.32z"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </footer>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/store.js', v='2') }}" defer></script>
+<script src="{{ url_for('static', filename='js/details.js', v='2') }}" defer></script>
+{% endblock %}

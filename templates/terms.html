@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='2') }}">
+<style>
+  .terms-wrap { max-width: 900px; margin: 28px auto; padding: 0 16px 40px; color: #e5e7eb; }
+  .terms-wrap h1 { font-size: 28px; font-weight: 900; margin: 12px 0; }
+  .terms-wrap h2 { font-size: 20px; font-weight: 800; margin: 18px 0 8px; }
+  .terms-wrap p, .terms-wrap li { color: #cbd5e1; }
+  .terms-wrap .card { background: rgba(3,7,18,0.6); border:1px solid rgba(148,163,184,0.22); border-radius: 14px; padding: 16px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
+</style>
+{% endblock %}
+
+{% block header %}
+<header class="site-header">
+  <div class="container">
+    <div class="left-actions"></div>
+    <a href="/" class="brand">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" alt="InefableStore" class="logo"/>
+      {% else %}
+        <span class="logo-text">InefableStore</span>
+      {% endif %}
+    </a>
+    <div class="right-actions"></div>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<section class="terms-wrap">
+  <div class="card">
+    <h1>Términos de uso</h1>
+    <p>Bienvenido a InefableStore. Al utilizar nuestros servicios, aceptas estos términos.</p>
+
+    <h2>1. Compras y pagos</h2>
+    <p>Las compras se procesan según el método elegido (Pago Móvil o Binance). Las referencias deben ser válidas.</p>
+
+    <h2>2. Reembolsos</h2>
+    <p>Los reembolsos están sujetos a evaluación caso por caso. Contáctanos por nuestras redes ante cualquier inconveniente.</p>
+
+    <h2>3. Entregas digitales</h2>
+    <p>Para categorías Gift Cards, recibirás un código digital tras la aprobación de tu orden.</p>
+
+    <h2>4. Soporte</h2>
+    <p>Estamos disponibles por Facebook, Instagram y WhatsApp.</p>
+
+    <h2>5. Modificaciones</h2>
+    <p>Podemos actualizar estos términos. Te recomendamos revisarlos periódicamente.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/store.js', v='2') }}" defer></script>
+{% endblock %}
