@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateMobileFooter() {
     if (!mfs) return;
-    const show = isMobile && selectedItemIndex >= 0;
+    const show = selectedItemIndex >= 0;
     if (!show) {
       mfs.classList.remove('show');
       mfs.setAttribute('hidden', '');

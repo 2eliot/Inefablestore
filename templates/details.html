@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='2') }}">
@@ -142,7 +142,6 @@
     <div id="mfs-price" class="mfs-price"></div>
   </div>
   <button id="mfs-close" class="mfs-close" aria-label="Cerrar">✕</button>
-  
 </div>
 <!-- Overlay and Drawer + Auth modal copied so header buttons work here too -->
 <div id="overlay" class="overlay" hidden></div>
@@ -234,3 +233,5 @@
 <script src="{{ url_for('static', filename='js/store.js', v='2') }}" defer></script>
 <script src="{{ url_for('static', filename='js/details.js', v='2') }}" defer></script>
 {% endblock %}
+
+

@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+﻿document.addEventListener('DOMContentLoaded', () => {
   console.log('admin.js loaded v5');
   const tabs = document.querySelectorAll('#adminTabs .tab');
   const panels = document.querySelectorAll('.tab-panel');
@@ -170,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!ordersWdList) return;
     ordersWdList.innerHTML = '';
     if (!items || items.length === 0) {
-      ordersWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerán aquí.</p></div>';
+      ordersWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerÃ¡n aquÃ­.</p></div>';
       return;
     }
     const fmtUSD = (n) => {
@@ -180,11 +180,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const tile = document.createElement('div');
       tile.className = 'order-tile';
       const when = new Date(r.created_at).toLocaleString();
-      const statusIcon = r.status === 'approved' ? '✅' : r.status === 'rejected' ? '⛔' : '⏳';
+      const statusIcon = r.status === 'approved' ? 'âœ…' : r.status === 'rejected' ? 'â›”' : 'â³';
       const statusClass = r.status === 'approved' ? 'ok' : r.status === 'rejected' ? 'rej' : 'pend';
       const payoutLine = (r.method === 'pm')
-        ? `Pago Móvil: ${r.pm_bank || ''} • ${r.pm_name || ''} • ${r.pm_phone || ''} • ${r.pm_id || ''}`
-        : `Binance: ${r.binance_email || ''} • ${r.binance_phone || ''}`;
+        ? `Pago MÃ³vil: ${r.pm_bank || ''} â€¢ ${r.pm_name || ''} â€¢ ${r.pm_phone || ''} â€¢ ${r.pm_id || ''}`
+        : `Binance: ${r.binance_email || ''} â€¢ ${r.binance_phone || ''}`;
       tile.innerHTML = `
         <div class="row-head">
           <div>
@@ -253,7 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!affWdList) return;
     affWdList.innerHTML = '';
     if (!items || items.length === 0) {
-      affWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerán aquí.</p></div>';
+      affWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerÃ¡n aquÃ­.</p></div>';
       return;
     }
     const fmtUSD = (n) => {
@@ -263,11 +263,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const tile = document.createElement('div');
       tile.className = 'order-tile';
       const when = new Date(r.created_at).toLocaleString();
-      const statusIcon = r.status === 'approved' ? '✅' : r.status === 'rejected' ? '⛔' : '⏳';
+      const statusIcon = r.status === 'approved' ? 'âœ…' : r.status === 'rejected' ? 'â›”' : 'â³';
       const statusClass = r.status === 'approved' ? 'ok' : r.status === 'rejected' ? 'rej' : 'pend';
       const payoutLine = (r.method === 'pm')
-        ? `Pago Móvil: ${r.pm_bank || ''} • ${r.pm_name || ''} • ${r.pm_phone || ''} • ${r.pm_id || ''}`
-        : `Binance: ${r.binance_email || ''} • ${r.binance_phone || ''}`;
+        ? `Pago MÃ³vil: ${r.pm_bank || ''} â€¢ ${r.pm_name || ''} â€¢ ${r.pm_phone || ''} â€¢ ${r.pm_id || ''}`
+        : `Binance: ${r.binance_email || ''} â€¢ ${r.binance_phone || ''}`;
       tile.innerHTML = `
         <div class="row-head">
           <div>
@@ -352,7 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(txt || 'No se pudo guardar métodos de pago');
+      throw new Error(txt || 'No se pudo guardar mÃ©todos de pago');
     }
     return res.json();
   }
@@ -567,7 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchImages() {
     const res = await fetch('/admin/images/list');
-    if (!res.ok) throw new Error('No se pudo listar imágenes');
+    if (!res.ok) throw new Error('No se pudo listar imÃ¡genes');
     return res.json();
   }
 
@@ -578,7 +578,7 @@ document.addEventListener('DOMContentLoaded', () => {
     imgIndex.byPath.clear();
     imgIndex.byTitle.clear();
     if (!items || items.length === 0) {
-      gallery.innerHTML = '<div class="empty-state"><h3>Sin imágenes</h3><p>Sube imágenes para usarlas en el sitio.</p></div>';
+      gallery.innerHTML = '<div class="empty-state"><h3>Sin imÃ¡genes</h3><p>Sube imÃ¡genes para usarlas en el sitio.</p></div>';
       return;
     }
     items.forEach(img => {
@@ -691,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!id) { console.warn('[images] cannot resolve id for delete'); toast('No se pudo resolver la imagen', 'error'); return; }
       // For overlay button, skip confirm to avoid blocked dialogs on some setups
       if (!(buttonEl && buttonEl.classList && buttonEl.classList.contains('btn-del-ov'))) {
-        const ok = confirm('¿Eliminar esta imagen? Esta acción no se puede deshacer.');
+        const ok = confirm('Â¿Eliminar esta imagen? Esta acciÃ³n no se puede deshacer.');
         if (!ok) return;
       }
       if (buttonEl) buttonEl.disabled = true;
@@ -834,12 +834,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Si la pestaña de Imágenes ya está activa al cargar, refrescar
+  // Si la pestaÃ±a de ImÃ¡genes ya estÃ¡ activa al cargar, refrescar
   if (document.querySelector('#tab-images.active')) {
     refreshGallery();
   }
 
-  // Delegación global (respaldo) para botones de imágenes
+  // DelegaciÃ³n global (respaldo) para botones de imÃ¡genes
   document.body.addEventListener('click', async (e) => {
     const del = e.target.closest('.btn-del');
     const delOv = e.target.closest('.btn-del-ov');
@@ -884,11 +884,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       const pkgs = (data && data.packages) || [];
       // Reset options
-      affPkgSelect.innerHTML = '<option value="">— Selecciona un juego —</option>';
+      affPkgSelect.innerHTML = '<option value="">â€” Selecciona un juego â€”</option>';
       pkgs.forEach(p => {
         const opt = document.createElement('option');
         opt.value = String(p.id);
-        opt.textContent = `${p.name} ${p.category ? '· '+p.category.toUpperCase() : ''}`;
+        opt.textContent = `${p.name} ${p.category ? 'Â· '+p.category.toUpperCase() : ''}`;
         affPkgSelect.appendChild(opt);
       });
     } catch (_) {
@@ -932,7 +932,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="pkg-header">
           <div>
             <div class="name">${u.name || '-'} <span class="badge">${u.active ? 'ACTIVO' : 'INACTIVO'}</span></div>
-            <div class="sub">Código: <strong>${u.code}</strong> • Email: <strong>${u.email || '-'}</strong> • Saldo: <strong>${fmtUSD(u.balance)}</strong> • Desc: <strong>${(u.discount_percent||0)}%</strong> • Alcance: <strong>${u.scope || 'all'}${u.scope === 'package' && u.scope_package_id ? ' #'+u.scope_package_id : ''}</strong></div>
+            <div class="sub">CÃ³digo: <strong>${u.code}</strong> â€¢ Email: <strong>${u.email || '-'}</strong> â€¢ Saldo: <strong>${fmtUSD(u.balance)}</strong> â€¢ Desc: <strong>${(u.discount_percent||0)}%</strong> â€¢ Alcance: <strong>${u.scope || 'all'}${u.scope === 'package' && u.scope_package_id ? ' #'+u.scope_package_id : ''}</strong></div>
           </div>
           <div class="head-actions">
             <button class="btn btn-aff-save" data-id="${u.id}" type="button">Guardar</button>
@@ -941,9 +941,9 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="pkg-content" style="display:grid; gap:6px;">
           <input class="aff-edit-name" type="text" value="${u.name || ''}" placeholder="Nombre" />
-          <input class="aff-edit-code" type="text" value="${u.code || ''}" placeholder="Código" />
+          <input class="aff-edit-code" type="text" value="${u.code || ''}" placeholder="CÃ³digo" />
           <input class="aff-edit-email" type="email" value="${u.email || ''}" placeholder="Email" />
-          <input class="aff-edit-pass" type="password" value="" placeholder="Nueva contraseña (opcional)" />
+          <input class="aff-edit-pass" type="password" value="" placeholder="Nueva contraseÃ±a (opcional)" />
           <div style="display:grid; gap:6px; grid-template-columns: 1fr 1fr;">
             <input class="aff-edit-disc" type="number" step="0.1" min="0" max="100" value="${u.discount_percent || 0}" placeholder="Descuento %" />
             <select class="aff-edit-scope">
@@ -972,7 +972,7 @@ document.addEventListener('DOMContentLoaded', () => {
       balance: (affBalance && parseFloat(affBalance.value || '0')) || 0,
       active: affActive ? !!affActive.checked : true
     };
-    if (!payload.code) { toast('Código requerido'); return; }
+    if (!payload.code) { toast('CÃ³digo requerido'); return; }
     const res = await fetch('/admin/special/users', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
     });
@@ -1071,7 +1071,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!ordersList) return;
     ordersList.innerHTML = '';
     if (!items || items.length === 0) {
-      ordersList.innerHTML = '<div class="empty-state"><h3>Sin órdenes</h3><p>Cuando los clientes confirmen pagos, sus órdenes aparecerán aquí.</p></div>';
+      ordersList.innerHTML = '<div class="empty-state"><h3>Sin Ã³rdenes</h3><p>Cuando los clientes confirmen pagos, sus Ã³rdenes aparecerÃ¡n aquÃ­.</p></div>';
       return;
     }
     const fmtUSD = (amt) => {
@@ -1089,10 +1089,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const juego = o.package_name || `#${o.store_package_id}`;
       const diam = o.item_title || '';
       const precioUSD = fmtUSD(o.item_price_usd || 0);
-      const statusIcon = o.status === 'approved' ? '✅' : o.status === 'rejected' ? '⛔' : '⏳';
+      const statusIcon = o.status === 'approved' ? 'âœ…' : o.status === 'rejected' ? 'â›”' : 'â³';
       const statusClass = o.status === 'approved' ? 'ok' : o.status === 'rejected' ? 'rej' : 'pend';
-      const playerId = o.customer_id || '—';
-      const txRef = o.reference || '—';
+      const playerId = o.customer_id || 'â€”';
+      const txRef = o.reference || 'â€”';
       const gameName = o.package_name || '';
       const isGift = (o.package_category || '').toLowerCase() === 'gift';
       tile.innerHTML = `
@@ -1103,11 +1103,11 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
           <div class=\"box-right\">
             <code class=\"hex\">${playerId}</code>
-            <button class=\"btn-copy\" type=\"button\" data-copy=\"${playerId}\">📋</button>
+            <button class=\"btn-copy\" type=\"button\" data-copy=\"${playerId}\">ðŸ“‹</button>
           </div>
         </div>
         <div class=\"row-metrics\">
-          <div class=\"metric diam\"><span>${diam || ''}</span> <span>💎</span></div>
+          <div class=\"metric diam\"><span>${diam || ''}</span> <span>ðŸ’Ž</span></div>
           <div class=\"metric usd\"><span>${precioUSD}</span></div>
         </div>
         <div class=\"row-foot\">
@@ -1116,7 +1116,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         ${isGift ? `
         <div class=\"row-actions\">
-          <input class=\"input gift-code\" data-id=\"${o.id}\" type=\"text\" placeholder=\"Código para el cliente\" value=\"${o.delivery_code || ''}\" style=\"flex:1; min-width:220px;\" />
+          <input class=\"input gift-code\" data-id=\"${o.id}\" type=\"text\" placeholder=\"CÃ³digo para el cliente\" value=\"${o.delivery_code || ''}\" style=\"flex:1; min-width:220px;\" />
         </div>` : ''}
         <div class=\"row-actions\">
           <button class=\"btn btn-approve\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Aprobar</button>
@@ -1231,7 +1231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!items || items.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.innerHTML = '<h3>Sin imágenes</h3><p>Sube una imagen para comenzar.</p>';
+      empty.innerHTML = '<h3>Sin imÃ¡genes</h3><p>Sube una imagen para comenzar.</p>';
       gallery.appendChild(empty);
       return;
     }
@@ -1251,7 +1251,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function refreshGallery() {
     try {
       const res = await fetch('/admin/images/list');
-      if (!res.ok) throw new Error('No se pudo listar imágenes');
+      if (!res.ok) throw new Error('No se pudo listar imÃ¡genes');
       const data = await res.json();
       renderGallery(data);
     } catch (err) {
@@ -1345,7 +1345,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!data || data.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty-state';
-        empty.innerHTML = '<h3>Sin imágenes</h3><p>Sube una imagen en la pestaña Imágenes.</p>';
+        empty.innerHTML = '<h3>Sin imÃ¡genes</h3><p>Sube una imagen en la pestaÃ±a ImÃ¡genes.</p>';
         logoPickerGrid.appendChild(empty);
         return;
       }
@@ -1358,7 +1358,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (_) {
       const err = document.createElement('div');
-      err.textContent = 'Error cargando imágenes';
+      err.textContent = 'Error cargando imÃ¡genes';
       logoPickerGrid.appendChild(err);
     }
   }
@@ -1376,57 +1376,40 @@ document.addEventListener('DOMContentLoaded', () => {
   if (logoPicker) {
     logoPicker.addEventListener('click', (e) => {
       if (e.target.classList.contains('modal-backdrop')) {
-        closeLogoPicker();
+        closeLogoPicker();
       }
     });
   }
+
+  // Picker grid click handling: use selected image
   if (logoPickerGrid) {
     logoPickerGrid.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.btn-use-logo');
+      const btn = e.target && e.target.closest && e.target.closest('.btn-use-logo');
       if (!btn) return;
-      const meta = btn.closest('.meta');
-      const path = meta && meta.querySelector('.path')?.textContent;
+      const meta = btn.closest && btn.closest('.meta');
+      const pathEl = meta && meta.querySelector && meta.querySelector('.path');
+      const path = pathEl && (pathEl.textContent || '').trim();
       if (!path) return;
       const target = currentPickTarget || inputLogo;
       if (!target) return;
       target.value = path;
       if (target === inputLogo) {
-        showLogoPreview();
         try {
+          showLogoPreview && showLogoPreview();
           if (btnSaveLogo) btnSaveLogo.disabled = true;
-          await saveLogo();
-          toast('Logo actualizado');
-        } catch (e) {
-          toast('No se pudo guardar el logo');
+          const res = await fetch('/admin/config/logo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ logo_path: path }) });
+          if (!res.ok) throw new Error('No se pudo guardar el logo');
+          toast && toast('Logo actualizado');
+        } catch (_) {
+          toast && toast('No se pudo guardar el logo');
         } finally {
           if (btnSaveLogo) btnSaveLogo.disabled = false;
         }
-      } else if (window.__currentPickPkgId) {
-        // Auto-guardar imagen del paquete seleccionado
-        try {
-          const pid = window.__currentPickPkgId;
-          const res = await fetch(`/admin/packages/${pid}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_path: path })
-          });
-          if (!res.ok) {
-            const txt = await res.text();
-            throw new Error(txt || 'No se pudo actualizar el paquete');
-          }
-          toast('Imagen del paquete actualizada');
-          await fetchPackages();
-        } catch (err) {
-          toast(err.message || 'No se pudo actualizar la imagen');
-        } finally {
-          window.__currentPickPkgId = null;
-        }
       }
-      closeLogoPicker();
+      closeLogoPicker && closeLogoPicker();
     });
   }
-
-  // Save hero
+  // Save payments
   if (btnSavePayments) {
     btnSavePayments.addEventListener('click', async () => {
       try {
@@ -1446,6 +1429,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Save hero (carousel)
+  if (btnSaveHero) {
+    btnSaveHero.addEventListener('click', async () => {
+      try {
+        btnSaveHero.disabled = true;
+        const resp = await saveHero();
+        if (resp && resp.ok) {
+          toast('Carrusel guardado');
+          await fetchHero();
+        } else {
+          toast('Guardado, pero respuesta inesperada');
+        }
+      } catch (e) {
+        toast(e.message || 'No se pudo guardar hero');
+      } finally {
+        btnSaveHero.disabled = false;
+      }
+    });
+  }
   // Packages CRUD
   // =====================
   function renderPackagesList(items) {
@@ -1483,7 +1485,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <option value="mobile" ${p.category === 'mobile' ? 'selected' : ''}>Juegos Mobile</option>
             <option value="gift" ${p.category === 'gift' ? 'selected' : ''}>Gift Cards</option>
           </select>
-          <textarea class="edit-desc" placeholder="Descripción del juego" style="min-height:60px;">${p.description || ''}</textarea>
+          <textarea class="edit-desc" placeholder="DescripciÃ³n del juego" style="min-height:60px;">${p.description || ''}</textarea>
           <div style="display:flex; gap:6px;">
             <input class="edit-image" type="text" value="${p.image_path}" readonly />
             <button class="btn btn-pick-img" type="button">Elegir</button>
@@ -1501,7 +1503,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="items-list"></div>
             <div class="items-form" style="margin-top:10px; display:grid; gap:6px; grid-template-columns: 1fr 140px;">
-              <input class="new-item-title" type="text" placeholder="Título del paquete" />
+              <input class="new-item-title" type="text" placeholder="TÃ­tulo del paquete" />
               <input class="new-item-price" type="number" step="0.01" min="0" placeholder="Precio" />
               <div style="grid-column:1 / -1; display:flex; gap:6px;">
                 <button class="btn btn-item-create" type="button">Agregar paquete</button>
@@ -1680,7 +1682,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const priceEl = game && game.querySelector('.new-item-price');
         const title = titleEl ? titleEl.value.trim() : '';
         const price = priceEl ? parseFloat(priceEl.value || '0') : 0;
-        if (!gid || !title) { toast('Título requerido'); return; }
+        if (!gid || !title) { toast('TÃ­tulo requerido'); return; }
         try {
           btnItemCreate.disabled = true;
           const res = await fetch(`/admin/package/${gid}/items`, {
@@ -1780,7 +1782,7 @@ document.addEventListener('DOMContentLoaded', () => {
       row.style.gap = '6px';
       row.style.marginBottom = '8px';
       row.innerHTML = `
-        <input class="it-title" type="text" value="${it.title || ''}" placeholder="Título" />
+        <input class="it-title" type="text" value="${it.title || ''}" placeholder="TÃ­tulo" />
         <input class="it-price" type="number" step="0.01" min="0" value="${Number(it.price || 0)}" placeholder="Precio" />
         <div style="grid-column:1 / -1; display:flex; gap:6px;">
           <button class="btn btn-item-save" type="button">Guardar</button>
@@ -1791,3 +1793,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+
+
+
