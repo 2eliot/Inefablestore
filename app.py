@@ -10,6 +10,7 @@ import smtplib
 import socket
 import threading
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Create Flask app
 app = Flask(__name__, instance_relative_config=True)

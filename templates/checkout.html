@@ -5,11 +5,12 @@
 <style>
   .co-wrap { max-width: 900px; margin: 0 auto; padding: 16px 12px 28px; }
   .co-banner { background: var(--price-accent, #10b981); color: #0b0f14; font-weight: 900; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 16px; }
-  .co-card { background: rgba(3,7,18,0.6); border:1px solid rgba(148,163,184,0.22); border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
+  /* Charcoal card style */
+  .co-card { background: #2b2f36; border:1px solid #3a3f47; border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
   .co-card h3 { margin: 0 0 8px; color: #e2e8f0; font-weight: 900; }
-  .co-row { display:flex; justify-content: space-between; gap: 10px; border-top:1px solid rgba(148,163,184,0.22); padding-top:10px; }
-  .co-row .copy-btn { border:1px solid rgba(148,163,184,0.35); background: rgba(15,23,42,0.6); color:#e2e8f0; border-radius:8px; padding:4px 8px; font-size:12px; cursor:pointer; }
-  .co-row .copy-btn:hover { background: rgba(30,41,59,0.8); }
+  .co-row { display:flex; justify-content: space-between; gap: 10px; border-top:1px solid #3a3f47; padding-top:10px; }
+  .co-row .copy-btn { border:1px solid #3a3f47; background: #1f2329; color:#e2e8f0; border-radius:8px; padding:4px 8px; font-size:12px; cursor:pointer; }
+  .co-row .copy-btn:hover { background: #262b32; }
   .co-actions { margin-top: 10px; }
   .co-actions .btn { width: 100%; }
   /* Reference input emphasis */
@@ -30,9 +31,9 @@
   #co-ref.input:focus { border-color:#0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,0.25); }
   .co-hint { color: #94a3b8; font-size: 12px; margin-top: 6px; text-align: center; }
   /* Discount price styling */
-  .price-old { text-decoration: line-through; color: rgba(7, 26, 45, 0.7); margin-right: 8px; font-weight: 800; }
-  .price-new { color: #05243a; background: rgba(255,255,255,0.35); padding: 2px 8px; border-radius: 8px; font-weight: 900; }
-  .discount-badge { text-decoration: line-through; color: #05243a; border: 2px solid rgba(2,132,199,0.35); padding: 2px 6px; border-radius: 8px; font-weight: 900; margin-right: 8px; background: rgba(2,132,199,0.15); }
+  .price-old { text-decoration: line-through; color: rgba(148,163,184,0.6); margin-right: 8px; font-weight: 800; }
+  .price-new { color: #0b0f14; background: rgba(255,255,255,0.5); padding: 2px 8px; border-radius: 8px; font-weight: 900; }
+  .discount-badge { text-decoration: line-through; color: #0ea5e9; border: 2px solid rgba(2,132,199,0.35); padding: 2px 6px; border-radius: 8px; font-weight: 900; margin-right: 8px; background: rgba(2,132,199,0.15); }
   .co-disc-note { text-align:center; color:#bfdbfe; font-weight:900; margin: 6px 0 12px; }
   .co-disc-note[hidden] { display: none; }
   @media (max-width: 700px) {

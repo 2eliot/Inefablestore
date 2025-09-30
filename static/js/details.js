@@ -13,6 +13,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnMore = document.getElementById('btn-more');
   const btnPayBSD = document.getElementById('pay-bsd');
   const btnPayUSD = document.getElementById('pay-usd');
+  // Mobile footer selection
+  const mfs = document.getElementById('mfs');
+  const mfsTitle = document.getElementById('mfs-title');
+  const mfsPrice = document.getElementById('mfs-price');
+  const mfsClose = document.getElementById('mfs-close');
   // Step 4 inputs
   const inputCustomerId = document.getElementById('customer-id');
   // Hide Step 1 (player ID) for gift category
@@ -54,6 +59,26 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedItemIndex = -1;
   let methodChosen = false; // show prices only after choosing a payment method
 
+  function updateMobileFooter() {
+    if (!mfs) return;
+    const show = isMobile && selectedItemIndex >= 0;
+    if (!show) {
+      mfs.classList.remove('show');
+      mfs.setAttribute('hidden', '');
+      return;
+    }
+    const it = (allItems && selectedItemIndex >= 0) ? allItems[selectedItemIndex] : null;
+    if (it) {
+      if (mfsTitle) mfsTitle.textContent = it.title || '';
+      if (mfsPrice) {
+        const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
+        mfsPrice.textContent = formatPrice(val);
+      }
+    }
+    mfs.classList.add('show');
+    mfs.removeAttribute('hidden');
+  }
+
   function formatPrice(n){
     const v = Number(n || 0);
     if (currency === 'BSD') {
@@ -84,19 +109,14 @@ document.addEventListener('DOMContentLoaded', () => {
       b.addEventListener('click', () => {
         selBox.hidden = false;
         selTitle.textContent = it.title;
-        if (methodChosen) {
-          const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
-          selPrice.textContent = formatPrice(val);
-          sumPrice.textContent = formatPrice(val);
-        } else {
-          // Hide price until payment method is chosen
-          selPrice.textContent = '';
-          sumPrice.textContent = '';
-        }
+        const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
+        selPrice.textContent = formatPrice(val);
+        sumPrice.textContent = formatPrice(val);
         grid.querySelectorAll('.item-pill').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         selectedItemIndex = items.indexOf(it);
         persistState();
+        updateMobileFooter();
       });
       // Autoselect first visible if none selected yet
       if (i === 0 && !grid.querySelector('.item-pill.active')) setTimeout(() => b.click(), 0);
@@ -123,16 +143,16 @@ document.addEventListener('DOMContentLoaded', () => {
     rate = Number((data && data.rate_bsd_per_usd) || 0);
     renderItems(allItems);
   }).catch(() => { rate = 0; renderItems(allItems); });
-
   // Fetch payments configuration (Admin-configured)
   fetch('/store/payments').then(r => r.json()).then(data => {
     if (data && data.ok) paymentsCfg = data.payments || null;
   }).catch(() => { paymentsCfg = null; });
 
-  if (btnMore) {
-    btnMore.addEventListener('click', () => {
-      showingAll = true;
-      renderItems(allItems);
+  if (mfsClose) {
+    mfsClose.addEventListener('click', () => {
+      if (!mfs) return;
+      mfs.classList.remove('show');
+      mfs.setAttribute('hidden', '');
     });
   }
 
@@ -160,6 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     renderItems(allItems);
     persistState();
+    updateMobileFooter();
   }
 
   if (btnPayBSD) btnPayBSD.addEventListener('click', () => setCurrency('BSD'));
@@ -175,6 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showingAll = false; // reset when switching
       renderItems(allItems);
     }
+    updateMobileFooter();
   });
 
   // =====================
