@@ -1,8 +1,3 @@
-@app.route("/uploads/<path:filename>")
-def serve_uploaded_file(filename: str):
-    """Serve files from UPLOAD_FOLDER when using a persistent Disk (prefix /uploads)."""
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
-
 import os
 import shutil
 from datetime import datetime
