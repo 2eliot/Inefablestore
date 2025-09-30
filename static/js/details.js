@@ -132,6 +132,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Wire up "Ver más" to reveal remaining packages on mobile
+  if (btnMore) {
+    btnMore.addEventListener('click', () => {
+      showingAll = true;
+      renderItems(allItems);
+      try { btnMore.blur(); } catch (_) {}
+    });
+  }
+
   fetch(`/store/package/${gid}/items`).then(r => r.json()).then(data => {
     allItems = (data && data.items) || [];
     showingAll = false;
