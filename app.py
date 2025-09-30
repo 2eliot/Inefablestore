@@ -1143,6 +1143,9 @@ def allowed_file(filename: str) -> bool:
 
 @app.route("/admin/images/list")
 def admin_images_list():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
     images = ImageAsset.query.order_by(ImageAsset.uploaded_at.desc()).all()
     return jsonify([
         {
@@ -1158,6 +1161,9 @@ def admin_images_list():
 
 @app.route("/admin/images/upload", methods=["POST"])
 def admin_images_upload():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
     if "image" not in request.files:
         return jsonify({"ok": False, "error": "No file part"}), 400
     file = request.files["image"]
@@ -1189,6 +1195,51 @@ def admin_images_upload():
             "uploaded_at": image.uploaded_at.isoformat()
         }
     })
+
+
+@app.route("/admin/images/<int:image_id>", methods=["DELETE"])
+def admin_images_delete(image_id: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    img = ImageAsset.query.get(image_id)
+    if not img:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    # Try to remove the physical file only if it is within the uploads folder
+    try:
+        path = (img.path or "").strip()
+        if path.startswith("/static/uploads/"):
+            fs_path = os.path.join(app.root_path, path.lstrip("/"))
+            if os.path.isfile(fs_path):
+                os.remove(fs_path)
+    except Exception:
+        # ignore file removal errors to not block DB delete
+        pass
+    db.session.delete(img)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/images/<int:image_id>/delete", methods=["POST"])
+def admin_images_delete_fallback(image_id: int):
+    """Fallback for environments that block DELETE method."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    img = ImageAsset.query.get(image_id)
+    if not img:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    try:
+        path = (img.path or "").strip()
+        if path.startswith("/static/uploads/"):
+            fs_path = os.path.join(app.root_path, path.lstrip("/"))
+            if os.path.isfile(fs_path):
+                os.remove(fs_path)
+    except Exception:
+        pass
+    db.session.delete(img)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/admin/config/logo", methods=["GET"])

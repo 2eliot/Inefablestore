@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let rate = 0; // BsD per 1 USD
   let currency = 'USD'; // 'USD' or 'BSD'
   let selectedItemIndex = -1;
+  let methodChosen = false; // show prices only after choosing a payment method
 
   function formatPrice(n){
     const v = Number(n || 0);
@@ -78,14 +79,20 @@ document.addEventListener('DOMContentLoaded', () => {
     list.forEach((it, i) => {
       const b = document.createElement('button');
       b.className = 'item-pill';
-      const displayPrice = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
-      b.innerHTML = `<span class="t">${it.title}</span><span class="p">${formatPrice(displayPrice)}</span>`;
+      // Do NOT show price in the package selector; only title.
+      b.innerHTML = `<span class="t">${it.title}</span>`;
       b.addEventListener('click', () => {
         selBox.hidden = false;
         selTitle.textContent = it.title;
-        const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
-        selPrice.textContent = formatPrice(val);
-        sumPrice.textContent = formatPrice(val);
+        if (methodChosen) {
+          const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
+          selPrice.textContent = formatPrice(val);
+          sumPrice.textContent = formatPrice(val);
+        } else {
+          // Hide price until payment method is chosen
+          selPrice.textContent = '';
+          sumPrice.textContent = '';
+        }
         grid.querySelectorAll('.item-pill').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         selectedItemIndex = items.indexOf(it);
@@ -131,6 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setCurrency(newCurrency) {
     currency = newCurrency;
+    methodChosen = true;
     // toggle active state on buttons
     if (btnPayBSD && btnPayUSD) {
       if (currency === 'BSD') {
@@ -141,6 +149,15 @@ document.addEventListener('DOMContentLoaded', () => {
         btnPayBSD.classList.remove('primary');
       }
     }
+    // Recompute and show prices only now that a method is chosen
+    if (selectedItemIndex >= 0) {
+      const it = allItems[selectedItemIndex];
+      if (it) {
+        const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
+        selPrice.textContent = formatPrice(val);
+        sumPrice.textContent = formatPrice(val);
+      }
+    }
     renderItems(allItems);
     persistState();
   }
@@ -148,8 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnPayBSD) btnPayBSD.addEventListener('click', () => setCurrency('BSD'));
   if (btnPayUSD) btnPayUSD.addEventListener('click', () => setCurrency('USD'));
 
-  // default to USD view (Binance) initially
-  setCurrency('USD');
+  // Do not pre-select a payment method to avoid showing prices prematurely
 
   // Re-render on resize to switch mobile/desktop behavior
   window.addEventListener('resize', () => {

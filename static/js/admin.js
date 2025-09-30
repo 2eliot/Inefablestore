@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('admin.js loaded v4');
   const tabs = document.querySelectorAll('#adminTabs .tab');
   const panels = document.querySelectorAll('.tab-panel');
   // Elements used across handlers (declare early)
@@ -525,10 +526,192 @@ document.addEventListener('DOMContentLoaded', () => {
   // =====================
   // Images: upload + list
   // =====================
-
-  function toast(msg) {
-    console.log(msg);
+  // Lightweight toast notifications
+  function ensureToastHost() {
+    let host = document.getElementById('toast-host');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'toast-host';
+      host.style.position = 'fixed';
+      host.style.right = '12px';
+      host.style.bottom = '12px';
+      host.style.display = 'grid';
+      host.style.gap = '8px';
+      host.style.zIndex = '9999';
+      document.body.appendChild(host);
+    }
+    return host;
   }
+  function toast(msg, type = 'info') {
+    console.log(msg);
+    const host = ensureToastHost();
+    const el = document.createElement('div');
+    el.textContent = String(msg || '').slice(0, 300);
+    el.style.maxWidth = '320px';
+    el.style.padding = '10px 12px';
+    el.style.borderRadius = '10px';
+    el.style.fontWeight = '700';
+    el.style.boxShadow = '0 6px 18px rgba(0,0,0,0.25)';
+    el.style.border = '1px solid';
+    el.style.background = type === 'error' ? 'rgba(239,68,68,0.15)' : type === 'success' ? 'rgba(14,165,233,0.15)' : 'rgba(2,6,23,0.7)';
+    el.style.color = type === 'error' ? '#fecaca' : type === 'success' ? '#bae6fd' : '#e5e7eb';
+    el.style.borderColor = type === 'error' ? 'rgba(239,68,68,0.35)' : type === 'success' ? 'rgba(14,165,233,0.35)' : 'rgba(148,163,184,0.35)';
+    host.appendChild(el);
+    setTimeout(() => { el.remove(); }, 3500);
+  }
+
+  async function fetchImages() {
+    const res = await fetch('/admin/images/list');
+    if (!res.ok) throw new Error('No se pudo listar imágenes');
+    return res.json();
+  }
+
+  function renderGallery(items) {
+    if (!gallery || !tpl) return;
+    gallery.innerHTML = '';
+    if (!items || items.length === 0) {
+      gallery.innerHTML = '<div class="empty-state"><h3>Sin imágenes</h3><p>Sube imágenes para usarlas en el sitio.</p></div>';
+      return;
+    }
+    items.forEach(img => {
+      const node = tpl.content.cloneNode(true);
+      const card = node.querySelector('.image-card');
+      const thumb = node.querySelector('.thumb');
+      const title = node.querySelector('.title');
+      const path = node.querySelector('.path');
+      const delBtn = node.querySelector('.btn-del');
+      if (thumb) thumb.src = img.path;
+      if (title) title.textContent = img.title || '';
+      if (path) path.textContent = img.path || '';
+      if (card) card.dataset.id = img.id;
+      if (delBtn) delBtn.dataset.id = img.id;
+      gallery.appendChild(node);
+    });
+  }
+
+  async function refreshGallery() {
+    try {
+      const data = await fetchImages();
+      renderGallery(data);
+    } catch (e) {
+      if (gallery) gallery.innerHTML = `<div class="empty-state"><p>${e.message || 'Error'}</p></div>`;
+    }
+  }
+
+  async function uploadImage(file) {
+    const fd = new FormData();
+    fd.append('image', file);
+    const res = await fetch('/admin/images/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo subir');
+    return data.image;
+  }
+
+  if (btnUpload && fileInput) {
+    btnUpload.addEventListener('click', (e) => {
+      e.preventDefault();
+      fileInput.click();
+    });
+    fileInput.addEventListener('change', async () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      try {
+        btnUpload.disabled = true;
+        await uploadImage(f);
+        await refreshGallery();
+      } catch (e) {
+        toast(e.message || 'Error al subir');
+      } finally {
+        btnUpload.disabled = false;
+        fileInput.value = '';
+      }
+    });
+  }
+
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', refreshGallery);
+  }
+
+  if (gallery) {
+    gallery.addEventListener('click', async (e) => {
+      const btnCopy = e.target.closest('.btn-copy');
+      const btnDel = e.target.closest('.btn-del');
+      const card = e.target.closest('.image-card');
+      if (!card) return;
+      const id = (btnDel && btnDel.dataset.id) || card.dataset.id;
+      const pathEl = card.querySelector('.path');
+      if (btnCopy && pathEl) {
+        try { await navigator.clipboard.writeText(pathEl.textContent || ''); toast('Copiado', 'success'); } catch (_) { toast('No se pudo copiar', 'error'); }
+      }
+      if (btnDel && id) {
+        try {
+          btnDel.disabled = true;
+          let res = await fetch(`/admin/images/${id}`, { method: 'DELETE' });
+          if (!res.ok) {
+            // fallback via POST
+            res = await fetch(`/admin/images/${id}/delete`, { method: 'POST' });
+            if (!res.ok) {
+              let msg = 'No se pudo eliminar';
+              try { const d = await res.json(); msg = d.error || msg; } catch(_){ /* ignore */ }
+              throw new Error(msg);
+            }
+          }
+          // Optimista: quitar la tarjeta del DOM
+          card.remove();
+          // y opcionalmente refrescar para re-sincronizar
+          await refreshGallery();
+          toast('Imagen eliminada', 'success');
+        } catch (err) {
+          toast(err.message || 'Error al eliminar', 'error');
+        } finally {
+          if (btnDel) btnDel.disabled = false;
+        }
+      }
+    });
+  }
+
+  // Si la pestaña de Imágenes ya está activa al cargar, refrescar
+  if (document.querySelector('#tab-images.active')) {
+    refreshGallery();
+  }
+
+  // Delegación global (respaldo) para botones de imágenes
+  document.body.addEventListener('click', async (e) => {
+    const del = e.target.closest('.btn-del');
+    const copy = e.target.closest('.btn-copy');
+    if (!del && !copy) return;
+    const card = e.target.closest('.image-card');
+    const id = (del && del.dataset.id) || (card && card.dataset.id);
+    if (copy && card) {
+      const pathEl = card.querySelector('.path');
+      if (pathEl) {
+        try { await navigator.clipboard.writeText(pathEl.textContent || ''); toast('Copiado', 'success'); } catch (_) { toast('No se pudo copiar', 'error'); }
+      }
+    }
+    if (del && id) {
+      if (!confirm('¿Eliminar esta imagen? Esta acción no se puede deshacer.')) return;
+      try {
+        del.disabled = true;
+                let res = await fetch(`/admin/images/${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+          // fallback via POST for environments blocking DELETE
+          res = await fetch(`/admin/images/${id}/delete`, { method: 'POST' });
+          if (!res.ok) {
+            let msg = 'No se pudo eliminar';
+            try { const d = await res.json(); msg = d.error || msg; } catch(_){}
+            throw new Error(msg);
+          }
+        }
+        if (card) card.remove();
+        await refreshGallery();
+        toast('Imagen eliminada', 'success');
+      } catch (err) {
+        toast(err.message || 'Error al eliminar', 'error');
+      } finally {
+        del.disabled = false;
+      }
+    }
+  });
 
   // =====================
   // Affiliates: list + CRUD
