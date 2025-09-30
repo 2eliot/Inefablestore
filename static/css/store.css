@@ -172,14 +172,19 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
 /* Packages carousel */
 .packages { padding: 14px 12px 0; max-width: 1200px; margin: 0 auto; }
 /* Featured uses same head/rail/card styles, only container differs */
-.featured .packages-head { display:flex; align-items:center; justify-content: space-between; margin-bottom: 10px; }
-.featured .packages-title { margin: 0; color: #ffffff; }
+.featured .packages-head { display:flex; align-items:center; justify-content: space-between; margin-bottom: 16px; }
+/* Extra breathing room under Juegos Mobile title */
+#pkgs-mobile .packages-head { margin-bottom: 18px; }
+.featured .packages-title { margin: 0; color: #ffffff; font-size: 18px; }
 .featured .packages-nav { display:flex; gap: 8px; }
 .packages-head { display:flex; align-items:center; justify-content: space-between; margin-bottom: 10px; }
 .packages-title { margin: 0; color: #ffffff; }
 .packages-nav { display:flex; gap: 8px; }
 .packages-nav button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; }
-.packages-rail { display:flex; gap: 14px; overflow-x: auto; scroll-behavior: smooth; padding-bottom: 8px; justify-content: center; }
+.packages-rail { display:flex; gap: 22px; overflow-x: auto; scroll-behavior: smooth; padding-bottom: 8px; justify-content: center; }
+/* Fallback for browsers/environments where flex gap is not applied */
+.packages-rail .pkg-card { margin-right: 8px; }
+.packages-rail .pkg-card:last-child { margin-right: 0; }
 .packages-rail::-webkit-scrollbar { height: 8px; }
 .packages-rail::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
 
@@ -188,16 +193,16 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
 .pkg-name { text-align: center; margin: 10px 0 0; font-size: 18px; font-weight: 900; text-shadow: 0 1px 0 rgba(0,0,0,0.3); }
 
 /* Smaller cards in Best Sellers */
-#best-sellers .packages-rail { gap: 12px; }
+#best-sellers .packages-rail { gap: 18px; }
 #best-sellers .pkg-card { min-width: 150px; max-width: 180px; padding: 8px 8px 10px; border-radius: 14px; }
 #best-sellers .pkg-thumb { border-radius: 12px; }
 #best-sellers .pkg-name { font-size: 14px; margin-top: 6px; }
 /* Extra spacing between Best Sellers and Juegos Mobile */
-#best-sellers { margin-bottom: 28px; }
+#best-sellers { margin-bottom: 40px; }
 
 /* Tablet: keep horizontal scroll behavior */
 @media (min-width: 600px) and (max-width: 900px) {
-  .packages-rail { display: flex; gap: 14px; overflow-x: auto; justify-content: center; }
+  .packages-rail { display: flex; gap: 22px; overflow-x: auto; justify-content: center; }
   .pkg-card { min-width: 190px; max-width: 220px; }
 }
 
@@ -321,10 +326,10 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
   /* Packages: carousel with 2 cards visible on phones */
   .packages { padding-left: 12px; padding-right: 12px; }
   .featured { padding-left: 12px; padding-right: 12px; }
-  .packages-rail { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .packages-rail { display: flex; gap: 18px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
   .pkg-card { flex: 0 0 calc(50% - 6px); min-width: calc(50% - 6px); max-width: calc(50% - 6px); scroll-snap-align: start; }
   /* Best Sellers: 3 per row on phones */
-  #best-sellers .packages-rail { gap: 10px; }
+  #best-sellers .packages-rail { gap: 14px; }
   #best-sellers .pkg-card { flex: 0 0 calc(33.333% - 7px); min-width: calc(33.333% - 7px); max-width: calc(33.333% - 7px); }
   /* Hide scroll indicator on mobile */
   .packages-rail { -ms-overflow-style: none; scrollbar-width: none; }
