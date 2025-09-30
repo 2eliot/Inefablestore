@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('admin.js loaded v4');
+  console.log('admin.js loaded v5');
   const tabs = document.querySelectorAll('#adminTabs .tab');
   const panels = document.querySelectorAll('.tab-panel');
   // Elements used across handlers (declare early)
@@ -8,6 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const fileInput = document.getElementById('file-input');
   const gallery = document.getElementById('gallery');
   const tpl = document.getElementById('image-card-tpl');
+  // Client-side index to resolve IDs when dataset is missing
+  const imgIndex = {
+    byPath: new Map(), // '/static/uploads/..' => id
+    byTitle: new Map(), // title => id
+  };
   // Config elements
   const inputLogo = document.getElementById('logo-path');
   const btnSaveLogo = document.getElementById('btn-save-logo');
@@ -569,6 +574,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderGallery(items) {
     if (!gallery || !tpl) return;
     gallery.innerHTML = '';
+    // reset index
+    imgIndex.byPath.clear();
+    imgIndex.byTitle.clear();
     if (!items || items.length === 0) {
       gallery.innerHTML = '<div class="empty-state"><h3>Sin imágenes</h3><p>Sube imágenes para usarlas en el sitio.</p></div>';
       return;
@@ -580,13 +588,133 @@ document.addEventListener('DOMContentLoaded', () => {
       const title = node.querySelector('.title');
       const path = node.querySelector('.path');
       const delBtn = node.querySelector('.btn-del');
+      const delOv = node.querySelector('.btn-del-ov');
       if (thumb) thumb.src = img.path;
       if (title) title.textContent = img.title || '';
       if (path) path.textContent = img.path || '';
-      if (card) card.dataset.id = img.id;
-      if (delBtn) delBtn.dataset.id = img.id;
+      const idStr = String(img.id);
+      // index
+      if (img.path) imgIndex.byPath.set(String(img.path), idStr);
+      if (img.title) imgIndex.byTitle.set(String(img.title), idStr);
+      if (card) { card.dataset.id = idStr; }
+      if (delBtn) { delBtn.dataset.id = idStr; }
+      if (delOv) { delOv.dataset.id = idStr; }
+      if (title && title.setAttribute) { title.setAttribute('data-id', idStr); }
+      if (path && path.setAttribute) { path.setAttribute('data-id', idStr); }
+      const wrap = node.querySelector('.thumb-wrap');
+      if (wrap && wrap.setAttribute) { wrap.setAttribute('data-id', idStr); }
+      if (card) {
+        // Extra attributes for robustness and debugging
+        card.setAttribute('data-image-id', idStr);
+        const meta = node.querySelector('.meta');
+        if (meta && !meta.querySelector('.img-id')) {
+          const sm = document.createElement('small');
+          sm.className = 'img-id';
+          sm.textContent = `ID: ${idStr}`;
+          sm.style.display = 'block';
+          sm.style.color = '#64748b';
+          sm.style.marginTop = '2px';
+          meta.insertBefore(sm, meta.firstChild);
+        }
+      }
+      if (delBtn) {
+        // Direct listener as a fallback in case delegation is interfered with
+        delBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const id = delBtn.dataset.id || (card && card.dataset.id);
+          console.log('[images] direct btn-del click', { id });
+          await deleteImage(card, id, delBtn);
+        });
+      }
+      if (delOv) {
+        delOv.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const id = delOv.dataset.id || (card && card.dataset.id);
+          console.log('[images] direct btn-del-ov click', { id });
+          await deleteImage(card, id, delOv);
+        });
+      }
       gallery.appendChild(node);
     });
+  }
+
+  async function deleteImage(card, id, buttonEl) {
+    try {
+      // Primary: delete by path (more reliable in this UI)
+      const pElPrimary = card && card.querySelector && card.querySelector('.path');
+      const cardPathPrimary = pElPrimary && (pElPrimary.textContent || '').trim();
+      if (cardPathPrimary) {
+        try {
+          console.log('[images] delete_by_path', { path: cardPathPrimary });
+          const resP = await fetch('/admin/images/delete_by_path', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: cardPathPrimary })
+          });
+          const dP = await resP.json().catch(()=>({}));
+          if (resP.ok && dP && dP.ok) {
+            if (card) card.remove();
+            await refreshGallery();
+            toast('Imagen eliminada', 'success');
+            return;
+          }
+        } catch (_) { /* ignore */ }
+      }
+      // Fallback: try ID-based deletion
+      // Resolve missing ID by matching metadata if not provided
+      if (!id) {
+        try {
+          const pEl = card && card.querySelector && card.querySelector('.path');
+          const tEl = card && card.querySelector && card.querySelector('.title');
+          const cardPath = pEl && (pEl.textContent || '').trim();
+          const cardTitle = tEl && (tEl.textContent || '').trim();
+          if (cardPath && imgIndex.byPath.has(cardPath)) id = imgIndex.byPath.get(cardPath);
+          if (!id && cardTitle && imgIndex.byTitle.has(cardTitle)) id = imgIndex.byTitle.get(cardTitle);
+          if (!id) {
+            const imgEl = card && card.querySelector && card.querySelector('img.thumb');
+            const src = imgEl && imgEl.src;
+            if (src) {
+              for (const [p, v] of imgIndex.byPath.entries()) { if (src.endsWith(p)) { id = v; break; } }
+            }
+          }
+          if (!id) {
+            const resList = await fetch('/admin/images/list');
+            const list = await resList.json();
+            const hit = (list || []).find(x => (cardPath && x.path === cardPath) || (cardTitle && x.title === cardTitle) || (card && card.querySelector('img.thumb') && (card.querySelector('img.thumb').src || '').endsWith(x.path)));
+            if (hit) { id = String(hit.id); if (card && card.setAttribute) card.setAttribute('data-id', id); }
+          }
+          if (!id) {
+            const idLabel = card && card.querySelector && card.querySelector('.img-id');
+            if (idLabel && idLabel.textContent) { const m = idLabel.textContent.match(/ID:\s*(\d+)/i); if (m) { id = m[1]; if (card && card.setAttribute) card.setAttribute('data-id', id); } }
+          }
+        } catch (_) { /* ignore */ }
+      }
+      if (!id) { console.warn('[images] cannot resolve id for delete'); toast('No se pudo resolver la imagen', 'error'); return; }
+      // For overlay button, skip confirm to avoid blocked dialogs on some setups
+      if (!(buttonEl && buttonEl.classList && buttonEl.classList.contains('btn-del-ov'))) {
+        const ok = confirm('¿Eliminar esta imagen? Esta acción no se puede deshacer.');
+        if (!ok) return;
+      }
+      if (buttonEl) buttonEl.disabled = true;
+      console.log('[images] sending delete', { id });
+      let res = await fetch(`/admin/images/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        // fallback via POST (some hosts block DELETE)
+        res = await fetch(`/admin/images/${id}/delete`, { method: 'POST' });
+      }
+      if (!res.ok) {
+        let msg = 'No se pudo eliminar';
+        try { const d = await res.json(); msg = d.error || msg; } catch(_) { /* ignore */ }
+        throw new Error(msg);
+      }
+      if (card) card.remove();
+      await refreshGallery();
+      toast('Imagen eliminada', 'success');
+    } catch (err) {
+      toast(err.message || 'Error al eliminar', 'error');
+      try { alert(err.message || 'Error al eliminar'); } catch(_) {}
+    } finally {
+      if (buttonEl) buttonEl.disabled = false;
+    }
   }
 
   async function refreshGallery() {
@@ -608,24 +736,78 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (btnUpload && fileInput) {
-    btnUpload.addEventListener('click', (e) => {
+    let lastOpenAt = 0;
+    let lastFilesSig = '';
+    let isUploading = false;
+
+    const openPicker = (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      const now = Date.now();
+      if (now - lastOpenAt < 800 || isUploading) {
+        console.log('[images] picker suppressed (debounce/busy)');
+        return;
+      }
+      lastOpenAt = now;
+      btnUpload.disabled = true; // avoid double-open by extra clicks
+      console.log('[images] opening file picker');
       fileInput.click();
-    });
-    fileInput.addEventListener('change', async () => {
-      const f = fileInput.files && fileInput.files[0];
-      if (!f) return;
+      // Re-enable shortly in case user cancels dialog
+      setTimeout(() => { btnUpload.disabled = false; }, 1000);
+    };
+
+    btnUpload.addEventListener('click', openPicker);
+
+    const onFileChange = async () => {
+      if (isUploading) { console.log('[images] change ignored: upload in progress'); return; }
+      // Self-disable listener to prevent duplicate firing on some browsers
+      fileInput.removeEventListener('change', onFileChange);
+      const files = Array.from(fileInput.files || []);
+      const sig = files.map(f => `${f.name}|${f.size}|${f.lastModified}`).join(',');
+      if (sig && sig === lastFilesSig) {
+        console.log('[images] duplicate change ignored (same selection)');
+        fileInput.value = '';
+        // Reattach listener
+        setTimeout(() => fileInput.addEventListener('change', onFileChange), 0);
+        return;
+      }
+      lastFilesSig = sig;
+      if (!files.length) {
+        setTimeout(() => fileInput.addEventListener('change', onFileChange), 0);
+        return;
+      }
       try {
+        isUploading = true;
         btnUpload.disabled = true;
-        await uploadImage(f);
+        const seen = new Set();
+        const unique = files.filter(f => {
+          const s = `${f.name}|${f.size}|${f.lastModified}`;
+          if (seen.has(s)) return false;
+          seen.add(s);
+          return true;
+        });
+        for (let i = 0; i < unique.length; i++) {
+          const f = unique[i];
+          if (!f) continue;
+          toast(`Subiendo ${i+1}/${unique.length}: ${f.name}`);
+          await uploadImage(f);
+        }
         await refreshGallery();
+        toast(`Se subieron ${unique.length} archivo(s)`, 'success');
       } catch (e) {
-        toast(e.message || 'Error al subir');
+        toast(e.message || 'Error al subir', 'error');
       } finally {
         btnUpload.disabled = false;
         fileInput.value = '';
+        isUploading = false;
+        setTimeout(() => { lastOpenAt = 0; lastFilesSig = ''; }, 200);
+        // Reattach listener after finishing
+        setTimeout(() => fileInput.addEventListener('change', onFileChange), 0);
       }
-    });
+    };
+
+    // Attach once at init
+    fileInput.addEventListener('change', onFileChange);
   }
 
   if (btnRefresh) {
@@ -636,36 +818,18 @@ document.addEventListener('DOMContentLoaded', () => {
     gallery.addEventListener('click', async (e) => {
       const btnCopy = e.target.closest('.btn-copy');
       const btnDel = e.target.closest('.btn-del');
-      const card = e.target.closest('.image-card');
+      const btnDelOv = e.target.closest('.btn-del-ov');
+      const card = e.target.closest('.image-card') || e.target.closest('[data-id]');
       if (!card) return;
-      const id = (btnDel && btnDel.dataset.id) || card.dataset.id;
+      const withId = e.target.closest('[data-id]');
+      const id = (btnDel && btnDel.dataset.id) || (btnDelOv && btnDelOv.dataset.id) || (withId && withId.getAttribute('data-id')) || card.getAttribute('data-id');
       const pathEl = card.querySelector('.path');
       if (btnCopy && pathEl) {
         try { await navigator.clipboard.writeText(pathEl.textContent || ''); toast('Copiado', 'success'); } catch (_) { toast('No se pudo copiar', 'error'); }
       }
-      if (btnDel && id) {
-        try {
-          btnDel.disabled = true;
-          let res = await fetch(`/admin/images/${id}`, { method: 'DELETE' });
-          if (!res.ok) {
-            // fallback via POST
-            res = await fetch(`/admin/images/${id}/delete`, { method: 'POST' });
-            if (!res.ok) {
-              let msg = 'No se pudo eliminar';
-              try { const d = await res.json(); msg = d.error || msg; } catch(_){ /* ignore */ }
-              throw new Error(msg);
-            }
-          }
-          // Optimista: quitar la tarjeta del DOM
-          card.remove();
-          // y opcionalmente refrescar para re-sincronizar
-          await refreshGallery();
-          toast('Imagen eliminada', 'success');
-        } catch (err) {
-          toast(err.message || 'Error al eliminar', 'error');
-        } finally {
-          if (btnDel) btnDel.disabled = false;
-        }
+      if (btnDel || btnDelOv) {
+        console.log('[images] delegated btn-del click', { id });
+        await deleteImage(card, id, (btnDel || btnDelOv));
       }
     });
   }
@@ -678,40 +842,36 @@ document.addEventListener('DOMContentLoaded', () => {
   // Delegación global (respaldo) para botones de imágenes
   document.body.addEventListener('click', async (e) => {
     const del = e.target.closest('.btn-del');
+    const delOv = e.target.closest('.btn-del-ov');
     const copy = e.target.closest('.btn-copy');
-    if (!del && !copy) return;
-    const card = e.target.closest('.image-card');
-    const id = (del && del.dataset.id) || (card && card.dataset.id);
+    if (!del && !delOv && !copy) return;
+    const idHost = e.target.closest('[data-id]');
+    const card = e.target.closest('.image-card') || idHost;
+    const id = (del && del.dataset.id) || (delOv && delOv.dataset.id) || (idHost && idHost.getAttribute('data-id')) || (card && card.getAttribute('data-id'));
     if (copy && card) {
       const pathEl = card.querySelector('.path');
       if (pathEl) {
         try { await navigator.clipboard.writeText(pathEl.textContent || ''); toast('Copiado', 'success'); } catch (_) { toast('No se pudo copiar', 'error'); }
       }
     }
-    if (del && id) {
-      if (!confirm('¿Eliminar esta imagen? Esta acción no se puede deshacer.')) return;
-      try {
-        del.disabled = true;
-                let res = await fetch(`/admin/images/${id}`, { method: 'DELETE' });
-        if (!res.ok) {
-          // fallback via POST for environments blocking DELETE
-          res = await fetch(`/admin/images/${id}/delete`, { method: 'POST' });
-          if (!res.ok) {
-            let msg = 'No se pudo eliminar';
-            try { const d = await res.json(); msg = d.error || msg; } catch(_){}
-            throw new Error(msg);
-          }
-        }
-        if (card) card.remove();
-        await refreshGallery();
-        toast('Imagen eliminada', 'success');
-      } catch (err) {
-        toast(err.message || 'Error al eliminar', 'error');
-      } finally {
-        del.disabled = false;
-      }
+    if (del || delOv) {
+      console.log('[images] body delegated btn-del click', { id });
+      await deleteImage(card, id, (del || delOv));
     }
   });
+
+  // Capturing listener as last resort to catch clicks before others cancel them
+  document.addEventListener('click', async (e) => {
+    const del = e.target.closest && e.target.closest('.btn-del');
+    const delOv = e.target.closest && e.target.closest('.btn-del-ov');
+    if (!del && !delOv) return;
+    const idHost = e.target.closest && e.target.closest('[data-id]');
+    const card = e.target.closest('.image-card') || idHost;
+    const id = (del && del.dataset.id) || (delOv && delOv.dataset.id) || (idHost && idHost.getAttribute('data-id')) || (card && card.getAttribute('data-id'));
+    console.log('[images] CAPTURE btn-del click', { id, target: e.target && e.target.className });
+    e.preventDefault();
+    await deleteImage(card, id, (del || delOv));
+  }, true);
 
   // =====================
   // Affiliates: list + CRUD

@@ -1172,6 +1172,20 @@ def admin_images_upload():
     if not allowed_file(file.filename):
         return jsonify({"ok": False, "error": "Tipo de archivo no permitido"}), 400
 
+    # Deduplicate: if same filename is uploaded twice within 3 seconds in this session, skip
+    try:
+        now_ts = datetime.utcnow().timestamp()
+        last = session.get("_last_img_upload") or {}
+        last_name = last.get("name")
+        last_ts = float(last.get("ts", 0))
+        if last_name == file.filename and (now_ts - last_ts) < 3.0:
+            # Update timestamp to avoid loops and return ok (frontend refreshes gallery anyway)
+            session["_last_img_upload"] = {"name": file.filename, "ts": now_ts}
+            return jsonify({"ok": True, "skipped": True})
+        session["_last_img_upload"] = {"name": file.filename, "ts": now_ts}
+    except Exception:
+        pass
+
     filename = secure_filename(file.filename)
     # Avoid collisions by prefixing timestamp
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
@@ -1240,6 +1254,31 @@ def admin_images_delete_fallback(image_id: int):
     db.session.delete(img)
     db.session.commit()
     return jsonify({"ok": True})
+
+
+# Delete by path: fallback when client cannot resolve ID
+@app.route("/admin/images/delete_by_path", methods=["POST"])
+def admin_images_delete_by_path():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    path_in = (data.get("path") or "").strip()
+    if not path_in:
+        return jsonify({"ok": False, "error": "Ruta requerida"}), 400
+    img = ImageAsset.query.filter_by(path=path_in).first()
+    if not img:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    try:
+        if path_in.startswith("/static/uploads/"):
+            fs_path = os.path.join(app.root_path, path_in.lstrip("/"))
+            if os.path.isfile(fs_path):
+                os.remove(fs_path)
+    except Exception:
+        pass
+    db.session.delete(img)
+    db.session.commit()
+    return jsonify({"ok": True, "deleted_id": img.id})
 
 
 @app.route("/admin/config/logo", methods=["GET"])

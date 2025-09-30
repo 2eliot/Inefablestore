@@ -217,12 +217,24 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
   overflow: visible; /* no horizontal scroll */
   justify-content: center; /* center within container */
 }
+/* In grid mode, allow cards to be fluid inside columns (override carousel fixed widths) */
+.cat-filtered #pkgs-mobile .pkg-card,
+.cat-filtered #pkgs-gift .pkg-card {
+  min-width: 0;
+  max-width: none;
+  width: 100%;
+}
 /* Phones: 2 per row */
 @media (max-width: 700px) {
   .cat-filtered #pkgs-mobile .packages-rail,
   .cat-filtered #pkgs-gift .packages-rail {
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
+  }
+  /* Ensure cards fill their grid column fully on phones */
+  .cat-filtered #pkgs-mobile .pkg-card,
+  .cat-filtered #pkgs-gift .pkg-card {
+    width: 100%;
   }
 }
 
@@ -300,6 +312,9 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
   .hero-slide { background-size: cover; background-repeat: no-repeat; background-color: #000; }
   .hero-nav { width: 28px; height: 28px; }
   .hero-dots .dot { width: 6px; height: 6px; }
+
+  /* Hide game description on mobile */
+  .game-desc { display: none; }
 
   /* Packages: carousel with 2 cards visible on phones */
   .packages { padding-left: 12px; padding-right: 12px; }

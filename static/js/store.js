@@ -11,6 +11,18 @@ document.addEventListener('DOMContentLoaded', () => {
   function openOverlay() {
     overlay && overlay.removeAttribute('hidden');
   }
+
+  // Lightweight session check to avoid 401s on public pages
+  async function getSessionUser() {
+    try {
+      const res = await fetch('/auth/session');
+      const data = await res.json();
+      if (res.ok && data && data.ok && data.user) return data.user;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
   function closeOverlay() {
     overlay && overlay.setAttribute('hidden', '');
   }
@@ -96,8 +108,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Clicking on user label opens Profile tab or login modal
   if (userLabel) {
     userLabel.addEventListener('click', async () => {
-      const data = await fetchAndFillProfile();
-      if (data && data.ok && data.profile && data.profile.email) {
+      const u = await getSessionUser();
+      if (u && u.email) {
         window.location.href = '/user';
       } else {
         openAuthModal();
@@ -191,9 +203,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auth modal open/close
   if (btnLogin) {
     btnLogin.addEventListener('click', async () => {
-      // If already logged in, go to /user
-      const data = await fetchAndFillProfile();
-      if (data && data.ok && data.profile && data.profile.email) {
+      // If already logged in, go to /user (session check avoids 401)
+      const u = await getSessionUser();
+      if (u && u.email) {
         window.location.href = '/user';
         return;
       }
@@ -285,10 +297,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Try to load profile on page load to show user email if already logged in
   (async function initUserLabel() {
-    const data = await fetchAndFillProfile();
-    if (data && data.ok && data.profile && data.profile.email) {
-      setUserLabel(data.profile.email);
-    }
+    const u = await getSessionUser();
+    if (u && u.email) setUserLabel(u.email);
   })();
 
   // Helper: alerts

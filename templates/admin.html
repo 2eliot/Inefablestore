@@ -90,9 +90,9 @@
       <div class="panel-header">
         <h2>Imágenes</h2>
         <div class="actions">
-          <input id="file-input" type="file" accept="image/*" style="display:none;" />
-          <button id="btn-upload" class="btn primary">Subir Imagen</button>
-          <button id="btn-refresh" class="btn">Refrescar</button>
+          <input id="file-input" type="file" accept="image/*" multiple style="display:none;" />
+          <button id="btn-upload" class="btn primary" type="button">Subir Imagen</button>
+          <button id="btn-refresh" class="btn" type="button">Refrescar</button>
         </div>
       </div>
       <div class="panel-body">
@@ -100,7 +100,10 @@
         <div id="gallery" class="image-grid"></div>
         <template id="image-card-tpl">
           <div class="image-card">
-            <img class="thumb" alt="" />
+            <div class="thumb-wrap">
+              <img class="thumb" alt="" />
+              <button class="btn btn-del-ov" type="button" title="Eliminar">✕</button>
+            </div>
             <div class="meta">
               <div class="title"></div>
               <code class="path"></code>
