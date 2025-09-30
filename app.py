@@ -1,6 +1,12 @@
+@app.route("/uploads/<path:filename>")
+def serve_uploaded_file(filename: str):
+    """Serve files from UPLOAD_FOLDER when using a persistent Disk (prefix /uploads)."""
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+
 import os
+import shutil
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -39,6 +45,9 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key")
 
 DEFAULT_UPLOAD = os.path.join(app.root_path, "static", "uploads")
 app.config["UPLOAD_FOLDER"] = os.environ.get("UPLOAD_FOLDER", DEFAULT_UPLOAD)
+# Public URL prefix that points to where images are served from.
+# If using persistent Disk (outside static), set UPLOAD_URL_PREFIX=/uploads and UPLOAD_FOLDER to the mounted path.
+app.config["UPLOAD_URL_PREFIX"] = os.environ.get("UPLOAD_URL_PREFIX", "/static/uploads")
 try:
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 except Exception:
@@ -1194,7 +1203,9 @@ def admin_images_upload():
     save_path = os.path.join(app.config["UPLOAD_FOLDER"], final_name)
     file.save(save_path)
 
-    public_path = f"/static/uploads/{final_name}"
+    # Build public path according to configured prefix (works for both static and Disk)
+    prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
+    public_path = f"{prefix}/{final_name}"
     image = ImageAsset(title=final_name, path=public_path, alt_text=name)
     db.session.add(image)
     db.session.commit()
@@ -1222,8 +1233,13 @@ def admin_images_delete(image_id: int):
     # Try to remove the physical file only if it is within the uploads folder
     try:
         path = (img.path or "").strip()
-        if path.startswith("/static/uploads/"):
-            fs_path = os.path.join(app.root_path, path.lstrip("/"))
+        prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
+        if path.startswith(prefix + "/"):
+            rel = path[len(prefix):].lstrip("/")
+            # If serving from static/uploads, rel is under app.root_path/static/uploads.
+            # If serving from Disk, rel is under app.config['UPLOAD_FOLDER'].
+            base = app.config.get("UPLOAD_FOLDER") or DEFAULT_UPLOAD
+            fs_path = os.path.join(base, rel)
             if os.path.isfile(fs_path):
                 os.remove(fs_path)
     except Exception:
@@ -1245,8 +1261,11 @@ def admin_images_delete_fallback(image_id: int):
         return jsonify({"ok": False, "error": "No existe"}), 404
     try:
         path = (img.path or "").strip()
-        if path.startswith("/static/uploads/"):
-            fs_path = os.path.join(app.root_path, path.lstrip("/"))
+        prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
+        if path.startswith(prefix + "/"):
+            rel = path[len(prefix):].lstrip("/")
+            base = app.config.get("UPLOAD_FOLDER") or DEFAULT_UPLOAD
+            fs_path = os.path.join(base, rel)
             if os.path.isfile(fs_path):
                 os.remove(fs_path)
     except Exception:
@@ -1270,8 +1289,11 @@ def admin_images_delete_by_path():
     if not img:
         return jsonify({"ok": False, "error": "No existe"}), 404
     try:
-        if path_in.startswith("/static/uploads/"):
-            fs_path = os.path.join(app.root_path, path_in.lstrip("/"))
+        prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
+        if path_in.startswith(prefix + "/"):
+            rel = path_in[len(prefix):].lstrip("/")
+            base = app.config.get("UPLOAD_FOLDER") or DEFAULT_UPLOAD
+            fs_path = os.path.join(base, rel)
             if os.path.isfile(fs_path):
                 os.remove(fs_path)
     except Exception:

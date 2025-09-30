@@ -1401,6 +1401,26 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
           if (btnSaveLogo) btnSaveLogo.disabled = false;
         }
+      } else if (window.__currentPickPkgId) {
+        // Auto-guardar imagen del paquete seleccionado
+        try {
+          const pid = window.__currentPickPkgId;
+          const res = await fetch(`/admin/packages/${pid}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_path: path })
+          });
+          if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || 'No se pudo actualizar el paquete');
+          }
+          toast('Imagen del paquete actualizada');
+          await fetchPackages();
+        } catch (err) {
+          toast(err.message || 'No se pudo actualizar la imagen');
+        } finally {
+          window.__currentPickPkgId = null;
+        }
       }
       closeLogoPicker();
     });
@@ -1491,6 +1511,20 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       `;
       pkgList.appendChild(item);
+      // Propagar pkgId a controles para auto-guardar al elegir imagen
+      const imgInput = item.querySelector('.edit-image');
+      const pickBtn = item.querySelector('.btn-pick-img');
+      const saveBtn = item.querySelector('.btn-save');
+      if (saveBtn) saveBtn.dataset.id = String(p.id);
+      if (imgInput) imgInput.dataset.pkgId = String(p.id);
+      if (pickBtn) pickBtn.dataset.pkgId = String(p.id);
+      // Listener directo: abrir picker al pulsar 'Elegir' del paquete
+      if (pickBtn && imgInput) {
+        pickBtn.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          openLogoPicker(imgInput);
+        });
+      }
     });
   }
 
