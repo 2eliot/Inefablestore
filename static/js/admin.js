@@ -1,4 +1,4 @@
-﻿document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
   console.log('admin.js loaded v5');
   const tabs = document.querySelectorAll('#adminTabs .tab');
   const panels = document.querySelectorAll('.tab-panel');
@@ -43,7 +43,6 @@
   const btnMailTest = document.getElementById('btn-mail-test');
   const btnMailSave = document.getElementById('btn-mail-save');
   const mailTestResult = document.getElementById('mail-test-result');
-  // Session info fields
   const sessEmail = document.getElementById('sess-email');
   const sessRole = document.getElementById('sess-role');
   // Packages
@@ -51,6 +50,8 @@
   const pkgImage = document.getElementById('pkg-image');
   const pkgCategory = document.getElementById('pkg-category');
   const pkgDesc = document.getElementById('pkg-desc');
+  const pkgRequires = document.getElementById('pkg-requires-zone');
+  const pkgRequiresZoneId = document.getElementById('pkg-requires-zone-id');
   const btnPickPkgImage = document.getElementById('btn-pick-pkg-image');
   const btnCreatePkg = document.getElementById('btn-create-pkg');
   const btnPackagesRefresh = document.getElementById('btn-packages-refresh');
@@ -170,7 +171,7 @@
     if (!ordersWdList) return;
     ordersWdList.innerHTML = '';
     if (!items || items.length === 0) {
-      ordersWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerÃ¡n aquÃ­.</p></div>';
+      ordersWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerán aquí.</p></div>';
       return;
     }
     const fmtUSD = (n) => {
@@ -180,11 +181,11 @@
       const tile = document.createElement('div');
       tile.className = 'order-tile';
       const when = new Date(r.created_at).toLocaleString();
-      const statusIcon = r.status === 'approved' ? 'âœ…' : r.status === 'rejected' ? 'â›”' : 'â³';
+      const statusIcon = r.status === 'approved' ? 'OK' : r.status === 'rejected' ? 'X' : '...';
       const statusClass = r.status === 'approved' ? 'ok' : r.status === 'rejected' ? 'rej' : 'pend';
       const payoutLine = (r.method === 'pm')
-        ? `Pago MÃ³vil: ${r.pm_bank || ''} â€¢ ${r.pm_name || ''} â€¢ ${r.pm_phone || ''} â€¢ ${r.pm_id || ''}`
-        : `Binance: ${r.binance_email || ''} â€¢ ${r.binance_phone || ''}`;
+        ? `Pago Móvil: ${r.pm_bank || ''} · ${r.pm_name || ''} · ${r.pm_phone || ''} · ${r.pm_id || ''}`
+        : `Binance: ${r.binance_email || ''} · ${r.binance_phone || ''}`;
       tile.innerHTML = `
         <div class="row-head">
           <div>
@@ -212,8 +213,10 @@
     });
   }
 
-  if (ordersWdList) {
-    ordersWdList.addEventListener('click', async (e) => {
+  {
+  const _ordersWdList = document.getElementById('orders-wd-list');
+  if (_ordersWdList) {
+    _ordersWdList.addEventListener('click', async (e) => {
       const app = e.target.closest('.btn-wd-approve');
       const rej = e.target.closest('.btn-wd-reject');
       if (app || rej) {
@@ -225,7 +228,7 @@
           });
           if (!res.ok) throw new Error('No se pudo actualizar');
           await fetchAffWithdrawalsForOrders();
-        } catch (err) {
+}catch (err) {
           toast(err.message || 'Error');
         } finally {
           (app || rej).disabled = false;
@@ -253,7 +256,7 @@
     if (!affWdList) return;
     affWdList.innerHTML = '';
     if (!items || items.length === 0) {
-      affWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerÃ¡n aquÃ­.</p></div>';
+      affWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerán aquí.</p></div>';
       return;
     }
     const fmtUSD = (n) => {
@@ -263,11 +266,11 @@
       const tile = document.createElement('div');
       tile.className = 'order-tile';
       const when = new Date(r.created_at).toLocaleString();
-      const statusIcon = r.status === 'approved' ? 'âœ…' : r.status === 'rejected' ? 'â›”' : 'â³';
+      const statusIcon = r.status === 'approved' ? 'OK' : r.status === 'rejected' ? 'X' : '...';
       const statusClass = r.status === 'approved' ? 'ok' : r.status === 'rejected' ? 'rej' : 'pend';
       const payoutLine = (r.method === 'pm')
-        ? `Pago MÃ³vil: ${r.pm_bank || ''} â€¢ ${r.pm_name || ''} â€¢ ${r.pm_phone || ''} â€¢ ${r.pm_id || ''}`
-        : `Binance: ${r.binance_email || ''} â€¢ ${r.binance_phone || ''}`;
+        ? `Pago Móvil: ${r.pm_bank || ''} · ${r.pm_name || ''} · ${r.pm_phone || ''} · ${r.pm_id || ''}`
+        : `Binance: ${r.binance_email || ''} · ${r.binance_phone || ''}`;
       tile.innerHTML = `
         <div class="row-head">
           <div>
@@ -333,6 +336,7 @@
         if (binEmail) binEmail.value = data.binance_email || '';
         if (binPhone) binPhone.value = data.binance_phone || '';
       }
+window.fetchPayments = fetchPayments;
     } catch (_) { /* ignore */ }
   }
 
@@ -352,9 +356,8 @@
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(txt || 'No se pudo guardar mÃ©todos de pago');
+      throw new Error(txt || 'No se pudo guardar métodos de pago');
     }
-    return res.json();
   }
 
   // Save rate
@@ -427,6 +430,7 @@
         inputLogo.value = data.logo_path || '';
         showLogoPreview();
       }
+window.fetchLogo = fetchLogo;
     } catch (_) { /* ignore */ }
   }
 
@@ -567,7 +571,7 @@
 
   async function fetchImages() {
     const res = await fetch('/admin/images/list');
-    if (!res.ok) throw new Error('No se pudo listar imÃ¡genes');
+    if (!res.ok) throw new Error('No se pudo listar imágenes');
     return res.json();
   }
 
@@ -578,7 +582,7 @@
     imgIndex.byPath.clear();
     imgIndex.byTitle.clear();
     if (!items || items.length === 0) {
-      gallery.innerHTML = '<div class="empty-state"><h3>Sin imÃ¡genes</h3><p>Sube imÃ¡genes para usarlas en el sitio.</p></div>';
+      gallery.innerHTML = '<div class="empty-state"><h3>Sin imágenes</h3><p>Sube imágenes para usarlas en el sitio.</p></div>';
       return;
     }
     items.forEach(img => {
@@ -691,7 +695,7 @@
       if (!id) { console.warn('[images] cannot resolve id for delete'); toast('No se pudo resolver la imagen', 'error'); return; }
       // For overlay button, skip confirm to avoid blocked dialogs on some setups
       if (!(buttonEl && buttonEl.classList && buttonEl.classList.contains('btn-del-ov'))) {
-        const ok = confirm('Â¿Eliminar esta imagen? Esta acciÃ³n no se puede deshacer.');
+        const ok = confirm('Ã‚Â¿Eliminar esta imagen? Esta acciÃƒÂ³n no se puede deshacer.');
         if (!ok) return;
       }
       if (buttonEl) buttonEl.disabled = true;
@@ -718,13 +722,15 @@
   }
 
   async function refreshGallery() {
-    try {
-      const data = await fetchImages();
-      renderGallery(data);
-    } catch (e) {
-      if (gallery) gallery.innerHTML = `<div class="empty-state"><p>${e.message || 'Error'}</p></div>`;
-    }
+  const data = await fetchImages().catch(() => null);
+  if (!data) {
+    if (gallery) gallery.innerHTML = `<div class="empty-state"><p>Error</p></div>`;
+    return;
   }
+  renderGallery(data);
+}
+window.refreshGallery = refreshGallery;
+window.refreshGallery = refreshGallery;
 
   async function uploadImage(file) {
     const fd = new FormData();
@@ -811,7 +817,7 @@
   }
 
   if (btnRefresh) {
-    btnRefresh.addEventListener('click', refreshGallery);
+    btnRefresh.addEventListener('click', () => window.refreshGallery && window.refreshGallery());
   }
 
   if (gallery) {
@@ -834,12 +840,12 @@
     });
   }
 
-  // Si la pestaÃ±a de ImÃ¡genes ya estÃ¡ activa al cargar, refrescar
+  // Si la pestaÃƒÂ±a de ImÃƒÂ¡genes ya estÃƒÂ¡ activa al cargar, refrescar
   if (document.querySelector('#tab-images.active')) {
     refreshGallery();
   }
 
-  // DelegaciÃ³n global (respaldo) para botones de imÃ¡genes
+  // DelegaciÃƒÂ³n global (respaldo) para botones de imÃƒÂ¡genes
   document.body.addEventListener('click', async (e) => {
     const del = e.target.closest('.btn-del');
     const delOv = e.target.closest('.btn-del-ov');
@@ -884,11 +890,11 @@
       const data = await res.json();
       const pkgs = (data && data.packages) || [];
       // Reset options
-      affPkgSelect.innerHTML = '<option value="">â€” Selecciona un juego â€”</option>';
+      affPkgSelect.innerHTML = '<option value="">Ã¢â‚¬â€ Selecciona un juego Ã¢â‚¬â€</option>';
       pkgs.forEach(p => {
         const opt = document.createElement('option');
         opt.value = String(p.id);
-        opt.textContent = `${p.name} ${p.category ? 'Â· '+p.category.toUpperCase() : ''}`;
+        opt.textContent = `${p.name} ${p.category ? 'Ã‚Â· '+p.category.toUpperCase() : ''}`;
         affPkgSelect.appendChild(opt);
       });
     } catch (_) {
@@ -932,7 +938,7 @@
         <div class="pkg-header">
           <div>
             <div class="name">${u.name || '-'} <span class="badge">${u.active ? 'ACTIVO' : 'INACTIVO'}</span></div>
-            <div class="sub">CÃ³digo: <strong>${u.code}</strong> â€¢ Email: <strong>${u.email || '-'}</strong> â€¢ Saldo: <strong>${fmtUSD(u.balance)}</strong> â€¢ Desc: <strong>${(u.discount_percent||0)}%</strong> â€¢ Alcance: <strong>${u.scope || 'all'}${u.scope === 'package' && u.scope_package_id ? ' #'+u.scope_package_id : ''}</strong></div>
+            <div class="sub">CÃƒÂ³digo: <strong>${u.code}</strong> Ã¢â‚¬Â¢ Email: <strong>${u.email || '-'}</strong> Ã¢â‚¬Â¢ Saldo: <strong>${fmtUSD(u.balance)}</strong> Ã¢â‚¬Â¢ Desc: <strong>${(u.discount_percent||0)}%</strong> Ã¢â‚¬Â¢ Alcance: <strong>${u.scope || 'all'}${u.scope === 'package' && u.scope_package_id ? ' #'+u.scope_package_id : ''}</strong></div>
           </div>
           <div class="head-actions">
             <button class="btn btn-aff-save" data-id="${u.id}" type="button">Guardar</button>
@@ -941,9 +947,9 @@
         </div>
         <div class="pkg-content" style="display:grid; gap:6px;">
           <input class="aff-edit-name" type="text" value="${u.name || ''}" placeholder="Nombre" />
-          <input class="aff-edit-code" type="text" value="${u.code || ''}" placeholder="CÃ³digo" />
+          <input class="aff-edit-code" type="text" value="${u.code || ''}" placeholder="CÃƒÂ³digo" />
           <input class="aff-edit-email" type="email" value="${u.email || ''}" placeholder="Email" />
-          <input class="aff-edit-pass" type="password" value="" placeholder="Nueva contraseÃ±a (opcional)" />
+          <input class="aff-edit-pass" type="password" value="" placeholder="Nueva contraseÃƒÂ±a (opcional)" />
           <div style="display:grid; gap:6px; grid-template-columns: 1fr 1fr;">
             <input class="aff-edit-disc" type="number" step="0.1" min="0" max="100" value="${u.discount_percent || 0}" placeholder="Descuento %" />
             <select class="aff-edit-scope">
@@ -972,7 +978,7 @@
       balance: (affBalance && parseFloat(affBalance.value || '0')) || 0,
       active: affActive ? !!affActive.checked : true
     };
-    if (!payload.code) { toast('CÃ³digo requerido'); return; }
+    if (!payload.code) { toast('CÃƒÂ³digo requerido'); return; }
     const res = await fetch('/admin/special/users', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
     });
@@ -1068,10 +1074,11 @@
   }
 
   function renderOrders(items) {
+  function fixMb(s){ s = String(s==null?'':s); return s.replace(/ÃƒÂ¡|Ã¡/g,'á').replace(/ÃƒÂ©|Ã©/g,'é').replace(/ÃƒÂ­|Ã­/g,'í').replace(/ÃƒÂ³|Ã³/g,'ó').replace(/ÃƒÂº|Ãº/g,'ú').replace(/ÃƒÂ±|Ã±/g,'ñ').replace(/Ã‚Â·/g,'·').replace(/Ã¢â‚¬â€�/g,'-').replace(/Ã¢â‚¬Â¢/g,'•'); }
     if (!ordersList) return;
     ordersList.innerHTML = '';
     if (!items || items.length === 0) {
-      ordersList.innerHTML = '<div class="empty-state"><h3>Sin Ã³rdenes</h3><p>Cuando los clientes confirmen pagos, sus Ã³rdenes aparecerÃ¡n aquÃ­.</p></div>';
+      ordersList.innerHTML = '<div class="empty-state"><h3>Sin órdenes</h3><p>Cuando los clientes confirmen pagos, sus órdenes aparecerán aquí.</p></div>';
       return;
     }
     const fmtUSD = (amt) => {
@@ -1087,13 +1094,13 @@
       tile.className = 'order-tile';
       const when = new Date(o.created_at).toLocaleString();
       const juego = o.package_name || `#${o.store_package_id}`;
-      const diam = o.item_title || '';
+      const diam = fixMb(o.item_title) || '';
       const precioUSD = fmtUSD(o.item_price_usd || 0);
-      const statusIcon = o.status === 'approved' ? 'âœ…' : o.status === 'rejected' ? 'â›”' : 'â³';
+      const statusIcon = o.status === 'approved' ? 'OK' : o.status === 'rejected' ? 'X' : '...';
       const statusClass = o.status === 'approved' ? 'ok' : o.status === 'rejected' ? 'rej' : 'pend';
-      const playerId = o.customer_id || 'â€”';
-      const txRef = o.reference || 'â€”';
-      const gameName = o.package_name || '';
+      const playerId = fixMb(o.customer_id || '-') ;
+      const txRef = fixMb(o.reference || '-') ;
+      const gameName = fixMb(o.package_name || '');
       const isGift = (o.package_category || '').toLowerCase() === 'gift';
       tile.innerHTML = `
         <div class=\"row-head\">
@@ -1103,11 +1110,11 @@
           </div>
           <div class=\"box-right\">
             <code class=\"hex\">${playerId}</code>
-            <button class=\"btn-copy\" type=\"button\" data-copy=\"${playerId}\">ðŸ“‹</button>
+            <button class=\"btn-copy\" type=\"button\" data-copy=\"${playerId}\">Copiar</button>
           </div>
         </div>
         <div class=\"row-metrics\">
-          <div class=\"metric diam\"><span>${diam || ''}</span> <span>ðŸ’Ž</span></div>
+          <div class=\"metric diam\"><span>${diam || ''}</span> <span>DIAM</span></div>
           <div class=\"metric usd\"><span>${precioUSD}</span></div>
         </div>
         <div class=\"row-foot\">
@@ -1116,13 +1123,15 @@
         </div>
         ${isGift ? `
         <div class=\"row-actions\">
-          <input class=\"input gift-code\" data-id=\"${o.id}\" type=\"text\" placeholder=\"CÃ³digo para el cliente\" value=\"${o.delivery_code || ''}\" style=\"flex:1; min-width:220px;\" />
+          <input class=\"input gift-code\" data-id=\"${o.id}\" type=\"text\" placeholder=\"Código para el cliente\" value=\"${o.delivery_code || ''}\" style=\"flex:1; min-width:220px;\" />
         </div>` : ''}
         <div class=\"row-actions\">
           <button class=\"btn btn-approve\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Aprobar</button>
           <button class=\"btn btn-reject\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Rechazar</button>
         </div>
       `;
+      const cust = tile.querySelector('.row-foot .customer');
+      if (cust) { cust.textContent = 'ID: ' + playerId + (o.customer_zone ? ' - ZONA: ' + o.customer_zone : '') + ' - ' + (fixMb(o.name) || fixMb(o.email) || 'Cliente'); }
       ordersList.appendChild(tile);
     });
   }
@@ -1170,11 +1179,13 @@
   // Config: rate get/set
   // =====================
   async function fetchRate() {
-    try {
-      const res = await fetch('/admin/config/rate');
-      const data = await res.json();
-      if (data && data.ok && inputRate) inputRate.value = data.rate_bsd_per_usd || '';
-    } catch (_) { /* ignore */ }
+  try {
+    const res = await fetch('/admin/config/rate');
+    const data = await res.json();
+    if (data && data.ok && inputRate) inputRate.value = data.rate_bsd_per_usd || '';
+  } catch (_) { /* ignore */ }
+}
+window.fetchRate = fetchRate;window.fetchRate = fetchRate;
   }
 
   async function saveRate() {
@@ -1204,6 +1215,7 @@
         if (hero2) hero2.value = data.hero_2 || '';
         if (hero3) hero3.value = data.hero_3 || '';
       }
+window.fetchHero = fetchHero;
     } catch (_) { /* ignore */ }
   }
 
@@ -1231,7 +1243,7 @@
     if (!items || items.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.innerHTML = '<h3>Sin imÃ¡genes</h3><p>Sube una imagen para comenzar.</p>';
+      empty.innerHTML = '<h3>Sin imágenes</h3><p>Sube una imagen para comenzar.</p>';
       gallery.appendChild(empty);
       return;
     }
@@ -1245,17 +1257,6 @@
       title.textContent = it.title || '';
       path.textContent = it.path || '';
       gallery.appendChild(node);
-    }
-  }
-
-  async function refreshGallery() {
-    try {
-      const res = await fetch('/admin/images/list');
-      if (!res.ok) throw new Error('No se pudo listar imÃ¡genes');
-      const data = await res.json();
-      renderGallery(data);
-    } catch (err) {
-      toast(err.message || 'Error al listar');
     }
   }
 
@@ -1293,7 +1294,7 @@
   }
 
   if (btnRefresh) {
-    btnRefresh.addEventListener('click', refreshGallery);
+    btnRefresh.addEventListener('click', () => window.refreshGallery && window.refreshGallery());
   }
 
   // Copy path button (event delegation)
@@ -1315,10 +1316,10 @@
   }
 
   // Fetch current config on load of admin page (after element refs are defined)
-  fetchLogo();
-  fetchHero();
-  fetchRate();
-  fetchPayments();
+  window.fetchLogo && window.fetchLogo();
+  window.fetchHero && window.fetchHero();
+  window.fetchRate && window.fetchRate();
+  window.fetchPayments && window.fetchPayments();
 
   // =====================
   // Logo picker modal
@@ -1345,7 +1346,7 @@
       if (!data || data.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty-state';
-        empty.innerHTML = '<h3>Sin imÃ¡genes</h3><p>Sube una imagen en la pestaÃ±a ImÃ¡genes.</p>';
+        empty.innerHTML = '<h3>Sin imágenes</h3><p>Sube una imagen en la pestaña Imágenes.</p>';
         logoPickerGrid.appendChild(empty);
         return;
       }
@@ -1358,7 +1359,7 @@
       }
     } catch (_) {
       const err = document.createElement('div');
-      err.textContent = 'Error cargando imÃ¡genes';
+      err.textContent = 'Error cargando imágenes';
       logoPickerGrid.appendChild(err);
     }
   }
@@ -1376,7 +1377,8 @@
   if (logoPicker) {
     logoPicker.addEventListener('click', (e) => {
       if (e.target.classList.contains('modal-backdrop')) {
-        closeLogoPicker();
+        closeLogoPicker();
+
       }
     });
   }
@@ -1416,7 +1418,7 @@
         btnSavePayments.disabled = true;
         const resp = await savePayments();
         if (resp && resp.ok) {
-          toast('Métodos de pago guardados');
+          toast('MÃ©todos de pago guardados');
           await fetchPayments();
         } else {
           toast('Guardado, pero respuesta inesperada');
@@ -1485,7 +1487,10 @@
             <option value="mobile" ${p.category === 'mobile' ? 'selected' : ''}>Juegos Mobile</option>
             <option value="gift" ${p.category === 'gift' ? 'selected' : ''}>Gift Cards</option>
           </select>
-          <textarea class="edit-desc" placeholder="DescripciÃ³n del juego" style="min-height:60px;">${p.description || ''}</textarea>
+          <textarea class="edit-desc" placeholder="DescripciÃƒÂ³n del juego" style="min-height:60px;">${p.description || ''}</textarea>
+          <label style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+            <input class="edit-requires-zone" type="checkbox" ${p.requires_zone_id ? 'checked' : ''}/> Zona ID requerida
+          </label>
           <div style="display:flex; gap:6px;">
             <input class="edit-image" type="text" value="${p.image_path}" readonly />
             <button class="btn btn-pick-img" type="button">Elegir</button>
@@ -1503,7 +1508,7 @@
             </div>
             <div class="items-list"></div>
             <div class="items-form" style="margin-top:10px; display:grid; gap:6px; grid-template-columns: 1fr 140px;">
-              <input class="new-item-title" type="text" placeholder="TÃ­tulo del paquete" />
+              <input class="new-item-title" type="text" placeholder="TÃƒÂ­tulo del paquete" />
               <input class="new-item-price" type="number" step="0.01" min="0" placeholder="Precio" />
               <div style="grid-column:1 / -1; display:flex; gap:6px;">
                 <button class="btn btn-item-create" type="button">Agregar paquete</button>
@@ -1543,6 +1548,7 @@
     const image_path = (pkgImage && pkgImage.value.trim()) || '';
     const category = (pkgCategory && pkgCategory.value) || 'mobile';
     const description = (pkgDesc && pkgDesc.value.trim()) || '';
+    const requires_zone_id = !!(pkgRequires && pkgRequires.checked);
     if (!name || !image_path) {
       toast('Nombre e imagen requeridos');
       return;
@@ -1550,7 +1556,7 @@
     const res = await fetch('/admin/packages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, image_path, category, description })
+      body: JSON.stringify({ name, image_path, category, description, requires_zone_id })
     });
     if (!res.ok) {
       const txt = await res.text();
@@ -1646,11 +1652,13 @@
         const catEl = item && item.querySelector('.edit-category');
         const imgEl = item && item.querySelector('.edit-image');
         const descEl = item && item.querySelector('.edit-desc');
+        const rzEl = item && item.querySelector('.edit-requires-zone');
         const payload = {
           name: nameEl ? nameEl.value.trim() : '',
           category: catEl ? catEl.value : 'mobile',
           image_path: imgEl ? imgEl.value.trim() : '',
-          description: descEl ? descEl.value.trim() : ''
+          description: descEl ? descEl.value.trim() : '',
+          requires_zone_id: rzEl ? !!rzEl.checked : false
         };
         try {
           btnSave.disabled = true;
@@ -1682,7 +1690,7 @@
         const priceEl = game && game.querySelector('.new-item-price');
         const title = titleEl ? titleEl.value.trim() : '';
         const price = priceEl ? parseFloat(priceEl.value || '0') : 0;
-        if (!gid || !title) { toast('TÃ­tulo requerido'); return; }
+        if (!gid || !title) { toast('TÃƒÂ­tulo requerido'); return; }
         try {
           btnItemCreate.disabled = true;
           const res = await fetch(`/admin/package/${gid}/items`, {
@@ -1782,7 +1790,7 @@
       row.style.gap = '6px';
       row.style.marginBottom = '8px';
       row.innerHTML = `
-        <input class="it-title" type="text" value="${it.title || ''}" placeholder="TÃ­tulo" />
+        <input class="it-title" type="text" value="${it.title || ''}" placeholder="TÃƒÂ­tulo" />
         <input class="it-price" type="number" step="0.01" min="0" value="${Number(it.price || 0)}" placeholder="Precio" />
         <div style="grid-column:1 / -1; display:flex; gap:6px;">
           <button class="btn btn-item-save" type="button">Guardar</button>
@@ -1793,6 +1801,25 @@
     });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

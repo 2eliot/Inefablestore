@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const qCur = qs.get('cur');
   const qMethod = qs.get('method'); // 'pm' | 'binance'
   const qCid = qs.get('cid');
+  const qZid = qs.get('zid');
   const qRefCode = (qs.get('rc') || '').trim();
   const qName = qs.get('n') || '';
   const qEmail = qs.get('e') || '';
@@ -125,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
       coInfo.appendChild(row);
     };
     if (qCid) addRow('ID de jugador', qCid);
+    if (qZid) addRow('Zona ID', qZid);
     if (currency === 'BSD') {
       addRow('Banco', (paymentsCfg && paymentsCfg.pm_bank) || '');
       addRow('Nombre', (paymentsCfg && paymentsCfg.pm_name) || '');
@@ -198,6 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const email = qEmail || (state && state.email) || '';
       const phone = qPhone || (state && state.phone) || '';
       const customer_id = qs.get('cid') || '';
+      const customer_zone = qs.get('zid') || '';
       const payload = {
         store_package_id: gid,
         item_id: item ? item.id : null,
@@ -209,6 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
         email,
         phone,
         customer_id,
+        customer_zone,
         special_code: qRefCode || ''
       };
       // UI loading state

@@ -1,4 +1,4 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='2') }}">
@@ -80,7 +80,7 @@
   <div class="modal-backdrop"></div>
 </div>
 
-<section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}">
+<section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}">
   <div class="details-left">
     <div class="game-hero">
       <div class="banner" style="background-image:url('{{ game.image_path }}')"></div>
@@ -100,6 +100,9 @@
     <div class="step-card">
       <div class="step-title">1 Ingrese su ID</div>
       <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID">
+      {% if game.requires_zone_id %}
+      <input id="customer-zone" class="input" type="text" placeholder="Ingresa tu Zona ID">
+      {% endif %}
     </div>
 
     <div class="step-card">
@@ -127,8 +130,11 @@
       <input id="full-name" class="input" type="text" placeholder="Nombre y apellido">
       <input id="email" class="input" type="email" placeholder="Correo de contacto">
       <input id="phone" class="input" type="tel" placeholder="Número de teléfono">
-      <input id="ref-code" class="input" type="text" placeholder="CÓDIGO DE DESCUENTO (opcional)">
-      <small id="ref-status" style="color:#94a3b8;"></small>
+      <div class="form-sep" aria-hidden="true"></div>
+      <div class="discount-section" role="group" aria-label="Código de descuento">
+        <input id="ref-code" class="input" type="text" placeholder="CÓDIGO DE DESCUENTO (opcional)">
+        <small id="ref-status" class="ref-status"></small>
+      </div>
       <label class="check"><input id="save-data" type="checkbox"> Guardar datos para futuras compras</label>
       <button id="btn-buy" class="btn primary full" type="button">Comprar</button>
     </div>

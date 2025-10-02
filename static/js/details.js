@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!root) return;
   const gid = root.getAttribute('data-game-id');
   const category = (root.getAttribute('data-category') || '').toLowerCase();
+  const requiresZone = (root.getAttribute('data-requires-zone') === '1');
   const isGift = category === 'gift';
   const grid = document.getElementById('items-grid');
   const selBox = document.getElementById('selected-box');
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const mfsClose = document.getElementById('mfs-close');
   // Step 4 inputs
   const inputCustomerId = document.getElementById('customer-id');
+  const inputCustomerZone = document.getElementById('customer-zone');
   // Hide Step 1 (player ID) for gift category
   if (isGift && inputCustomerId) {
     const stepCard = inputCustomerId.closest('.step-card');
@@ -105,7 +107,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const b = document.createElement('button');
       b.className = 'item-pill';
       // Do NOT show price in the package selector; only title.
-      b.innerHTML = `<span class="t">${it.title}</span>`;
+            b.innerHTML = `
+  <div class="item-pill-col">
+    <div class="item-pill-title">${it.title || ''}</div>
+  </div>
+`;
       b.addEventListener('click', () => {
         selBox.hidden = false;
         selTitle.textContent = it.title;
@@ -119,7 +125,6 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMobileFooter();
       });
       // Autoselect first visible if none selected yet
-      if (i === 0 && !grid.querySelector('.item-pill.active')) setTimeout(() => b.click(), 0);
       grid.appendChild(b);
     });
     if (btnMore) {
@@ -217,6 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!chkSave || !chkSave.checked) return; // only persist if user opted in
     const data = {
       customer_id: isGift ? '' : (inputCustomerId ? inputCustomerId.value.trim() : ''),
+      customer_zone: (requiresZone && !isGift && inputCustomerZone) ? (inputCustomerZone.value.trim()) : '',
       name: inputName ? inputName.value.trim() : '',
       email: inputEmail ? inputEmail.value.trim() : '',
       phone: inputPhone ? inputPhone.value.trim() : '',
@@ -243,6 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!state || !state.save) return; // only apply if user opted in previously
     if (chkSave) chkSave.checked = true;
     if (!isGift && inputCustomerId && state.customer_id && !inputCustomerId.value) inputCustomerId.value = state.customer_id;
+    if (!isGift && requiresZone && inputCustomerZone && state.customer_zone && !inputCustomerZone.value) inputCustomerZone.value = state.customer_zone;
     if (inputName && state.name) inputName.value = state.name;
     if (inputEmail && state.email) inputEmail.value = state.email;
     if (inputPhone && state.phone) inputPhone.value = state.phone;
@@ -374,6 +381,11 @@ document.addEventListener('DOMContentLoaded', () => {
           if (inputCustomerId) inputCustomerId.focus();
           return;
         }
+        if (requiresZone && inputCustomerZone && !inputCustomerZone.value.trim()) {
+          alert('Ingresa tu Zona ID');
+          inputCustomerZone.focus();
+          return;
+        }
       }
       // Persist current selection if user opted
       if (chkSave && chkSave.checked) persistState();
@@ -389,6 +401,9 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       if (!isGift && inputCustomerId) {
         paramsObj.cid = inputCustomerId.value.trim();
+      }
+      if (!isGift && requiresZone && inputCustomerZone) {
+        paramsObj.zid = inputCustomerZone.value.trim();
       }
       const rcode = inputRefCode ? inputRefCode.value.trim() : '';
       if (rcode) paramsObj.rc = rcode;
@@ -428,3 +443,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+
+

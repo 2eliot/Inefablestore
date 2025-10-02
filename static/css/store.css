@@ -1,4 +1,4 @@
-﻿/* Reduce spacing when una sola categoría está visible */
+/* Reduce spacing when una sola categoría está visible */
 .cat-filtered .packages { padding-bottom: 0; }
 
 /* Small-to-mid screens: avoid overflow in details items grid */
@@ -420,6 +420,25 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
   border-color: var(--price-accent);
   box-shadow: 0 0 0 3px rgba(16,185,129,0.25);
 }
+/* Separator between personal data and discount code */
+.details-right .form-sep {
+  height: 0;
+  border-top: 1px solid rgba(148,163,184,0.25);
+  margin: 12px 0 10px;
+}
+/* Discount code section visually delimited */
+.details-right .discount-section {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px dashed rgba(148,163,184,0.35);
+  border-radius: 12px;
+  background: transparent;
+}
+.details-right .discount-section .ref-status {
+  color: #94a3b8;
+}
 /* Pay modal reference input inside details page */
 #pay-ref.input { border:1px solid rgba(148,163,184,0.25); background: rgba(2,6,23,0.7); color:#e2e8f0; }
 #pay-ref.input::placeholder { color:#94a3b8; }
@@ -568,3 +587,19 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
   .mobile-footer-sel { grid-template-columns: 1fr auto !important; gap: 8px !important; }
   .mfs-mid { justify-self: center !important; text-align: center !important; }
 }
+/* Vertical layout for item pills (title over price) */
+.item-pill .item-pill-col { display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
+.item-pill .item-pill-title { font-weight:700; line-height:1.1; }
+.item-pill .item-pill-price { color:#10b981; font-weight:800; }
+
+/* Mobile footer (stack title over price) */
+#mfs .mfs-mid { display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
+#mfs .mfs-title { font-weight:700; line-height:1.1; }
+#mfs .mfs-price { color:#10b981; font-weight:800; }
+/* Centered layout for item pills and mobile footer */
+.item-pill .item-pill-col{ align-items:center; text-align:center; }
+#mfs .mfs-mid{ align-items:center; }
+#mfs .mfs-title, #mfs .mfs-price{ text-align:center; width:100%; }
+/* Semi-transparent mobile footer */
+#mfs{ background: rgba(2, 6, 23, 0.55) !important; border: 1px solid rgba(148,163,184,0.25) !important; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: 0 8px 30px rgba(0,0,0,0.35); }
+#mfs .mfs-icon{ opacity: .95; }

@@ -74,6 +74,7 @@ class Order(db.Model):
     # buyer info
     customer_name = db.Column(db.String(200), default="")  # legacy support
     customer_id = db.Column(db.String(120), default="")  # game ID
+    customer_zone = db.Column(db.String(120), default="")  # optional Zone ID
     name = db.Column(db.String(200), default="")
     email = db.Column(db.String(200), default="")
     phone = db.Column(db.String(80), default="")
@@ -157,6 +158,8 @@ class StorePackage(db.Model):
     # category: 'mobile' (JUEGOS MOBILE) or 'gift' (GIFT CARDS)
     category = db.Column(db.String(20), default="mobile")
     description = db.Column(db.Text, default="")
+    # whether this game requires an extra Zone ID
+    requires_zone_id = db.Column(db.Boolean, default=False)
 
 class GamePackageItem(db.Model):
     __tablename__ = "game_packages"
@@ -165,6 +168,8 @@ class GamePackageItem(db.Model):
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, default="")
     price = db.Column(db.Float, default=0.0)
+    # Optional small label/badge to show on the package (e.g., HOT, NEW)
+    sticker = db.Column(db.String(50), default="")
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -240,6 +245,9 @@ with app.app_context():
         if "description" not in cols:
             db.session.execute(text("ALTER TABLE store_packages ADD COLUMN description TEXT DEFAULT ''"))
             db.session.commit()
+        if "requires_zone_id" not in cols:
+            db.session.execute(text("ALTER TABLE store_packages ADD COLUMN requires_zone_id INTEGER DEFAULT 0"))
+            db.session.commit()
         # Orders table migration: add missing columns if an older schema exists
         info_orders = db.session.execute(text("PRAGMA table_info(orders)")).fetchall()
         order_cols = {row[1] for row in info_orders}
@@ -253,6 +261,7 @@ with app.app_context():
             add_order_col('store_package_id', "store_package_id INTEGER")
             add_order_col('item_id', "item_id INTEGER")
             add_order_col('customer_id', "customer_id TEXT DEFAULT ''")
+            add_order_col('customer_zone', "customer_zone TEXT DEFAULT ''")
             add_order_col('name', "name TEXT DEFAULT ''")
             add_order_col('email', "email TEXT DEFAULT ''")
             add_order_col('phone', "phone TEXT DEFAULT ''")
@@ -305,6 +314,17 @@ with app.app_context():
             pass
     except Exception as e:
         # Safe to ignore if not SQLite or column already exists
+        pass
+
+    # Ensure new columns in game_packages (sticker)
+    try:
+        from sqlalchemy import text
+        gp_info = db.session.execute(text("PRAGMA table_info(game_packages)")).fetchall()
+        gp_cols = {row[1] for row in gp_info}
+        if "sticker" not in gp_cols:
+            db.session.execute(text("ALTER TABLE game_packages ADD COLUMN sticker TEXT DEFAULT ''"))
+            db.session.commit()
+    except Exception:
         pass
 
 # ==============================
@@ -806,6 +826,7 @@ def create_order():
         email = (data.get("email") or "").strip()
         phone = (data.get("phone") or "").strip()
         customer_id = (data.get("customer_id") or "").strip()
+        customer_zone = (data.get("customer_zone") or "").strip()
         special_code = (data.get("special_code") or "").strip()
 
         if not reference:
@@ -826,6 +847,7 @@ def create_order():
             email=email,
             phone=phone,
             customer_id=customer_id,
+            customer_zone=customer_zone,
             customer_name=name or email or customer_id,
             status="pending",
             special_code=special_code,
@@ -906,6 +928,7 @@ def admin_orders_list():
             "item_title": it.title if it else "",
             "item_price_usd": (it.price if it else 0.0),
             "customer_id": x.customer_id,
+            "customer_zone": x.customer_zone or "",
             "name": x.name,
             "email": x.email,
             "phone": x.phone,
@@ -1008,7 +1031,7 @@ def store_game_items(gid: int):
     return jsonify({
         "ok": True,
         "items": [
-            {"id": it.id, "title": it.title, "price": it.price}
+            {"id": it.id, "title": it.title, "price": it.price, "sticker": (it.sticker or "")}
             for it in items
         ]
     })
@@ -1473,7 +1496,7 @@ def admin_game_items_list(gid: int):
     return jsonify({
         "ok": True,
         "items": [
-            {"id": it.id, "title": it.title, "price": it.price, "description": it.description, "active": it.active}
+            {"id": it.id, "title": it.title, "price": it.price, "description": it.description, "sticker": (it.sticker or ""), "active": it.active}
             for it in items
         ]
     })
@@ -1489,16 +1512,17 @@ def admin_game_items_create(gid: int):
     data = request.get_json(silent=True) or {}
     title = (data.get("title") or "").strip()
     description = (data.get("description") or "").strip()
+    sticker = (data.get("sticker") or "").strip()
     try:
         price = float(data.get("price") or 0)
     except Exception:
         price = 0.0
     if not title:
         return jsonify({"ok": False, "error": "Título requerido"}), 400
-    item = GamePackageItem(store_package_id=gid, title=title, description=description, price=price, active=True)
+    item = GamePackageItem(store_package_id=gid, title=title, description=description, price=price, sticker=sticker, active=True)
     db.session.add(item)
     db.session.commit()
-    return jsonify({"ok": True, "item": {"id": item.id, "title": item.title, "price": item.price, "description": item.description, "active": item.active}})
+    return jsonify({"ok": True, "item": {"id": item.id, "title": item.title, "price": item.price, "description": item.description, "sticker": (item.sticker or ""), "active": item.active}})
 
 @app.route("/admin/package/item/<int:item_id>", methods=["PUT", "PATCH"])
 def admin_game_items_update(item_id: int):
@@ -1513,6 +1537,8 @@ def admin_game_items_update(item_id: int):
         item.title = (data.get("title") or "").strip()
     if "description" in data:
         item.description = (data.get("description") or "").strip()
+    if "sticker" in data:
+        item.sticker = (data.get("sticker") or "").strip()
     if "price" in data:
         try:
             item.price = float(data.get("price") or 0)
@@ -1549,6 +1575,7 @@ def admin_packages_update(pid: int):
     image_path = data.get("image_path")
     category = data.get("category")
     description = data.get("description")
+    requires_zone_id = data.get("requires_zone_id")
     active = data.get("active")
     if name is not None:
         item.name = (name or '').strip()
@@ -1561,10 +1588,22 @@ def admin_packages_update(pid: int):
         item.category = c
     if description is not None:
         item.description = (description or '').strip()
+    if requires_zone_id is not None:
+        item.requires_zone_id = bool(requires_zone_id)
     if active is not None:
         item.active = bool(active)
     db.session.commit()
-    return jsonify({"ok": True, "package": {"id": item.id, "name": item.name, "image_path": item.image_path, "active": item.active, "category": item.category}})
+    return jsonify({
+        "ok": True,
+        "package": {
+            "id": item.id,
+            "name": item.name,
+            "image_path": item.image_path,
+            "active": item.active,
+            "category": item.category,
+            "requires_zone_id": bool(item.requires_zone_id)
+        }
+    })
 
 
 # Admin packages management
@@ -1577,7 +1616,7 @@ def admin_packages_list():
     return jsonify({
         "ok": True,
         "packages": [
-            {"id": p.id, "name": p.name, "image_path": p.image_path, "active": p.active, "category": (p.category or 'mobile'), "description": (p.description or '')}
+            {"id": p.id, "name": p.name, "image_path": p.image_path, "active": p.active, "category": (p.category or 'mobile'), "description": (p.description or ''), "requires_zone_id": bool(p.requires_zone_id)}
             for p in items
         ]
     })
@@ -1593,11 +1632,12 @@ def admin_packages_create():
     image_path = (data.get("image_path") or "").strip()
     category = (data.get("category") or "mobile").strip().lower()
     description = (data.get("description") or "").strip()
+    requires_zone_id = bool(data.get("requires_zone_id", False))
     if category not in ("mobile", "gift"):
         category = "mobile"
     if not name or not image_path:
         return jsonify({"ok": False, "error": "Nombre e imagen requeridos"}), 400
-    item = StorePackage(name=name, image_path=image_path, active=True, category=category, description=description)
+    item = StorePackage(name=name, image_path=image_path, active=True, category=category, description=description, requires_zone_id=requires_zone_id)
     db.session.add(item)
     db.session.commit()
     return jsonify({"ok": True, "package": {"id": item.id, "name": item.name, "image_path": item.image_path, "active": item.active}})
