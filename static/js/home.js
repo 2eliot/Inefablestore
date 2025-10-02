@@ -59,10 +59,13 @@ document.addEventListener('DOMContentLoaded', () => {
     pkgs.forEach(p => {
       const card = document.createElement('article');
       card.className = 'pkg-card';
-      card.innerHTML = `
-        <div class="pkg-thumb" style="background-image:url('${p.image_path || ''}')"></div>
-        <h3 class="pkg-name">${p.name || ''}</h3>
-      `;
+      const imgUrl = p.image_path || '';
+      const isGif = /\.gif(\?.*)?$/i.test(imgUrl);
+      const thumb = isGif
+        ? `<div class="pkg-thumb"><img class="pkg-thumb-img" src="${imgUrl}" alt="${(p.name||'').replace(/"/g,'&quot;')}"/></div>`
+        : `<div class="pkg-thumb" style="background-image:url('${imgUrl}')"></div>`;
+      card.innerHTML = `${thumb}
+        <h3 class="pkg-name">${p.name || ''}</h3>`;
       card.style.cursor = 'pointer';
       card.addEventListener('click', () => {
         if (p && typeof p.id !== 'undefined') {

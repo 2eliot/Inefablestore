@@ -102,8 +102,22 @@ document.addEventListener('DOMContentLoaded', () => {
       grid.appendChild(empty);
       return;
     }
-    const list = isMobile ? (showingAll ? items : items.slice(0, 6)) : items;
-    list.forEach((it, i) => {
+    // Group items: specials first
+    const specials = (items || []).filter(it => (it.sticker || '').toLowerCase() === 'special');
+    const normals = (items || []).filter(it => (it.sticker || '').toLowerCase() !== 'special');
+    const ordered = specials.concat(normals);
+    const visible = isMobile ? (showingAll ? ordered : ordered.slice(0, 6)) : ordered;
+
+    const firstNormalInVisible = visible.find(x => normals.indexOf(x) !== -1);
+    visible.forEach((it) => {
+      // Insert a thin separator line before the first normal item when specials exist
+      if (specials.length && firstNormalInVisible === it) {
+        const sep = document.createElement('div');
+        sep.style.borderTop = '1px solid rgba(148,163,184,0.35)';
+        sep.style.margin = '8px 0';
+        sep.style.gridColumn = '1 / -1';
+        grid.appendChild(sep);
+      }
       const b = document.createElement('button');
       b.className = 'item-pill';
       // Do NOT show price in the package selector; only title.
@@ -124,6 +138,15 @@ document.addEventListener('DOMContentLoaded', () => {
         persistState();
         updateMobileFooter();
       });
+      // Keep selection active on re-render (e.g., when switching payment method)
+      if (items.indexOf(it) === selectedItemIndex) {
+        b.classList.add('active');
+        selBox.hidden = false;
+        selTitle.textContent = it.title || '';
+        const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
+        selPrice.textContent = formatPrice(val);
+        sumPrice.textContent = formatPrice(val);
+      }
       // Autoselect first visible if none selected yet
       grid.appendChild(b);
     });
@@ -131,16 +154,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isMobile) {
         btnMore.hidden = true;
       } else {
-        const needMore = items.length > 6;
-        btnMore.hidden = !needMore || showingAll;
+        const needMore = ordered.length > 6;
+        btnMore.hidden = !needMore;
+        if (!btnMore.hidden) btnMore.textContent = showingAll ? 'Ver menos' : 'Ver más';
       }
     }
   }
 
-  // Wire up "Ver más" to reveal remaining packages on mobile
+  // Toggle "Ver más" / "Ver menos" on mobile
   if (btnMore) {
     btnMore.addEventListener('click', () => {
-      showingAll = true;
+      showingAll = !showingAll;
       renderItems(allItems);
       try { btnMore.blur(); } catch (_) {}
     });
@@ -391,6 +415,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (chkSave && chkSave.checked) persistState();
       const gid = root.getAttribute('data-game-id');
       const method = (currency === 'BSD') ? 'pm' : 'binance';
+      // Require phone before proceeding to checkout
+      if (!inputPhone || !inputPhone.value.trim()) {
+        alert('Ingresa tu número de teléfono');
+        if (inputPhone) inputPhone.focus();
+        return;
+      }
       const paramsObj = {
         sel: String(selectedItemIndex),
         cur: currency,

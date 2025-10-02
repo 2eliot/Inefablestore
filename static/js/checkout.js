@@ -199,6 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const name = qName || (state && state.name) || '';
       const email = qEmail || (state && state.email) || '';
       const phone = qPhone || (state && state.phone) || '';
+      if (!phone) { alert('Ingresa tu número de teléfono'); return; }
       const customer_id = qs.get('cid') || '';
       const customer_zone = qs.get('zid') || '';
       const payload = {

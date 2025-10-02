@@ -835,6 +835,8 @@ def create_order():
             return jsonify({"ok": False, "error": "Monto inválido"}), 400
         if method not in ("pm", "binance"):
             return jsonify({"ok": False, "error": "Método inválido"}), 400
+        if not phone:
+            return jsonify({"ok": False, "error": "Teléfono requerido"}), 400
 
         o = Order(
             store_package_id=gid,
