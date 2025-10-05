@@ -688,7 +688,8 @@ def store_special_validate():
 def index():
     """Public storefront index page with header and configurable logo."""
     logo_url = get_config_value("logo_path", "")
-    return render_template("index.html", logo_url=logo_url)
+    banner_url = get_config_value("mid_banner_path", "")
+    return render_template("index.html", logo_url=logo_url, banner_url=banner_url)
 
 @app.route("/store/hero")
 def store_hero():
@@ -757,14 +758,8 @@ def store_best_sellers():
     )
     ids = [row[0] for row in agg if row[0] is not None]
     if not ids:
-        # Fallback: latest active packages
-        items = StorePackage.query.filter_by(active=True).order_by(StorePackage.created_at.desc()).limit(12).all()
-        return jsonify({
-            "packages": [
-                {"id": p.id, "name": p.name, "image_path": p.image_path, "category": (p.category or 'mobile')}
-                for p in items
-            ]
-        })
+        # No approved sales yet -> return empty list (do not show latest)
+        return jsonify({"packages": []})
     # fetch package rows keeping order by counts
     rows = StorePackage.query.filter(StorePackage.id.in_(ids), StorePackage.active == True).all()
     by_id = {p.id: p for p in rows}
@@ -1330,6 +1325,15 @@ def admin_config_logo_get():
     return jsonify({"logo_path": row.value if row else ""})
 
 
+@app.route("/admin/config/mid_banner", methods=["GET"])
+def admin_config_mid_banner_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    row = AppConfig.query.filter_by(key="mid_banner_path").first()
+    return jsonify({"ok": True, "mid_banner_path": row.value if row else ""})
+
+
 @app.route("/admin/config/hero", methods=["GET"])
 def admin_config_hero_get():
     user = session.get("user")
@@ -1447,6 +1451,33 @@ def admin_config_logo_set():
         row.value = logo_path
     db.session.commit()
     return jsonify({"ok": True, "logo_path": row.value})
+
+
+@app.route("/admin/config/mid_banner", methods=["POST"])
+def admin_config_mid_banner_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    path = (data.get("mid_banner_path") or "").strip()
+    if not path:
+        # allow clearing
+        row = AppConfig.query.filter_by(key="mid_banner_path").first()
+        if row:
+            db.session.delete(row)
+            db.session.commit()
+        return jsonify({"ok": True, "mid_banner_path": ""})
+    # simple validation similar to logo
+    if not (path.startswith("/static/") or path.startswith("http://") or path.startswith("https://")):
+        return jsonify({"ok": False, "error": "Ruta inválida. Debe ser /static/... o URL completa."}), 400
+    row = AppConfig.query.filter_by(key="mid_banner_path").first()
+    if not row:
+        row = AppConfig(key="mid_banner_path", value=path)
+        db.session.add(row)
+    else:
+        row.value = path
+    db.session.commit()
+    return jsonify({"ok": True, "mid_banner_path": row.value})
 
 
 @app.route("/auth/login", methods=["POST"])

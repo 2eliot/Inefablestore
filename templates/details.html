@@ -98,7 +98,7 @@
   </div>
   <div class="details-right">
     <div class="step-card">
-      <div class="step-title">1 Ingrese su ID</div>
+      <div class="step-title" data-step="1">1 Ingrese su ID</div>
       <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID">
       {% if game.requires_zone_id %}
       <input id="customer-zone" class="input" type="text" placeholder="Ingresa tu Zona ID">
@@ -106,7 +106,7 @@
     </div>
 
     <div class="step-card">
-      <div class="step-title">2 Selecciona tu producto</div>
+      <div class="step-title" data-step="2">2 Selecciona tu producto</div>
       <div id="items-grid" class="items-grid"><!-- items --></div>
       <div style="margin-top:10px; text-align:center;">
         <button id="btn-more" class="btn" type="button" hidden>Ver más</button>
@@ -114,7 +114,7 @@
     </div>
 
     <div class="step-card">
-      <div class="step-title">3 Seleccione un método de pago</div>
+      <div class="step-title" data-step="3">3 Seleccione un método de pago</div>
       <div class="pay-methods">
         <button id="pay-bsd" class="btn pay" type="button">Pago Móvil</button>
         <button id="pay-usd" class="btn pay" type="button">Binance</button>
@@ -126,7 +126,7 @@
     </div>
 
     <div class="step-card">
-      <div class="step-title">4 Ingresa tus datos</div>
+      <div class="step-title" data-step="4">4 Ingresa tus datos</div>
       <input id="full-name" class="input" type="text" placeholder="Nombre y apellido">
       <input id="email" class="input" type="email" placeholder="Correo de contacto">
       <input id="phone" class="input" type="tel" placeholder="Número de teléfono">

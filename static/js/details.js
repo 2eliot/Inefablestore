@@ -57,7 +57,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let showingAll = false; // only used on mobile
   let isMobile = window.matchMedia('(max-width: 699px)').matches;
   let rate = 0; // BsD per 1 USD
-  let currency = 'USD'; // 'USD' or 'BSD'
+  // Default: show BsD first on mobile footer; USD on desktop until user chooses
+  let currency = isMobile ? 'BSD' : 'USD'; // 'USD' or 'BSD'
   let selectedItemIndex = -1;
   let methodChosen = false; // show prices only after choosing a payment method
 
@@ -232,6 +233,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (nowMobile !== isMobile) {
       isMobile = nowMobile;
       showingAll = false; // reset when switching
+      // If user hasn't chosen a method yet, keep defaulting: BsD on mobile, USD on desktop
+      if (!methodChosen) {
+        currency = isMobile ? 'BSD' : 'USD';
+      }
       renderItems(allItems);
     }
     updateMobileFooter();

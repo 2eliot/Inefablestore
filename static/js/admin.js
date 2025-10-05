@@ -18,6 +18,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSaveLogo = document.getElementById('btn-save-logo');
   const btnPasteLogo = document.getElementById('btn-paste-logo');
   const logoPreview = document.getElementById('logo-preview');
+  // Mid banner config
+  const inputMidBanner = document.getElementById('mid-banner-path');
+  const btnSaveMidBanner = document.getElementById('btn-save-mid-banner');
+  const btnPickMidBanner = document.getElementById('btn-pick-mid-banner');
+  const midBannerPreview = document.getElementById('mid-banner-preview');
   // Hero config
   const hero1 = document.getElementById('hero-1');
   const hero2 = document.getElementById('hero-2');
@@ -100,6 +105,47 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.dataset.target = dt.dataset.target;
       adminDrawerTabs.appendChild(btn);
     });
+  }
+
+  // =====================
+  // Config: mid banner get/set
+  // =====================
+  async function fetchMidBanner() {
+    try {
+      const res = await fetch('/admin/config/mid_banner');
+      const data = await res.json();
+      if (inputMidBanner) {
+        inputMidBanner.value = (data && data.mid_banner_path) || '';
+        showMidBannerPreview();
+      }
+      window.fetchMidBanner = fetchMidBanner;
+    } catch (_) { /* ignore */ }
+  }
+
+  function showMidBannerPreview() {
+    if (!inputMidBanner || !midBannerPreview) return;
+    const url = (inputMidBanner.value || '').trim();
+    if (url) {
+      midBannerPreview.src = url;
+      midBannerPreview.style.display = 'inline-block';
+    } else {
+      midBannerPreview.style.display = 'none';
+    }
+  }
+
+  async function saveMidBanner() {
+    if (!inputMidBanner) return;
+    const mid_banner_path = (inputMidBanner.value || '').trim();
+    const res = await fetch('/admin/config/mid_banner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mid_banner_path })
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || 'No se pudo guardar');
+    }
+    return res.json();
   }
 
   // Session: fetch and fill
@@ -505,6 +551,7 @@ window.fetchLogo = fetchLogo;
         fetchPayments();
         fetchMailInfo();
         fetchSessionInfo();
+        fetchMidBanner && fetchMidBanner();
       }
       // If Orders tab is opened, refresh orders
       if (tab.dataset.target === '#tab-orders') {
@@ -1317,6 +1364,7 @@ window.fetchHero = fetchHero;
 
   // Fetch current config on load of admin page (after element refs are defined)
   window.fetchLogo && window.fetchLogo();
+  window.fetchMidBanner && window.fetchMidBanner();
   window.fetchHero && window.fetchHero();
   window.fetchRate && window.fetchRate();
   window.fetchPayments && window.fetchPayments();
@@ -1367,6 +1415,9 @@ window.fetchHero = fetchHero;
   if (btnPickLogo) {
     btnPickLogo.addEventListener('click', () => openLogoPicker(inputLogo));
   }
+  if (btnPickMidBanner) {
+    btnPickMidBanner.addEventListener('click', () => openLogoPicker(inputMidBanner));
+  }
   if (btnPickHero1) btnPickHero1.addEventListener('click', () => openLogoPicker(hero1));
   if (btnPickHero2) btnPickHero2.addEventListener('click', () => openLogoPicker(hero2));
   if (btnPickHero3) btnPickHero3.addEventListener('click', () => openLogoPicker(hero3));
@@ -1406,6 +1457,18 @@ window.fetchHero = fetchHero;
           toast && toast('No se pudo guardar el logo');
         } finally {
           if (btnSaveLogo) btnSaveLogo.disabled = false;
+        }
+      } else if (target === inputMidBanner) {
+        try {
+          showMidBannerPreview && showMidBannerPreview();
+          if (btnSaveMidBanner) btnSaveMidBanner.disabled = true;
+          const res = await fetch('/admin/config/mid_banner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mid_banner_path: path }) });
+          if (!res.ok) throw new Error('No se pudo guardar el banner');
+          toast && toast('Banner actualizado');
+        } catch (_) {
+          toast && toast('No se pudo guardar el banner');
+        } finally {
+          if (btnSaveMidBanner) btnSaveMidBanner.disabled = false;
         }
       }
       closeLogoPicker && closeLogoPicker();

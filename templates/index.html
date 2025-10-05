@@ -99,6 +99,18 @@
   </div>
 </section>
 
+{% if banner_url %}
+<!-- MID PAGE BANNER -->
+<section class="mid-banner">
+  <div class="container" style="max-width:1200px; margin:0 auto;">
+    <a href="#pkgs-gift" style="display:block;">
+      <img src="{{ banner_url }}" alt="Promoción" style="width:100%; height:auto; border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,0.15);">
+    </a>
+  </div>
+
+</section>
+{% endif %}
+
 <!-- GIFT CARDS carousel -->
 <section class="packages" id="pkgs-gift">
   <div class="packages-head">
