@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite
+
+# Virtual env
+.venv/
+venv/
+ENV/
+
+# Local env vars
+.env
+
+# Instance folder for SQLite and runtime files
+instance/
+
+# OS/IDE noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build artifacts
+*.log
+
+# Node modules (if any future frontend tooling)
+node_modules/

@@ -1,0 +1,413 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="admin-layout">
+  <aside class="sidebar">
+    <nav class="tabs" id="adminTabs" role="tablist" aria-label="Pestañas de administración">
+      <button class="tab active" data-target="#tab-orders" aria-selected="true">Órdenes</button>
+      <button class="tab" data-target="#tab-packages" aria-selected="false">Paquetes</button>
+      <button class="tab" data-target="#tab-images" aria-selected="false">Imágenes</button>
+      <button class="tab" data-target="#tab-config" aria-selected="false">Configuración</button>
+      <button class="tab" data-target="#tab-affiliates" aria-selected="false">Afiliados</button>
+    </nav>
+  </aside>
+
+  <section class="content">
+    <!-- Órdenes -->
+    <div id="tab-orders" class="tab-panel active" role="tabpanel">
+      <div class="panel-header">
+        <h2>Órdenes</h2>
+        <div class="actions">
+          <button id="btn-orders-refresh" class="btn">Refrescar</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div id="orders-list" class="orders-list">
+          <div class="empty-state">
+            <h3>Sin órdenes</h3>
+            <p>Cuando los clientes confirmen pagos, sus órdenes aparecerán aquí.</p>
+          </div>
+        </div>
+
+        <hr style="margin:16px 0; opacity:.35;">
+        <div class="panel-header" style="padding:0; margin-bottom:8px;">
+          <h3 style="margin:0;">Retiros de Afiliados</h3>
+          <div class="actions">
+            <button id="btn-orders-wd-refresh" class="btn" type="button">Refrescar</button>
+          </div>
+        </div>
+        <div id="orders-wd-list" class="orders-list">
+          <div class="empty-state">
+            <h3>Sin solicitudes</h3>
+            <p>Cuando los afiliados pidan retiro aparecerán aquí.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paquetes -->
+    <div id="tab-packages" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Paquetes</h2>
+        <div class="actions">
+          <button id="btn-packages-refresh" class="btn">Refrescar</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <form id="pkg-form" class="config-form" onsubmit="return false;">
+          <div class="form-row">
+            <label for="pkg-name">Nombre del paquete</label>
+            <input id="pkg-name" type="text" placeholder="Ej: Arena Breakout">
+          </div>
+          <div class="form-row">
+            <label for="pkg-category">Categoría</label>
+            <select id="pkg-category">
+              <option value="mobile">Juegos Mobile</option>
+              <option value="gift">Gift Cards</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="pkg-desc">Descripción del juego</label>
+            <textarea id="pkg-desc" placeholder="Descripción visible en la página de detalles" rows="3"></textarea>
+          </div>
+          <div class="form-row">
+            <label>Zona ID requerida</label>
+            <label style="display:flex; align-items:center; gap:8px;">
+              <input id="pkg-requires-zone" type="checkbox"> Mostrar campo "Zona ID" en este juego
+            </label>
+          </div>
+          <div class="form-row">
+            <label for="pkg-image">Imagen</label>
+            <input id="pkg-image" type="text" placeholder="Selecciona desde galería" readonly>
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-pick-pkg-image" class="btn" type="button">Elegir desde galería</button>
+              <button id="btn-create-pkg" class="btn primary" type="button">Crear paquete</button>
+            </div>
+          </div>
+        </form>
+        <div id="pkg-list">
+          <div id="pkg-group-special" class="pkg-group" hidden>
+            <h3 class="pkg-group-title">Paquetes especiales</h3>
+            <div class="pkg-accordion"></div>
+          </div>
+          <div id="pkg-group-normal" class="pkg-group">
+            <h3 class="pkg-group-title">Paquetes normales</h3>
+            <div class="pkg-accordion"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Imágenes -->
+    <div id="tab-images" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Imágenes</h2>
+        <div class="actions">
+          <input id="file-input" type="file" accept="image/*" multiple style="display:none;" />
+          <button id="btn-upload" class="btn primary" type="button">Subir Imagen</button>
+          <button id="btn-refresh" class="btn" type="button">Refrescar</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <p style="color:#64748b; margin:0 0 12px;">Sube imágenes que luego podrás usar como logo u otros activos del sitio.</p>
+        <div id="gallery" class="image-grid"></div>
+        <template id="image-card-tpl">
+          <div class="image-card">
+            <div class="thumb-wrap">
+              <img class="thumb" alt="" />
+              <button class="btn btn-del-ov" type="button" title="Eliminar">✕</button>
+            </div>
+            <div class="meta">
+              <div class="title"></div>
+              <code class="path"></code>
+              <div style="margin-top:8px;">
+                <button class="btn btn-copy" type="button">Copiar ruta</button>
+                <button class="btn btn-del" type="button" style="margin-left:8px;">Eliminar</button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Configuración -->
+    <div id="tab-config" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Configuración</h2>
+        <div class="actions">
+          <button class="btn primary" disabled>Guardar Cambios</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <form class="config-form" onsubmit="return false;">
+          <div class="form-row">
+            <label for="site-name">Nombre de la tienda</label>
+            <input id="site-name" type="text" placeholder="InefableStore" disabled>
+          </div>
+          <div class="form-row">
+            <label for="currency">Moneda</label>
+            <select id="currency" disabled>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="MXN">MXN</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="items-per-page">Items por página</label>
+            <input id="items-per-page" type="number" min="1" value="10" disabled>
+          </div>
+          <div class="form-row">
+            <label for="logo-path">Logo (URL o ruta estática)</label>
+            <input id="logo-path" type="text" placeholder="Selecciona desde galería" readonly>
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-save-logo" class="btn primary" type="button">Guardar Logo</button>
+              <button id="btn-pick-logo" class="btn" type="button">Elegir desde galería</button>
+            </div>
+          </div>
+          <div style="margin-left:200px; color:#64748b;">
+            Sube una imagen en la pestaña <strong>Imágenes</strong>. Luego aquí pulsa "Elegir desde galería" y finalmente "Guardar Logo".
+          </div>
+          <div style="margin-left:200px; margin-top:12px;">
+            <img id="logo-preview" src="" alt="Vista previa del logo" style="max-height:80px; display:none; border:1px solid #e2e8f0; padding:6px; border-radius:6px; background:#fff;" />
+          </div>
+
+          <hr style="margin:24px 0; opacity:0.5;">
+          <h3 style="margin:0 0 12px;">Banner intermedio (entre Mobile y Gift)</h3>
+          <div class="form-row">
+            <label for="mid-banner-path">Banner (URL o ruta estática)</label>
+            <input id="mid-banner-path" type="text" placeholder="Selecciona desde galería" readonly>
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-save-mid-banner" class="btn primary" type="button">Guardar Banner</button>
+              <button id="btn-pick-mid-banner" class="btn" type="button">Elegir desde galería</button>
+            </div>
+          </div>
+          <div style="margin-left:200px; color:#64748b;">
+            Selecciona una imagen ancha. Se mostrará entre "Juegos Mobile" y "Gift Cards" en la página principal.
+          </div>
+          <div style="margin-left:200px; margin-top:12px;">
+            <img id="mid-banner-preview" src="" alt="Vista previa del banner" style="max-height:140px; display:none; border:1px solid #e2e8f0; padding:6px; border-radius:6px; background:#fff;" />
+          </div>
+
+          <hr style="margin:24px 0; opacity:0.5;">
+          <h3 style="margin:0 0 12px;">Carrusel principal (3 imágenes)</h3>
+          <div class="form-row">
+            <label for="hero-1">Hero 1</label>
+            <input id="hero-1" type="text" placeholder="Selecciona desde galería" readonly>
+          </div>
+          <div class="form-row">
+            <label for="hero-2">Hero 2</label>
+            <input id="hero-2" type="text" placeholder="Selecciona desde galería" readonly>
+          </div>
+          <div class="form-row">
+            <label for="hero-3">Hero 3</label>
+            <input id="hero-3" type="text" placeholder="Selecciona desde galería" readonly>
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-pick-hero-1" class="btn" type="button">Elegir 1</button>
+              <button id="btn-pick-hero-2" class="btn" type="button">Elegir 2</button>
+              <button id="btn-pick-hero-3" class="btn" type="button">Elegir 3</button>
+              <button id="btn-save-hero" class="btn primary" type="button">Guardar Carrusel</button>
+            </div>
+          </div>
+
+          <hr style="margin:24px 0; opacity:0.5;">
+          <h3 style="margin:0 0 12px;">Tasa de cambio</h3>
+          <div class="form-row">
+            <label for="rate-bsd">BsD por 1 USD</label>
+            <input id="rate-bsd" type="number" step="0.01" min="0" placeholder="Ej: 35.50">
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-save-rate" class="btn primary" type="button">Guardar tasa</button>
+            </div>
+          </div>
+
+          <hr style="margin:24px 0; opacity:0.5;">
+          <h3 style="margin:0 0 12px;">Métodos de pago</h3>
+          <div class="form-row">
+            <label>Pago Móvil - Banco</label>
+            <input id="pm-bank" type="text" placeholder="Nombre del banco">
+          </div>
+          <div class="form-row">
+            <label>Pago Móvil - Nombre</label>
+            <input id="pm-name" type="text" placeholder="Titular">
+          </div>
+          <div class="form-row">
+            <label>Pago Móvil - Teléfono</label>
+            <input id="pm-phone" type="text" placeholder="04XXXXXXXXX">
+          </div>
+          <div class="form-row">
+            <label>Pago Móvil - Cédula/RIF</label>
+            <input id="pm-id" type="text" placeholder="V-00000000">
+          </div>
+          <div class="form-row">
+            <label>Binance - Email</label>
+            <input id="binance-email" type="email" placeholder="correo@binance.com">
+          </div>
+          <div class="form-row">
+            <label>Binance - Teléfono</label>
+            <input id="binance-phone" type="text" placeholder="Teléfono registrado">
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-save-payments" class="btn primary" type="button">Guardar métodos de pago</button>
+            </div>
+          </div>
+
+          <hr style="margin:24px 0; opacity:0.5;">
+          <h3 style="margin:0 0 12px;">Correo: verificación y prueba</h3>
+          <div class="form-row">
+            <label>Remitente (MAIL_USER)</label>
+            <input id="mail-user" type="text" placeholder="user@example.com" readonly>
+          </div>
+          <div class="form-row">
+            <label>Enviar a</label>
+            <input id="mail-to" type="email" placeholder="correo de destino">
+          </div>
+          <div class="form-row">
+            <label>Asunto</label>
+            <input id="mail-subject" type="text" placeholder="Prueba de correo - Inefable Store">
+          </div>
+          <div class="form-row">
+            <label>Mensaje</label>
+            <textarea id="mail-body" rows="3" placeholder="Texto del correo de prueba"></textarea>
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-mail-save" class="btn primary" type="button">Guardar destino</button>
+              <button id="btn-mail-test" class="btn" type="button">Enviar correo de prueba</button>
+              <small id="mail-test-result" style="display:block; margin-top:6px; color:#94a3b8;"></small>
+            </div>
+          </div>
+
+          <hr style="margin:24px 0; opacity:0.5;">
+          <h3 style="margin:0 0 12px;">Sesión actual</h3>
+          <div class="form-row">
+            <label>Email</label>
+            <input id="sess-email" type="text" readonly placeholder="No autenticado">
+          </div>
+          <div class="form-row">
+            <label>Rol</label>
+            <input id="sess-role" type="text" readonly placeholder="-">
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Afiliados -->
+    <div id="tab-affiliates" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Afiliados</h2>
+        <div class="actions">
+          <button id="btn-aff-refresh" class="btn">Refrescar</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <form id="aff-form" class="config-form" onsubmit="return false;">
+          <div class="form-row">
+            <label for="aff-name">Nombre</label>
+            <input id="aff-name" type="text" placeholder="Nombre del afiliado">
+          </div>
+          <div class="form-row">
+            <label for="aff-email">Email</label>
+            <input id="aff-email" type="email" placeholder="correo@ejemplo.com">
+          </div>
+          <div class="form-row">
+            <label for="aff-code">Código</label>
+            <input id="aff-code" type="text" placeholder="Código único (referencia)">
+          </div>
+          <div class="form-row">
+            <label for="aff-disc">Descuento (%)</label>
+            <input id="aff-disc" type="number" step="0.1" min="0" max="100" value="10">
+          </div>
+          <div class="form-row">
+            <label for="aff-scope">Alcance</label>
+            <select id="aff-scope" class="input">
+              <option value="all" selected>Todos los juegos</option>
+              <option value="package">Solo un juego</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="aff-pkg-select">Juego (si aplica)</label>
+            <select id="aff-pkg-select" class="input">
+              <option value="">— Selecciona un juego —</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="aff-pass">Contraseña</label>
+            <input id="aff-pass" type="password" placeholder="Asignar contraseña">
+          </div>
+          <div class="form-row">
+            <label for="aff-balance">Saldo (USD)</label>
+            <input id="aff-balance" type="number" step="0.01" min="0" value="0">
+          </div>
+          <div class="form-row">
+            <label>Activo</label>
+            <input id="aff-active" type="checkbox" checked>
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-aff-create" class="btn primary" type="button">Crear afiliado</button>
+            </div>
+          </div>
+        </form>
+        <div id="aff-list" class="image-grid"></div>
+
+        <hr style="margin:16px 0; opacity:.35;">
+        <div class="panel-header" style="padding:0; margin-bottom:8px;">
+          <h3 style="margin:0;">Retiros de Afiliados</h3>
+          <div class="actions">
+            <button id="btn-aff-wd-refresh" class="btn" type="button">Refrescar</button>
+          </div>
+        </div>
+        <div id="aff-wd-list" class="orders-list">
+          <div class="empty-state">
+            <h3>Sin solicitudes</h3>
+            <p>Cuando los afiliados pidan retiro aparecerán aquí.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+</div>
+
+<!-- Logo Picker Modal -->
+<div id="logo-picker" class="modal" hidden>
+  <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="logoPickerTitle">
+    <div class="modal-header">
+      <h3 id="logoPickerTitle">Elegir logo desde galería</h3>
+      <button type="button" class="btn modal-close" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="logo-picker-grid" class="image-grid"></div>
+      <template id="logo-picker-card-tpl">
+        <div class="image-card">
+          <img class="thumb" alt="" />
+          <div class="meta">
+            <div class="title"></div>
+            <code class="path"></code>
+            <div style="margin-top:8px;">
+              <button class="btn btn-use-logo" type="button">Usar este</button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+  </div>
+{% endblock %}

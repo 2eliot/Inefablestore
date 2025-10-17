@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+<style>
+  .user-page { max-width: 980px; margin: 28px auto; padding: 0 16px; }
+  .profile-hero { display:flex; align-items:center; gap: 16px; margin-bottom: 16px; }
+  .avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg,#3a3f47,#48505a); display:flex; align-items:center; justify-content:center; font-size: 28px; font-weight: 800; color: #e5e7eb; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
+  .who { display:flex; flex-direction:column; }
+  .who .name { font-size: 22px; font-weight: 900; color: #e5e7eb; }
+  .who .email { color: #cbd5e1; font-weight: 700; }
+  .user-grid { display:grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  .user-card { background: #2b2f36; border: 1px solid #3a3f47; border-radius: 14px; box-shadow: 0 12px 30px rgba(0,0,0,0.35); color: #e5e7eb; overflow:hidden; }
+  .user-header { display:flex; align-items:center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #3a3f47; }
+  .user-title { font-size: 18px; font-weight: 800; letter-spacing:.3px; }
+  .user-body { padding: 16px; display:grid; gap: 12px; }
+  .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .user-actions { display:flex; gap: 10px; justify-content: space-between; padding: 12px 16px 16px; border-top:1px solid #3a3f47; }
+  .side-card { background:#2b2f36; border:1px solid #3a3f47; border-radius:14px; padding: 14px; display:grid; gap:10px; height:fit-content; }
+  .muted { color:#cbd5e1; }
+  .pill { display:inline-flex; align-items:center; gap:6px; background: rgba(148,163,184,0.12); border:1px solid #484f59; color:#cbd5e1; padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px; }
+  @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .user-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block header %}
+<header class="site-header">
+  <div class="container">
+    <div class="left-actions">
+      <button class="icon-btn hamburger" aria-label="Menú">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <a href="/" class="brand">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" alt="InefableStore" class="logo"/>
+      {% else %}
+        <span class="logo-text">InefableStore</span>
+      {% endif %}
+    </a>
+    <div class="right-actions">
+      <button class="icon-btn login" aria-label="Usuario">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="user-page" data-is-admin="{{ 1 if is_admin else 0 }}" data-is-affiliate="{{ 1 if is_affiliate else 0 }}">
+  <div class="profile-hero">
+    <div class="avatar" id="avatar-initials">U</div>
+    <div class="who">
+      <div class="name" id="who-name">Usuario</div>
+      <div class="email" id="who-email">correo@example.com</div>
+    </div>
+    <span class="pill">Cuenta</span>
+  </div>
+
+  <div class="user-grid">
+    <div class="user-card">
+      <div class="user-header">
+        <div class="user-title">Información de perfil</div>
+        <div id="profile-alert" class="alert" hidden></div>
+      </div>
+      <div class="user-body">
+        <div class="grid-2">
+          <div>
+            <label>Nombre</label>
+            <input id="profile-name" type="text" placeholder="Tu nombre" class="input">
+          </div>
+          <div>
+            <label>Email</label>
+            <input id="profile-email" type="email" placeholder="tu@correo.com" class="input">
+          </div>
+          <div>
+            <label>Teléfono</label>
+            <input id="profile-phone" type="tel" placeholder="Número de teléfono" class="input">
+          </div>
+        </div>
+      </div>
+      <div class="user-actions">
+        {% if is_admin %}<a href="/admin" class="btn" title="Panel Admin">Ir al Admin</a>{% endif %}
+        <div style="display:flex; gap:10px;">
+          <button id="btn-save-profile" class="btn primary">Guardar</button>
+          <button id="btn-logout" class="btn" title="Cerrar sesión">Cerrar sesión</button>
+        </div>
+      </div>
+    </div>
+    <div class="side-card">
+      <div style="display:flex; align-items:center; justify-content: space-between;">
+        <strong>Mis órdenes procesadas</strong>
+        <span class="muted" style="font-size:12px;">Aprobadas</span>
+      </div>
+      <div style="display:grid; gap:8px;">
+        <input id="q-email" class="input" type="email" placeholder="Tu correo (opcional)">
+        <input id="q-customer" class="input" type="text" placeholder="ID de jugador (opcional)">
+        <button id="btn-myorders" class="btn primary" type="button">Buscar</button>
+      </div>
+      <div id="my-orders" style="display:grid; gap:8px; margin-top:10px;"></div>
+
+      {% if is_affiliate %}
+      <hr style="margin:14px 0; opacity:.35;">
+      <div style="display:flex; align-items:center; justify-content: space-between;">
+        <strong>Resumen de afiliado</strong>
+        <span class="pill">10% comisión</span>
+      </div>
+      <div id="aff-summary" class="muted" style="display:grid; gap:6px;">
+        <div>Mi código: <strong id="aff-code">-</strong></div>
+        <div>Órdenes referidas aprobadas: <strong id="aff-approved">0</strong></div>
+        <div>Saldo acumulado (USD): <strong id="aff-balance">$0.00</strong></div>
+      </div>
+
+      <button id="btn-aff-withdraw" class="btn" type="button" style="margin-top:10px;">Retirar</button>
+      <div id="aff-withdraw-panel" class="co-card" style="margin-top:8px; display:none;">
+        <h3 style="margin:0 0 8px;">Solicitud de retiro</h3>
+        <div class="muted" style="font-size:12px;">Se enviará al administrador para aprobación.</div>
+        <div style="display:grid; gap:8px; margin-top:8px;">
+          <div>
+            <label>Método</label>
+            <select id="aw-method" class="input">
+              <option value="pm">Pago Móvil</option>
+              <option value="binance">Binance</option>
+              <option value="zinli">Zinli</option>
+            </select>
+          </div>
+          <div id="aw-pm" style="display:grid; gap:6px;">
+            <input id="aw-pm-bank" class="input" type="text" placeholder="Banco" />
+            <input id="aw-pm-name" class="input" type="text" placeholder="Titular" />
+            <input id="aw-pm-phone" class="input" type="text" placeholder="Teléfono Pago Móvil" />
+            <input id="aw-pm-id" class="input" type="text" placeholder="Cédula/RIF" />
+          </div>
+          <div id="aw-bin" style="display:none; gap:6px;">
+            <input id="aw-bin-email" class="input" type="email" placeholder="Email de Binance" />
+            <input id="aw-bin-phone" class="input" type="text" placeholder="Teléfono en Binance" />
+          </div>
+          <div id="aw-zin" style="display:none; gap:6px;">
+            <input id="aw-zin-email" class="input" type="email" placeholder="Email de Zinli" />
+            <input id="aw-zin-tag" class="input" type="text" placeholder="Usuario/tag de Zinli" />
+          </div>
+          <div>
+            <label>Monto (USD)</label>
+            <input id="aw-amount" class="input" type="number" step="0.01" min="1" placeholder="Ej: 10.00" />
+          </div>
+          <button id="btn-aw-send" class="btn primary" type="button">Enviar solicitud</button>
+        </div>
+        <div id="aw-alert" class="muted" style="margin-top:8px;"></div>
+      </div>
+
+      <div id="aw-list" style="display:grid; gap:8px; margin-top:10px;"></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Shared header behaviors -->
+<script src="{{ url_for('static', filename='js/store.js', v='2') }}" defer></script>
+<!-- User page logic -->
+<script src="{{ url_for('static', filename='js/user.js', v='2') }}" defer></script>
+{% endblock %}
+
+{# Overlays and Drawer for header consistency #}
+<div id="overlay" class="overlay" hidden></div>
+<aside id="left-drawer" class="drawer left" hidden>
+  <div class="drawer-header">
+    <strong>Menú</strong>
+    <button class="icon-btn close-left" aria-label="Cerrar">✕</button>
+  </div>
+  <nav class="drawer-nav">
+    <a href="/">Inicio</a>
+    <a href="#">Catálogo</a>
+    <a href="#">Contacto</a>
+  </nav>
+</aside>

@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='2') }}">
+<style>
+  .co-wrap { max-width: 900px; margin: 0 auto; padding: 16px 12px 28px; }
+  .co-banner { background: var(--price-accent, #10b981); color: #0b0f14; font-weight: 900; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 16px; }
+  /* Charcoal card style */
+  .co-card { background: #2b2f36; border:1px solid #3a3f47; border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
+  .co-card h3 { margin: 0 0 8px; color: #e2e8f0; font-weight: 900; }
+  .co-row { display:flex; justify-content: space-between; gap: 10px; border-top:1px solid #3a3f47; padding-top:10px; }
+  .co-row .copy-btn { border:1px solid #3a3f47; background: #1f2329; color:#e2e8f0; border-radius:8px; padding:4px 8px; font-size:12px; cursor:pointer; }
+  .co-row .copy-btn:hover { background: #262b32; }
+  .co-actions { margin-top: 10px; }
+  .co-actions .btn { width: 100%; }
+  /* Reference input emphasis */
+  .ref-group { display:grid; gap:8px; }
+  .ref-label { color:#cbd5e1; font-weight:800; font-size:13px; letter-spacing:.2px; }
+  .ref-hint { color: #94a3b8; font-size: 12px; margin-top: -2px; }
+  #co-ref.input { 
+    padding: 12px 14px; 
+    border-width: 2px; 
+    border-color: rgba(148,163,184,0.55); 
+    border-radius: 10px;
+    background: rgba(2,6,23,0.5);
+    color:#e5e7eb;
+    outline: none;
+    transition: box-shadow .15s ease, border-color .15s ease;
+  }
+  #co-ref.input::placeholder { color: #94a3b8; }
+  #co-ref.input:focus { border-color:#94a3b8; box-shadow: 0 0 0 3px rgba(148,163,184,0.25); }
+  .co-hint { color: #94a3b8; font-size: 12px; margin-top: 6px; text-align: center; }
+  /* Discount price styling */
+  .price-old { text-decoration: line-through; color: rgba(148,163,184,0.6); margin-right: 8px; font-weight: 800; }
+  .price-new { color: #0b0f14; background: rgba(255,255,255,0.5); padding: 2px 8px; border-radius: 8px; font-weight: 900; }
+  .discount-badge { text-decoration: line-through; color: #cbd5e1; border: 2px solid rgba(148,163,184,0.35); padding: 2px 6px; border-radius: 8px; font-weight: 900; margin-right: 8px; background: rgba(148,163,184,0.15); }
+  .co-disc-note { text-align:center; color:#cbd5e1; font-weight:900; margin: 6px 0 12px; }
+  .co-disc-note[hidden] { display: none; }
+  @media (max-width: 700px) {
+    .co-wrap { padding-left: 10px; padding-right: 10px; }
+  }
+</style>
+{% endblock %}
+
+{% block header %}
+<header class="site-header">
+  <div class="container">
+    <div class="left-actions">
+      <a href="/" class="icon-btn" aria-label="Volver" title="Volver">‹</a>
+    </div>
+    <a href="/" class="brand">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" alt="InefableStore" class="logo"/>
+      {% else %}
+        <span class="logo-text">InefableStore</span>
+      {% endif %}
+    </a>
+    <div class="right-actions"></div>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<section class="co-wrap" id="checkout" data-gid="{{ gid }}">
+  <div class="co-banner" id="co-total">Total a pagar</div>
+  <div id="co-disc-note" class="co-disc-note" hidden></div>
+
+  <div class="co-card">
+    <h3>Información de pago</h3>
+    <div id="co-info"></div>
+  </div>
+
+  <div class="co-card">
+    <h3>Tiempo restante para completar el pago</h3>
+    <div id="co-timer" style="text-align:center; font-weight:800;">30:00</div>
+    <div class="co-actions">
+      <div class="ref-group">
+        <label for="co-ref" class="ref-label">Referencia de pago</label>
+        <input id="co-ref" class="input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Ej: últimos 6 dígitos" maxlength="12">
+        <div class="ref-hint">Ingresa la referencia exacta de tu pago para agilizar la verificación.</div>
+      </div>
+      <button id="btn-co-confirm" class="btn primary" type="button" style="margin-top:10px;">Confirmar Pago</button>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/checkout.js', v='1') }}" defer></script>
+{% endblock %}
