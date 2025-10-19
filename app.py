@@ -1207,6 +1207,11 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+@app.route("/uploads/<path:filename>")
+def uploads_serve(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+
+
 @app.route("/admin/images/list")
 def admin_images_list():
     user = session.get("user")
