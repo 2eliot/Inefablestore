@@ -1485,8 +1485,14 @@ def admin_config_logo_set():
             db.session.commit()
         return jsonify({"ok": True, "logo_path": ""})
 
-    # simple validation: should start with /static/ or http
-    if not (logo_path.startswith("/static/") or logo_path.startswith("http://") or logo_path.startswith("https://")):
+    # simple validation: allow /static/, configured UPLOAD_URL_PREFIX, or http(s)
+    prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
+    if not (
+        logo_path.startswith("/static/")
+        or logo_path.startswith(prefix + "/")
+        or logo_path.startswith("http://")
+        or logo_path.startswith("https://")
+    ):
         return jsonify({"ok": False, "error": "Ruta inválida. Debe ser /static/... o URL completa."}), 400
 
     row = AppConfig.query.filter_by(key="logo_path").first()
@@ -1514,7 +1520,13 @@ def admin_config_mid_banner_set():
             db.session.commit()
         return jsonify({"ok": True, "mid_banner_path": ""})
     # simple validation similar to logo
-    if not (path.startswith("/static/") or path.startswith("http://") or path.startswith("https://")):
+    prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
+    if not (
+        path.startswith("/static/")
+        or path.startswith(prefix + "/")
+        or path.startswith("http://")
+        or path.startswith("https://")
+    ):
         return jsonify({"ok": False, "error": "Ruta inválida. Debe ser /static/... o URL completa."}), 400
     row = AppConfig.query.filter_by(key="mid_banner_path").first()
     if not row:
