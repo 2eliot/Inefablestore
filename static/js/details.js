@@ -110,6 +110,72 @@ document.addEventListener('DOMContentLoaded', () => {
     const visible = isMobile ? (showingAll ? ordered : ordered.slice(0, 6)) : ordered;
 
     const firstNormalInVisible = visible.find(x => normals.indexOf(x) !== -1);
+    // Helper to trim transparent borders of a PNG icon using canvas
+    async function trimPngTransparency(imgEl) {
+      try {
+        await new Promise((res, rej) => {
+          if (imgEl.complete && imgEl.naturalWidth > 0) return res();
+          imgEl.addEventListener('load', () => res(), { once: true });
+          imgEl.addEventListener('error', () => rej(new Error('load error')), { once: true });
+        });
+        const w = imgEl.naturalWidth;
+        const h = imgEl.naturalHeight;
+        if (!w || !h) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(imgEl, 0, 0);
+        const { data } = ctx.getImageData(0, 0, w, h);
+        let top = 0, left = 0, right = w - 1, bottom = h - 1;
+        let found = false;
+        // Top
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const a = data[(y * w + x) * 4 + 3];
+            if (a !== 0) { top = y; found = true; break; }
+          }
+          if (found) break;
+        }
+        found = false;
+        // Bottom
+        for (let y = h - 1; y >= top; y--) {
+          for (let x = 0; x < w; x++) {
+            const a = data[(y * w + x) * 4 + 3];
+            if (a !== 0) { bottom = y; found = true; break; }
+          }
+          if (found) break;
+        }
+        found = false;
+        // Left
+        for (let x = 0; x < w; x++) {
+          for (let y = top; y <= bottom; y++) {
+            const a = data[(y * w + x) * 4 + 3];
+            if (a !== 0) { left = x; found = true; break; }
+          }
+          if (found) break;
+        }
+        found = false;
+        // Right
+        for (let x = w - 1; x >= left; x--) {
+          for (let y = top; y <= bottom; y++) {
+            const a = data[(y * w + x) * 4 + 3];
+            if (a !== 0) { right = x; found = true; break; }
+          }
+          if (found) break;
+        }
+        const cw = Math.max(1, right - left + 1);
+        const ch = Math.max(1, bottom - top + 1);
+        if (cw === w && ch === h) return; // nothing to trim
+        const out = document.createElement('canvas');
+        out.width = cw;
+        out.height = ch;
+        const octx = out.getContext('2d');
+        octx.drawImage(canvas, left, top, cw, ch, 0, 0, cw, ch);
+        const dataUrl = out.toDataURL('image/png');
+        imgEl.src = dataUrl;
+      } catch (_) { /* ignore */ }
+    }
     visible.forEach((it) => {
       // Insert a thin separator line before the first normal item when specials exist
       if (specials.length && firstNormalInVisible === it) {
@@ -121,10 +187,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const b = document.createElement('button');
       b.className = 'item-pill';
-      // Do NOT show price in the package selector; only title.
-            b.innerHTML = `
-  <div class="item-pill-col">
+      // Do NOT show price in the package selector; only title. Optionally show icon (forced size).
+      const isPhone = window.matchMedia('(max-width: 700px)').matches;
+      const iconSize = isPhone ? 30 : 50;
+      const iconHtml = (it.icon_path && it.icon_path.trim())
+        ? `<img class=\"item-icon\" src=\"${it.icon_path}\" alt=\"\" style=\"width:${iconSize}px;height:${iconSize}px;object-fit:contain;display:inline-block;\" />`
+        : '';
+      b.innerHTML = `
+  <div class="item-pill-col item-pill-row" style="display:flex;align-items:center;gap:8px;">
     <div class="item-pill-title">${it.title || ''}</div>
+    ${iconHtml}
   </div>
 `;
       b.addEventListener('click', () => {
@@ -150,6 +222,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       // Autoselect first visible if none selected yet
       grid.appendChild(b);
+      // After mount, if PNG, trim transparent padding to visually ignore empty background
+      try {
+        const img = b.querySelector('.item-icon');
+        if (img && (/(\.png)(\?|$)/i).test(String(img.src))) {
+          // Use rAF to ensure element is in DOM, then trim
+          requestAnimationFrame(() => trimPngTransparency(img));
+        }
+      } catch (_) { /* ignore */ }
     });
     if (btnMore) {
       if (!isMobile) {

@@ -1,3 +1,9 @@
+/* Small icon next to item title in selector */
+.item-pill .item-pill-row { display:flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+.item-pill .item-icon { width: 50px !important; height: 50px !important; object-fit: contain; display:inline-block; }
+@media (max-width: 700px) {
+  .item-pill .item-icon { width: 30px !important; height: 30px !important; }
+}
 /* Reduce spacing when una sola categoría está visible */
 .cat-filtered .packages { padding-bottom: 0; }
 
@@ -659,8 +665,8 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
   .mobile-footer-sel { grid-template-columns: 1fr auto !important; gap: 8px !important; }
   .mfs-mid { justify-self: center !important; text-align: center !important; }
 }
-/* Vertical layout for item pills (title over price) */
-.item-pill .item-pill-col { display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
+/* Item pill layout: keep title and icon on the same row (icon to the right) */
+.item-pill .item-pill-col { display:flex; flex-direction:row; align-items:center; gap:8px; }
 .item-pill .item-pill-title { font-weight:700; line-height:1.1; }
 .item-pill .item-pill-price { color:#10b981; font-weight:800; }
 
@@ -675,3 +681,12 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
 /* Semi-transparent mobile footer */
 #mfs{ background: rgba(2, 6, 23, 0.55) !important; border: 1px solid rgba(148,163,184,0.25) !important; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: 0 8px 30px rgba(0,0,0,0.35); }
 #mfs .mfs-icon{ opacity: .95; }
+
+/* Optional small item icon next to item title in details page package selector */
+.item-pill .item-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  display: inline-block;
+  vertical-align: middle;
+}

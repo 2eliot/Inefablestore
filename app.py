@@ -1,6 +1,7 @@
 import os
 import shutil
 from datetime import datetime
+from uuid import uuid4
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
@@ -171,6 +172,8 @@ class GamePackageItem(db.Model):
     price = db.Column(db.Float, default=0.0)
     # Optional small label/badge to show on the package (e.g., HOT, NEW)
     sticker = db.Column(db.String(50), default="")
+    # Optional small icon shown next to the item title in details page
+    icon_path = db.Column(db.String(300), default="")
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -187,6 +190,15 @@ class AppConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.Text, default="")
+
+
+class SessionImage(db.Model):
+    __tablename__ = "session_images"
+    id = db.Column(db.Integer, primary_key=True)
+    sid = db.Column(db.String(64), index=True, nullable=False)  # per-session key
+    title = db.Column(db.String(200), default="")
+    path = db.Column(db.String(300), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class SpecialUser(db.Model):
     __tablename__ = "special_users"
@@ -327,6 +339,9 @@ with app.app_context():
         gp_cols = {row[1] for row in gp_info}
         if "sticker" not in gp_cols:
             db.session.execute(text("ALTER TABLE game_packages ADD COLUMN sticker TEXT DEFAULT ''"))
+            db.session.commit()
+        if "icon_path" not in gp_cols:
+            db.session.execute(text("ALTER TABLE game_packages ADD COLUMN icon_path TEXT DEFAULT ''"))
             db.session.commit()
     except Exception:
         pass
@@ -695,6 +710,23 @@ def index():
     banner_url = get_config_value("mid_banner_path", "")
     return render_template("index.html", logo_url=logo_url, banner_url=banner_url)
 
+@app.route("/terms")
+def terms_page():
+    return render_template("terms.html")
+
+@app.route("/user")
+def user_page():
+    u = session.get("user") or {}
+    role = u.get("role")
+    is_admin = (role == "admin")
+    is_affiliate = (role == "affiliate")
+    logo_url = get_config_value("logo_path", "")
+    return render_template("user.html", is_admin=is_admin, is_affiliate=is_affiliate, logo_url=logo_url)
+
+@app.route("/admin")
+def admin_page():
+    return render_template("admin.html")
+
 @app.route("/store/hero")
 def store_hero():
     return jsonify({
@@ -714,7 +746,11 @@ def store_rate():
         rate = float(rate_str) if rate_str else 0.0
     except Exception:
         rate = 0.0
-    return jsonify({"rate_bsd_per_usd": rate})
+    resp = jsonify({"rate_bsd_per_usd": rate})
+    # Avoid browser/proxy caching so updates from Admin reflect immediately
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @app.route("/store/payments")
@@ -729,6 +765,351 @@ def store_payments():
         "binance_phone": get_config_value("binance_phone", ""),
     }
     return jsonify({"ok": True, "payments": data})
+
+
+# ==============================
+# Admin: Config APIs
+# ==============================
+@app.route("/admin/config/logo", methods=["GET"])
+def admin_config_logo_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "logo_path": get_config_value("logo_path", "")})
+
+
+@app.route("/admin/config/logo", methods=["POST"])
+def admin_config_logo_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    set_config_value("logo_path", (data.get("logo_path") or "").strip())
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/config/mid_banner", methods=["GET"])
+def admin_config_mid_banner_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "mid_banner_path": get_config_value("mid_banner_path", "")})
+
+
+@app.route("/admin/config/mid_banner", methods=["POST"])
+def admin_config_mid_banner_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    set_config_value("mid_banner_path", (data.get("mid_banner_path") or "").strip())
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/config/rate", methods=["GET"])
+def admin_config_rate_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "rate_bsd_per_usd": get_config_value("exchange_rate_bsd_per_usd", "")})
+
+
+@app.route("/admin/config/rate", methods=["POST"])
+def admin_config_rate_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    set_config_value("exchange_rate_bsd_per_usd", (data.get("rate_bsd_per_usd") or "").strip())
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/config/payments", methods=["GET"])
+def admin_config_payments_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({
+        "ok": True,
+        "pm_bank": get_config_value("pm_bank", ""),
+        "pm_name": get_config_value("pm_name", ""),
+        "pm_phone": get_config_value("pm_phone", ""),
+        "pm_id": get_config_value("pm_id", ""),
+        "binance_email": get_config_value("binance_email", ""),
+        "binance_phone": get_config_value("binance_phone", ""),
+    })
+
+
+@app.route("/admin/config/payments", methods=["POST"])
+def admin_config_payments_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    set_config_value("pm_bank", (data.get("pm_bank") or "").strip())
+    set_config_value("pm_name", (data.get("pm_name") or "").strip())
+    set_config_value("pm_phone", (data.get("pm_phone") or "").strip())
+    set_config_value("pm_id", (data.get("pm_id") or "").strip())
+    set_config_value("binance_email", (data.get("binance_email") or "").strip())
+    set_config_value("binance_phone", (data.get("binance_phone") or "").strip())
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/config/mail", methods=["GET"])
+def admin_config_mail_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({
+        "ok": True,
+        "mail_user": MAIL_USER,
+        "admin_notify_email": get_config_value("admin_notify_email", ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL)
+    })
+
+
+@app.route("/admin/config/mail", methods=["POST"])
+def admin_config_mail_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    email = (data.get("admin_notify_email") or "").strip()
+    if not email:
+        return jsonify({"ok": False, "error": "Email requerido"}), 400
+    set_config_value("admin_notify_email", email)
+    return jsonify({"ok": True, "admin_notify_email": email})
+
+
+@app.route("/admin/config/mail/test", methods=["POST"])
+def admin_config_mail_test():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    to = (data.get("to") or "").strip()
+    subject = (data.get("subject") or "").strip() or "Prueba de correo"
+    body = (data.get("body") or "").strip() or "Mensaje de prueba"
+    if not to:
+        return jsonify({"ok": False, "error": "Destino requerido"}), 400
+    send_email_async(to, subject, body)
+    return jsonify({"ok": True, "to": to})
+
+
+@app.route("/admin/config/hero", methods=["GET"])
+def admin_config_hero_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({
+        "ok": True,
+        "hero_1": get_config_value("hero_1", ""),
+        "hero_2": get_config_value("hero_2", ""),
+        "hero_3": get_config_value("hero_3", ""),
+    })
+
+
+@app.route("/admin/config/hero", methods=["POST"])
+def admin_config_hero_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    set_config_value("hero_1", (data.get("hero_1") or "").strip())
+    set_config_value("hero_2", (data.get("hero_2") or "").strip())
+    set_config_value("hero_3", (data.get("hero_3") or "").strip())
+    return jsonify({"ok": True})
+
+
+# ==============================
+# Admin: Images APIs
+# ==============================
+def _allowed_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@app.route("/admin/images/list", methods=["GET"])
+def admin_images_list():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    items = ImageAsset.query.order_by(ImageAsset.uploaded_at.desc()).all()
+    return jsonify([
+        {"id": x.id, "title": x.title, "path": x.path, "alt_text": x.alt_text}
+        for x in items
+    ])
+
+
+@app.route("/admin/images/upload", methods=["POST"])
+def admin_images_upload():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    file = request.files.get("image")
+    if not file or file.filename == "":
+        return jsonify({"ok": False, "error": "Archivo requerido"}), 400
+    if not _allowed_file(file.filename):
+        return jsonify({"ok": False, "error": "Extensión no permitida"}), 400
+    fname = secure_filename(file.filename)
+    # Avoid collisions
+    ts = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    base, ext = os.path.splitext(fname)
+    fname = f"{base}_{ts}{ext}"
+    try:
+        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    except Exception:
+        pass
+    fpath = os.path.join(app.config["UPLOAD_FOLDER"], fname)
+    file.save(fpath)
+    public_path = f"{app.config['UPLOAD_URL_PREFIX'].rstrip('/')}/{fname}"
+    img = ImageAsset(title=fname, path=public_path, alt_text="")
+    db.session.add(img)
+    db.session.commit()
+    return jsonify({"ok": True, "image": {"id": img.id, "title": img.title, "path": img.path}})
+
+
+def _delete_image_record_and_file(img: ImageAsset) -> None:
+    # Try removing file if it lives under UPLOAD_FOLDER
+    try:
+        # If path is a URL prefix, map to file path by basename
+        name = os.path.basename(img.path or "")
+        if name:
+            fpath = os.path.join(app.config["UPLOAD_FOLDER"], name)
+            if os.path.isfile(fpath):
+                os.remove(fpath)
+    except Exception:
+        pass
+    try:
+        db.session.delete(img)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+@app.route("/admin/images/<int:img_id>", methods=["DELETE"])
+def admin_images_delete(img_id: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    img = ImageAsset.query.get(img_id)
+    if not img:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    _delete_image_record_and_file(img)
+    return jsonify({"ok": True})
+
+
+"""
+Session-scoped Images (per admin session)
+Persisted in DB keyed by a generated SID stored in Flask session, so they survive page reloads.
+"""
+
+def _ensure_session_sid() -> str:
+    sid = session.get("sid")
+    if not sid or not isinstance(sid, str) or len(sid) < 8:
+        sid = uuid4().hex
+        session["sid"] = sid
+    return sid
+
+
+@app.route("/session/images/list", methods=["GET"])
+def session_images_list():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    sid = _ensure_session_sid()
+    rows = SessionImage.query.filter_by(sid=sid).order_by(SessionImage.created_at.desc()).all()
+    return jsonify({"ok": True, "items": [{"title": r.title or "", "path": r.path} for r in rows]})
+
+
+@app.route("/session/images/add", methods=["POST"])
+def session_images_add():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    path = (data.get("path") or "").strip()
+    if not path:
+        return jsonify({"ok": False, "error": "Ruta requerida"}), 400
+    sid = _ensure_session_sid()
+    exists = SessionImage.query.filter_by(sid=sid, path=path).first()
+    if not exists:
+        db.session.add(SessionImage(sid=sid, title=title, path=path))
+        db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/session/images/upload", methods=["POST"])
+def session_images_upload():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    file = request.files.get("image")
+    if not file or file.filename == "":
+        return jsonify({"ok": False, "error": "Archivo requerido"}), 400
+    if not _allowed_file(file.filename):
+        return jsonify({"ok": False, "error": "Extensión no permitida"}), 400
+    fname = secure_filename(file.filename)
+    ts = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    base, ext = os.path.splitext(fname)
+    fname = f"{base}_{ts}{ext}"
+    try:
+        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    except Exception:
+        pass
+    fpath = os.path.join(app.config["UPLOAD_FOLDER"], fname)
+    file.save(fpath)
+    public_path = f"{app.config['UPLOAD_URL_PREFIX'].rstrip('/')}/{fname}"
+    # Store image reference in DB for this session
+    sid = _ensure_session_sid()
+    item = {"title": fname, "path": public_path}
+    db.session.add(SessionImage(sid=sid, title=fname, path=public_path))
+    db.session.commit()
+    return jsonify({"ok": True, "image": item})
+
+
+@app.route("/session/images/delete", methods=["POST"])
+def session_images_delete():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    path = (data.get("path") or "").strip()
+    if not path:
+        return jsonify({"ok": False, "error": "Ruta requerida"}), 400
+    sid = _ensure_session_sid()
+    SessionImage.query.filter_by(sid=sid, path=path).delete()
+    db.session.commit()
+    # Optional: also remove file if under our uploads and was uploaded this session
+    try:
+        name = os.path.basename(path)
+        fpath = os.path.join(app.config["UPLOAD_FOLDER"], name)
+        if os.path.isfile(fpath):
+            os.remove(fpath)
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/images/<int:img_id>/delete", methods=["POST"])
+def admin_images_delete_post(img_id: int):
+    # Fallback for environments that block DELETE
+    return admin_images_delete(img_id)
+
+
+@app.route("/admin/images/delete_by_path", methods=["POST"])
+def admin_images_delete_by_path():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    p = (data.get("path") or "").strip()
+    if not p:
+        return jsonify({"ok": False, "error": "Ruta requerida"}), 400
+    img = ImageAsset.query.filter_by(path=p).first()
+    if not img:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    _delete_image_record_and_file(img)
+    return jsonify({"ok": True})
 
 
 @app.route("/store/packages")
@@ -1053,7 +1434,8 @@ def admin_orders_set_status(oid: int):
                 send_email_async(to_addr, f"Orden #{o.id} aprobada – Inefable Store", body)
     except Exception:
         pass
-    return jsonify({"ok": True, "id": o.id, "status": o.status, "delivery_code": o.delivery_code})
+    return jsonify({"ok": True})
+
 
 @app.route("/store/package/<int:gid>/items")
 def store_game_items(gid: int):
@@ -1069,512 +1451,11 @@ def store_game_items(gid: int):
     return jsonify({
         "ok": True,
         "items": [
-            {"id": it.id, "title": it.title, "price": it.price, "sticker": (it.sticker or "")}
+            {"id": it.id, "title": it.title, "price": it.price, "sticker": (it.sticker or ""), "icon_path": (it.icon_path or "")}
             for it in items
         ]
     })
 
-@app.route("/admin")
-def admin():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return redirect(url_for("index"))
-    return render_template("admin.html")
-
-# ==============================
-# Admin: Mail config and test
-# ==============================
-@app.route("/admin/config/mail", methods=["GET"])
-def admin_config_mail_info():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    return jsonify({
-        "ok": True,
-        "mail_user": MAIL_USER or "",
-        "admin_notify_email": get_config_value("admin_notify_email", ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL or ""),
-        "smtp_host": MAIL_SMTP_HOST,
-        "smtp_port": MAIL_SMTP_PORT,
-    })
-
-@app.route("/admin/config/mail", methods=["POST"])
-def admin_config_mail_set():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    notify = (data.get("admin_notify_email") or "").strip()
-    if not notify:
-        return jsonify({"ok": False, "error": "Correo destino requerido"}), 400
-    set_config_value("admin_notify_email", notify)
-    return jsonify({"ok": True, "admin_notify_email": notify})
-
-
-@app.route("/admin/config/mail/test", methods=["POST"])
-def admin_config_mail_test():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    to_email = (data.get("to") or ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL or "").strip()
-    subject = (data.get("subject") or "Prueba de correo - Inefable Store").strip()
-    body = (data.get("body") or f"Correo de prueba enviado desde Admin a {to_email}.").strip()
-    # Intentamos enviar aquí para poder reportar el error exacto
-    try:
-        if not MAIL_USER or not MAIL_APP_PASSWORD:
-            return jsonify({"ok": False, "error": "Falta MAIL_USER o MAIL_APP_PASSWORD"}), 400
-        msg = MIMEMultipart()
-        msg['From'] = MAIL_USER
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body or "", 'plain'))
-        try:
-            _smtp_send_starttls(msg, to_email)
-            return jsonify({"ok": True, "to": to_email, "mode": "starttls"})
-        except Exception as e1:
-            try:
-                _smtp_send_ssl(msg, to_email)
-                return jsonify({"ok": True, "to": to_email, "mode": "ssl465"})
-            except Exception as e2:
-                return jsonify({"ok": False, "error": f"SMTP: starttls:{e1} | ssl:{e2}"}), 500
-    except Exception as e:
-        return jsonify({"ok": False, "error": f"SMTP: {str(e)}"}), 500
-
-
-@app.route("/user")
-def user_page():
-    # Profile page for any user (logged or not). Frontend can query /orders/my
-    logo_url = get_config_value("logo_path", "")
-    role = (session.get("user") or {}).get("role")
-    is_admin = role == "admin"
-    is_affiliate = role == "affiliate"
-    return render_template("user.html", logo_url=logo_url, is_admin=is_admin, is_affiliate=is_affiliate)
-
-
-@app.route("/terms")
-def terms_page():
-    logo_url = get_config_value("logo_path", "")
-    return render_template("terms.html", logo_url=logo_url)
-
-
-@app.route("/orders/my")
-def orders_my():
-    """Return orders for the current session.
-    - Admins: can filter by `email` or `customer_id` query params.
-    - Users: only their own orders (by session email); query params are ignored.
-    Returns up to 30 most recent.
-    """
-    user = session.get("user")
-    if not user:
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    q = Order.query.filter(Order.status.in_(["approved", "rejected", "pending"]))
-    if user.get("role") == "admin":
-        email = (request.args.get("email") or "").strip()
-        cid = (request.args.get("customer_id") or "").strip()
-        if email:
-            q = q.filter(Order.email == email)
-        if cid:
-            q = q.filter(Order.customer_id == cid)
-        if not email and not cid:
-            return jsonify({"ok": True, "orders": []})
-    else:
-        # Normal user: restrict by session email only
-        email = (user.get("email") or "").strip()
-        if not email:
-            return jsonify({"ok": True, "orders": []})
-        q = q.filter(Order.email == email)
-    rows = q.order_by(Order.created_at.desc()).limit(30).all()
-    out = []
-    for x in rows:
-        pkg = StorePackage.query.get(x.store_package_id)
-        it = GamePackageItem.query.get(x.item_id) if x.item_id else None
-        out.append({
-            "id": x.id,
-            "created_at": x.created_at.isoformat(),
-            "package_name": pkg.name if pkg else "",
-            "item_title": it.title if it else "",
-            "item_price_usd": (it.price if it else 0.0),
-            "reference": x.reference,
-            "status": x.status,
-            "method": x.method,
-            "currency": x.currency,
-            "amount": x.amount,
-        })
-    return jsonify({"ok": True, "orders": out})
-
-
-def allowed_file(filename: str) -> bool:
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-@app.route("/uploads/<path:filename>")
-def uploads_serve(filename):
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
-
-
-@app.route("/admin/images/list")
-def admin_images_list():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    images = ImageAsset.query.order_by(ImageAsset.uploaded_at.desc()).all()
-    return jsonify([
-        {
-            "id": img.id,
-            "title": img.title,
-            "path": img.path,
-            "alt_text": img.alt_text,
-            "uploaded_at": img.uploaded_at.isoformat()
-        }
-        for img in images
-    ])
-
-
-@app.route("/admin/images/upload", methods=["POST"])
-def admin_images_upload():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    if "image" not in request.files:
-        return jsonify({"ok": False, "error": "No file part"}), 400
-    file = request.files["image"]
-    if file.filename == "":
-        return jsonify({"ok": False, "error": "No selected file"}), 400
-    if not allowed_file(file.filename):
-        return jsonify({"ok": False, "error": "Tipo de archivo no permitido"}), 400
-
-    # Deduplicate: if same filename is uploaded twice within 3 seconds in this session, skip
-    try:
-        now_ts = datetime.utcnow().timestamp()
-        last = session.get("_last_img_upload") or {}
-        last_name = last.get("name")
-        last_ts = float(last.get("ts", 0))
-        if last_name == file.filename and (now_ts - last_ts) < 3.0:
-            # Update timestamp to avoid loops and return ok (frontend refreshes gallery anyway)
-            session["_last_img_upload"] = {"name": file.filename, "ts": now_ts}
-            return jsonify({"ok": True, "skipped": True})
-        session["_last_img_upload"] = {"name": file.filename, "ts": now_ts}
-    except Exception:
-        pass
-
-    filename = secure_filename(file.filename)
-    # Avoid collisions by prefixing timestamp
-    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
-    name, ext = os.path.splitext(filename)
-    final_name = f"{name}_{timestamp}{ext}"
-    save_path = os.path.join(app.config["UPLOAD_FOLDER"], final_name)
-    file.save(save_path)
-
-    # Build public path according to configured prefix (works for both static and Disk)
-    prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
-    public_path = f"{prefix}/{final_name}"
-    image = ImageAsset(title=final_name, path=public_path, alt_text=name)
-    db.session.add(image)
-    db.session.commit()
-
-    return jsonify({
-        "ok": True,
-        "image": {
-            "id": image.id,
-            "title": image.title,
-            "path": image.path,
-            "alt_text": image.alt_text,
-            "uploaded_at": image.uploaded_at.isoformat()
-        }
-    })
-
-
-@app.route("/admin/images/<int:image_id>", methods=["DELETE"])
-def admin_images_delete(image_id: int):
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    img = ImageAsset.query.get(image_id)
-    if not img:
-        return jsonify({"ok": False, "error": "No existe"}), 404
-    # Try to remove the physical file only if it is within the uploads folder
-    try:
-        path = (img.path or "").strip()
-        prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
-        if path.startswith(prefix + "/"):
-            rel = path[len(prefix):].lstrip("/")
-            # If serving from static/uploads, rel is under app.root_path/static/uploads.
-            # If serving from Disk, rel is under app.config['UPLOAD_FOLDER'].
-            base = app.config.get("UPLOAD_FOLDER") or DEFAULT_UPLOAD
-            fs_path = os.path.join(base, rel)
-            if os.path.isfile(fs_path):
-                os.remove(fs_path)
-    except Exception:
-        # ignore file removal errors to not block DB delete
-        pass
-    db.session.delete(img)
-    db.session.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/admin/images/<int:image_id>/delete", methods=["POST"])
-def admin_images_delete_fallback(image_id: int):
-    """Fallback for environments that block DELETE method."""
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    img = ImageAsset.query.get(image_id)
-    if not img:
-        return jsonify({"ok": False, "error": "No existe"}), 404
-    try:
-        path = (img.path or "").strip()
-        prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
-        if path.startswith(prefix + "/"):
-            rel = path[len(prefix):].lstrip("/")
-            base = app.config.get("UPLOAD_FOLDER") or DEFAULT_UPLOAD
-            fs_path = os.path.join(base, rel)
-            if os.path.isfile(fs_path):
-                os.remove(fs_path)
-    except Exception:
-        pass
-    db.session.delete(img)
-    db.session.commit()
-    return jsonify({"ok": True})
-
-
-# Delete by path: fallback when client cannot resolve ID
-@app.route("/admin/images/delete_by_path", methods=["POST"])
-def admin_images_delete_by_path():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    path_in = (data.get("path") or "").strip()
-    if not path_in:
-        return jsonify({"ok": False, "error": "Ruta requerida"}), 400
-    img = ImageAsset.query.filter_by(path=path_in).first()
-    if not img:
-        return jsonify({"ok": False, "error": "No existe"}), 404
-    try:
-        prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
-        if path_in.startswith(prefix + "/"):
-            rel = path_in[len(prefix):].lstrip("/")
-            base = app.config.get("UPLOAD_FOLDER") or DEFAULT_UPLOAD
-            fs_path = os.path.join(base, rel)
-            if os.path.isfile(fs_path):
-                os.remove(fs_path)
-    except Exception:
-        pass
-    db.session.delete(img)
-    db.session.commit()
-    return jsonify({"ok": True, "deleted_id": img.id})
-
-
-@app.route("/admin/config/logo", methods=["GET"])
-def admin_config_logo_get():
-    row = AppConfig.query.filter_by(key="logo_path").first()
-    return jsonify({"logo_path": row.value if row else ""})
-
-
-@app.route("/admin/config/mid_banner", methods=["GET"])
-def admin_config_mid_banner_get():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    row = AppConfig.query.filter_by(key="mid_banner_path").first()
-    return jsonify({"ok": True, "mid_banner_path": row.value if row else ""})
-
-
-@app.route("/admin/config/hero", methods=["GET"])
-def admin_config_hero_get():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    return jsonify({
-        "ok": True,
-        "hero_1": get_config_value("hero_1", ""),
-        "hero_2": get_config_value("hero_2", ""),
-        "hero_3": get_config_value("hero_3", ""),
-    })
-
-
-# ==============================
-# Admin: exchange rate config
-# ==============================
-@app.route("/admin/config/rate", methods=["GET"])
-def admin_config_rate_get():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    val = get_config_value("exchange_rate_bsd_per_usd", "")
-    return jsonify({"ok": True, "rate_bsd_per_usd": val})
-
-
-@app.route("/admin/config/rate", methods=["POST"])
-def admin_config_rate_set():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    raw = (data.get("rate_bsd_per_usd") or "").strip()
-    try:
-        val = float(raw)
-        if val < 0:
-            val = 0.0
-        set_config_value("exchange_rate_bsd_per_usd", str(val))
-    except Exception:
-        return jsonify({"ok": False, "error": "Valor inválido"}), 400
-    return jsonify({"ok": True, "rate_bsd_per_usd": get_config_value("exchange_rate_bsd_per_usd", "0")})
-
-
-@app.route("/admin/config/payments", methods=["GET"])
-def admin_config_payments_get():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    data = {
-        "pm_bank": get_config_value("pm_bank", ""),
-        "pm_name": get_config_value("pm_name", ""),
-        "pm_phone": get_config_value("pm_phone", ""),
-        "pm_id": get_config_value("pm_id", ""),
-        "binance_email": get_config_value("binance_email", ""),
-        "binance_phone": get_config_value("binance_phone", ""),
-    }
-    return jsonify({"ok": True, **data})
-
-
-@app.route("/admin/config/payments", methods=["POST"])
-def admin_config_payments_set():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    keys = [
-        "pm_bank", "pm_name", "pm_phone", "pm_id",
-        "binance_email", "binance_phone",
-    ]
-    for k in keys:
-        v = (data.get(k) or "").strip()
-        set_config_value(k, v)
-    out = {k: get_config_value(k, "") for k in keys}
-    return jsonify({"ok": True, **out})
-
-
-@app.route("/admin/config/hero", methods=["POST"])
-def admin_config_hero_set():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    for i in (1, 2, 3):
-        key = f"hero_{i}"
-        val = (data.get(key) or "").strip()
-        set_config_value(key, val)
-    return jsonify({
-        "ok": True,
-        "hero_1": get_config_value("hero_1", ""),
-        "hero_2": get_config_value("hero_2", ""),
-        "hero_3": get_config_value("hero_3", ""),
-    })
-
-
-@app.route("/admin/config/logo", methods=["POST"])
-def admin_config_logo_set():
-    data = request.get_json(silent=True) or {}
-    logo_path = (data.get("logo_path") or "").strip()
-    if not logo_path:
-        # allow clearing the logo
-        row = AppConfig.query.filter_by(key="logo_path").first()
-        if row:
-            db.session.delete(row)
-            db.session.commit()
-        return jsonify({"ok": True, "logo_path": ""})
-
-    # simple validation: allow /static/, configured UPLOAD_URL_PREFIX, or http(s)
-    prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
-    if not (
-        logo_path.startswith("/static/")
-        or logo_path.startswith(prefix + "/")
-        or logo_path.startswith("http://")
-        or logo_path.startswith("https://")
-    ):
-        return jsonify({"ok": False, "error": "Ruta inválida. Debe ser /static/... o URL completa."}), 400
-
-    row = AppConfig.query.filter_by(key="logo_path").first()
-    if not row:
-        row = AppConfig(key="logo_path", value=logo_path)
-        db.session.add(row)
-    else:
-        row.value = logo_path
-    db.session.commit()
-    return jsonify({"ok": True, "logo_path": row.value})
-
-
-@app.route("/admin/config/mid_banner", methods=["POST"])
-def admin_config_mid_banner_set():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    path = (data.get("mid_banner_path") or "").strip()
-    if not path:
-        # allow clearing
-        row = AppConfig.query.filter_by(key="mid_banner_path").first()
-        if row:
-            db.session.delete(row)
-            db.session.commit()
-        return jsonify({"ok": True, "mid_banner_path": ""})
-    # simple validation similar to logo
-    prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/static/uploads").rstrip("/")
-    if not (
-        path.startswith("/static/")
-        or path.startswith(prefix + "/")
-        or path.startswith("http://")
-        or path.startswith("https://")
-    ):
-        return jsonify({"ok": False, "error": "Ruta inválida. Debe ser /static/... o URL completa."}), 400
-    row = AppConfig.query.filter_by(key="mid_banner_path").first()
-    if not row:
-        row = AppConfig(key="mid_banner_path", value=path)
-        db.session.add(row)
-    else:
-        row.value = path
-    db.session.commit()
-    return jsonify({"ok": True, "mid_banner_path": row.value})
-
-
-@app.route("/auth/login", methods=["POST"])
-def auth_login():
-    data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip()
-    password = data.get("password") or ""
-    if not email or not password:
-        return jsonify({"ok": False, "error": "Email y contraseña requeridos"}), 400
-    # Admin login
-    if email.lower() == ADMIN_EMAIL.lower() and password == ADMIN_PASSWORD:
-        session["user"] = {"email": ADMIN_EMAIL, "role": "admin"}
-        return jsonify({"ok": True, "user": session["user"]})
-    # Affiliate login
-    aff = SpecialUser.query.filter(db.func.lower(SpecialUser.email) == email.lower()).first()
-    if aff and aff.password_hash and check_password_hash(aff.password_hash, password):
-        session["user"] = {"email": aff.email or email, "role": "affiliate", "affiliate_id": aff.id, "name": aff.name}
-        return jsonify({"ok": True, "user": session["user"]})
-    # User login
-    u = User.query.filter(db.func.lower(User.email) == email.lower()).first()
-    if u and check_password_hash(u.password_hash, password):
-        session["user"] = {"email": u.email, "role": "user", "user_id": u.id, "name": u.name}
-        return jsonify({"ok": True, "user": session["user"]})
-    return jsonify({"ok": False, "error": "Credenciales inválidas"}), 401
-
-
-@app.route("/auth/logout", methods=["POST"])
-def auth_logout():
-    session.pop("user", None)
-    return jsonify({"ok": True})
-
-
-@app.route("/auth/session", methods=["GET"])
-def auth_session_info():
-    u = session.get("user")
-    return jsonify({"ok": True, "user": (u or None)})
-
-
-# Admin: CRUD para items por juego
 @app.route("/admin/package/<int:gid>/items", methods=["GET"])
 def admin_game_items_list(gid: int):
     user = session.get("user")
@@ -1587,7 +1468,7 @@ def admin_game_items_list(gid: int):
     return jsonify({
         "ok": True,
         "items": [
-            {"id": it.id, "title": it.title, "price": it.price, "description": it.description, "sticker": (it.sticker or ""), "active": it.active}
+            {"id": it.id, "title": it.title, "price": it.price, "description": it.description, "sticker": (it.sticker or ""), "icon_path": (it.icon_path or ""), "active": it.active}
             for it in items
         ]
     })
@@ -1604,16 +1485,17 @@ def admin_game_items_create(gid: int):
     title = (data.get("title") or "").strip()
     description = (data.get("description") or "").strip()
     sticker = (data.get("sticker") or "").strip()
+    icon_path = (data.get("icon_path") or "").strip()
     try:
         price = float(data.get("price") or 0)
     except Exception:
         price = 0.0
     if not title:
         return jsonify({"ok": False, "error": "Título requerido"}), 400
-    item = GamePackageItem(store_package_id=gid, title=title, description=description, price=price, sticker=sticker, active=True)
+    item = GamePackageItem(store_package_id=gid, title=title, description=description, price=price, sticker=sticker, icon_path=icon_path, active=True)
     db.session.add(item)
     db.session.commit()
-    return jsonify({"ok": True, "item": {"id": item.id, "title": item.title, "price": item.price, "description": item.description, "sticker": (item.sticker or ""), "active": item.active}})
+    return jsonify({"ok": True, "item": {"id": item.id, "title": item.title, "price": item.price, "description": item.description, "sticker": (item.sticker or ""), "icon_path": (item.icon_path or ""), "active": item.active}})
 
 @app.route("/admin/package/item/<int:item_id>", methods=["PUT", "PATCH"])
 def admin_game_items_update(item_id: int):
@@ -1630,6 +1512,8 @@ def admin_game_items_update(item_id: int):
         item.description = (data.get("description") or "").strip()
     if "sticker" in data:
         item.sticker = (data.get("sticker") or "").strip()
+    if "icon_path" in data:
+        item.icon_path = (data.get("icon_path") or "").strip()
     if "price" in data:
         try:
             item.price = float(data.get("price") or 0)
@@ -1795,6 +1679,42 @@ def set_config_value(key: str, value: str) -> None:
     else:
         row.value = value
     db.session.commit()
+
+
+@app.route("/auth/login", methods=["POST"])
+def auth_login():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    password = data.get("password") or ""
+    if not email or not password:
+        return jsonify({"ok": False, "error": "Email y contraseña requeridos"}), 400
+    # Admin login (env credentials)
+    if email.lower() == (ADMIN_EMAIL or "").lower() and password == (ADMIN_PASSWORD or ""):
+        session["user"] = {"email": ADMIN_EMAIL, "role": "admin"}
+        return jsonify({"ok": True, "user": session["user"]})
+    # Affiliate login
+    su = SpecialUser.query.filter(db.func.lower(SpecialUser.email) == email.lower()).first()
+    if su and su.password_hash and check_password_hash(su.password_hash, password):
+        session["user"] = {"email": su.email or email, "role": "affiliate", "affiliate_id": su.id, "name": su.name}
+        return jsonify({"ok": True, "user": session["user"]})
+    # Normal user login
+    u = User.query.filter(db.func.lower(User.email) == email.lower()).first()
+    if u and check_password_hash(u.password_hash, password):
+        session["user"] = {"email": u.email, "role": "user", "user_id": u.id, "name": u.name}
+        return jsonify({"ok": True, "user": session["user"]})
+    return jsonify({"ok": False, "error": "Credenciales inválidas"}), 401
+
+
+@app.route("/auth/logout", methods=["POST"])
+def auth_logout():
+    session.pop("user", None)
+    return jsonify({"ok": True})
+
+
+@app.route("/auth/session", methods=["GET"])
+def auth_session_info():
+    u = session.get("user")
+    return jsonify({"ok": True, "user": (u or None)})
 
 
 @app.route("/auth/profile", methods=["GET"])
