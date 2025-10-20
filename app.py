@@ -62,6 +62,20 @@ ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "")  # default destina
 
 db = SQLAlchemy(app)
 
+# ==============================
+# Serve uploaded files (runtime uploads)
+# ==============================
+# This enables serving files stored in UPLOAD_FOLDER under a public URL.
+# Recommended for Render: set UPLOAD_FOLDER to a writable path (e.g. /var/tmp/uploads)
+# and UPLOAD_URL_PREFIX to '/uploads'.
+prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/uploads").rstrip("/")
+if prefix == "":
+    prefix = "/uploads"
+
+@app.route(f"{prefix}/<path:filename>")
+def serve_uploads(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+
 # Models
 class Order(db.Model):
     __tablename__ = "orders"
