@@ -111,11 +111,8 @@
         </div>
       </div>
       <div class="panel-body">
-        <p style="color:#64748b; margin:0 0 12px;">Sube imágenes que luego podrás usar como logo, banners o ítems.</p>
-
-        <h3 style="margin:0 0 10px;">Imágenes de paquetes (todas)</h3>
+        <p style="color:#64748b; margin:0 0 12px;">Sube imágenes que luego podrás usar como logo u otros activos del sitio.</p>
         <div id="gallery" class="image-grid"></div>
-
         <template id="image-card-tpl">
           <div class="image-card">
             <div class="thumb-wrap">
@@ -125,25 +122,13 @@
             <div class="meta">
               <div class="title"></div>
               <code class="path"></code>
-              <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+              <div style="margin-top:8px;">
                 <button class="btn btn-copy" type="button">Copiar ruta</button>
-                <button class="btn btn-del" type="button">Eliminar</button>
-                <button class="btn btn-use-item" type="button" title="Agregar a Ítems">Usar para Ítem</button>
+                <button class="btn btn-del" type="button" style="margin-left:8px;">Eliminar</button>
               </div>
             </div>
           </div>
         </template>
-
-        <hr style="margin:16px 0; opacity:.35;">
-        <div class="panel-header" style="padding:0; margin-bottom:8px; align-items:center;">
-          <h3 style="margin:0;">Imágenes seleccionadas para ítems</h3>
-          <div class="actions">
-            <input id="file-input-item" type="file" accept="image/*" multiple style="display:none;" />
-            <button id="btn-upload-item" class="btn" type="button">Subir Imagen de Ítem</button>
-            <button id="btn-items-refresh" class="btn" type="button">Refrescar</button>
-          </div>
-        </div>
-        <div id="gallery-items" class="image-grid"></div>
       </div>
     </div>
 

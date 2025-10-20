@@ -7,10 +7,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnRefresh = document.getElementById('btn-refresh');
   const fileInput = document.getElementById('file-input');
   const gallery = document.getElementById('gallery');
-  const galleryItems = document.getElementById('gallery-items');
-  const btnUploadItem = document.getElementById('btn-upload-item');
-  const btnItemsRefresh = document.getElementById('btn-items-refresh');
-  const fileInputItem = document.getElementById('file-input-item');
   const tpl = document.getElementById('image-card-tpl');
   // Client-side index to resolve IDs when dataset is missing
   const imgIndex = {
@@ -109,12 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.dataset.target = dt.dataset.target;
       adminDrawerTabs.appendChild(btn);
     });
-  }
-
-  async function refreshSessionItems() {
-    const items = await fetchSessionImages();
-    selectedItemImages.splice(0, selectedItemImages.length, ...items);
-    renderGalleryItems();
   }
 
   // Determine position to insert while dragging
@@ -259,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!ordersWdList) return;
     ordersWdList.innerHTML = '';
     if (!items || items.length === 0) {
-      ordersWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerán aquí.</p></div>';
+      ordersWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerÃ¡n aquÃ­.</p></div>';
       return;
     }
     const fmtUSD = (n) => {
@@ -272,8 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const statusIcon = r.status === 'approved' ? 'OK' : r.status === 'rejected' ? 'X' : '...';
       const statusClass = r.status === 'approved' ? 'ok' : r.status === 'rejected' ? 'rej' : 'pend';
       const payoutLine = (r.method === 'pm')
-        ? `Pago Móvil: ${r.pm_bank || ''} · ${r.pm_name || ''} · ${r.pm_phone || ''} · ${r.pm_id || ''}`
-        : `Binance: ${r.binance_email || ''} · ${r.binance_phone || ''}`;
+        ? `Pago MÃ³vil: ${r.pm_bank || ''} Â· ${r.pm_name || ''} Â· ${r.pm_phone || ''} Â· ${r.pm_id || ''}`
+        : `Binance: ${r.binance_email || ''} Â· ${r.binance_phone || ''}`;
       tile.innerHTML = `
         <div class="row-head">
           <div>
@@ -344,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!affWdList) return;
     affWdList.innerHTML = '';
     if (!items || items.length === 0) {
-      affWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerán aquí.</p></div>';
+      affWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerÃ¡n aquÃ­.</p></div>';
       return;
     }
     const fmtUSD = (n) => {
@@ -357,8 +347,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const statusIcon = r.status === 'approved' ? 'OK' : r.status === 'rejected' ? 'X' : '...';
       const statusClass = r.status === 'approved' ? 'ok' : r.status === 'rejected' ? 'rej' : 'pend';
       const payoutLine = (r.method === 'pm')
-        ? `Pago Móvil: ${r.pm_bank || ''} · ${r.pm_name || ''} · ${r.pm_phone || ''} · ${r.pm_id || ''}`
-        : `Binance: ${r.binance_email || ''} · ${r.binance_phone || ''}`;
+        ? `Pago MÃ³vil: ${r.pm_bank || ''} Â· ${r.pm_name || ''} Â· ${r.pm_phone || ''} Â· ${r.pm_id || ''}`
+        : `Binance: ${r.binance_email || ''} Â· ${r.binance_phone || ''}`;
       tile.innerHTML = `
         <div class="row-head">
           <div>
@@ -444,7 +434,7 @@ window.fetchPayments = fetchPayments;
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(txt || 'No se pudo guardar métodos de pago');
+      throw new Error(txt || 'No se pudo guardar mÃ©todos de pago');
     }
   }
 
@@ -586,7 +576,6 @@ window.fetchLogo = fetchLogo;
       // If Images tab is opened, refresh gallery
       if (tab.dataset.target === '#tab-images') {
         refreshGallery();
-        refreshSessionItems();
       }
       // If Config tab is opened, refresh rate and payments forms
       if (tab.dataset.target === '#tab-config') {
@@ -661,82 +650,18 @@ window.fetchLogo = fetchLogo;
 
   async function fetchImages() {
     const res = await fetch('/admin/images/list');
-    if (!res.ok) throw new Error('No se pudo listar imágenes');
+    if (!res.ok) throw new Error('No se pudo listar imÃ¡genes');
     return res.json();
-  }
-
-  // Session-scoped list of item images
-  const selectedItemImages = [];
-
-  async function fetchSessionImages() {
-    try {
-      const res = await fetch('/session/images/list');
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo listar');
-      return Array.isArray(data.items) ? data.items : [];
-    } catch (_) { return []; }
-  }
-
-  async function addSessionImage(title, path) {
-    const res = await fetch('/session/images/add', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ title, path }) });
-    const data = await res.json().catch(()=>({}));
-    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo agregar');
-  }
-
-  async function uploadSessionImage(file) {
-    const fd = new FormData();
-    fd.append('image', file);
-    const res = await fetch('/session/images/upload', { method:'POST', body: fd });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo subir');
-    return data.image;
-  }
-
-  function renderGalleryItems() {
-    if (!galleryItems) return;
-    galleryItems.innerHTML = '';
-    if (selectedItemImages.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'empty-state';
-      empty.innerHTML = '<h3>Sin imágenes</h3><p>Elige imágenes con "Usar para Ítem"</p>';
-      galleryItems.appendChild(empty);
-      return;
-    }
-    selectedItemImages.forEach(img => {
-      const card = document.createElement('div');
-      card.className = 'image-card';
-      const wrap = document.createElement('div');
-      wrap.className = 'thumb-wrap';
-      const im = document.createElement('img');
-      im.className = 'thumb';
-      im.alt = '';
-      im.src = img.path;
-      wrap.appendChild(im);
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      const t = document.createElement('div');
-      t.className = 'title';
-      t.textContent = img.title || '';
-      const p = document.createElement('code');
-      p.className = 'path';
-      p.textContent = img.path || '';
-      meta.appendChild(t);
-      meta.appendChild(p);
-      card.appendChild(wrap);
-      card.appendChild(meta);
-      galleryItems.appendChild(card);
-    });
   }
 
   function renderGallery(items) {
     if (!gallery || !tpl) return;
     gallery.innerHTML = '';
-
     // reset index
     imgIndex.byPath.clear();
     imgIndex.byTitle.clear();
     if (!items || items.length === 0) {
-      gallery.innerHTML = '<div class="empty-state"><h3>Sin imágenes</h3><p>Sube imágenes para usarlas en el sitio.</p></div>';
+      gallery.innerHTML = '<div class="empty-state"><h3>Sin imÃ¡genes</h3><p>Sube imÃ¡genes para usarlas en el sitio.</p></div>';
       return;
     }
     items.forEach(img => {
@@ -747,11 +672,9 @@ window.fetchLogo = fetchLogo;
       const path = node.querySelector('.path');
       const delBtn = node.querySelector('.btn-del');
       const delOv = node.querySelector('.btn-del-ov');
-      const useBtn = node.querySelector('.btn-use-item') || node.querySelector('.btn btn-use-item');
       if (thumb) thumb.src = img.path;
       if (title) title.textContent = img.title || '';
       if (path) path.textContent = img.path || '';
-
       const idStr = String(img.id);
       // index
       if (img.path) imgIndex.byPath.set(String(img.path), idStr);
@@ -759,23 +682,6 @@ window.fetchLogo = fetchLogo;
       if (card) { card.dataset.id = idStr; }
       if (delBtn) { delBtn.dataset.id = idStr; }
       if (delOv) { delOv.dataset.id = idStr; }
-      if (useBtn) {
-        useBtn.addEventListener('click', async (e) => {
-          e.preventDefault();
-          const it = { title: img.title || '', path: img.path || '' };
-          try {
-            await addSessionImage(it.title, it.path);
-            if (!selectedItemImages.some(x => x.path === it.path)) {
-              selectedItemImages.push(it);
-              renderGalleryItems();
-            }
-            toast('Agregado abajo', 'success');
-          } catch (err) {
-            toast(err.message || 'No se pudo agregar', 'error');
-          }
-        });
-      }
-
       if (title && title.setAttribute) { title.setAttribute('data-id', idStr); }
       if (path && path.setAttribute) { path.setAttribute('data-id', idStr); }
       const wrap = node.querySelector('.thumb-wrap');
@@ -990,36 +896,6 @@ window.refreshGallery = refreshGallery;
 
   if (btnRefresh) {
     btnRefresh.addEventListener('click', () => window.refreshGallery && window.refreshGallery());
-  }
-
-  // Bottom gallery: upload per-session item images
-  if (btnUploadItem && fileInputItem) {
-    btnUploadItem.addEventListener('click', (e) => {
-      e.preventDefault();
-      fileInputItem.click();
-    });
-    fileInputItem.addEventListener('change', async () => {
-      const files = Array.from(fileInputItem.files || []);
-      if (!files.length) return;
-      try {
-        for (let i = 0; i < files.length; i++) {
-          const img = await uploadSessionImage(files[i]);
-          if (img && img.path && !selectedItemImages.some(x => x.path === img.path)) {
-            selectedItemImages.push({ title: img.title || '', path: img.path });
-          }
-        }
-        renderGalleryItems();
-        toast('Imágenes subidas', 'success');
-      } catch (e) {
-        toast(e.message || 'Error al subir', 'error');
-      } finally {
-        fileInputItem.value = '';
-      }
-    });
-  }
-
-  if (btnItemsRefresh) {
-    btnItemsRefresh.addEventListener('click', refreshSessionItems);
   }
 
   if (gallery) {

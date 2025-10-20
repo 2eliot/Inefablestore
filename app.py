@@ -1,7 +1,6 @@
 import os
 import shutil
 from datetime import datetime
-from uuid import uuid4
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
@@ -190,15 +189,6 @@ class AppConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.Text, default="")
-
-
-class SessionImage(db.Model):
-    __tablename__ = "session_images"
-    id = db.Column(db.Integer, primary_key=True)
-    sid = db.Column(db.String(64), index=True, nullable=False)  # per-session key
-    title = db.Column(db.String(200), default="")
-    path = db.Column(db.String(300), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class SpecialUser(db.Model):
     __tablename__ = "special_users"
@@ -994,99 +984,6 @@ def admin_images_delete(img_id: int):
     if not img:
         return jsonify({"ok": False, "error": "No existe"}), 404
     _delete_image_record_and_file(img)
-    return jsonify({"ok": True})
-
-
-"""
-Session-scoped Images (per admin session)
-Persisted in DB keyed by a generated SID stored in Flask session, so they survive page reloads.
-"""
-
-def _ensure_session_sid() -> str:
-    sid = session.get("sid")
-    if not sid or not isinstance(sid, str) or len(sid) < 8:
-        sid = uuid4().hex
-        session["sid"] = sid
-    return sid
-
-
-@app.route("/session/images/list", methods=["GET"])
-def session_images_list():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    sid = _ensure_session_sid()
-    rows = SessionImage.query.filter_by(sid=sid).order_by(SessionImage.created_at.desc()).all()
-    return jsonify({"ok": True, "items": [{"title": r.title or "", "path": r.path} for r in rows]})
-
-
-@app.route("/session/images/add", methods=["POST"])
-def session_images_add():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    title = (data.get("title") or "").strip()
-    path = (data.get("path") or "").strip()
-    if not path:
-        return jsonify({"ok": False, "error": "Ruta requerida"}), 400
-    sid = _ensure_session_sid()
-    exists = SessionImage.query.filter_by(sid=sid, path=path).first()
-    if not exists:
-        db.session.add(SessionImage(sid=sid, title=title, path=path))
-        db.session.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/session/images/upload", methods=["POST"])
-def session_images_upload():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    file = request.files.get("image")
-    if not file or file.filename == "":
-        return jsonify({"ok": False, "error": "Archivo requerido"}), 400
-    if not _allowed_file(file.filename):
-        return jsonify({"ok": False, "error": "Extensión no permitida"}), 400
-    fname = secure_filename(file.filename)
-    ts = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
-    base, ext = os.path.splitext(fname)
-    fname = f"{base}_{ts}{ext}"
-    try:
-        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-    except Exception:
-        pass
-    fpath = os.path.join(app.config["UPLOAD_FOLDER"], fname)
-    file.save(fpath)
-    public_path = f"{app.config['UPLOAD_URL_PREFIX'].rstrip('/')}/{fname}"
-    # Store image reference in DB for this session
-    sid = _ensure_session_sid()
-    item = {"title": fname, "path": public_path}
-    db.session.add(SessionImage(sid=sid, title=fname, path=public_path))
-    db.session.commit()
-    return jsonify({"ok": True, "image": item})
-
-
-@app.route("/session/images/delete", methods=["POST"])
-def session_images_delete():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    path = (data.get("path") or "").strip()
-    if not path:
-        return jsonify({"ok": False, "error": "Ruta requerida"}), 400
-    sid = _ensure_session_sid()
-    SessionImage.query.filter_by(sid=sid, path=path).delete()
-    db.session.commit()
-    # Optional: also remove file if under our uploads and was uploaded this session
-    try:
-        name = os.path.basename(path)
-        fpath = os.path.join(app.config["UPLOAD_FOLDER"], name)
-        if os.path.isfile(fpath):
-            os.remove(fpath)
-    except Exception:
-        pass
     return jsonify({"ok": True})
 
 
