@@ -80,7 +80,7 @@
   <div class="modal-backdrop"></div>
 </div>
 
-<section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}">
+<section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}" data-active-login="{{ 1 if (active_login_game_id|int) == game.id else 0 }}" data-default-region="{{ player_lookup_region }}">
   <div class="details-left">
     <div class="game-hero">
       <div class="banner" style="background-image:url('{{ game.image_path }}')"></div>
@@ -97,11 +97,22 @@
     </div>
   </div>
   <div class="details-right">
+    
     <div class="step-card">
       <div class="step-title" data-step="1">1 Ingrese su ID</div>
+      {% if active_login_game_id and (active_login_game_id|int) == game.id %}
+      <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;">
+        <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID">
+        <button id="btn-verify-player" class="btn" type="button">Verificar</button>
+      </div>
+      {% else %}
       <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID">
+      {% endif %}
       {% if game.requires_zone_id %}
       <input id="customer-zone" class="input" type="text" placeholder="Ingresa tu Zona ID">
+      {% endif %}
+      {% if active_login_game_id and (active_login_game_id|int) == game.id %}
+      <small id="player-nickname" class="ref-status" style="display:block; margin-top:6px; text-align:center;"></small>
       {% endif %}
     </div>
 

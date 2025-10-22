@@ -42,6 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const binEmail = document.getElementById('binance-email');
   const binPhone = document.getElementById('binance-phone');
   const btnSavePayments = document.getElementById('btn-save-payments');
+  const inputActiveLoginGame = document.getElementById('active-login-game');
+  const btnSaveActiveLoginGame = document.getElementById('btn-save-active-login-game');
   // Mail test elements
   const mailUser = document.getElementById('mail-user');
   const mailTo = document.getElementById('mail-to');
@@ -584,6 +586,7 @@ window.fetchLogo = fetchLogo;
         fetchMailInfo();
         fetchSessionInfo();
         fetchMidBanner && fetchMidBanner();
+        fetchActiveLoginGame();
       }
       // If Orders tab is opened, refresh orders
       if (tab.dataset.target === '#tab-orders') {
@@ -1563,6 +1566,41 @@ window.fetchHero = fetchHero;
       if (grpSpec) grpSpec.hidden = true;
       return;
     }
+
+  async function fetchActiveLoginGame() {
+    try {
+      const res = await fetch('/admin/config/active_login_game');
+      const data = await res.json();
+      if (res.ok && data && data.ok && inputActiveLoginGame) {
+        inputActiveLoginGame.value = data.active_login_game_id || '';
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  async function saveActiveLoginGame() {
+    const val = inputActiveLoginGame ? String(inputActiveLoginGame.value || '').trim() : '';
+    const res = await fetch('/admin/config/active_login_game', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active_login_game_id: val })
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t || 'No se pudo guardar');
+    }
+  }
+
+  if (btnSaveActiveLoginGame) {
+    btnSaveActiveLoginGame.addEventListener('click', async () => {
+      try {
+        btnSaveActiveLoginGame.disabled = true;
+        await saveActiveLoginGame();
+        toast('Juego activo guardado');
+      } catch (e) {
+        toast(e.message || 'Error');
+      } finally {
+        btnSaveActiveLoginGame.disabled = false;
+      }
+    });
+  }
     let specCount = 0;
     items.forEach(p => {
       const isGift = (p.category || 'mobile') === 'gift';

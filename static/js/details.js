@@ -22,6 +22,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Step 4 inputs
   const inputCustomerId = document.getElementById('customer-id');
   const inputCustomerZone = document.getElementById('customer-zone');
+  const btnVerifyPlayer = document.getElementById('btn-verify-player');
+  const playerNickname = document.getElementById('player-nickname');
+  const btnRightLogin = document.getElementById('btn-right-login');
+  const activeLogin = (root.getAttribute('data-active-login') === '1');
   // Hide Step 1 (player ID) for gift category
   if (isGift && inputCustomerId) {
     const stepCard = inputCustomerId.closest('.step-card');
@@ -35,6 +39,33 @@ document.addEventListener('DOMContentLoaded', () => {
     if (step2Title) step2Title.textContent = '1 Selecciona tu producto';
     if (step3Title) step3Title.textContent = '2 Seleccione un método de pago';
     if (step4Title) step4Title.textContent = '3 Ingresa tus datos';
+  }
+
+  // Right small login button opens auth modal (only when active)
+  if (activeLogin && btnRightLogin) {
+    btnRightLogin.addEventListener('click', () => {
+      const modal = document.getElementById('auth-modal');
+      if (modal) modal.removeAttribute('hidden');
+    });
+  }
+
+  // Verify player UID via backend proxy: ALT endpoint only
+  if (activeLogin && btnVerifyPlayer) {
+    btnVerifyPlayer.addEventListener('click', async () => {
+      try {
+        const uid = (inputCustomerId && inputCustomerId.value.trim()) || '';
+        if (!uid) return alert('Ingrese su ID');
+        if (playerNickname) { playerNickname.style.color = '#94a3b8'; playerNickname.textContent = 'Verificando...'; }
+        const r = await fetch(`/store/player_lookup_scrape?uid=${encodeURIComponent(uid)}`);
+        const d = await r.json();
+        if (!r.ok || !d || !d.ok || !d.nickname) {
+          throw new Error((d && d.error) ? d.error : 'No se encontró el nombre');
+        }
+        if (playerNickname) { playerNickname.style.color = '#86efac'; playerNickname.textContent = `${d.nickname}`; }
+      } catch (e) {
+        if (playerNickname) { playerNickname.style.color = '#fca5a5'; playerNickname.textContent = e.message || 'Error'; }
+      }
+    });
   }
   const inputName = document.getElementById('full-name');
   const inputEmail = document.getElementById('email');
