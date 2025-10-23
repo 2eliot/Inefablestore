@@ -49,24 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Verify player UID via backend proxy: ALT endpoint only
-  if (activeLogin && btnVerifyPlayer) {
-    btnVerifyPlayer.addEventListener('click', async () => {
-      try {
-        const uid = (inputCustomerId && inputCustomerId.value.trim()) || '';
-        if (!uid) return alert('Ingrese su ID');
-        if (playerNickname) { playerNickname.style.color = '#94a3b8'; playerNickname.textContent = 'Verificando...'; }
-        const r = await fetch(`/store/player_lookup_scrape?uid=${encodeURIComponent(uid)}`);
-        const d = await r.json();
-        if (!r.ok || !d || !d.ok || !d.nickname) {
-          throw new Error((d && d.error) ? d.error : 'No se encontró el nombre');
-        }
-        if (playerNickname) { playerNickname.style.color = '#86efac'; playerNickname.textContent = `${d.nickname}`; }
-      } catch (e) {
-        if (playerNickname) { playerNickname.style.color = '#fca5a5'; playerNickname.textContent = e.message || 'Error'; }
-      }
-    });
-  }
+  
   const inputName = document.getElementById('full-name');
   const inputEmail = document.getElementById('email');
   const inputPhone = document.getElementById('phone');
@@ -296,6 +279,69 @@ document.addEventListener('DOMContentLoaded', () => {
   // Fetch payments configuration (Admin-configured)
   fetch('/store/payments').then(r => r.json()).then(data => {
     if (data && data.ok) paymentsCfg = data.payments || null;
+    try {
+      const cfg = paymentsCfg || {};
+      // Pago Móvil
+      if (btnPayBSD) {
+        const url = (cfg.pm_image_path || '').trim();
+        if (url) {
+          btnPayBSD.innerHTML = `<img src="${url}" alt="Pago Móvil" style="max-height:42px; max-width:160px; object-fit:contain; display:block; margin:0 auto;" />`;
+          if (/(\.png)(\?|$)/i.test(url)) {
+            const img = btnPayBSD.querySelector('img');
+            if (img) { requestAnimationFrame(() => { try {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              img.addEventListener('load', () => {
+                const w = img.naturalWidth, h = img.naturalHeight; if (!w||!h) return;
+                canvas.width = w; canvas.height = h; ctx.drawImage(img, 0, 0);
+                const { data } = ctx.getImageData(0, 0, w, h);
+                let top=0,left=0,right=w-1,bottom=h-1,found=false;
+                for(let y=0;y<h;y++){ for(let x=0;x<w;x++){ if(data[(y*w+x)*4+3]!==0){ top=y; found=true; break; } } if(found) break; }
+                found=false; for(let y=h-1;y>=top;y--){ for(let x=0;x<w;x++){ if(data[(y*w+x)*4+3]!==0){ bottom=y; found=true; break; } } if(found) break; }
+                found=false; for(let x=0;x<w;x++){ for(let y=top;y<=bottom;y++){ if(data[(y*w+x)*4+3]!==0){ left=x; found=true; break; } } if(found) break; }
+                found=false; for(let x=w-1;x>=left;x--){ for(let y=top;y<=bottom;y++){ if(data[(y*w+x)*4+3]!==0){ right=x; found=true; break; } } if(found) break; }
+                const cw = Math.max(1, right-left+1), ch = Math.max(1, bottom-top+1);
+                if (cw===w && ch===h) return;
+                const out = document.createElement('canvas'); out.width=cw; out.height=ch; out.getContext('2d').drawImage(canvas, left, top, cw, ch, 0, 0, cw, ch);
+                img.src = out.toDataURL('image/png');
+              }, { once:true });
+            } catch(_){} }); }
+          }
+        } else {
+          btnPayBSD.textContent = 'Pago Móvil';
+        }
+      }
+      // Binance
+      if (btnPayUSD) {
+        const url2 = (cfg.binance_image_path || '').trim();
+        if (url2) {
+          btnPayUSD.innerHTML = `<img src="${url2}" alt="Binance" style="max-height:42px; max-width:160px; object-fit:contain; display:block; margin:0 auto;" />`;
+          if (/(\.png)(\?|$)/i.test(url2)) {
+            const img2 = btnPayUSD.querySelector('img');
+            if (img2) { requestAnimationFrame(() => { try {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              img2.addEventListener('load', () => {
+                const w = img2.naturalWidth, h = img2.naturalHeight; if (!w||!h) return;
+                canvas.width = w; canvas.height = h; ctx.drawImage(img2, 0, 0);
+                const { data } = ctx.getImageData(0, 0, w, h);
+                let top=0,left=0,right=w-1,bottom=h-1,found=false;
+                for(let y=0;y<h;y++){ for(let x=0;x<w;x++){ if(data[(y*w+x)*4+3]!==0){ top=y; found=true; break; } } if(found) break; }
+                found=false; for(let y=h-1;y>=top;y--){ for(let x=0;x<w;x++){ if(data[(y*w+x)*4+3]!==0){ bottom=y; found=true; break; } } if(found) break; }
+                found=false; for(let x=0;x<w;x++){ for(let y=top;y<=bottom;y++){ if(data[(y*w+x)*4+3]!==0){ left=x; found=true; break; } } if(found) break; }
+                found=false; for(let x=w-1;x>=left;x--){ for(let y=top;y<=bottom;y++){ if(data[(y*w+x)*4+3]!==0){ right=x; found=true; break; } } if(found) break; }
+                const cw = Math.max(1, right-left+1), ch = Math.max(1, bottom-top+1);
+                if (cw===w && ch===h) return;
+                const out = document.createElement('canvas'); out.width=cw; out.height=ch; out.getContext('2d').drawImage(canvas, left, top, cw, ch, 0, 0, cw, ch);
+                img2.src = out.toDataURL('image/png');
+              }, { once:true });
+            } catch(_){} }); }
+          }
+        } else {
+          btnPayUSD.textContent = 'Binance';
+        }
+      }
+    } catch (_) {}
   }).catch(() => { paymentsCfg = null; });
 
   if (mfsClose) {

@@ -6,14 +6,10 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
-from bs4 import BeautifulSoup
-import re
 import smtplib
-import socket
 import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import requests
 
 # Create Flask app
 app = Flask(__name__, instance_relative_config=True)
@@ -770,59 +766,13 @@ def store_payments():
         "pm_id": get_config_value("pm_id", ""),
         "binance_email": get_config_value("binance_email", ""),
         "binance_phone": get_config_value("binance_phone", ""),
+        "pm_image_path": get_config_value("pm_image_path", ""),
+        "binance_image_path": get_config_value("binance_image_path", ""),
     }
     return jsonify({"ok": True, "payments": data})
 
 
-@app.route("/store/player_lookup_scrape")
-def store_player_lookup_scrape():
-    uid = (request.args.get("uid") or "").strip()
-    if not uid:
-        return jsonify({"ok": False, "error": "uid requerido"}), 400
-    url = f"https://www.freefiremania.com.br/cuenta/{uid}.html"
-    try:
-        r = requests.get(url, timeout=12, headers={"User-Agent": "Mozilla/5.0"})
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        h1 = soup.find("h1")
-        raw = (h1.get_text(strip=True) if h1 else None)
-        nickname = None
-        if raw:
-            txt = raw
-            # Remove common prefixes/suffixes around nickname
-            prefixes = [
-                "Perfil del Jugador",
-                "Perfil do Jogador",
-                "Perfil de Jogador",
-                "Perfil do jogador",
-                "Perfil do Player",
-            ]
-            suffixes = [
-                "en Free Fire",
-                "no Free Fire",
-            ]
-            for p in prefixes:
-                if txt.startswith(p):
-                    txt = txt[len(p):].strip()
-            for s in suffixes:
-                if txt.endswith(s):
-                    txt = txt[: -len(s)].strip()
-            # Regex fallback: capture between 'Perfil del Jugador' and 'en Free Fire'
-            if not txt or txt == raw:
-                m = re.search(r"Perfil\s+del\s+Jugador\s+(.*?)\s+en\s+Free\s*Fire", raw, re.IGNORECASE)
-                if not m:
-                    m = re.search(r"Perfil\s+do\s+Jogador\s+(.*?)\s+(?:no|em)\s+Free\s*Fire", raw, re.IGNORECASE)
-                if m:
-                    txt = m.group(1).strip()
-            nickname = txt or None
-        if nickname:
-            return jsonify({"ok": True, "nickname": nickname})
-        return jsonify({"ok": False, "error": "No se encontró nickname"}), 404
-    except requests.exceptions.RequestException as e:
-        return jsonify({"ok": False, "error": f"API error: {str(e)}"}), 502
-
-
-
+ 
 
 # ==============================
 # Admin: Config APIs
@@ -894,6 +844,8 @@ def admin_config_payments_get():
         "pm_id": get_config_value("pm_id", ""),
         "binance_email": get_config_value("binance_email", ""),
         "binance_phone": get_config_value("binance_phone", ""),
+        "pm_image_path": get_config_value("pm_image_path", ""),
+        "binance_image_path": get_config_value("binance_image_path", ""),
     })
 
 
@@ -909,6 +861,8 @@ def admin_config_payments_set():
     set_config_value("pm_id", (data.get("pm_id") or "").strip())
     set_config_value("binance_email", (data.get("binance_email") or "").strip())
     set_config_value("binance_phone", (data.get("binance_phone") or "").strip())
+    set_config_value("pm_image_path", (data.get("pm_image_path") or "").strip())
+    set_config_value("binance_image_path", (data.get("binance_image_path") or "").strip())
     return jsonify({"ok": True})
 
 
@@ -1151,6 +1105,7 @@ def store_game_detail(gid: int):
     active_login_game_id = get_config_value("active_login_game_id", "")
     player_lookup_region = get_config_value("player_lookup_default_region", "US")
     player_lookup_regions = get_config_value("player_lookup_regions_default", "US,BR,ME,PK,CIS,ID,LATAM,MX")
+    scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
     return render_template(
         "details.html",
         game=game,
@@ -1158,6 +1113,7 @@ def store_game_detail(gid: int):
         active_login_game_id=active_login_game_id,
         player_lookup_region=player_lookup_region,
         player_lookup_regions=player_lookup_regions,
+        scrape_enabled=scrape_enabled,
     )
 
 

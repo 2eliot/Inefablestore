@@ -1,5 +1,23 @@
 {% extends 'base.html' %}
 {% block content %}
+<style>
+  /* Softer green styling for payment method selector */
+  #pay-method-select {
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.35);
+    color: #d1fae5; /* minty text */
+    border-radius: 8px;
+    padding: 8px 10px;
+    outline: none;
+    transition: box-shadow .15s ease, border-color .15s ease;
+  }
+  #pay-method-select:focus {
+    border-color: rgba(34, 197, 94, 0.55);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+  }
+  #pay-method-select option { color: #0b0f14; }
+  #pay-method-select option[disabled] { color: #64748b; }
+</style>
 <div class="admin-layout">
   <aside class="sidebar">
     <nav class="tabs" id="adminTabs" role="tablist" aria-label="Pestañas de administración">
@@ -249,28 +267,54 @@
           <hr style="margin:24px 0; opacity:0.5;">
           <h3 style="margin:0 0 12px;">Métodos de pago</h3>
           <div class="form-row">
-            <label>Pago Móvil - Banco</label>
-            <input id="pm-bank" type="text" placeholder="Nombre del banco">
+            <label for="pay-method-select">Seleccionar método</label>
+            <select id="pay-method-select">
+              <option value="" disabled selected hidden>— Selecciona un método —</option>
+              <option value="pm">Pago Móvil</option>
+              <option value="binance">Binance</option>
+            </select>
           </div>
-          <div class="form-row">
-            <label>Pago Móvil - Nombre</label>
-            <input id="pm-name" type="text" placeholder="Titular">
+          <div id="pm-section">
+            <div class="form-row">
+              <label>Pago Móvil - Banco</label>
+              <input id="pm-bank" type="text" placeholder="Nombre del banco">
+            </div>
+            <div class="form-row">
+              <label>Pago Móvil - Nombre</label>
+              <input id="pm-name" type="text" placeholder="Titular">
+            </div>
+            <div class="form-row">
+              <label>Pago Móvil - Teléfono</label>
+              <input id="pm-phone" type="text" placeholder="04XXXXXXXXX">
+            </div>
+            <div class="form-row">
+              <label>Pago Móvil - Cédula/RIF</label>
+              <input id="pm-id" type="text" placeholder="V-00000000">
+            </div>
+            <div class="form-row">
+              <label>Pago Móvil - Imagen (PNG)</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input id="pm-image" type="text" placeholder="Selecciona desde galería" readonly>
+                <button id="btn-pick-pm-image" class="btn" type="button">Elegir</button>
+              </div>
+            </div>
           </div>
-          <div class="form-row">
-            <label>Pago Móvil - Teléfono</label>
-            <input id="pm-phone" type="text" placeholder="04XXXXXXXXX">
-          </div>
-          <div class="form-row">
-            <label>Pago Móvil - Cédula/RIF</label>
-            <input id="pm-id" type="text" placeholder="V-00000000">
-          </div>
-          <div class="form-row">
-            <label>Binance - Email</label>
-            <input id="binance-email" type="email" placeholder="correo@binance.com">
-          </div>
-          <div class="form-row">
-            <label>Binance - Teléfono</label>
-            <input id="binance-phone" type="text" placeholder="Teléfono registrado">
+          <div id="binance-section">
+            <div class="form-row">
+              <label>Binance - Email</label>
+              <input id="binance-email" type="email" placeholder="correo@binance.com">
+            </div>
+            <div class="form-row">
+              <label>Binance - Teléfono</label>
+              <input id="binance-phone" type="text" placeholder="Teléfono registrado">
+            </div>
+            <div class="form-row">
+              <label>Binance - Imagen (PNG)</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input id="binance-image" type="text" placeholder="Selecciona desde galería" readonly>
+                <button id="btn-pick-binance-image" class="btn" type="button">Elegir</button>
+              </div>
+            </div>
           </div>
           <div class="form-row">
             <label>&nbsp;</label>
@@ -279,25 +323,25 @@
             </div>
           </div>
 
-          <hr style="margin:24px 0; opacity:0.5;">
-          <h3 style="margin:0 0 12px;">Correo: verificación y prueba</h3>
-          <div class="form-row">
+          <hr style="margin:24px 0; opacity:0.5;" hidden>
+          <h3 style="margin:0 0 12px;" hidden>Correo: verificación y prueba</h3>
+          <div class="form-row" hidden>
             <label>Remitente (MAIL_USER)</label>
             <input id="mail-user" type="text" placeholder="user@example.com" readonly>
           </div>
-          <div class="form-row">
+          <div class="form-row" hidden>
             <label>Enviar a</label>
             <input id="mail-to" type="email" placeholder="correo de destino">
           </div>
-          <div class="form-row">
+          <div class="form-row" hidden>
             <label>Asunto</label>
             <input id="mail-subject" type="text" placeholder="Prueba de correo - Inefable Store">
           </div>
-          <div class="form-row">
+          <div class="form-row" hidden>
             <label>Mensaje</label>
             <textarea id="mail-body" rows="3" placeholder="Texto del correo de prueba"></textarea>
           </div>
-          <div class="form-row">
+          <div class="form-row" hidden>
             <label>&nbsp;</label>
             <div>
               <button id="btn-mail-save" class="btn primary" type="button">Guardar destino</button>
@@ -306,13 +350,13 @@
             </div>
           </div>
 
-          <hr style="margin:24px 0; opacity:0.5;">
-          <h3 style="margin:0 0 12px;">Sesión actual</h3>
-          <div class="form-row">
+          <hr style="margin:24px 0; opacity:0.5;" hidden>
+          <h3 style="margin:0 0 12px;" hidden>Sesión actual</h3>
+          <div class="form-row" hidden>
             <label>Email</label>
             <input id="sess-email" type="text" readonly placeholder="No autenticado">
           </div>
-          <div class="form-row">
+          <div class="form-row" hidden>
             <label>Rol</label>
             <input id="sess-role" type="text" readonly placeholder="-">
           </div>

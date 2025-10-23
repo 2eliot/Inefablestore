@@ -2,6 +2,21 @@
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='3') }}">
+<style>
+  /* Softer, less bright styling for payment method buttons */
+  .btn.pay {
+    background: #0b0f14;
+    border: 1px solid rgba(148,163,184,0.25);
+    color: #e5e7eb;
+  }
+  .btn.pay:hover { background: #111827; }
+  .btn.pay.primary {
+    background: rgba(34, 197, 94, 0.06);
+    border-color: rgba(34, 197, 94, 0.28);
+    box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.18);
+    color: #c7f9e1;
+  }
+</style>
 {% endblock %}
 
 {% block header %}
@@ -80,7 +95,7 @@
   <div class="modal-backdrop"></div>
 </div>
 
-<section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}" data-active-login="{{ 1 if (active_login_game_id|int) == game.id else 0 }}" data-default-region="{{ player_lookup_region }}">
+<section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}" data-active-login="{{ 1 if (active_login_game_id|int) == game.id else 0 }}" data-default-region="{{ player_lookup_region }}" data-scrape-enabled="{{ 1 if scrape_enabled else 0 }}">
   <div class="details-left">
     <div class="game-hero">
       <div class="banner" style="background-image:url('{{ game.image_path }}')"></div>
@@ -100,7 +115,7 @@
     
     <div class="step-card">
       <div class="step-title" data-step="1">1 Ingrese su ID</div>
-      {% if active_login_game_id and (active_login_game_id|int) == game.id %}
+      {% if scrape_enabled and active_login_game_id and (active_login_game_id|int) == game.id %}
       <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;">
         <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID">
         <button id="btn-verify-player" class="btn" type="button">Verificar</button>
@@ -111,7 +126,7 @@
       {% if game.requires_zone_id %}
       <input id="customer-zone" class="input" type="text" placeholder="Ingresa tu Zona ID">
       {% endif %}
-      {% if active_login_game_id and (active_login_game_id|int) == game.id %}
+      {% if scrape_enabled and active_login_game_id and (active_login_game_id|int) == game.id %}
       <small id="player-nickname" class="ref-status" style="display:block; margin-top:6px; text-align:center;"></small>
       {% endif %}
     </div>
@@ -225,7 +240,7 @@
       <div class="copyline">
         <span>© Inefable Store</span>
         <span>•</span>
-        <a href="/terms" target="_blank">Términos de uso</a>
+        <a href="/terms" target="_blank" style="color:#22c55e;">Términos de uso</a>
       </div>
       <div class="contact-line">
         <span class="label">Contactos:</span>
@@ -248,7 +263,7 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/store.js', v='3') }}" defer></script>
-<script src="{{ url_for('static', filename='js/details.js', v='3') }}" defer></script>
+<script src="{{ url_for('static', filename='js/details.js', v='4') }}" defer></script>
 {% endblock %}
 
 

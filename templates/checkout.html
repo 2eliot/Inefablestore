@@ -7,10 +7,14 @@
   .co-banner { background: var(--price-accent, #10b981); color: #0b0f14; font-weight: 900; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 16px; }
   /* Charcoal card style */
   .co-card { background: #2b2f36; border:1px solid #3a3f47; border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
-  .co-card h3 { margin: 0 0 8px; color: #e2e8f0; font-weight: 900; }
-  .co-row { display:flex; justify-content: space-between; gap: 10px; border-top:1px solid #3a3f47; padding-top:10px; }
-  .co-row .copy-btn { border:1px solid #3a3f47; background: #1f2329; color:#e2e8f0; border-radius:8px; padding:4px 8px; font-size:12px; cursor:pointer; }
-  .co-row .copy-btn:hover { background: #262b32; }
+  .co-card h3 { margin: 0 0 8px; color: #e2e8f0; font-weight: 900; text-align:center; padding-bottom:10px; border-bottom:1px solid #3a3f47; }
+  /* Info rows with icon + value + copy */
+  #co-info { display:grid; gap:12px; }
+  .co-item { display:grid; grid-template-columns: 28px 1fr auto; align-items:center; gap:10px; }
+  .co-ico { width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:#cbd5e1; }
+  .co-val { color:#e2e8f0; font-weight:800; }
+  .copy-btn { border:1px solid #3a3f47; background: #1f2329; color:#e2e8f0; border-radius:8px; padding:6px 8px; font-size:12px; cursor:pointer; }
+  .copy-btn:hover { background: #262b32; }
   .co-actions { margin-top: 10px; }
   .co-actions .btn { width: 100%; }
   /* Reference input emphasis */
@@ -86,5 +90,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/checkout.js', v='1') }}" defer></script>
+<script src="{{ url_for('static', filename='js/checkout.js', v='2') }}" defer></script>
 {% endblock %}

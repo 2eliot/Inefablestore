@@ -103,39 +103,46 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderInfo() {
     if (!coInfo) return;
     coInfo.innerHTML = '';
-    const addRow = (label, value) => {
+    const svg = (name) => {
+      if (name === 'bank') return '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M3 10h18v2H3v-2zm2 3h2v5H5v-5zm4 0h2v5H9v-5zm4 0h2v5h-2v-5zm4 0h2v5h-2v-5zM3 21h18v2H3v-2zM12 2l9 6H3l9-6z"/></svg>';
+      if (name === 'email') return '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 13L2 6.76V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6.76L12 13zm0-2.4L22 4H2l10 6.6z"/></svg>';
+      if (name === 'user') return '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.33 0-8 2.17-8 5v1h16v-1c0-2.83-3.67-5-8-5z"/></svg>';
+      if (name === 'id') return '<svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M3 4h18v16H3z\" opacity=\".3\"/><path d=\"M21 2H3a1 1 0 0 0-1 1v18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM4 6h16v12H4zm3 2h6v2H7zm0 4h10v2H7z\"/></svg>';
+      return '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>';
+    };
+    const addItem = (iconName, value) => {
       const row = document.createElement('div');
-      row.className = 'co-row';
-      const left = document.createElement('strong');
-      left.textContent = label;
-      const right = document.createElement('div');
-      right.style.display = 'flex';
-      right.style.gap = '8px';
-      const val = document.createElement('span');
-      val.textContent = value || '-';
+      row.className = 'co-item';
+      const ico = document.createElement('div');
+      ico.className = 'co-ico';
+      ico.innerHTML = svg(iconName);
+      const val = document.createElement('div');
       val.className = 'co-val';
+      val.textContent = value || '-';
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'copy-btn';
       btn.setAttribute('data-copy', value || '');
       btn.textContent = 'Copiar';
-      right.appendChild(val);
-      right.appendChild(btn);
-      row.appendChild(left);
-      row.appendChild(right);
+      row.appendChild(ico);
+      row.appendChild(val);
+      row.appendChild(btn);
       coInfo.appendChild(row);
     };
-    if (qCid) addRow('ID de jugador', qCid);
-    if (qZid) addRow('Zona ID', qZid);
+    // Optional player info lines (kept at top if present)
+    // Player ID (qCid) intentionally hidden from checkout UI, but still used internally
+    if (qZid) addItem('id', qZid);
     if (currency === 'BSD') {
-      addRow('Banco', (paymentsCfg && paymentsCfg.pm_bank) || '');
-      addRow('Nombre', (paymentsCfg && paymentsCfg.pm_name) || '');
-      addRow('Teléfono', (paymentsCfg && paymentsCfg.pm_phone) || '');
-      addRow('Cédula/RIF', (paymentsCfg && paymentsCfg.pm_id) || '');
+      // Show PM bank/name/phone/id
+      addItem('bank', (paymentsCfg && paymentsCfg.pm_bank) || '');
+      addItem('user', (paymentsCfg && paymentsCfg.pm_name) || '');
+      addItem('user', (paymentsCfg && paymentsCfg.pm_phone) || '');
+      addItem('id', (paymentsCfg && paymentsCfg.pm_id) || '');
     } else {
-      // For Binance, show Email and Pay ID only
-      addRow('Email', (paymentsCfg && paymentsCfg.binance_email) || '');
-      addRow('Pay ID', (paymentsCfg && paymentsCfg.binance_phone) || '');
+      // Binance: show provider name, email and Pay ID
+      addItem('bank', 'Binance');
+      addItem('email', (paymentsCfg && paymentsCfg.binance_email) || '');
+      addItem('user', (paymentsCfg && paymentsCfg.binance_phone) || '');
     }
   }
 

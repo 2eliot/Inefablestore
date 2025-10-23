@@ -34,6 +34,29 @@ document.addEventListener('DOMContentLoaded', () => {
   // Rate config
   const inputRate = document.getElementById('rate-bsd');
   const btnSaveRate = document.getElementById('btn-save-rate');
+  // Force-hide mail verification and session sections (fallback)
+  function hideMailAndSessionSections() {
+    const ids = [
+      'mail-user','mail-to','mail-subject','mail-body','btn-mail-save','btn-mail-test','mail-test-result',
+      'sess-email','sess-role'
+    ];
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const row = el.closest && el.closest('.form-row');
+      if (row) { row.style.display = 'none'; }
+      else { el.style.display = 'none'; }
+    });
+    // Also hide nearby headings if present
+    document.querySelectorAll('h3').forEach(h3 => {
+      const txt = (h3.textContent || '').toLowerCase();
+      if (txt.includes('correo: verificación') || txt.includes('correo: verificacion') || txt.includes('sesión actual') || txt.includes('sesion actual')) {
+        h3.style.display = 'none';
+      }
+    });
+    // Apply current selection filter if any
+    filterPackagesBySelect();
+  }
   // Payments config
   const pmBank = document.getElementById('pm-bank');
   const pmName = document.getElementById('pm-name');
@@ -42,6 +65,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const binEmail = document.getElementById('binance-email');
   const binPhone = document.getElementById('binance-phone');
   const btnSavePayments = document.getElementById('btn-save-payments');
+  const pmImage = document.getElementById('pm-image');
+  const binImage = document.getElementById('binance-image');
+  const btnPickPmImage = document.getElementById('btn-pick-pm-image');
+  const btnPickBinImage = document.getElementById('btn-pick-binance-image');
+  const payMethodSelect = document.getElementById('pay-method-select');
+  const pmSection = document.getElementById('pm-section');
+  const binSection = document.getElementById('binance-section');
+
+  function showPaySection(which) {
+    const raw = which != null ? which : (payMethodSelect && payMethodSelect.value);
+    const val = (raw || '').toLowerCase();
+    if (!val) {
+      if (pmSection) pmSection.style.display = 'none';
+      if (binSection) binSection.style.display = 'none';
+      return;
+    }
+    if (pmSection) pmSection.style.display = (val === 'pm') ? '' : 'none';
+    if (binSection) binSection.style.display = (val === 'binance') ? '' : 'none';
+  }
+  if (payMethodSelect) {
+    payMethodSelect.addEventListener('change', () => showPaySection(payMethodSelect.value));
+  }
   const inputActiveLoginGame = document.getElementById('active-login-game');
   const btnSaveActiveLoginGame = document.getElementById('btn-save-active-login-game');
   // Mail test elements
@@ -63,6 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCreatePkg = document.getElementById('btn-create-pkg');
   const btnPackagesRefresh = document.getElementById('btn-packages-refresh');
   const pkgList = document.getElementById('pkg-list');
+  const pkgSelect = document.getElementById('pkg-select');
   // Orders elements
   const btnOrdersRefresh = document.getElementById('btn-orders-refresh');
   const ordersList = document.getElementById('orders-list');
@@ -108,6 +154,33 @@ document.addEventListener('DOMContentLoaded', () => {
       adminDrawerTabs.appendChild(btn);
     });
   }
+
+  // =====================
+  // Config: active login game get/set
+  // =====================
+  async function fetchActiveLoginGame() {
+    try {
+      const res = await fetch('/admin/config/active_login_game');
+      const data = await res.json();
+      if (data && data.ok && inputActiveLoginGame) {
+        inputActiveLoginGame.value = (data.active_login_game_id || '').toString();
+      }
+      window.fetchActiveLoginGame = fetchActiveLoginGame;
+    } catch (_) { /* ignore */ }
+  }
+
+  async function saveActiveLoginGame() {
+    const payload = { active_login_game_id: inputActiveLoginGame ? (inputActiveLoginGame.value || '').trim() : '' };
+    const res = await fetch('/admin/config/active_login_game', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || 'No se pudo guardar');
+    }
+    return res.json();
+  }
+  
 
   // Determine position to insert while dragging
   function getDragAfterElement(container, mouseY) {
@@ -415,6 +488,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (pmId) pmId.value = data.pm_id || '';
         if (binEmail) binEmail.value = data.binance_email || '';
         if (binPhone) binPhone.value = data.binance_phone || '';
+        if (pmImage) pmImage.value = data.pm_image_path || '';
+        if (binImage) binImage.value = data.binance_image_path || '';
+        // Do not auto-select any method; keep placeholder until user chooses
+        showPaySection();
       }
 window.fetchPayments = fetchPayments;
     } catch (_) { /* ignore */ }
@@ -427,7 +504,9 @@ window.fetchPayments = fetchPayments;
       pm_phone: pmPhone ? pmPhone.value.trim() : '',
       pm_id: pmId ? pmId.value.trim() : '',
       binance_email: binEmail ? binEmail.value.trim() : '',
-      binance_phone: binPhone ? binPhone.value.trim() : ''
+      binance_phone: binPhone ? binPhone.value.trim() : '',
+      pm_image_path: pmImage ? pmImage.value.trim() : '',
+      binance_image_path: binImage ? binImage.value.trim() : ''
     };
     const res = await fetch('/admin/config/payments', {
       method: 'POST',
@@ -438,7 +517,10 @@ window.fetchPayments = fetchPayments;
       const txt = await res.text();
       throw new Error(txt || 'No se pudo guardar mÃ©todos de pago');
     }
+    return res.json();
   }
+  // Ensure global symbol exists for any external references
+  window.savePayments = savePayments;
 
   // Save rate
   if (btnSaveRate) {
@@ -587,10 +669,15 @@ window.fetchLogo = fetchLogo;
         fetchSessionInfo();
         fetchMidBanner && fetchMidBanner();
         fetchActiveLoginGame();
+        hideMailAndSessionSections();
       }
       // If Orders tab is opened, refresh orders
       if (tab.dataset.target === '#tab-orders') {
         fetchOrders();
+      }
+      // If Packages tab is opened, fetch packages to populate selector and list
+      if (tab.dataset.target === '#tab-packages') {
+        fetchPackages();
       }
       // If Affiliates tab is opened, refresh affiliates
       if (tab.dataset.target === '#tab-affiliates') {
@@ -607,12 +694,36 @@ window.fetchLogo = fetchLogo;
   if (active) activateTab(active.dataset.target);
   // If landing on Orders, fetch initially
   if (document.querySelector('#tab-orders.active')) { fetchOrders(); fetchAffWithdrawalsForOrders(); }
+  // Do not select a payment method by default on load
+  showPaySection();
+  // Always hide mail/session blocks (fallback)
+  hideMailAndSessionSections();
 
   // Wire mail test button
   if (btnMailTest) btnMailTest.addEventListener('click', sendMailTest);
   if (btnMailSave) btnMailSave.addEventListener('click', saveMailDestination);
   // If landing on Config, also fetch session/mail info immediately
   if (document.querySelector('#tab-config.active')) { fetchMailInfo(); fetchSessionInfo(); }
+
+  // Wire save active login game
+  if (btnSaveActiveLoginGame) {
+    btnSaveActiveLoginGame.addEventListener('click', async () => {
+      try {
+        btnSaveActiveLoginGame.disabled = true;
+        const resp = await saveActiveLoginGame();
+        if (resp && resp.ok) {
+          toast('Juego activo guardado');
+          await fetchActiveLoginGame();
+        } else {
+          toast('Guardado, pero respuesta inesperada');
+        }
+      } catch (e) {
+        toast(e.message || 'No se pudo guardar');
+      } finally {
+        btnSaveActiveLoginGame.disabled = false;
+      }
+    });
+  }
 
   // =====================
   // Images: upload + list
@@ -970,14 +1081,17 @@ window.refreshGallery = refreshGallery;
       const res = await fetch('/store/packages');
       const data = await res.json();
       const pkgs = (data && data.packages) || [];
-      // Reset options
-      affPkgSelect.innerHTML = '<option value="">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Selecciona un juego ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</option>';
-      pkgs.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = String(p.id);
-        opt.textContent = `${p.name} ${p.category ? 'Ãƒâ€šÃ‚Â· '+p.category.toUpperCase() : ''}`;
-        affPkgSelect.appendChild(opt);
-      });
+      if (affPkgSelect) {
+        const keep = affPkgSelect.querySelector('option[value=""]');
+        affPkgSelect.innerHTML = '';
+        if (keep) { keep.selected = true; affPkgSelect.appendChild(keep); }
+        pkgs.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = String(p.id);
+          opt.textContent = `${p.name || 'Paquete'} (ID ${p.id})`;
+          affPkgSelect.appendChild(opt);
+        });
+      }
     } catch (_) {
       // keep minimal options
     }
@@ -1412,11 +1526,23 @@ window.fetchHero = fetchHero;
     currentPickTarget = targetInput || null;
     await loadLogoPickerGrid();
     logoPicker.removeAttribute('hidden');
+    // Lock background scroll (mobile friendly)
+    try { document.documentElement.style.overflow = 'hidden'; document.body.style.overflow = 'hidden'; } catch(_) {}
+    // Ensure modal is visible at top on mobile
+    try {
+      const body = logoPicker.querySelector('.modal-body') || logoPicker;
+      body.scrollTop = 0;
+      logoPicker.scrollIntoView({ behavior: 'auto', block: 'start' });
+      // For some mobile browsers, also force window scroll to top
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    } catch(_) {}
   }
 
   function closeLogoPicker() {
     if (!logoPicker) return;
     logoPicker.setAttribute('hidden', '');
+    // Restore background scroll
+    try { document.documentElement.style.overflow = ''; document.body.style.overflow = ''; } catch(_) {}
   }
 
   async function loadLogoPickerGrid() {
@@ -1456,6 +1582,8 @@ window.fetchHero = fetchHero;
   if (btnPickHero2) btnPickHero2.addEventListener('click', () => openLogoPicker(hero2));
   if (btnPickHero3) btnPickHero3.addEventListener('click', () => openLogoPicker(hero3));
   if (btnPickPkgImage) btnPickPkgImage.addEventListener('click', () => openLogoPicker(pkgImage));
+  if (btnPickPmImage && pmImage) btnPickPmImage.addEventListener('click', () => openLogoPicker(pmImage));
+  if (btnPickBinImage && binImage) btnPickBinImage.addEventListener('click', () => openLogoPicker(binImage));
   if (btnCloseModal) {
     btnCloseModal.addEventListener('click', closeLogoPicker);
   }
@@ -1515,7 +1643,7 @@ window.fetchHero = fetchHero;
         btnSavePayments.disabled = true;
         const resp = await savePayments();
         if (resp && resp.ok) {
-          toast('MÃƒÂ©todos de pago guardados');
+          toast('Métodos de pago guardados', 'success');
           await fetchPayments();
         } else {
           toast('Guardado, pero respuesta inesperada');
@@ -1733,6 +1861,30 @@ if (btnSaveHero) {
     } catch (_) {
       if (pkgList) pkgList.innerHTML = '<div class="empty-state"><p>Error</p></div>';
     }
+  }
+
+  function filterPackagesBySelect() {
+    const sel = pkgSelect ? String(pkgSelect.value || '') : '';
+    const items = pkgList ? pkgList.querySelectorAll('.pkg-item') : [];
+    if (!items || items.length === 0) return;
+    if (!sel) {
+      // Hide all until user selects
+      items.forEach(el => { el.style.display = 'none'; el.classList.remove('open'); });
+      return;
+    }
+    items.forEach(el => {
+      const match = (el.dataset && el.dataset.id) === sel;
+      el.style.display = match ? '' : 'none';
+      if (match) {
+        el.classList.add('open');
+        try { el.scrollIntoView({ behavior: 'auto', block: 'start' }); } catch(_) {}
+      } else {
+        el.classList.remove('open');
+      }
+    });
+  }
+  if (pkgSelect) {
+    pkgSelect.addEventListener('change', filterPackagesBySelect);
   }
 
   // Create a new store package
@@ -1968,7 +2120,7 @@ if (btnSaveHero) {
     });
   }
 
-  // Load packages if tab is visible initially
+  // Load packages initially (and again on tab switch)
   fetchPackages();
 
   // Helpers for game items rendering
