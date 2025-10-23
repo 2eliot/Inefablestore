@@ -2,21 +2,6 @@
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='3') }}">
-<style>
-  /* Softer, less bright styling for payment method buttons */
-  .btn.pay {
-    background: #0b0f14;
-    border: 1px solid rgba(148,163,184,0.25);
-    color: #e5e7eb;
-  }
-  .btn.pay:hover { background: #111827; }
-  .btn.pay.primary {
-    background: rgba(34, 197, 94, 0.06);
-    border-color: rgba(34, 197, 94, 0.28);
-    box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.18);
-    color: #c7f9e1;
-  }
-</style>
 {% endblock %}
 
 {% block header %}

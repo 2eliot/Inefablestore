@@ -575,10 +575,11 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
 }
 .pay-methods .btn.pay:focus { outline: none; box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
 .pay-methods .btn.pay.primary {
-  background: var(--price-accent);
-  border-color: var(--price-accent);
-  color: #0b0f14;
-  box-shadow: 0 8px 24px rgba(16,185,129,0.35), inset 0 0 0 2px rgba(255,255,255,0.3);
+  /* Match packages selection: subtle emerald tint */
+  background: rgba(16,185,129,0.12);
+  border-color: var(--action-accent);
+  color: #e2e8f0;
+  box-shadow: none;
 }
 
 /* Hide selection badges on phone */
