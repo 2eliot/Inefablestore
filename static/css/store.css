@@ -11,7 +11,7 @@
 @media (max-width: 760px) {
   .details-layout { padding-left: 10px; padding-right: 10px; overflow-x: hidden; }
   .details-left, .details-right { max-width: 100%; overflow-x: hidden; }
-  .details-right .step-card { width: 100%; box-sizing: border-box; overflow: hidden; }
+  .details-right .step-card { width: 100%; box-sizing: border-box; overflow: visible; }
   .items-grid { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .item-pill { min-width: 0; box-sizing: border-box; padding: 10px; }
   .item-pill .t {
@@ -281,10 +281,12 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
   /* Auto-fit columns between 200-220px to avoid leftover space and center neatly */
   grid-template-columns: repeat(auto-fit, minmax(200px, 220px));
   gap: 14px;
-  overflow: visible; /* no horizontal scroll */
+  overflow: visible !important; /* no horizontal scroll */
   justify-content: center; /* center within container */
   place-content: center; /* ensure both axes centering for the grid */
   margin-left: auto; margin-right: auto; /* center the rail itself */
+  padding-left: 0 !important; padding-right: 0 !important; /* drop carousel gutters */
+  scroll-snap-type: none !important; /* avoid snapping to right on phones */
 }
 /* In grid mode, allow cards to be fluid inside columns (override carousel fixed widths) */
 .cat-filtered #pkgs-mobile .pkg-card,
@@ -453,7 +455,7 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
 .selected-title { font-weight: 900; color:#ffffff; margin-bottom: 4px; }
 .selected-price { color: var(--price-accent); font-weight: 800; }
 
-.details-right .step-card { background: #2b2f36; border:1px solid #484f59; border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
+.details-right .step-card { background: #2b2f36; border:1px solid #484f59; border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); overflow: visible; }
 .details-right .step-title { font-weight: 900; margin-bottom: 10px; color:#e2e8f0; }
 /* Step title number badge */
 .details-right .step-title[data-step] {
@@ -498,6 +500,37 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
   border-color: var(--price-accent);
   box-shadow: 0 0 0 3px rgba(16,185,129,0.25);
 }
+/* Composite phone field as a single input */
+.phone-field { display:flex; align-items:center; height: 44px; border: 1px solid rgba(148,163,184,0.25); border-radius: 12px; background: #1f2329; overflow: visible; }
+.phone-field:focus-within { border-color: var(--price-accent); box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
+.phone-prefix { position: relative; height: 100%; z-index: 1001; }
+.phone-cc-btn { display:flex; align-items:center; gap:8px; height: 100%; padding: 0 10px; border: none; background: transparent; color:#e2e8f0; cursor:pointer; border-right: 1px solid rgba(148,163,184,0.25); }
+.phone-cc-btn img { display:block; width:16px; height:12px; border-radius:2px; }
+.phone-cc-btn .phone-caret { margin-left: 6px; color: #94a3b8; font-size: 12px; line-height: 1; transition: transform 120ms ease; }
+.phone-cc-btn.open .phone-caret { transform: rotate(180deg); }
+.phone-cc-menu[hidden] { display:none; }
+.phone-cc-menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 140px; background:#1f2329; border:1px solid rgba(148,163,184,0.25); border-radius:10px; box-shadow: 0 12px 30px rgba(0,0,0,0.35); z-index: 1002; padding:6px; }
+.phone-cc-menu { min-width: 260px; }
+.phone-cc-menu button { width:100%; text-align:left; background:transparent; border:none; color:#e2e8f0; padding:8px 10px; border-radius:8px; cursor:pointer; }
+.phone-cc-menu button:hover { background:#30353c; }
+/* Country search input */
+.phone-cc-search { width: 100%; margin: 4px 0 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.25); background: #0b0f14; color: #e2e8f0; }
+.phone-cc-search::placeholder { color:#94a3b8; }
+.phone-cc-search:focus { outline:none; border-color: var(--price-accent); box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
+.phone-cc-list { max-height: 192px; overflow-y: auto; overflow-x: hidden; display: grid; gap: 4px; }
+.phone-cc-item { min-height: 44px; }
+@media (max-width: 700px) {
+  /* Ensure dropdown does not collide with mobile footer; keep at most viewport minus ~180px */
+  .phone-cc-list { max-height: min(192px, calc(100vh - 180px)); }
+}
+.phone-field .input#phone-local { flex: 1; height: 100%; border: none !important; background: transparent !important; color: #e2e8f0; padding: 0 12px; border-radius: 0; box-shadow: none; }
+.phone-field .input#phone-local::placeholder { color: #94a3b8; }
+.phone-field .input#phone-local:focus { outline: none; }
+.phone-cc-item { display:flex; align-items:center; justify-content: space-between; gap: 10px; }
+.phone-cc-item .cc-left { display:flex; align-items:center; gap:10px; }
+.phone-cc-item .cc-left img { width:16px; height:12px; border-radius:2px; display:block; }
+.phone-cc-item .cc-name { color:#e2e8f0; font-weight: 700; }
+.phone-cc-item .cc-dial { color:#94a3b8; font-weight: 700; }
 /* Separator between personal data and discount code */
 .details-right .form-sep {
   height: 0;

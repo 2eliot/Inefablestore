@@ -99,7 +99,7 @@
   <div class="details-right">
     
     <div class="step-card">
-      <div class="step-title" data-step="1">1 Ingrese su ID</div>
+      <div class="step-title" data-step="1">Ingrese su ID</div>
       {% if scrape_enabled and active_login_game_id and (active_login_game_id|int) == game.id %}
       <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;">
         <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID">
@@ -117,7 +117,7 @@
     </div>
 
     <div class="step-card">
-      <div class="step-title" data-step="2">2 Selecciona tu producto</div>
+      <div class="step-title" data-step="2">Selecciona tu producto</div>
       <div id="items-grid" class="items-grid"><!-- items --></div>
       <div style="margin-top:10px; text-align:center;">
         <button id="btn-more" class="btn" type="button" hidden>Ver más</button>
@@ -125,7 +125,7 @@
     </div>
 
     <div class="step-card">
-      <div class="step-title" data-step="3">3 Seleccione un método de pago</div>
+      <div class="step-title" data-step="3">Seleccione un método de pago</div>
       <div class="pay-methods">
         <button id="pay-bsd" class="btn pay" type="button">Pago Móvil</button>
         <button id="pay-usd" class="btn pay" type="button">Binance</button>
@@ -137,10 +137,24 @@
     </div>
 
     <div class="step-card">
-      <div class="step-title" data-step="4">4 Ingresa tus datos</div>
+      <div class="step-title" data-step="4">Ingresa tus datos</div>
       <input id="full-name" class="input" type="text" placeholder="Nombre y apellido">
       <input id="email" class="input" type="email" placeholder="Correo de contacto">
-      <input id="phone" class="input" type="tel" placeholder="Número de teléfono">
+      <div class="phone-field">
+        <div class="phone-prefix">
+          <button class="phone-cc-btn" type="button" aria-label="Código de país">
+            <img src="https://flagcdn.com/w20/ve.png" alt="VE" width="16" height="12" loading="lazy">
+            <span id="phone-cc-label">+58</span>
+            <span class="phone-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="phone-cc-menu" id="phone-cc-menu" hidden>
+            <button type="button" data-cc="+58" data-flag="ve">🇻🇪 +58</button>
+          </div>
+          <input id="phone-cc" type="hidden" value="+58">
+        </div>
+        <input id="phone-local" class="input" type="tel" placeholder="Número de teléfono">
+        <input id="phone" type="hidden" />
+      </div>
       <div class="form-sep" aria-hidden="true"></div>
       <div class="discount-section" role="group" aria-label="Código de descuento">
         <input id="ref-code" class="input" type="text" placeholder="CÓDIGO DE DESCUENTO (opcional)">
@@ -176,6 +190,23 @@
     </div>
   </div>
 </aside>
+
+{% if related_packages %}
+<section class="packages" id="related-packages">
+  <div class="packages-head">
+    <h2 class="packages-title">PAQUETES RELACIONADOS</h2>
+  </div>
+  <div class="packages-rail" aria-label="Carrusel de paquetes relacionados">
+    {% for p in related_packages %}
+      <a class="pkg-card" href="{{ url_for('store_game_detail', gid=p.id) }}">
+        <div class="pkg-thumb" style="background-image:url('{{ p.image_path }}')"></div>
+        <div class="pkg-name">{{ p.name }}</div>
+      </a>
+    {% endfor %}
+  </div>
+  
+</section>
+{% endif %}
 
 <div id="auth-modal" class="auth-modal" hidden>
   <div class="auth-card">

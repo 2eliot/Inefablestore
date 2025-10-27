@@ -61,6 +61,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function showCategory(cat) {
     const c = (cat || '').toLowerCase();
     if (!secMobile && !secGift) return; // not on homepage
+    const railMobile = document.getElementById('rail-mobile');
+    const railGift = document.getElementById('rail-gift');
+    const resetRails = () => {
+      try { if (railMobile) { railMobile.scrollLeft = 0; railMobile.style.scrollBehavior = 'auto'; } } catch(_){}
+      try { if (railGift) { railGift.scrollLeft = 0; railGift.style.scrollBehavior = 'auto'; } } catch(_){}
+      // Next frame restore smooth scroll for future interactions
+      requestAnimationFrame(() => {
+        try { if (railMobile) railMobile.style.scrollBehavior = ''; } catch(_){}
+        try { if (railGift) railGift.style.scrollBehavior = ''; } catch(_){}
+      });
+    };
     if (c === 'gift') {
       if (secGift) { secGift.hidden = false; secGift.style.display = ''; }
       if (secMobile) { secMobile.hidden = true; secMobile.style.display = 'none'; }
@@ -68,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (secBest) { secBest.hidden = true; secBest.style.display = 'none'; }
       document.body.classList.add('cat-filtered');
       const target = document.querySelector('#pkgs-gift');
+      resetRails();
       if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (c === 'mobile') {
       if (secMobile) { secMobile.hidden = false; secMobile.style.display = ''; }
@@ -76,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (secBest) { secBest.hidden = true; secBest.style.display = 'none'; }
       document.body.classList.add('cat-filtered');
       const target = document.querySelector('#pkgs-mobile');
+      resetRails();
       if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
       if (secMobile) { secMobile.hidden = false; secMobile.style.display = ''; }
@@ -83,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (secHero) { secHero.hidden = false; secHero.style.display = ''; }
       if (secBest) { secBest.hidden = false; secBest.style.display = ''; }
       document.body.classList.remove('cat-filtered');
+      resetRails();
     }
   }
   (function applyInitialCategoryFromUrl(){
@@ -175,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') hide();
     });
-    // Click on menu items: filter + smooth-scroll + update URL hash, then close
+    // Click on menu items: if on homepage filter; otherwise redirect to index with anchor
     menu.addEventListener('click', (e) => {
       const a = e.target.closest('a.dd-item');
       if (!a) return;
@@ -184,9 +198,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // Always filter by category when clicking
       e.preventDefault();
       if (cat === 'gift' || cat === 'mobile') {
+        const onHome = !!(secMobile || secGift);
+        const targetHash = cat === 'gift' ? '#pkgs-gift' : '#pkgs-mobile';
+        if (!onHome) {
+          window.location.href = '/' + targetHash;
+          return;
+        }
         showCategory(cat);
         // Update URL hash to aid bookmarking/back nav
-        const targetHash = cat === 'gift' ? '#pkgs-gift' : '#pkgs-mobile';
         if (history && history.replaceState) {
           history.replaceState(null, '', targetHash);
         } else {

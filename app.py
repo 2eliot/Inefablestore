@@ -1106,6 +1106,20 @@ def store_game_detail(gid: int):
     player_lookup_region = get_config_value("player_lookup_default_region", "US")
     player_lookup_regions = get_config_value("player_lookup_regions_default", "US,BR,ME,PK,CIS,ID,LATAM,MX")
     scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
+    # Related packages by same category
+    try:
+        rel_q = StorePackage.query.filter(
+            StorePackage.active == True,
+            StorePackage.category == (game.category or 'mobile'),
+            StorePackage.id != game.id,
+        )
+        try:
+            rel_q = rel_q.order_by(StorePackage.sort_order.asc(), StorePackage.created_at.desc())
+        except Exception:
+            rel_q = rel_q.order_by(StorePackage.created_at.desc())
+        related = rel_q.limit(5).all()
+    except Exception:
+        related = []
     return render_template(
         "details.html",
         game=game,
@@ -1114,6 +1128,7 @@ def store_game_detail(gid: int):
         player_lookup_region=player_lookup_region,
         player_lookup_regions=player_lookup_regions,
         scrape_enabled=scrape_enabled,
+        related_packages=[{"id": p.id, "name": p.name, "image_path": p.image_path, "category": (p.category or 'mobile')} for p in related],
     )
 
 

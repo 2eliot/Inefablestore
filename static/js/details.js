@@ -26,19 +26,37 @@ document.addEventListener('DOMContentLoaded', () => {
   const playerNickname = document.getElementById('player-nickname');
   const btnRightLogin = document.getElementById('btn-right-login');
   const activeLogin = (root.getAttribute('data-active-login') === '1');
-  // Hide Step 1 (player ID) for gift category
+  // Hide Step 1 (player ID) for gift category and renumber badges/texts
   if (isGift && inputCustomerId) {
     const stepCard = inputCustomerId.closest('.step-card');
     if (stepCard) stepCard.hidden = true;
-    // Renumber remaining steps for gift category
     const stepCards = root.querySelectorAll('.details-right .step-card');
-    // stepCards[0] is the (now hidden) customer-id; we adjust titles of next ones if present
     const step2Title = stepCards[1] && stepCards[1].querySelector('.step-title');
     const step3Title = stepCards[2] && stepCards[2].querySelector('.step-title');
     const step4Title = stepCards[3] && stepCards[3].querySelector('.step-title');
-    if (step2Title) step2Title.textContent = '1 Selecciona tu producto';
-    if (step3Title) step3Title.textContent = '2 Seleccione un método de pago';
-    if (step4Title) step4Title.textContent = '3 Ingresa tus datos';
+    if (step2Title) {
+      step2Title.dataset.step = '1';
+      step2Title.textContent = 'Selecciona tu producto';
+    }
+
+  // Initialize phone label from hidden cc value
+  (function initPhoneUi(){
+    const ccInit = (inputPhoneCc && inputPhoneCc.value) ? inputPhoneCc.value : '+58';
+    if (phoneCcLabel) phoneCcLabel.textContent = ccInit;
+    const img = phoneCcBtn && phoneCcBtn.querySelector('img');
+    if (img && (!img.getAttribute('src') || /\/ve\.png$/i.test(img.getAttribute('src')))) {
+      // leave default VE unless profile/local overrides later
+    }
+    updateCombinedPhone();
+  })();
+    if (step3Title) {
+      step3Title.dataset.step = '2';
+      step3Title.textContent = 'Seleccione un método de pago';
+    }
+    if (step4Title) {
+      step4Title.dataset.step = '3';
+      step4Title.textContent = 'Ingresa tus datos';
+    }
   }
 
   // Right small login button opens auth modal (only when active)
@@ -53,6 +71,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const inputName = document.getElementById('full-name');
   const inputEmail = document.getElementById('email');
   const inputPhone = document.getElementById('phone');
+  const inputPhoneLocal = document.getElementById('phone-local');
+  const inputPhoneCc = document.getElementById('phone-cc');
+  const phoneCcBtn = document.querySelector('.phone-prefix .phone-cc-btn');
+  const phoneCcMenu = document.getElementById('phone-cc-menu');
+  const phoneCcLabel = document.getElementById('phone-cc-label');
   const chkSave = document.getElementById('save-data');
   const btnBuy = document.getElementById('btn-buy');
   const inputRefCode = document.getElementById('ref-code');
@@ -75,6 +98,170 @@ document.addEventListener('DOMContentLoaded', () => {
   let currency = isMobile ? 'BSD' : 'USD'; // 'USD' or 'BSD'
   let selectedItemIndex = -1;
   let methodChosen = false; // show prices only after choosing a payment method
+
+  function updateCombinedPhone() {
+    if (!inputPhone) return;
+    const cc = (inputPhoneCc ? inputPhoneCc.value.trim() : '').replace(/\s+/g, '');
+    const local = (inputPhoneLocal ? inputPhoneLocal.value.trim() : '');
+    const val = [cc, local].filter(Boolean).join(' ');
+    inputPhone.value = val;
+  }
+
+  // Country code dropdown with dynamic population and search
+  async function populateCountries() {
+    if (!phoneCcMenu) return;
+    // Build container: search + list
+    phoneCcMenu.innerHTML = '';
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.placeholder = 'Buscar país o código';
+    search.className = 'phone-cc-search';
+    const list = document.createElement('div');
+    list.className = 'phone-cc-list';
+    phoneCcMenu.appendChild(search);
+    phoneCcMenu.appendChild(list);
+    // Loading state
+    const loading = document.createElement('div');
+    loading.style.color = '#94a3b8';
+    loading.style.padding = '6px 8px';
+    loading.textContent = 'Cargando...';
+    list.appendChild(loading);
+    let rows = [];
+    try {
+      const res = await fetch('https://restcountries.com/v3.1/all?fields=name,idd,cca2');
+      const data = await res.json();
+      rows = (data || []).map(r => {
+        const root = (r.idd && r.idd.root) || '';
+        const sufs = (r.idd && r.idd.suffixes) || [];
+        const dial = (root && sufs && sufs.length) ? (root + sufs[0]) : (root || '');
+        return {
+          name: (r.name && (r.name.common || r.name.official)) || '',
+          code: (r.cca2 || '').toLowerCase(),
+          dial: dial || ''
+        };
+      }).filter(x => x.name && x.code && x.dial.startsWith('+'));
+      rows.sort((a,b) => a.name.localeCompare(b.name, 'es')); 
+    } catch(_) {
+      rows = [ { name: 'Venezuela', code: 've', dial: '+58' } ];
+    }
+    function render(filter) {
+      list.innerHTML = '';
+      const f = (filter || '').toLowerCase();
+      rows.filter(x => !f || x.name.toLowerCase().includes(f) || x.dial.includes(f))
+        .forEach(x => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.setAttribute('data-cc', x.dial);
+          btn.setAttribute('data-flag', x.code);
+          btn.className = 'phone-cc-item';
+          btn.innerHTML = `
+            <span class="cc-left">
+              <img src="https://flagcdn.com/w20/${x.code}.png" alt="" width="16" height="12">
+              <span class="cc-name">${x.name}</span>
+            </span>
+            <span class="cc-dial">${x.dial}</span>
+          `;
+          btn.addEventListener('click', () => {
+            if (inputPhoneCc) inputPhoneCc.value = x.dial;
+            if (phoneCcLabel) phoneCcLabel.textContent = x.dial;
+            const img = phoneCcBtn && phoneCcBtn.querySelector('img');
+            if (img) img.src = `https://flagcdn.com/w20/${x.code}.png`;
+            phoneCcMenu.setAttribute('hidden', '');
+            updateCombinedPhone();
+          });
+          list.appendChild(btn);
+        });
+      if (!list.children.length) {
+        const empty = document.createElement('div');
+        empty.style.color = '#94a3b8';
+        empty.style.padding = '6px 8px';
+        empty.textContent = 'Sin resultados';
+        list.appendChild(empty);
+      }
+    }
+    search.addEventListener('input', () => render(search.value));
+    render('');
+  }
+
+  function mobileFooterHeight() {
+    try {
+      const el = document.getElementById('mfs');
+      if (!el) return 0;
+      const visible = !el.hasAttribute('hidden') || el.classList.contains('show');
+      if (!visible) return 0;
+      const r = el.getBoundingClientRect();
+      return Math.max(0, r.height || 0);
+    } catch (_) { return 0; }
+  }
+
+  function positionPhoneMenu() {
+    if (!phoneCcBtn || !phoneCcMenu) return;
+    const menu = phoneCcMenu;
+    const list = menu.querySelector('.phone-cc-list');
+    const btnRect = phoneCcBtn.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    const footerH = mobileFooterHeight();
+    const margin = 10;
+    const desired = 192; // 4 items x 44px aprox + padding
+    // Space below button considering footer
+    const spaceBelow = Math.max(0, vh - btnRect.bottom - footerH - margin);
+    const spaceAbove = Math.max(0, btnRect.top - margin);
+    // Default open downward
+    menu.style.top = 'calc(100% + 6px)';
+    menu.style.bottom = 'auto';
+    const maxHDown = Math.max(120, Math.min(desired, spaceBelow));
+    const maxHUp = Math.max(120, Math.min(desired, spaceAbove));
+    let useUp = false;
+    if (maxHDown < 140 && maxHUp > maxHDown) useUp = true;
+    if (useUp) {
+      menu.style.top = 'auto';
+      menu.style.bottom = 'calc(100% + 6px)';
+      if (list) list.style.maxHeight = `${maxHUp}px`;
+      else menu.style.maxHeight = `${maxHUp}px`;
+    } else {
+      if (list) list.style.maxHeight = `${maxHDown}px`;
+      else menu.style.maxHeight = `${maxHDown}px`;
+    }
+  }
+
+  if (phoneCcBtn && phoneCcMenu) {
+    phoneCcBtn.addEventListener('click', async () => {
+      const isHidden = phoneCcMenu.hasAttribute('hidden');
+      if (isHidden) {
+        phoneCcMenu.removeAttribute('hidden');
+        phoneCcBtn.classList.add('open');
+        phoneCcBtn.setAttribute('aria-expanded', 'true');
+        await populateCountries();
+        positionPhoneMenu();
+      } else {
+        phoneCcMenu.setAttribute('hidden', '');
+        phoneCcBtn.classList.remove('open');
+        phoneCcBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+    // Keyboard support
+    phoneCcBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        phoneCcBtn.click();
+      }
+    });
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!phoneCcMenu) return;
+      if (phoneCcMenu.hasAttribute('hidden')) return;
+      if (e.target === phoneCcBtn || phoneCcBtn.contains(e.target)) return;
+      if (phoneCcMenu.contains(e.target)) return;
+      phoneCcMenu.setAttribute('hidden', '');
+      phoneCcBtn.classList.remove('open');
+      phoneCcBtn.setAttribute('aria-expanded', 'false');
+    });
+    // Re-position on resize/scroll while open
+    window.addEventListener('resize', () => { if (!phoneCcMenu.hasAttribute('hidden')) positionPhoneMenu(); });
+    window.addEventListener('scroll', () => { if (!phoneCcMenu.hasAttribute('hidden')) positionPhoneMenu(); }, { passive: true });
+  }
+
+  if (inputPhoneLocal) inputPhoneLocal.addEventListener('input', updateCombinedPhone);
 
   function updateMobileFooter() {
     if (!mfs) return;
@@ -438,7 +625,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isGift && requiresZone && inputCustomerZone && state.customer_zone && !inputCustomerZone.value) inputCustomerZone.value = state.customer_zone;
     if (inputName && state.name) inputName.value = state.name;
     if (inputEmail && state.email) inputEmail.value = state.email;
-    if (inputPhone && state.phone) inputPhone.value = state.phone;
+    if (inputPhone && state.phone) {
+      // Try to split +CC local
+      const s = String(state.phone || '').trim();
+      const m = s.match(/^(\+\d{1,4})\s+(.*)$/);
+      if (m) {
+        if (inputPhoneCc) inputPhoneCc.value = m[1];
+        if (phoneCcLabel) phoneCcLabel.textContent = m[1];
+        if (inputPhoneLocal && !inputPhoneLocal.value) inputPhoneLocal.value = m[2];
+        updateCombinedPhone();
+      } else {
+        if (inputPhoneLocal && !inputPhoneLocal.value) inputPhoneLocal.value = s;
+        updateCombinedPhone();
+      }
+    }
     if (typeof state.selectedIndex === 'number') selectedItemIndex = state.selectedIndex;
     if (state.currency === 'BSD' || state.currency === 'USD') setCurrency(state.currency);
   }
@@ -578,9 +778,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const gid = root.getAttribute('data-game-id');
       const method = (currency === 'BSD') ? 'pm' : 'binance';
       // Require phone before proceeding to checkout
+      updateCombinedPhone();
       if (!inputPhone || !inputPhone.value.trim()) {
         alert('Ingresa tu número de teléfono');
-        if (inputPhone) inputPhone.focus();
+        if (inputPhoneLocal) inputPhoneLocal.focus();
         return;
       }
       const paramsObj = {
