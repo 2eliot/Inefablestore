@@ -182,8 +182,9 @@ def send_email_html(to_email: str, subject: str, html_body: str, text_body: str 
         return False
 
 def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackageItem'):
-    logo_url = get_config_value("logo_path", "") or ""
+    # Brand title instead of logo; support via WhatsApp if configured
     support_url = get_config_value("support_url", "") or "#"
+    whatsapp_url = get_config_value("whatsapp_url", "") or support_url or "#"
     privacy_url = get_config_value("privacy_url", "") or "#"
     unsubscribe_url = get_config_value("unsubscribe_url", "") or "#"
     juego = (pkg.name if pkg else '').strip()
@@ -212,8 +213,8 @@ def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackage
     <tr><td align=\"center\" style=\"padding:20px 0;\">
       <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"max-width:600px; background-color:#2c2c2c; border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,0.4);\">
         <tr>
-          <td align=\"center\" style=\"padding:30px 20px 20px;\">
-            {f'<img src="{logo_url}" alt="Inefable Store Logo" width="150" style="display:block;border:0;">' if logo_url else ''}
+          <td align=\"center\" style=\"padding:26px 20px 16px;\">
+            <div style=\"display:inline-block; font-weight:900; font-size:22px; letter-spacing:1px; color:#ffffff;\">INEFABLESTOR</div>
           </td>
         </tr>
         <tr>
@@ -260,7 +261,7 @@ def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackage
           <td align=\"center\" style=\"padding: 20px 40px 30px;\">
             <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr>
               <td align=\"center\" style=\"border-radius:5px;\" bgcolor=\"#009688\">
-                <a href=\"{support_url}\" target=\"_blank\" style=\"font-size:16px; font-family:Arial, sans-serif; color:#ffffff; text-decoration:none; padding:12px 25px; border-radius:5px; border:1px solid #009688; display:inline-block;\">Contactar a Soporte</a>
+                <a href=\"{whatsapp_url}\" target=\"_blank\" style=\"font-size:16px; font-family:Arial, sans-serif; color:#ffffff; text-decoration:none; padding:12px 25px; border-radius:5px; border:1px solid #009688; display:inline-block;\">Contactar a Soporte</a>
               </td>
             </tr></table>
           </td>
@@ -1180,8 +1181,15 @@ def admin_images_delete_by_path():
 def store_packages():
     category = (request.args.get("category") or '').strip().lower()
     q = StorePackage.query.filter_by(active=True)
-    if category in ("mobile", "gift"):
-        q = q.filter_by(category=category)
+    # Accept common aliases
+    if category:
+        cat = category
+        mobile_aliases = {"mobile", "movil", "móvil", "juegos", "games", "game"}
+        gift_aliases = {"gift", "gif", "gifts", "giftcard", "giftcards", "card", "cards"}
+        if cat in mobile_aliases:
+            q = q.filter(StorePackage.category.in_(["mobile", "movil", "juegos"]))
+        elif cat in gift_aliases:
+            q = q.filter(StorePackage.category.in_(["gift", "gif", "giftcards"]))
     try:
         items = q.order_by(StorePackage.sort_order.asc(), StorePackage.created_at.desc()).all()
     except Exception:

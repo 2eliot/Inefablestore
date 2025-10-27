@@ -38,17 +38,6 @@ document.addEventListener('DOMContentLoaded', () => {
       step2Title.dataset.step = '1';
       step2Title.textContent = 'Selecciona tu producto';
     }
-
-  // Initialize phone label from hidden cc value
-  (function initPhoneUi(){
-    const ccInit = (inputPhoneCc && inputPhoneCc.value) ? inputPhoneCc.value : '+58';
-    if (phoneCcLabel) phoneCcLabel.textContent = ccInit;
-    const img = phoneCcBtn && phoneCcBtn.querySelector('img');
-    if (img && (!img.getAttribute('src') || /\/ve\.png$/i.test(img.getAttribute('src')))) {
-      // leave default VE unless profile/local overrides later
-    }
-    updateCombinedPhone();
-  })();
     if (step3Title) {
       step3Title.dataset.step = '2';
       step3Title.textContent = 'Seleccione un método de pago';
