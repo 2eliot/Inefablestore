@@ -160,6 +160,134 @@ def send_email_async(to_email: str, subject: str, body: str) -> None:
         except Exception:
             pass
 
+# HTML email support
+def send_email_html(to_email: str, subject: str, html_body: str, text_body: str = "") -> bool:
+    if not MAIL_USER or not MAIL_APP_PASSWORD or not to_email:
+        return False
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['From'] = MAIL_USER
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        if text_body:
+            msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_body or "", 'html', 'utf-8'))
+        try:
+            _smtp_send_starttls(msg, to_email)
+            return True
+        except Exception:
+            _smtp_send_ssl(msg, to_email)
+            return True
+    except Exception:
+        return False
+
+def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackageItem'):
+    logo_url = get_config_value("logo_path", "") or ""
+    support_url = get_config_value("support_url", "") or "#"
+    privacy_url = get_config_value("privacy_url", "") or "#"
+    unsubscribe_url = get_config_value("unsubscribe_url", "") or "#"
+    juego = (pkg.name if pkg else '').strip()
+    item_t = (it.title if it else 'N/A')
+    monto = f"{o.amount} {o.currency}"
+    is_gift = (pkg.category or '').lower() == 'gift' if pkg else False
+    code_row = ''
+    if (o.delivery_code or '').strip():
+        code_row = f"""
+            <tr>
+                <td style=\"color: #bbbbbb; font-size: 14px; padding-left: 0;\"><strong>Código:</strong></td>
+                <td align=\"right\" style=\"color: #ffffff; font-size: 14px; padding-right: 0;\">{o.delivery_code}</td>
+            </tr>
+        """
+    html = f"""
+<!DOCTYPE html>
+<html lang=\"es\">
+<head>
+  <meta charset=\"UTF-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+  <title>Orden Aprobada - Inefable Store</title>
+  <style type=\"text/css\">body, table, td, a {{ font-family: Arial, sans-serif; }}</style>
+</head>
+<body style=\"margin:0; padding:0; background-color:#1a1a1a;\">
+  <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"table-layout:fixed; background-color:#1a1a1a;\">
+    <tr><td align=\"center\" style=\"padding:20px 0;\">
+      <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"max-width:600px; background-color:#2c2c2c; border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,0.4);\">
+        <tr>
+          <td align=\"center\" style=\"padding:30px 20px 20px;\">
+            {f'<img src="{logo_url}" alt="Inefable Store Logo" width="150" style="display:block;border:0;">' if logo_url else ''}
+          </td>
+        </tr>
+        <tr>
+          <td align=\"center\" style=\"padding:10px 20px;\">
+            <h1 style=\"color:#4CAF50; font-size:24px; margin:0; padding:0;\">¡{'Gift enviado' if is_gift else 'Recarga Exitosa'}!</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style=\"padding:20px 40px;\">
+            <p style=\"color:#f4f4f4; font-size:16px; line-height:24px; margin-top:0;\"><strong>Estimado cliente,</strong></p>
+            <p style=\"color:#cccccc; font-size:16px; line-height:24px;\">Nos complace informarle que su orden ha sido procesada con éxito. A continuación, el detalle de su transacción:</p>
+          </td>
+        </tr>
+        <tr>
+          <td style=\"padding:10px 40px;\">
+            <table border=\"0\" cellpadding=\"10\" cellspacing=\"0\" width=\"100%\" style=\"background-color:#383838; border:1px solid #444444; border-radius:4px;\">
+              <tr>
+                <td width=\"50%\" style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>Orden #:</strong></td>
+                <td width=\"50%\" align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{o.id}</td>
+              </tr>
+              <tr>
+                <td style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>Producto:</strong></td>
+                <td align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{juego}</td>
+              </tr>
+              <tr>
+                <td style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>Paquete:</strong></td>
+                <td align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{item_t}</td>
+              </tr>
+              {code_row}
+              <tr style=\"border-top:1px solid #555555;\">
+                <td style=\"color:#ffffff; font-size:16px; font-weight:bold; padding-left:0;\"><strong>Monto Total:</strong></td>
+                <td align=\"right\" style=\"color:#4CAF50; font-size:16px; font-weight:bold; padding-right:0;\">{monto}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style=\"padding:30px 40px 20px;\">
+            <p style=\"color:#cccccc; font-size:16px; line-height:24px;\">Agradecemos su preferencia y confianza en Inefable Store. Si necesita asistencia adicional o tiene alguna consulta, no dude en contactarnos. ¡Estamos para servirle!</p>
+            <p style=\"color:#f4f4f4; font-size:16px; line-height:24px; margin-bottom:0;\">Atentamente,<br>El equipo de Inefable Store</p>
+          </td>
+        </tr>
+        <tr>
+          <td align=\"center\" style=\"padding: 20px 40px 30px;\">
+            <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr>
+              <td align=\"center\" style=\"border-radius:5px;\" bgcolor=\"#009688\">
+                <a href=\"{support_url}\" target=\"_blank\" style=\"font-size:16px; font-family:Arial, sans-serif; color:#ffffff; text-decoration:none; padding:12px 25px; border-radius:5px; border:1px solid #009688; display:inline-block;\">Contactar a Soporte</a>
+              </td>
+            </tr></table>
+          </td>
+        </tr>
+        <tr>
+          <td align=\"center\" style=\"padding:20px 40px; background-color:#383838; border-radius:0 0 8px 8px;\">
+            <p style=\"color:#999999; font-size:12px; line-height:18px; margin:0;\">&copy; {datetime.utcnow().year} Inefable Store. Todos los derechos reservados.</p>
+            <p style=\"color:#999999; font-size:12px; line-height:18px; margin-top:5px;\"><a href=\"{unsubscribe_url}\" target=\"_blank\" style=\"color:#009688; text-decoration:underline;\">Darse de baja</a> | <a href=\"{privacy_url}\" target=\"_blank\" style=\"color:#009688; text-decoration:underline;\">Política de Privacidad</a></p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+"""
+    text = (
+        "Estimado cliente,\n\n"
+        "Su orden ha sido procesada con éxito.\n"
+        f"Orden #{o.id} – {juego}\n"
+        f"Paquete: {item_t}\n"
+        f"Monto: {monto}\n"
+        + (f"Código: {o.delivery_code}\n" if (o.delivery_code or '').strip() else "")
+        + "\nGracias por su preferencia."
+    )
+    return html, text
+
 
 class StorePackage(db.Model):
     __tablename__ = "store_packages"
@@ -1370,30 +1498,19 @@ def admin_orders_set_status(oid: int):
                     db.session.commit()
     except Exception:
         db.session.rollback()
-    # Notify buyer on approval (professional tone)
+    # Notify buyer on approval (HTML email)
     try:
         if status == "approved" and (o.email or o.name):
             pkg = StorePackage.query.get(o.store_package_id)
             it = GamePackageItem.query.get(o.item_id) if o.item_id else None
             to_addr = o.email or None
             if to_addr:
-                juego = (pkg.name if pkg else '').strip()
-                item_t = (it.title if it else 'N/A')
-                monto = f"{o.amount} {o.currency}"
-                body = (
-                    "Estimado cliente,\n\n"
-                    "Nos complace informarle que su recarga ha sido procesada con éxito.\n"
-                    f"Orden #{o.id} – {juego}\n"
-                    f"Paquete: {item_t}\n"
-                    f"Monto: {monto}\n"
-                )
-                if (o.delivery_code or '').strip():
-                    body += f"Código de entrega: {o.delivery_code}\n"
-                body += (
-                    "\n"
-                    "Agradecemos su preferencia y confianza en Inefable Store. Si necesita asistencia adicional o tiene alguna consulta, no dude en contactarnos. ¡Estamos para servirle!"
-                )
-                send_email_async(to_addr, f"Orden #{o.id} aprobada – Inefable Store", body)
+                html, text = build_order_approved_email(o, pkg, it)
+                # use HTML email; if async fails, ignore
+                try:
+                    send_email_html(to_addr, f"Orden #{o.id} aprobada – Inefable Store", html, text)
+                except Exception:
+                    send_email_async(to_addr, f"Orden #{o.id} aprobada – Inefable Store", text)
     except Exception:
         pass
     return jsonify({"ok": True})
