@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function ensureDesktopQty() {
-    if (!isGift || !selBox) return;
+    if (!selBox) return;
     const isPhone = window.matchMedia('(max-width: 699px)').matches;
     if (isPhone) return;
     if (!dqWrap) {
@@ -471,7 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedItemIndex = items.indexOf(it);
         persistState();
         updateMobileFooter();
-        if (isGift) { ensureDesktopQty(); }
+        ensureDesktopQty();
       });
       // Keep selection active on re-render (e.g., when switching payment method)
       if (items.indexOf(it) === selectedItemIndex) {
@@ -482,6 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const total = unit * Math.max(1, quantity || 1);
         selPrice.textContent = formatPrice(total);
         sumPrice.textContent = formatPrice(total);
+        ensureDesktopQty();
       }
       // Autoselect first visible if none selected yet
       grid.appendChild(b);

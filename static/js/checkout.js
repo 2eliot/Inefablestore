@@ -39,13 +39,16 @@ document.addEventListener('DOMContentLoaded', () => {
   let currency = (qMethod === 'pm') ? 'BSD' : (qMethod === 'binance') ? 'USD' : ((qCur === 'BSD' || qCur === 'USD') ? qCur : ((state && state.currency === 'BSD') ? 'BSD' : 'USD'));
   let selectedIndex = (qSel !== null && !isNaN(parseInt(qSel, 10))) ? parseInt(qSel, 10) : ((state && typeof state.selectedIndex === 'number') ? state.selectedIndex : -1);
 
-  function formatPrice(n){
+  function formatPriceFor(cur, n){
     const v = Number(n || 0);
-    if (currency === 'BSD') {
+    if (cur === 'BSD') {
       return v.toLocaleString('es-VE', { style:'currency', currency:'VES', minimumFractionDigits: 0, maximumFractionDigits: 0 });
-    } else {
-      return v.toLocaleString('en-US', { style:'currency', currency:'USD', maximumFractionDigits: 2 });
     }
+    return v.toLocaleString('en-US', { style:'currency', currency:'USD', maximumFractionDigits: 2 });
+  }
+  function formatPrice(n){
+    // Backwards-compatible helper using current currency
+    return formatPriceFor(currency, n);
   }
   // Global delegated copy handler with fallback
   document.addEventListener('click', async (e) => {
@@ -76,33 +79,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-  function computeTotal() {
-    if (!allItems || selectedIndex < 0 || selectedIndex >= allItems.length) return 0;
-    const baseUsd = Number(allItems[selectedIndex].price || 0);
-    let totalUsd = baseUsd * Math.max(1, quantity || 1);
+  function computeTotals() {
+    // Returns { amount, displayCurrency, usedCurrency, baseBeforeDiscount }
+    if (!allItems || selectedIndex < 0 || selectedIndex >= allItems.length) return { amount: 0, displayCurrency: currency, usedCurrency: currency, baseBeforeDiscount: 0 };
+    const baseUsd = Number(allItems[selectedIndex].price || 0) * Math.max(1, quantity || 1);
+    let totalUsd = baseUsd;
     if (window.__validRef && window.__validRef.discount) {
       totalUsd = totalUsd * (1 - window.__validRef.discount);
     }
-    return currency === 'BSD' ? totalUsd * (rate || 0) : totalUsd;
+    if (currency === 'BSD') {
+      if (rate && rate > 0) {
+        return { amount: totalUsd * rate, displayCurrency: 'BSD', usedCurrency: 'BSD', baseBeforeDiscount: baseUsd * rate };
+      }
+      // Fallback to USD if rate is not available to avoid showing 0
+      return { amount: totalUsd, displayCurrency: 'USD', usedCurrency: 'USD', baseBeforeDiscount: baseUsd };
+    }
+    return { amount: totalUsd, displayCurrency: 'USD', usedCurrency: 'USD', baseBeforeDiscount: baseUsd };
   }
 
   function renderHeader() {
-    const total = computeTotal();
+    const t = computeTotals();
     // If discount active, show new price then old price struck-through
     if (allItems && selectedIndex >= 0 && selectedIndex < allItems.length && window.__validRef && window.__validRef.discount) {
-      const baseUsd = Number(allItems[selectedIndex].price || 0);
-      const base = (currency === 'BSD') ? baseUsd * (rate || 0) : baseUsd;
-      if (base > total) {
-        coTotal.innerHTML = `Total a pagar: <span class="price-new">${formatPrice(total)}</span> <span class="price-old">${formatPrice(base)}</span>`;
-        // Show discount note below
+      if (t.baseBeforeDiscount > t.amount) {
+        coTotal.innerHTML = `Total a pagar: <span class="price-new">${formatPriceFor(t.displayCurrency, t.amount)}</span> <span class="price-old">${formatPriceFor(t.displayCurrency, t.baseBeforeDiscount)}</span>`;
         const pct = Math.round(Number(window.__validRef.discount || 0) * 100);
         if (coDiscNote) { coDiscNote.textContent = `${pct}% de descuento activo`; coDiscNote.removeAttribute('hidden'); }
         return;
       }
-    } else {
-      coTotal.textContent = `Total a pagar: ${formatPrice(total)}`;
     }
-    // Hide note if not discounted
+    coTotal.textContent = `Total a pagar: ${formatPriceFor(t.displayCurrency, t.amount)}`;
     if (coDiscNote) coDiscNote.setAttribute('hidden', '');
   }
 
@@ -203,13 +209,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!ref) { alert('Ingrese la referencia'); return; }
       // Prepare order payload
       const item = (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) ? allItems[selectedIndex] : null;
-      const baseUsd = item ? Number(item.price || 0) : 0;
-      let totalUsd = baseUsd * Math.max(1, quantity || 1);
-      if (window.__validRef && window.__validRef.discount) {
-        totalUsd = totalUsd * (1 - window.__validRef.discount);
-      }
-      const amount = (currency === 'BSD') ? totalUsd * (rate || 0) : totalUsd;
-      const method = (currency === 'BSD') ? 'pm' : 'binance';
+      const totals = computeTotals();
+      const amount = totals.amount;
+      const method = (totals.usedCurrency === 'BSD') ? 'pm' : 'binance';
       // Buyer info: prefer URL params from details, fallback to localStorage
       let state = null;
       try { state = JSON.parse(localStorage.getItem('inefablestore_checkout') || 'null'); } catch (_) { state = null; }
@@ -225,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Multi-package support: send items with quantity of selected package
         items: (item ? [{ item_id: item.id, qty: Math.max(1, quantity || 1) }] : []),
         amount,
-        currency,
+        currency: totals.usedCurrency,
         method,
         reference: ref,
         name,
