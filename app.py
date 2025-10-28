@@ -452,6 +452,12 @@ class SpecialUser(db.Model):
     discount_percent = db.Column(db.Float, default=10.0)  # percent, e.g. 10 means 10%
     scope = db.Column(db.String(20), default="all")  # 'all' | 'package'
     scope_package_id = db.Column(db.Integer, nullable=True)
+    # Category-specific discounts and commissions
+    discount_mobile_percent = db.Column(db.Float, default=0.0)
+    discount_gift_percent = db.Column(db.Float, default=0.0)
+    commission_percent = db.Column(db.Float, default=10.0)
+    commission_mobile_percent = db.Column(db.Float, default=0.0)
+    commission_gift_percent = db.Column(db.Float, default=0.0)
 
 
 class AffiliateWithdrawal(db.Model):
@@ -546,6 +552,16 @@ with app.app_context():
                 db.session.execute(text("ALTER TABLE special_users ADD COLUMN scope TEXT DEFAULT 'all'"))
             if "scope_package_id" not in aff_cols:
                 db.session.execute(text("ALTER TABLE special_users ADD COLUMN scope_package_id INTEGER"))
+            if "discount_mobile_percent" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN discount_mobile_percent REAL DEFAULT 0.0"))
+            if "discount_gift_percent" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN discount_gift_percent REAL DEFAULT 0.0"))
+            if "commission_percent" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN commission_percent REAL DEFAULT 10.0"))
+            if "commission_mobile_percent" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN commission_mobile_percent REAL DEFAULT 0.0"))
+            if "commission_gift_percent" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN commission_gift_percent REAL DEFAULT 0.0"))
             db.session.commit()
         except Exception:
             pass
@@ -600,7 +616,10 @@ def admin_special_users_list():
         "ok": True,
         "users": [
             {"id": u.id, "name": u.name, "code": u.code, "email": u.email or "", "balance": float(u.balance or 0.0), "active": bool(u.active),
-             "discount_percent": float(u.discount_percent or 0.0), "scope": u.scope or 'all', "scope_package_id": u.scope_package_id}
+             "discount_percent": float(u.discount_percent or 0.0),
+             "discount_mobile_percent": float(u.discount_mobile_percent or 0.0),
+             "discount_gift_percent": float(u.discount_gift_percent or 0.0),
+             "scope": u.scope or 'all', "scope_package_id": u.scope_package_id}
             for u in rows
         ]
     })
@@ -632,14 +651,29 @@ def admin_special_users_create():
     if email:
         if SpecialUser.query.filter(db.func.lower(SpecialUser.email) == email.lower()).first():
             return jsonify({"ok": False, "error": "Email ya existe"}), 400
+    # Optional extended fields
+    def fget(key, default=0.0):
+        try:
+            return float(data.get(key) or default)
+        except Exception:
+            return default
     su = SpecialUser(name=name, code=code, email=email or None, active=bool(data.get("active", True)), balance=float(data.get("balance") or 0.0),
-                     discount_percent=discount_percent, scope=scope if scope in ("all","package") else "all", scope_package_id=scope_package_id)
+                     discount_percent=discount_percent,
+                     discount_mobile_percent=fget("discount_mobile_percent", 0.0),
+                     discount_gift_percent=fget("discount_gift_percent", 0.0),
+                     commission_percent=fget("commission_percent", 10.0),
+                     commission_mobile_percent=fget("commission_mobile_percent", 0.0),
+                     commission_gift_percent=fget("commission_gift_percent", 0.0),
+                     scope=scope if scope in ("all","package") else "all", scope_package_id=scope_package_id)
     if password:
         su.password_hash = generate_password_hash(password)
     db.session.add(su)
     db.session.commit()
     return jsonify({"ok": True, "user": {"id": su.id, "name": su.name, "code": su.code, "email": su.email or "", "balance": su.balance, "active": su.active,
-            "discount_percent": su.discount_percent, "scope": su.scope, "scope_package_id": su.scope_package_id }})
+            "discount_percent": su.discount_percent,
+            "discount_mobile_percent": su.discount_mobile_percent,
+            "discount_gift_percent": su.discount_gift_percent,
+            "scope": su.scope, "scope_package_id": su.scope_package_id }})
 
 @app.route("/admin/special/users/<int:uid>", methods=["PATCH", "PUT"])
 def admin_special_users_update(uid: int):
@@ -680,6 +714,13 @@ def admin_special_users_update(uid: int):
             su.discount_percent = float(data.get("discount_percent") or 0.0)
         except Exception:
             pass
+    # Optional extended fields
+    for k in ("discount_mobile_percent", "discount_gift_percent", "commission_percent", "commission_mobile_percent", "commission_gift_percent"):
+        if k in data:
+            try:
+                setattr(su, k, float(data.get(k) or 0.0))
+            except Exception:
+                pass
     if "scope" in data:
         sc = (data.get("scope") or "all").strip().lower()
         if sc in ("all","package"):
@@ -939,7 +980,18 @@ def store_special_validate():
     if (su.scope or 'all') == 'package':
         if not gid or (su.scope_package_id and su.scope_package_id != gid):
             return jsonify({"ok": False, "error": "El código no aplica a este juego"}), 400
+    # Determine category-based discount
     disc = float(su.discount_percent or 0.0)
+    try:
+        if gid:
+            pkg = StorePackage.query.get(gid)
+            cat = (pkg.category or '').lower() if pkg else ''
+            if cat == 'gift' and float(su.discount_gift_percent or 0.0) > 0:
+                disc = float(su.discount_gift_percent or 0.0)
+            elif cat == 'mobile' and float(su.discount_mobile_percent or 0.0) > 0:
+                disc = float(su.discount_mobile_percent or 0.0)
+    except Exception:
+        pass
     return jsonify({"ok": True, "allowed": True, "discount": round(disc/100.0, 4)})
 
 # Routes
@@ -1541,9 +1593,14 @@ def create_order():
                     su = SpecialUser.query.get(o.special_user_id)
                 if (not su) and (o.special_code or ''):
                     su = SpecialUser.query.filter(db.func.lower(SpecialUser.code) == (o.special_code or '').lower(), SpecialUser.active == True).first()
+                # Category-based discount
                 if su and su.active:
                     try:
                         disc_pct = float(su.discount_percent or 0.0)
+                        if pkg and (pkg.category or '').lower() == 'gift' and float(su.discount_gift_percent or 0.0) > 0:
+                            disc_pct = float(su.discount_gift_percent or 0.0)
+                        elif pkg and (pkg.category or '').lower() == 'mobile' and float(su.discount_mobile_percent or 0.0) > 0:
+                            disc_pct = float(su.discount_mobile_percent or 0.0)
                     except Exception:
                         disc_pct = 0.0
                 base_usd = float((it.price if it else 0.0) or 0.0)
@@ -1678,47 +1735,7 @@ def admin_orders_set_status(oid: int):
         pass
     o.status = status
     db.session.commit()
-    # If approved, credit 10% commission to special user balance (in USD)
-    try:
-        if status == "approved" and (o.special_user_id or o.special_code):
-            su = None
-            if o.special_user_id:
-                su = SpecialUser.query.get(o.special_user_id)
-            if not su and o.special_code:
-                su = SpecialUser.query.filter(db.func.lower(SpecialUser.code) == (o.special_code or '').lower()).first()
-            if su and su.active:
-                usd_total = 0.0
-                # Prefer multi-item subtotal when available
-                used_multi = False
-                try:
-                    if (o.items_json or '').strip():
-                        parsed = json.loads(o.items_json or '[]')
-                        if isinstance(parsed, list) and parsed:
-                            usd_total = sum(float((x.get('price') or 0.0)) * int(x.get('qty') or 1) for x in parsed)
-                            used_multi = True
-                except Exception:
-                    used_multi = False
-                if not used_multi:
-                    it = GamePackageItem.query.get(o.item_id) if o.item_id else None
-                    if it:
-                        usd_total = float(it.price or 0.0)
-                    else:
-                        # fallback: derive from order amount/currency
-                        if (o.currency or 'USD').upper() == 'USD':
-                            usd_total = float(o.amount or 0.0)
-                        else:
-                            # convert using configured rate
-                            try:
-                                rate = float(get_config_value("exchange_rate_bsd_per_usd", "0") or 0)
-                            except Exception:
-                                rate = 0.0
-                            usd_total = float(o.amount or 0.0) / rate if rate > 0 else 0.0
-                commission = round(usd_total * 0.10, 2)
-                if commission > 0:
-                    su.balance = float(su.balance or 0.0) + commission
-                    db.session.commit()
-    except Exception:
-        db.session.rollback()
+    # Commission crediting disabled (only discount is used now)
     # Notify buyer on approval (HTML email)
     try:
         if status == "approved" and (o.email or o.name):

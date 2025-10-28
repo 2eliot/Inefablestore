@@ -387,8 +387,11 @@
             <input id="aff-code" type="text" placeholder="Código único (referencia)">
           </div>
           <div class="form-row">
-            <label for="aff-disc">Descuento (%)</label>
-            <input id="aff-disc" type="number" step="0.1" min="0" max="100" value="10">
+            <label>Descuento por categoría (%)</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+              <input id="aff-disc-mobile" type="number" step="0.1" min="0" max="100" placeholder="Juegos Mobile">
+              <input id="aff-disc-gift" type="number" step="0.1" min="0" max="100" placeholder="Gift Cards">
+            </div>
           </div>
           <div class="form-row">
             <label for="aff-scope">Alcance</label>
