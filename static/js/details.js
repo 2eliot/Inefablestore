@@ -19,6 +19,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const mfsTitle = document.getElementById('mfs-title');
   const mfsPrice = document.getElementById('mfs-price');
   const mfsClose = document.getElementById('mfs-close');
+  const mfsPlus = document.getElementById('mfs-plus');
+  const mfsMinus = document.getElementById('mfs-minus');
+  const mfsQtyVal = document.getElementById('mfs-qty-val');
   // Step 4 inputs
   const inputCustomerId = document.getElementById('customer-id');
   const inputCustomerZone = document.getElementById('customer-zone');
@@ -48,6 +51,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function ensureDesktopQty() {
+    if (!isGift || !selBox) return;
+    const isPhone = window.matchMedia('(max-width: 699px)').matches;
+    if (isPhone) return;
+    if (!dqWrap) {
+      dqWrap = document.createElement('div');
+      dqWrap.style.display = 'flex';
+      dqWrap.style.alignItems = 'center';
+      dqWrap.style.justifyContent = 'center';
+      dqWrap.style.gap = '10px';
+      dqWrap.style.marginTop = '8px';
+      dqMinus = document.createElement('button');
+      dqMinus.type = 'button';
+      dqMinus.className = 'btn';
+      dqMinus.textContent = '−';
+      dqVal = document.createElement('span');
+      dqVal.style.minWidth = '28px';
+      dqVal.style.textAlign = 'center';
+      dqVal.style.fontWeight = '900';
+      dqVal.textContent = String(Math.max(1, quantity || 1));
+      dqPlus = document.createElement('button');
+      dqPlus.type = 'button';
+      dqPlus.className = 'btn';
+      dqPlus.textContent = '+';
+      dqWrap.appendChild(dqMinus);
+      dqWrap.appendChild(dqVal);
+      dqWrap.appendChild(dqPlus);
+      selBox.parentNode && selBox.parentNode.insertBefore(dqWrap, selBox.nextSibling);
+      dqPlus.addEventListener('click', () => setQuantity((quantity || 1) + 1));
+      dqMinus.addEventListener('click', () => setQuantity((quantity || 1) - 1));
+    }
+    if (dqVal) dqVal.textContent = String(Math.max(1, quantity || 1));
+  }
+
   // Right small login button opens auth modal (only when active)
   if (activeLogin && btnRightLogin) {
     btnRightLogin.addEventListener('click', () => {
@@ -55,6 +92,27 @@ document.addEventListener('DOMContentLoaded', () => {
       if (modal) modal.removeAttribute('hidden');
     });
   }
+
+  // Quantity controls in mobile footer
+  function setQuantity(q) {
+    const old = quantity;
+    quantity = Math.max(1, Math.min(99, Math.floor(q || 1)));
+    if (quantity !== old) {
+      if (mfsQtyVal) mfsQtyVal.textContent = String(quantity);
+      // Update shown prices when quantity changes
+      if (selectedItemIndex >= 0) {
+        const it = allItems[selectedItemIndex];
+        const unit = currentUnitValue(it);
+        const total = unit * quantity;
+        if (selPrice) selPrice.textContent = formatPrice(total);
+        if (sumPrice) sumPrice.textContent = formatPrice(total);
+      }
+      updateMobileFooter();
+      persistState();
+    }
+  }
+  if (mfsPlus) mfsPlus.addEventListener('click', () => setQuantity((quantity || 1) + 1));
+  if (mfsMinus) mfsMinus.addEventListener('click', () => setQuantity((quantity || 1) - 1));
 
   
   const inputName = document.getElementById('full-name');
@@ -87,6 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let currency = isMobile ? 'BSD' : 'USD'; // 'USD' or 'BSD'
   let selectedItemIndex = -1;
   let methodChosen = false; // show prices only after choosing a payment method
+  let quantity = 1; // selected quantity
+  let dqWrap = null; let dqVal = null; let dqPlus = null; let dqMinus = null;
 
   function updateCombinedPhone() {
     if (!inputPhone) return;
@@ -264,12 +324,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (it) {
       if (mfsTitle) mfsTitle.textContent = it.title || '';
       if (mfsPrice) {
-        const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
+        const unit = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
+        const val = unit * Math.max(1, quantity || 1);
         mfsPrice.textContent = formatPrice(val);
       }
     }
     mfs.classList.add('show');
     mfs.removeAttribute('hidden');
+    if (mfsQtyVal) mfsQtyVal.textContent = String(Math.max(1, quantity || 1));
+    if (dqVal) dqVal.textContent = String(Math.max(1, quantity || 1));
   }
 
   function formatPrice(n){
@@ -281,6 +344,13 @@ document.addEventListener('DOMContentLoaded', () => {
       // Show in USD
       return v.toLocaleString('en-US', { style:'currency', currency:'USD', maximumFractionDigits: 2 });
     }
+  }
+
+  // Returns unit price in the currently selected currency
+  function currentUnitValue(it) {
+    if (!it) return 0;
+    const base = Number(it.price || 0);
+    return (currency === 'BSD') ? (base * (rate || 0)) : base;
   }
 
   function renderItems(items) {
@@ -392,23 +462,26 @@ document.addEventListener('DOMContentLoaded', () => {
       b.addEventListener('click', () => {
         selBox.hidden = false;
         selTitle.textContent = it.title;
-        const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
-        selPrice.textContent = formatPrice(val);
-        sumPrice.textContent = formatPrice(val);
+        const unit = currentUnitValue(it);
+        const total = unit * Math.max(1, quantity || 1);
+        selPrice.textContent = formatPrice(total);
+        sumPrice.textContent = formatPrice(total);
         grid.querySelectorAll('.item-pill').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         selectedItemIndex = items.indexOf(it);
         persistState();
         updateMobileFooter();
+        if (isGift) { ensureDesktopQty(); }
       });
       // Keep selection active on re-render (e.g., when switching payment method)
       if (items.indexOf(it) === selectedItemIndex) {
         b.classList.add('active');
         selBox.hidden = false;
         selTitle.textContent = it.title || '';
-        const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
-        selPrice.textContent = formatPrice(val);
-        sumPrice.textContent = formatPrice(val);
+        const unit = currentUnitValue(it);
+        const total = unit * Math.max(1, quantity || 1);
+        selPrice.textContent = formatPrice(total);
+        sumPrice.textContent = formatPrice(total);
       }
       // Autoselect first visible if none selected yet
       grid.appendChild(b);
@@ -545,9 +618,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selectedItemIndex >= 0) {
       const it = allItems[selectedItemIndex];
       if (it) {
-        const val = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
-        selPrice.textContent = formatPrice(val);
-        sumPrice.textContent = formatPrice(val);
+        const unit = currentUnitValue(it);
+        const total = unit * Math.max(1, quantity || 1);
+        selPrice.textContent = formatPrice(total);
+        sumPrice.textContent = formatPrice(total);
       }
     }
     renderItems(allItems);
@@ -590,6 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
       phone: inputPhone ? inputPhone.value.trim() : '',
       currency,
       selectedIndex: selectedItemIndex,
+      quantity: Math.max(1, quantity || 1),
       save: true
     };
     try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (_) {}
@@ -630,6 +705,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (typeof state.selectedIndex === 'number') selectedItemIndex = state.selectedIndex;
     if (state.currency === 'BSD' || state.currency === 'USD') setCurrency(state.currency);
+    if (typeof state.quantity === 'number' && state.quantity > 0) {
+      quantity = Math.max(1, Math.floor(state.quantity));
+      if (mfsQtyVal) mfsQtyVal.textContent = String(quantity);
+    }
+    updateMobileFooter();
   }
 
   async function loadProfileThenLocal() {
@@ -779,7 +859,8 @@ document.addEventListener('DOMContentLoaded', () => {
         method,
         n: (inputName && inputName.value.trim()) || '',
         e: (inputEmail && inputEmail.value.trim()) || '',
-        p: (inputPhone && inputPhone.value.trim()) || ''
+        p: (inputPhone && inputPhone.value.trim()) || '',
+        q: String(Math.max(1, quantity || 1))
       };
       if (!isGift && inputCustomerId) {
         paramsObj.cid = inputCustomerId.value.trim();

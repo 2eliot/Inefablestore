@@ -1289,8 +1289,16 @@ window.refreshGallery = refreshGallery;
       tile.className = 'order-tile';
       const when = new Date(o.created_at).toLocaleString();
       const juego = o.package_name || `#${o.store_package_id}`;
-      const diam = fixMb(o.item_title) || '';
-      const precioUSD = fmtUSD(o.item_price_usd || 0);
+      const itemsArr = Array.isArray(o.items) ? o.items : [];
+      // Show quantity of packages purchased, not internal content amount
+      const qtyTotal = itemsArr.length
+        ? itemsArr.reduce((sum, it) => sum + parseInt(it.qty||1,10), 0)
+        : 1;
+      const diam = itemsArr.length
+        ? itemsArr.map(it => `${parseInt(it.qty||1,10)}x ${fixMb(it.title||'')}`).join(' · ')
+        : ((qtyTotal > 1 ? `${qtyTotal}x ` : '') + (fixMb(o.item_title) || ''));
+      // Display order amount with currency directly
+      const amountDisp = `${Number(o.amount||0)} ${o.currency || ''}`.trim();
       const statusIcon = o.status === 'approved' ? 'OK' : o.status === 'rejected' ? 'X' : '...';
       const statusClass = o.status === 'approved' ? 'ok' : o.status === 'rejected' ? 'rej' : 'pend';
       const playerId = fixMb(o.customer_id || '-') ;
@@ -1309,22 +1317,26 @@ window.refreshGallery = refreshGallery;
           </div>
         </div>
         <div class=\"row-metrics\">
-          <div class=\"metric diam\"><span>${diam || ''}</span> <span>DIAM</span></div>
-          <div class=\"metric usd\"><span>${precioUSD}</span></div>
+          <div class=\"metric diam\"><span>${diam || ''}</span> <span>Cantidad: ${itemsArr.length ? qtyTotal : 1}</span></div>
+          <div class=\"metric usd\"><span>${amountDisp}</span></div>
         </div>
         <div class=\"row-foot\">
           <div>${when}</div>
           <div class=\"customer\">ID: ${playerId} - ${o.name || o.email || 'Cliente'}</div>
         </div>
         ${isGift ? `
-        <div class=\"row-actions\">
-          <input class=\"input gift-code\" data-id=\"${o.id}\" type=\"text\" placeholder=\"CÃ³digo para el cliente\" value=\"${o.delivery_code || ''}\" style=\"flex:1; min-width:220px;\" />
+        <div class=\"row-actions\"> 
+          ${ (itemsArr.length && qtyTotal > 1)
+            ? `<textarea class=\"input gift-codes\" data-id=\"${o.id}\" placeholder=\"Un c\u00f3digo por l\u00ednea\" rows=\"${Math.min(6, Math.max(2, qtyTotal))}\" style=\"flex:1; min-width:260px; resize:vertical;\"></textarea>`
+            : `<input class=\"input gift-code\" data-id=\"${o.id}\" type=\"text\" placeholder=\"C\u00f3digo para el cliente\" value=\"${o.delivery_code || ''}\" style=\"flex:1; min-width:220px;\" />`
+          }
         </div>` : ''}
         <div class=\"row-actions\">
           <button class=\"btn btn-approve\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Aprobar</button>
           <button class=\"btn btn-reject\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Rechazar</button>
         </div>
       `;
+
       const cust = tile.querySelector('.row-foot .customer');
       if (cust) { cust.textContent = 'ID: ' + playerId + (o.customer_zone ? ' - ZONA: ' + o.customer_zone : '') + (o.phone ? ' - TEL: ' + o.phone : '') + ' - ' + (fixMb(o.name) || fixMb(o.email) || 'Cliente'); }
       ordersList.appendChild(tile);
@@ -1352,7 +1364,13 @@ window.refreshGallery = refreshGallery;
         // If there is a gift code input for this order and approving, send it
         if (status === 'approved') {
           const codeInput = ordersList.querySelector(`.gift-code[data-id="${id}"]`);
-          if (codeInput && codeInput.value.trim()) payload.delivery_code = codeInput.value.trim();
+          const codesArea = ordersList.querySelector(`.gift-codes[data-id="${id}"]`);
+          if (codesArea) {
+            const lines = codesArea.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+            if (lines.length) payload.delivery_codes = lines;
+          } else if (codeInput && codeInput.value.trim()) {
+            payload.delivery_code = codeInput.value.trim();
+          }
         }
         const res = await fetch(`/admin/orders/${id}/status`, {
           method: 'POST',

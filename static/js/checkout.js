@@ -26,6 +26,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const qName = qs.get('n') || '';
   const qEmail = qs.get('e') || '';
   const qPhone = qs.get('p') || '';
+  const qQtyRaw = qs.get('q');
+  let quantity = 1;
+  try {
+    const qn = parseInt(qQtyRaw, 10);
+    if (!isNaN(qn) && qn > 0) quantity = Math.min(99, qn);
+  } catch(_) { quantity = 1; }
   const LS_KEY = 'inefablestore_checkout';
   let state = null;
   try { state = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (_) { state = null; }
@@ -73,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function computeTotal() {
     if (!allItems || selectedIndex < 0 || selectedIndex >= allItems.length) return 0;
     const baseUsd = Number(allItems[selectedIndex].price || 0);
-    let totalUsd = baseUsd;
+    let totalUsd = baseUsd * Math.max(1, quantity || 1);
     if (window.__validRef && window.__validRef.discount) {
       totalUsd = totalUsd * (1 - window.__validRef.discount);
     }
@@ -198,7 +204,11 @@ document.addEventListener('DOMContentLoaded', () => {
       // Prepare order payload
       const item = (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) ? allItems[selectedIndex] : null;
       const baseUsd = item ? Number(item.price || 0) : 0;
-      const amount = (currency === 'BSD') ? baseUsd * (rate || 0) : baseUsd;
+      let totalUsd = baseUsd * Math.max(1, quantity || 1);
+      if (window.__validRef && window.__validRef.discount) {
+        totalUsd = totalUsd * (1 - window.__validRef.discount);
+      }
+      const amount = (currency === 'BSD') ? totalUsd * (rate || 0) : totalUsd;
       const method = (currency === 'BSD') ? 'pm' : 'binance';
       // Buyer info: prefer URL params from details, fallback to localStorage
       let state = null;
@@ -212,6 +222,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const payload = {
         store_package_id: gid,
         item_id: item ? item.id : null,
+        // Multi-package support: send items with quantity of selected package
+        items: (item ? [{ item_id: item.id, qty: Math.max(1, quantity || 1) }] : []),
         amount,
         currency,
         method,

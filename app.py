@@ -1,6 +1,7 @@
 import os
 import shutil
 from datetime import datetime
+import json
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
@@ -100,9 +101,13 @@ class Order(db.Model):
     active = db.Column(db.Boolean, default=True)
     # Gift card or delivery code (for gift category)
     delivery_code = db.Column(db.String(200), default="")
+    # Optional: multiple gift codes for gift card orders
+    delivery_codes_json = db.Column(db.Text, default="")
     # Special referral code support
     special_code = db.Column(db.String(80), default="")
     special_user_id = db.Column(db.Integer, nullable=True)
+    # Optional: JSON string with multiple items: [{"item_id": int, "qty": int, "title": str, "price": float}]
+    items_json = db.Column(db.Text, default="")
 
 # ==============================
 # Email helper
@@ -184,21 +189,78 @@ def send_email_html(to_email: str, subject: str, html_body: str, text_body: str 
 def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackageItem'):
     # Brand title instead of logo; support via WhatsApp if configured
     support_url = get_config_value("support_url", "") or "#"
-    whatsapp_url = get_config_value("whatsapp_url", "") or support_url or "#"
+    whatsapp_url = get_config_value("whatsapp_url", "https://api.whatsapp.com/send?phone=%2B584125712917&context=Aff7qdKb5GW1QQopWoY5hu5m7aqDlXIwIePiy5n9tHAbOwwr7S_MpuFfFShRCkwT3obW4f_deI_-Pn-lIqpXebAyMVygTiqDvi2nUus8r-8gIUZPXawe5ygyCSYTu_9gnBCaSb_Hpta6aVnEAFw&source=FB_Page&app=facebook&entry_point=page_cta&fbclid=IwY2xjawNIxQhleHRuA2FlbQIxMABicmlkETAzV1c0cGtnNWZ0NDRLeFBLAR7pcNiHoxI3HNYArGiUIh2FTQpQWZSpIC2UBGHmUgayIhB8A4ziqRKz2Ttq1g_aem_vO-bNFKE2SRZSSZHa_Faow") or support_url or "#"
     privacy_url = get_config_value("privacy_url", "") or "#"
     unsubscribe_url = get_config_value("unsubscribe_url", "") or "#"
     juego = (pkg.name if pkg else '').strip()
     item_t = (it.title if it else 'N/A')
     monto = f"{o.amount} {o.currency}"
     is_gift = (pkg.category or '').lower() == 'gift' if pkg else False
+    # Delivery codes (single or multiple)
     code_row = ''
-    if (o.delivery_code or '').strip():
-        code_row = f"""
+    try:
+        codes = []
+        if (o.delivery_codes_json or '').strip():
+            parsed = json.loads(o.delivery_codes_json or '[]')
+            if isinstance(parsed, list):
+                codes = [str(x or '').strip() for x in parsed if str(x or '').strip()]
+        if not codes and (o.delivery_code or '').strip():
+            codes = [o.delivery_code.strip()]
+        if codes:
+            rows = []
+            for idx, c in enumerate(codes, start=1):
+                label = 'Código' if len(codes) == 1 else f'Código #{idx}'
+                rows.append(f"""
             <tr>
-                <td style=\"color: #bbbbbb; font-size: 14px; padding-left: 0;\"><strong>Código:</strong></td>
-                <td align=\"right\" style=\"color: #ffffff; font-size: 14px; padding-right: 0;\">{o.delivery_code}</td>
+                <td style=\"color: #bbbbbb; font-size: 14px; padding-left: 0;\"><strong>{label}:</strong></td>
+                <td align=\"right\" style=\"color: #ffffff; font-size: 14px; padding-right: 0;\">{c}</td>
             </tr>
-        """
+                """)
+            code_row = "\n".join(rows)
+    except Exception:
+        code_row = code_row
+    # Build items section for multi-item orders
+    items_section = ""
+    try:
+        if (o.items_json or '').strip():
+            items = json.loads(o.items_json or '[]')
+            if isinstance(items, list) and items:
+                # rows for each item
+                item_rows = []
+                for ent in items:
+                    t = ent.get('title')
+                    q = int(ent.get('qty') or 1)
+                    try:
+                        p = float(ent.get('price') or 0.0)
+                    except Exception:
+                        p = 0.0
+                    item_rows.append(f"""
+              <tr>
+                <td style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>{q} x</strong></td>
+                <td align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{t} · ${p:.2f} c/u</td>
+              </tr>
+                    """)
+                items_section = "\n".join(item_rows)
+    except Exception:
+        items_section = ""
+
+    # Compute total quantity and label
+    qty_total = 1
+    try:
+        if (o.items_json or '').strip():
+            items = json.loads(o.items_json or '[]')
+            if isinstance(items, list) and items:
+                qty_total = sum(int(ent.get('qty') or 1) for ent in items)
+    except Exception:
+        qty_total = 1
+    qty_label = 'Cantidad de tarjetas' if is_gift else 'Recargas totales'
+    qty_row = f"""
+              <tr>
+                <td style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>{qty_label}:</strong></td>
+                <td align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{qty_total}</td>
+              </tr>
+    """
+
     html = f"""
 <!DOCTYPE html>
 <html lang=\"es\">
@@ -239,11 +301,9 @@ def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackage
                 <td style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>Producto:</strong></td>
                 <td align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{juego}</td>
               </tr>
-              <tr>
-                <td style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>Paquete:</strong></td>
-                <td align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{item_t}</td>
-              </tr>
+              {items_section if items_section else f'<tr>\n                <td style=\\"color:#bbbbbb; font-size:14px; padding-left:0;\\"><strong>Paquete:</strong></td>\n                <td align=\\"right\\" style=\\"color:#ffffff; font-size:14px; padding-right:0;\\">{item_t}</td>\n              </tr>'}
               {code_row}
+              {qty_row}
               <tr style=\"border-top:1px solid #555555;\">
                 <td style=\"color:#ffffff; font-size:16px; font-weight:bold; padding-left:0;\"><strong>Monto Total:</strong></td>
                 <td align=\"right\" style=\"color:#4CAF50; font-size:16px; font-weight:bold; padding-right:0;\">{monto}</td>
@@ -278,15 +338,61 @@ def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackage
 </body>
 </html>
 """
-    text = (
-        "Estimado cliente,\n\n"
-        "Su orden ha sido procesada con éxito.\n"
-        f"Orden #{o.id} – {juego}\n"
-        f"Paquete: {item_t}\n"
-        f"Monto: {monto}\n"
-        + (f"Código: {o.delivery_code}\n" if (o.delivery_code or '').strip() else "")
-        + "\nGracias por su preferencia."
-    )
+    # Plain text summary
+    try:
+        lines = [
+            "Estimado cliente,\n",
+            "Su orden ha sido procesada con éxito.",
+            f"Orden #{o.id} – {juego}",
+        ]
+        if (o.items_json or '').strip():
+            items = json.loads(o.items_json or '[]')
+            if isinstance(items, list) and items:
+                lines.append("Paquetes:")
+                for ent in items:
+                    t = ent.get('title')
+                    q = int(ent.get('qty') or 1)
+                    try:
+                        p = float(ent.get('price') or 0.0)
+                    except Exception:
+                        p = 0.0
+                    lines.append(f" - {q} x {t} (${p:.2f} c/u)")
+        else:
+            lines.append(f"Paquete: {item_t}")
+        lines.append(f"{qty_label}: {qty_total}")
+        lines.append(f"Monto: {monto}")
+        # Include gift codes in text email
+        try:
+            codes_txt = []
+            if (o.delivery_codes_json or '').strip():
+                parsed = json.loads(o.delivery_codes_json or '[]')
+                if isinstance(parsed, list):
+                    codes_txt = [str(x or '').strip() for x in parsed if str(x or '').strip()]
+            if not codes_txt and (o.delivery_code or '').strip():
+                codes_txt = [o.delivery_code.strip()]
+            if codes_txt:
+                if len(codes_txt) == 1:
+                    lines.append(f"Código: {codes_txt[0]}")
+                else:
+                    lines.append("Códigos:")
+                    for i, c in enumerate(codes_txt, start=1):
+                        lines.append(f" - #{i}: {c}")
+        except Exception:
+            pass
+        if (o.delivery_code or '').strip():
+            lines.append(f"Código: {o.delivery_code}")
+        lines.append("\nGracias por su preferencia.")
+        text = "\n".join(lines)
+    except Exception:
+        text = (
+            "Estimado cliente,\n\n"
+            "Su orden ha sido procesada con éxito.\n"
+            f"Orden #{o.id} – {juego}\n"
+            f"Paquete: {item_t}\n"
+            f"Monto: {monto}\n"
+            + (f"Código: {o.delivery_code}\n" if (o.delivery_code or '').strip() else "")
+            + "\nGracias por su preferencia."
+        )
     return html, text
 
 
@@ -421,8 +527,10 @@ with app.app_context():
             add_order_col('price', "price REAL DEFAULT 0")
             add_order_col('active', "active INTEGER DEFAULT 1")
             add_order_col('delivery_code', "delivery_code TEXT DEFAULT ''")
+            add_order_col('delivery_codes_json', "delivery_codes_json TEXT DEFAULT ''")
             add_order_col('special_code', "special_code TEXT DEFAULT ''")
             add_order_col('special_user_id', "special_user_id INTEGER")
+            add_order_col('items_json', "items_json TEXT DEFAULT ''")
             db.session.commit()
         # Special users table migration: ensure new columns
         try:
@@ -1335,6 +1443,32 @@ def create_order():
             status="pending",
             special_code=special_code,
         )
+        # If client sent multiple items, store them in items_json
+        try:
+            raw_items = data.get("items")
+            items_list = []
+            if isinstance(raw_items, list) and raw_items:
+                for it_entry in raw_items:
+                    try:
+                        iid = int(it_entry.get("item_id"))
+                    except Exception:
+                        continue
+                    qty = int(it_entry.get("qty") or 1)
+                    if qty <= 0:
+                        qty = 1
+                    gi = GamePackageItem.query.get(iid)
+                    if not gi:
+                        continue
+                    items_list.append({
+                        "item_id": gi.id,
+                        "qty": qty,
+                        "title": gi.title,
+                        "price": float(gi.price or 0.0),
+                    })
+            if items_list:
+                o.items_json = json.dumps(items_list)
+        except Exception:
+            pass
         # Try to resolve special user id now for convenience
         try:
             if special_code:
@@ -1355,7 +1489,6 @@ def create_order():
                 f"Nueva orden #{o.id} creada",
                 f"Estado: {o.status}",
                 f"Juego: {(pkg.name if pkg else o.store_package_id)}",
-                f"Paquete: {(it.title if it else 'N/A')}",
                 f"Método: {o.method}  Moneda: {o.currency}",
                 f"Monto: {o.amount}",
                 f"Referencia: {o.reference}",
@@ -1363,6 +1496,43 @@ def create_order():
                 f"Código especial: {o.special_code or '-'}",
                 f"Fecha: {o.created_at.isoformat()}",
             ]
+            # Breakdown for multiple items, if present
+            try:
+                if (o.items_json or '').strip():
+                    items = json.loads(o.items_json or '[]')
+                    if isinstance(items, list) and items:
+                        lines.append("Paquetes:")
+                        for ent in items:
+                            t = ent.get("title")
+                            q = ent.get("qty")
+                            p = ent.get("price")
+                            try:
+                                p = float(p or 0.0)
+                            except Exception:
+                                p = 0.0
+                            lines.append(f" - {q} x {t} (${p:.2f} c/u)")
+                        try:
+                            subtotal = sum(float((x.get('price') or 0.0)) * int(x.get('qty') or 1) for x in items)
+                            lines.append(f"Subtotal USD: ${subtotal:.2f}")
+                        except Exception:
+                            pass
+                else:
+                    # Single item fallback
+                    lines.insert(3, f"Paquete: {(it.title if it else 'N/A')}")
+                # Quantity line (gift: cards, others: recharges)
+                try:
+                    qty_total = 1
+                    if (o.items_json or '').strip():
+                        items = json.loads(o.items_json or '[]')
+                        if isinstance(items, list) and items:
+                            qty_total = sum(int(x.get('qty') or 1) for x in items)
+                    is_gift = (pkg.category or '').lower() == 'gift' if pkg else False
+                    qty_label = 'Cantidad de tarjetas' if is_gift else 'Recargas totales'
+                    lines.append(f"{qty_label}: {qty_total}")
+                except Exception:
+                    pass
+            except Exception:
+                pass
             # If affiliate code is present, include before/after discount prices
             try:
                 disc_pct = 0.0
@@ -1434,6 +1604,24 @@ def admin_orders_list():
     for x in orders:
         pkg = StorePackage.query.get(x.store_package_id)
         it = GamePackageItem.query.get(x.item_id) if x.item_id else None
+        # Parse items_json if available
+        items_payload = []
+        try:
+            if (x.items_json or '').strip():
+                parsed = json.loads(x.items_json or '[]')
+                if isinstance(parsed, list):
+                    items_payload = parsed
+        except Exception:
+            items_payload = []
+        # Parse multiple delivery codes if available
+        delivery_codes = []
+        try:
+            if (x.delivery_codes_json or '').strip():
+                dc_parsed = json.loads(x.delivery_codes_json or '[]')
+                if isinstance(dc_parsed, list):
+                    delivery_codes = [str(c or '').strip() for c in dc_parsed if str(c or '').strip()]
+        except Exception:
+            delivery_codes = []
         out.append({
             "id": x.id,
             "created_at": x.created_at.isoformat(),
@@ -1444,6 +1632,7 @@ def admin_orders_list():
             "item_id": x.item_id,
             "item_title": it.title if it else "",
             "item_price_usd": (it.price if it else 0.0),
+            "items": items_payload,
             "customer_id": x.customer_id,
             "customer_zone": x.customer_zone or "",
             "name": x.name,
@@ -1454,6 +1643,7 @@ def admin_orders_list():
             "amount": x.amount,
             "reference": x.reference,
             "delivery_code": x.delivery_code or "",
+            "delivery_codes": delivery_codes,
         })
     return jsonify({"ok": True, "orders": out})
 
@@ -1470,10 +1660,22 @@ def admin_orders_set_status(oid: int):
     o = Order.query.get(oid)
     if not o:
         return jsonify({"ok": False, "error": "No existe"}), 404
-    # Optional: allow passing delivery_code when approving gift card orders
+    # Optional: allow passing single or multiple gift codes when approving gift card orders
     code = (data.get("delivery_code") or "").strip()
     if code:
         o.delivery_code = code
+    # Multiple codes support
+    try:
+        codes = data.get("delivery_codes")
+        if isinstance(codes, list):
+            clean = [str(c or '').strip() for c in codes]
+            clean = [c for c in clean if c]
+            if clean:
+                o.delivery_codes_json = json.dumps(clean)
+                # keep first for legacy compatibility
+                o.delivery_code = o.delivery_code or clean[0]
+    except Exception:
+        pass
     o.status = status
     db.session.commit()
     # If approved, credit 10% commission to special user balance (in USD)
@@ -1486,20 +1688,31 @@ def admin_orders_set_status(oid: int):
                 su = SpecialUser.query.filter(db.func.lower(SpecialUser.code) == (o.special_code or '').lower()).first()
             if su and su.active:
                 usd_total = 0.0
-                it = GamePackageItem.query.get(o.item_id) if o.item_id else None
-                if it:
-                    usd_total = float(it.price or 0.0)
-                else:
-                    # fallback: derive from order amount/currency
-                    if (o.currency or 'USD').upper() == 'USD':
-                        usd_total = float(o.amount or 0.0)
+                # Prefer multi-item subtotal when available
+                used_multi = False
+                try:
+                    if (o.items_json or '').strip():
+                        parsed = json.loads(o.items_json or '[]')
+                        if isinstance(parsed, list) and parsed:
+                            usd_total = sum(float((x.get('price') or 0.0)) * int(x.get('qty') or 1) for x in parsed)
+                            used_multi = True
+                except Exception:
+                    used_multi = False
+                if not used_multi:
+                    it = GamePackageItem.query.get(o.item_id) if o.item_id else None
+                    if it:
+                        usd_total = float(it.price or 0.0)
                     else:
-                        # convert using configured rate
-                        try:
-                            rate = float(get_config_value("exchange_rate_bsd_per_usd", "0") or 0)
-                        except Exception:
-                            rate = 0.0
-                        usd_total = float(o.amount or 0.0) / rate if rate > 0 else 0.0
+                        # fallback: derive from order amount/currency
+                        if (o.currency or 'USD').upper() == 'USD':
+                            usd_total = float(o.amount or 0.0)
+                        else:
+                            # convert using configured rate
+                            try:
+                                rate = float(get_config_value("exchange_rate_bsd_per_usd", "0") or 0)
+                            except Exception:
+                                rate = 0.0
+                            usd_total = float(o.amount or 0.0) / rate if rate > 0 else 0.0
                 commission = round(usd_total * 0.10, 2)
                 if commission > 0:
                     su.balance = float(su.balance or 0.0) + commission

@@ -172,7 +172,14 @@
     <div id="mfs-title" class="mfs-title">-</div>
     <div id="mfs-price" class="mfs-price"></div>
   </div>
-  <button id="mfs-close" class="mfs-close" aria-label="Cerrar">✕</button>
+  <div class="mfs-right" style="display:flex; flex-direction:column; align-items:center; gap:6px; margin:0 8px;">
+    <button id="mfs-close" class="mfs-close" aria-label="Cerrar" title="Cerrar" style="line-height:1;">✕</button>
+    <div class="mfs-qty" style="display:flex; align-items:center; gap:8px;">
+      <button id="mfs-minus" class="btn" type="button" aria-label="Disminuir" title="-" style="min-width:36px; padding:6px 10px;">−</button>
+      <span id="mfs-qty-val" style="min-width:24px; text-align:center; font-weight:900;">1</span>
+      <button id="mfs-plus" class="btn" type="button" aria-label="Aumentar" title="+" style="min-width:36px; padding:6px 10px;">+</button>
+    </div>
+  </div>
 </div>
 <!-- Overlay and Drawer + Auth modal copied so header buttons work here too -->
 <div id="overlay" class="overlay" hidden></div>
