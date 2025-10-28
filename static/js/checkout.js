@@ -82,10 +82,14 @@ document.addEventListener('DOMContentLoaded', () => {
   function computeTotals() {
     // Returns { amount, displayCurrency, usedCurrency, baseBeforeDiscount }
     if (!allItems || selectedIndex < 0 || selectedIndex >= allItems.length) return { amount: 0, displayCurrency: currency, usedCurrency: currency, baseBeforeDiscount: 0 };
-    const baseUsd = Number(allItems[selectedIndex].price || 0) * Math.max(1, quantity || 1);
+    const unitUsd = Number(allItems[selectedIndex].price || 0);
+    const qty = Math.max(1, quantity || 1);
+    const baseUsd = unitUsd * qty;
+    // Apply influencer discount ONLY to 1 unit, not to all quantity
     let totalUsd = baseUsd;
     if (window.__validRef && window.__validRef.discount) {
-      totalUsd = totalUsd * (1 - window.__validRef.discount);
+      const d = Number(window.__validRef.discount || 0);
+      totalUsd = (unitUsd * qty) - (unitUsd * d);
     }
     if (currency === 'BSD') {
       if (rate && rate > 0) {
