@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnBuy = document.getElementById('btn-buy');
   const inputRefCode = document.getElementById('ref-code');
   const refStatus = document.getElementById('ref-status');
-  let validRef = null; // { code, discount }
+  let validRef = null; // { code, discount, item_discounts?: [{item_id, discount}] }
   // Pay modal
   const payModal = document.getElementById('pay-modal');
   const payInfo = document.getElementById('pay-info');
@@ -757,8 +757,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!it) return 0;
     const baseUsd = Number(it.price || 0);
     let totalUsd = baseUsd;
-    if (validRef && validRef.discount) {
-      totalUsd = totalUsd * (1 - validRef.discount);
+    if (validRef) {
+      // Prefer item-specific discount if available
+      let frac = Number(validRef.discount || 0);
+      try {
+        if (Array.isArray(validRef.item_discounts)) {
+          const hit = validRef.item_discounts.find(x => Number(x.item_id) === Number(it.id));
+          if (hit && typeof hit.discount === 'number') frac = Number(hit.discount || 0);
+        }
+      } catch(_){}
+      if (frac > 0) totalUsd = totalUsd * (1 - frac);
     }
     return currency === 'BSD' ? totalUsd * (rate || 0) : totalUsd;
   }
@@ -887,8 +895,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch(`/store/special/validate?code=${encodeURIComponent(code)}&gid=${encodeURIComponent(gid||'')}`);
       const data = await res.json();
       if (!res.ok || !data.ok || !data.allowed) throw new Error(data.error || 'Código inválido');
-      validRef = { code, discount: Number(data.discount || 0) };
-      if (refStatus) { refStatus.style.color = '#86efac'; refStatus.textContent = `Código válido: ${code} (${Math.round((validRef.discount||0)*100)}% OFF)`; }
+      validRef = { code, discount: Number(data.discount || 0), item_discounts: Array.isArray(data.item_discounts) ? data.item_discounts : null };
+      // Determine effective percent for current selection (if any)
+      let shownPct = Math.round(Number(validRef.discount||0) * 100);
+      try {
+        const it = currentSelectedItem();
+        if (it && Array.isArray(validRef.item_discounts)) {
+          const hit = validRef.item_discounts.find(x => Number(x.item_id) === Number(it.id));
+          if (hit && typeof hit.discount === 'number') shownPct = Math.round(Number(hit.discount||0)*100);
+        }
+      } catch(_){}
+      if (refStatus) { refStatus.style.color = '#86efac'; refStatus.textContent = `Código válido: ${code} (${shownPct}% OFF)`; }
       renderItems(allItems);
     } catch (e) {
       validRef = null;

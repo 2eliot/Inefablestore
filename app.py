@@ -980,19 +980,58 @@ def store_special_validate():
     if (su.scope or 'all') == 'package':
         if not gid or (su.scope_package_id and su.scope_package_id != gid):
             return jsonify({"ok": False, "error": "El código no aplica a este juego"}), 400
-    # Determine category-based discount
+    # Determine category-based discount. For mobile, build per-item tiered discounts (low price -> higher %).
     disc = float(su.discount_percent or 0.0)
+    item_discounts = []  # [{item_id, discount (fraction)}]
     try:
         if gid:
             pkg = StorePackage.query.get(gid)
             cat = (pkg.category or '').lower() if pkg else ''
-            if cat == 'gift' and float(su.discount_gift_percent or 0.0) > 0:
-                disc = float(su.discount_gift_percent or 0.0)
-            elif cat == 'mobile' and float(su.discount_mobile_percent or 0.0) > 0:
-                disc = float(su.discount_mobile_percent or 0.0)
+            if cat == 'gift':
+                # gift uses gift category percent if provided; no tiering
+                if float(su.discount_gift_percent or 0.0) > 0:
+                    disc = float(su.discount_gift_percent or 0.0)
+            elif cat == 'mobile':
+                # Tiered per-item discount for mobile
+                # Define top/bottom percent (can be made configurable later)
+                max_pct = 10.0  # cheapest items
+                min_pct = 4.0   # most expensive items
+                try:
+                    # If affiliate set a mobile discount explicitly, use it as max, but clamp within [min_pct, 100]
+                    mset = float(su.discount_mobile_percent or 0.0)
+                    if mset > 0:
+                        max_pct = max(min(mset, 100.0), min_pct)
+                except Exception:
+                    pass
+                # Fetch items and sort by price asc
+                items = (
+                    GamePackageItem.query
+                    .filter_by(store_package_id=gid, active=True)
+                    .order_by(GamePackageItem.price.asc())
+                    .all()
+                )
+                n = len(items)
+                if n >= 1:
+                    if n == 1:
+                        # Single item: apply max_pct
+                        item_discounts = [{"item_id": items[0].id, "discount": round(max_pct/100.0, 4)}]
+                        disc = max_pct
+                    else:
+                        # Linear interpolation from max_pct (idx 0) down to min_pct (idx n-1)
+                        step = (max_pct - min_pct) / (n - 1)
+                        item_discounts = []
+                        for idx, it in enumerate(items):
+                            pct = max_pct - step * idx
+                            pct = max(min_pct, min(max_pct, pct))
+                            item_discounts.append({"item_id": it.id, "discount": round(pct/100.0, 4)})
+                        # Fallback/general display percent: use the first item percent
+                        disc = max_pct
     except Exception:
         pass
-    return jsonify({"ok": True, "allowed": True, "discount": round(disc/100.0, 4)})
+    resp = {"ok": True, "allowed": True, "discount": round(disc/100.0, 4)}
+    if item_discounts:
+        resp["item_discounts"] = item_discounts
+    return jsonify(resp)
 
 # Routes
 @app.route("/")

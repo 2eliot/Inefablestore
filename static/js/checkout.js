@@ -87,9 +87,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const baseUsd = unitUsd * qty;
     // Apply influencer discount ONLY to 1 unit, not to all quantity
     let totalUsd = baseUsd;
-    if (window.__validRef && window.__validRef.discount) {
-      const d = Number(window.__validRef.discount || 0);
-      totalUsd = (unitUsd * qty) - (unitUsd * d);
+    if (window.__validRef) {
+      // Prefer item-specific discount when available
+      let frac = Number(window.__validRef.discount || 0);
+      try {
+        const it = (allItems && selectedIndex >= 0) ? allItems[selectedIndex] : null;
+        if (it && Array.isArray(window.__validRef.item_discounts)) {
+          const hit = window.__validRef.item_discounts.find(x => Number(x.item_id) === Number(it.id));
+          if (hit && typeof hit.discount === 'number') frac = Number(hit.discount || 0);
+        }
+      } catch(_){}
+      if (frac > 0) {
+        totalUsd = (unitUsd * qty) - (unitUsd * frac);
+      }
     }
     if (currency === 'BSD') {
       if (rate && rate > 0) {
@@ -201,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch(`/store/special/validate?code=${encodeURIComponent(qRefCode)}&gid=${encodeURIComponent(gid||'')}`);
       const data = await res.json();
       if (res.ok && data && data.ok && data.allowed) {
-        window.__validRef = { code: qRefCode, discount: Number(data.discount || 0) };
+        window.__validRef = { code: qRefCode, discount: Number(data.discount || 0), item_discounts: Array.isArray(data.item_discounts) ? data.item_discounts : null };
         renderHeader();
       }
     } catch (_) { /* ignore */ }
