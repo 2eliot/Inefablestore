@@ -1744,6 +1744,67 @@ def admin_orders_list():
     return jsonify({"ok": True, "orders": out})
 
 
+@app.route("/orders/my", methods=["GET"])
+def orders_my():
+    user = session.get("user")
+    if not user:
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    q = Order.query
+    role = user.get("role")
+    if role == "admin":
+        email = (request.args.get("email") or "").strip()
+        customer_id = (request.args.get("customer_id") or "").strip()
+        if email:
+            q = q.filter(Order.email == email)
+        if customer_id:
+            q = q.filter(Order.customer_id == customer_id)
+        q = q.order_by(Order.created_at.desc()).limit(50)
+    elif role == "user":
+        email = (user.get("email") or "").strip()
+        if not email:
+            return jsonify({"ok": True, "orders": []})
+        q = q.filter(Order.email == email).order_by(Order.created_at.desc()).limit(50)
+    else:
+        # Affiliates or other roles: do not expose buyer orders
+        return jsonify({"ok": True, "orders": []})
+    rows = q.all()
+    out = []
+    for x in rows:
+        pkg = StorePackage.query.get(x.store_package_id)
+        it = GamePackageItem.query.get(x.item_id) if x.item_id else None
+        # Parse items_json if available
+        items_payload = []
+        try:
+            if (x.items_json or '').strip():
+                parsed = json.loads(x.items_json or '[]')
+                if isinstance(parsed, list):
+                    items_payload = parsed
+        except Exception:
+            items_payload = []
+        out.append({
+            "id": x.id,
+            "created_at": (x.created_at.isoformat() if hasattr(x.created_at, 'isoformat') else str(x.created_at)),
+            "status": x.status,
+            "store_package_id": x.store_package_id,
+            "package_name": pkg.name if pkg else "",
+            "package_category": (pkg.category if pkg and pkg.category else "mobile"),
+            "item_id": x.item_id,
+            "item_title": it.title if it else "",
+            "item_price_usd": (it.price if it else 0.0),
+            "items": items_payload,
+            "customer_id": x.customer_id,
+            "customer_zone": x.customer_zone or "",
+            "name": x.name,
+            "email": x.email,
+            "phone": x.phone,
+            "method": x.method,
+            "currency": x.currency,
+            "amount": x.amount,
+            "reference": x.reference,
+            "delivery_code": x.delivery_code or "",
+        })
+    return jsonify({"ok": True, "orders": out})
+
 @app.route("/admin/orders/<int:oid>/status", methods=["POST"])
 def admin_orders_set_status(oid: int):
     user = session.get("user")
@@ -1772,9 +1833,86 @@ def admin_orders_set_status(oid: int):
                 o.delivery_code = o.delivery_code or clean[0]
     except Exception:
         pass
+    prev_status = (o.status or '').lower()
     o.status = status
     db.session.commit()
-    # Commission crediting disabled (only discount is used now)
+    # Affiliate commission crediting
+    try:
+        if status == "approved" and prev_status != "approved":
+            su = None
+            if o.special_user_id:
+                su = SpecialUser.query.get(o.special_user_id)
+            if (not su) and (o.special_code or ''):
+                su = SpecialUser.query.filter(
+                    db.func.lower(SpecialUser.code) == (o.special_code or '').lower(),
+                    SpecialUser.active == True
+                ).first()
+            if su and su.active:
+                # Respect affiliate scope
+                scope_ok = True
+                sc = (su.scope or 'all')
+                if sc == 'package':
+                    try:
+                        scope_ok = (su.scope_package_id == o.store_package_id)
+                    except Exception:
+                        scope_ok = False
+                if scope_ok:
+                    # Determine commission base (USD)
+                    subtotal = 0.0
+                    try:
+                        if (o.items_json or '').strip():
+                            items = json.loads(o.items_json or '[]')
+                            if isinstance(items, list) and items:
+                                for ent in items:
+                                    q = int(ent.get('qty') or 1)
+                                    try:
+                                        p = float(ent.get('price') or 0.0)
+                                    except Exception:
+                                        p = 0.0
+                                    subtotal += (p * q)
+                    except Exception:
+                        pass
+                    if subtotal <= 0 and o.item_id:
+                        try:
+                            gi = GamePackageItem.query.get(o.item_id)
+                            if gi:
+                                subtotal = float(gi.price or 0.0)
+                        except Exception:
+                            pass
+                    if subtotal <= 0:
+                        try:
+                            amt_usd = float(o.amount or 0.0)
+                            cur = (o.currency or 'USD').upper()
+                            if cur != 'USD':
+                                try:
+                                    rate = float(get_config_value("exchange_rate_bsd_per_usd", "0") or 0)
+                                except Exception:
+                                    rate = 0.0
+                                if rate > 0:
+                                    amt_usd = round(amt_usd / rate, 2)
+                            subtotal = amt_usd
+                        except Exception:
+                            subtotal = 0.0
+                    # Commission percent by category
+                    comm_pct = 0.0
+                    try:
+                        pkg = StorePackage.query.get(o.store_package_id)
+                        comm_pct = float(su.commission_percent or 0.0)
+                        if pkg and (pkg.category or '').lower() == 'gift' and float(su.commission_gift_percent or 0.0) > 0:
+                            comm_pct = float(su.commission_gift_percent or 0.0)
+                        elif pkg and (pkg.category or '').lower() == 'mobile' and float(su.commission_mobile_percent or 0.0) > 0:
+                            comm_pct = float(su.commission_mobile_percent or 0.0)
+                    except Exception:
+                        pass
+                    if comm_pct > 0 and subtotal > 0:
+                        try:
+                            inc = round(subtotal * (comm_pct / 100.0), 2)
+                            su.balance = round(float(su.balance or 0.0) + inc, 2)
+                            db.session.commit()
+                        except Exception:
+                            db.session.rollback()
+    except Exception:
+        pass
     # Notify buyer on approval (HTML email)
     try:
         if status == "approved" and (o.email or o.name):
