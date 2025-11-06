@@ -739,3 +739,24 @@ body { margin: 0; min-height: 100vh; padding-bottom: 0; font-family: ui-sans-ser
   display: inline-block;
   vertical-align: middle;
 }
+
+/* Related packages in details page: 2 columns on mobile */
+@media (max-width: 700px) {
+  #related-packages .packages-rail {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+    overflow-x: visible !important;
+    scroll-snap-type: none !important;
+    flex-wrap: wrap !important;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+  #related-packages .pkg-card {
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    flex: none !important;
+    scroll-snap-align: none !important;
+  }
+}

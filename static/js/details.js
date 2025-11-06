@@ -148,6 +148,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let quantity = 1; // selected quantity
   let dqWrap = null; let dqVal = null; let dqPlus = null; let dqMinus = null;
 
+  // Hide "Ver más" button by default until we know there are more than 6 items
+  if (btnMore) {
+    btnMore.hidden = true;
+    btnMore.style.display = 'none';
+  }
+
   function updateCombinedPhone() {
     if (!inputPhone) return;
     const cc = (inputPhoneCc ? inputPhoneCc.value.trim() : '').replace(/\s+/g, '');
@@ -495,13 +501,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (_) { /* ignore */ }
     });
+    
+    // Control "Ver más" button visibility after rendering all items
     if (btnMore) {
+      // Always hide on desktop
       if (!isMobile) {
         btnMore.hidden = true;
+        btnMore.style.display = 'none';
       } else {
+        // On mobile: Show ONLY if there are MORE than 6 packages
         const needMore = ordered.length > 6;
-        btnMore.hidden = !needMore;
-        if (!btnMore.hidden) btnMore.textContent = showingAll ? 'Ver menos' : 'Ver más';
+        if (needMore) {
+          btnMore.hidden = false;
+          btnMore.style.display = 'inline-block';
+          btnMore.textContent = showingAll ? 'Ver menos' : 'Ver más';
+        } else {
+          btnMore.hidden = true;
+          btnMore.style.display = 'none';
+        }
       }
     }
   }
@@ -518,6 +535,11 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch(`/store/package/${gid}/items`).then(r => r.json()).then(data => {
     allItems = (data && data.items) || [];
     showingAll = false;
+    // Hide "Ver más" button immediately if there are 6 or fewer items
+    if (btnMore && allItems.length <= 6) {
+      btnMore.hidden = true;
+      btnMore.style.display = 'none';
+    }
     renderItems(allItems);
   }).catch(() => {});
 

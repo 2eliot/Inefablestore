@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const coRef = document.getElementById('co-ref');
   const btnConfirm = document.getElementById('btn-co-confirm');
   const coDiscNote = document.getElementById('co-disc-note');
+  const refError = document.getElementById('ref-error');
+  const refCounter = document.getElementById('ref-counter');
+  let isReferenceValid = false;
 
   let allItems = [];
   let rate = 0;
@@ -204,6 +207,113 @@ document.addEventListener('DOMContentLoaded', () => {
     startTimer(30*60);
   });
 
+  // Initialize button as disabled
+  if (btnConfirm) {
+    btnConfirm.disabled = true;
+  }
+
+  // Function to update visual digit indicators
+  function updateDigitIndicators(length) {
+    // Update dots
+    for (let i = 1; i <= 6; i++) {
+      const dot = document.getElementById(`dot-${i}`);
+      if (dot) {
+        if (i <= length) {
+          dot.classList.add('filled');
+        } else {
+          dot.classList.remove('filled');
+        }
+      }
+    }
+    // Update counter text
+    if (refCounter) {
+      refCounter.textContent = `${length}/6 dígitos`;
+      if (length === 6) {
+        refCounter.style.color = '#10b981';
+      } else {
+        refCounter.style.color = '#94a3b8';
+      }
+    }
+  }
+
+  // Reference validation: only allow digits and exactly 6 characters
+  if (coRef) {
+    coRef.addEventListener('input', (e) => {
+      // Remove non-digit characters
+      let value = e.target.value.replace(/\D/g, '');
+      // Limit to 6 digits
+      value = value.substring(0, 6);
+      e.target.value = value;
+      
+      // Update visual indicators
+      updateDigitIndicators(value.length);
+      
+      // Reset validation state
+      isReferenceValid = false;
+      if (refError) {
+        refError.style.display = 'none';
+        refError.textContent = '';
+      }
+      
+      // Enable/disable button based on length
+      if (btnConfirm) {
+        btnConfirm.disabled = value.length !== 6;
+      }
+      
+      // Check for duplicate reference when 6 digits are entered
+      if (value.length === 6) {
+        checkReferenceAvailability(value);
+      }
+    });
+  }
+  
+  // Function to check if reference is already in use
+  async function checkReferenceAvailability(reference) {
+    try {
+      const res = await fetch(`/orders/check-reference?reference=${encodeURIComponent(reference)}`);
+      const data = await res.json();
+      
+      if (res.ok && data.ok) {
+        if (data.exists) {
+          // Reference already in use
+          isReferenceValid = false;
+          if (refError) {
+            refError.textContent = data.message || 'Su referencia ya fue subida y su recarga está siendo procesada';
+            refError.style.display = 'block';
+          }
+          if (btnConfirm) {
+            btnConfirm.disabled = true;
+          }
+          // Make counter text red to indicate error
+          if (refCounter) {
+            refCounter.style.color = '#ef4444';
+          }
+        } else {
+          // Reference available
+          isReferenceValid = true;
+          if (refError) {
+            refError.style.display = 'none';
+            refError.textContent = '';
+          }
+          if (btnConfirm) {
+            btnConfirm.disabled = false;
+          }
+          // Make counter text green to indicate success
+          if (refCounter) {
+            refCounter.style.color = '#10b981';
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error checking reference:', err);
+      // On error, allow submission (backend will validate again)
+      isReferenceValid = true;
+      if (btnConfirm && coRef && coRef.value.length === 6) {
+        btnConfirm.disabled = false;
+      }
+    }
+  }
+
   // Validate referral code from query if present
   (async function validateRefAtStart(){
     if (!qRefCode) return;
@@ -221,6 +331,16 @@ document.addEventListener('DOMContentLoaded', () => {
     btnConfirm.addEventListener('click', async () => {
       const ref = coRef ? coRef.value.trim() : '';
       if (!ref) { alert('Ingrese la referencia'); return; }
+      // Validate exactly 6 digits
+      if (ref.length !== 6 || !/^\d{6}$/.test(ref)) {
+        alert('La referencia debe tener exactamente 6 dígitos');
+        return;
+      }
+      // Check if reference validation passed
+      if (!isReferenceValid) {
+        alert('Por favor, ingrese una referencia válida');
+        return;
+      }
       // Prepare order payload
       const item = (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) ? allItems[selectedIndex] : null;
       const totals = computeTotals();

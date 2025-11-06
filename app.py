@@ -1452,7 +1452,7 @@ def store_game_detail(gid: int):
             rel_q = rel_q.order_by(StorePackage.sort_order.asc(), StorePackage.created_at.desc())
         except Exception:
             rel_q = rel_q.order_by(StorePackage.created_at.desc())
-        related = rel_q.limit(5).all()
+        related = rel_q.limit(4).all()
     except Exception:
         related = []
     return render_template(
@@ -1480,6 +1480,28 @@ def store_checkout(gid: int):
 # ===============
 # Orders API
 # ===============
+
+@app.route("/orders/check-reference", methods=["GET"])
+def check_reference():
+    """Check if a reference is already in use by a pending order"""
+    reference = request.args.get("reference", "").strip()
+    if not reference:
+        return jsonify({"ok": False, "error": "Referencia requerida"}), 400
+    
+    # Check if reference exists in pending orders only
+    existing = Order.query.filter(
+        Order.reference == reference,
+        Order.status == "pending"
+    ).first()
+    
+    if existing:
+        return jsonify({
+            "ok": True,
+            "exists": True,
+            "message": "Su referencia ya fue subida y su recarga está siendo procesada"
+        })
+    
+    return jsonify({"ok": True, "exists": False})
 
 @app.route("/orders", methods=["POST"])
 def create_order():
@@ -1511,6 +1533,16 @@ def create_order():
 
         if not reference:
             return jsonify({"ok": False, "error": "Referencia requerida"}), 400
+        # Validate reference is exactly 6 digits
+        if not (reference.isdigit() and len(reference) == 6):
+            return jsonify({"ok": False, "error": "La referencia debe tener exactamente 6 dígitos"}), 400
+        # Check if reference already exists in pending orders
+        existing_pending = Order.query.filter(
+            Order.reference == reference,
+            Order.status == "pending"
+        ).first()
+        if existing_pending:
+            return jsonify({"ok": False, "error": "Su referencia ya fue subida y su recarga está siendo procesada"}), 400
         if amount <= 0:
             return jsonify({"ok": False, "error": "Monto inválido"}), 400
         if method not in ("pm", "binance"):
