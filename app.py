@@ -1,6 +1,6 @@
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import json
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
@@ -15,6 +15,13 @@ from email.mime.multipart import MIMEMultipart
 # Create Flask app
 app = Flask(__name__, instance_relative_config=True)
 load_dotenv()
+
+# Configure Venezuela timezone (GMT-4)
+VE_TIMEZONE = timezone(timedelta(hours=-4))
+
+def now_ve():
+    """Return current datetime in Venezuela timezone (GMT-4)"""
+    return datetime.now(VE_TIMEZONE)
 
 # Ensure instance folder exists for local SQLite default
 os.makedirs(app.instance_path, exist_ok=True)
@@ -328,7 +335,7 @@ def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackage
         </tr>
         <tr>
           <td align=\"center\" style=\"padding:20px 40px; background-color:#383838; border-radius:0 0 8px 8px;\">
-            <p style=\"color:#999999; font-size:12px; line-height:18px; margin:0;\">&copy; {datetime.utcnow().year} Inefable Store. Todos los derechos reservados.</p>
+            <p style=\"color:#999999; font-size:12px; line-height:18px; margin:0;\">&copy; {now_ve().year} Inefable Store. Todos los derechos reservados.</p>
             <p style=\"color:#999999; font-size:12px; line-height:18px; margin-top:5px;\"><a href=\"{unsubscribe_url}\" target=\"_blank\" style=\"color:#009688; text-decoration:underline;\">Darse de baja</a> | <a href=\"{privacy_url}\" target=\"_blank\" style=\"color:#009688; text-decoration:underline;\">Política de Privacidad</a></p>
           </td>
         </tr>
@@ -912,7 +919,7 @@ def admin_affiliate_withdrawals_set_status(w_id: int):
             return jsonify({"ok": False, "error": "Fondos insuficientes"}), 400
         su.balance = round(bal - float(r.amount_usd or 0.0), 2)
         r.status = "approved"
-        r.processed_at = datetime.utcnow()
+        r.processed_at = now_ve()
         db.session.commit()
         # Notify affiliate: withdrawal approved
         try:
@@ -935,7 +942,7 @@ def admin_affiliate_withdrawals_set_status(w_id: int):
         return jsonify({"ok": True, "balance": su.balance})
     else:
         r.status = "rejected"
-        r.processed_at = datetime.utcnow()
+        r.processed_at = now_ve()
         db.session.commit()
         # Notify affiliate: withdrawal rejected
         try:
@@ -1308,7 +1315,7 @@ def admin_images_upload():
         return jsonify({"ok": False, "error": "Extensión no permitida"}), 400
     fname = secure_filename(file.filename)
     # Avoid collisions
-    ts = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    ts = now_ve().strftime("%Y%m%d%H%M%S%f")
     base, ext = os.path.splitext(fname)
     fname = f"{base}_{ts}{ext}"
     try:

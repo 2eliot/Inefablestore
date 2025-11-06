@@ -169,7 +169,7 @@ body { overflow-x: hidden; }
   .scale-wrap { transform: scale(0.8); transform-origin: top left; width: calc(100% / 0.8); }
 }
 
-/* New order tile (white card) */
+/* New order tile (white card) - Reorganized layout */
 .order-tile {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -178,36 +178,264 @@ body { overflow-x: hidden; }
   box-shadow: 0 6px 16px rgba(15,23,42,0.06);
   margin-bottom: 14px;
 }
+
+/* Row head: Left (game + package + quantity) and Right (ID + zone + reference) */
 .order-tile .row-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
 }
-.order-tile .ref {
-  font-weight: 800; letter-spacing: 0.5px; color: #0f172a; font-size: 18px;
+
+/* Left box: Game name, package name, quantity, reference */
+.order-tile .box-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.order-tile .sub { color: #64748b; font-size: 13px; margin-top: 2px; }
+
+.order-tile .game-name {
+  font-weight: 800;
+  font-size: 16px;
+  color: #0f172a;
+  letter-spacing: 0.3px;
+}
+
+.order-tile .package-name {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.order-tile .quantity-label {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.order-tile .quantity-value {
+  color: #10b981;
+  font-weight: 800;
+}
+
+/* Reference section in left box */
+.order-tile .box-left .ref-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.order-tile .box-left .ref-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.order-tile .box-left .ref-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  color: #0f172a;
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  width: fit-content;
+}
+
+/* State badge (Procesado, Rechazado, Procesando) */
 .order-tile .state {
-  display: inline-flex; align-items: center; gap: 6px; margin-left: 6px;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
 }
-.order-tile .state .ok { color: #10b981; }
-.order-tile .state .pend { color: #f59e0b; }
-.order-tile .state .rej { color: #ef4444; }
-.order-tile .box-right { display: inline-flex; align-items: center; gap: 8px; }
-.order-tile .hex { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; color: #0f172a; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 6px 8px; border-radius: 8px; }
-.order-tile .btn-copy { background: #6366f1; color: #fff; border: none; border-radius: 8px; padding: 6px 8px; cursor: pointer; }
+.order-tile .state.ok {
+  color: #ffffff;
+  background: #10b981;
+}
+.order-tile .state.pend {
+  color: #ffffff;
+  background: #f59e0b;
+}
+.order-tile .state.rej {
+  color: #ffffff;
+  background: #ef4444;
+}
+
+/* Right box: ID + Zone ID in same line */
+.order-tile .box-right {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  min-width: 220px;
+}
+
+/* ID section (includes Zone ID in same line) */
+.order-tile .id-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.order-tile .id-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.order-tile .hex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  color: #0f172a;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.order-tile .btn-copy {
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.order-tile .btn-copy:hover { background: #5558e3; }
 .order-tile .btn-copy:active { transform: translateY(1px); }
 
-.order-tile .row-metrics { display: flex; align-items: center; gap: 18px; margin: 6px 0 10px; }
-.order-tile .metric { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; }
-.order-tile .metric.diam { color: #10b981; }
-.order-tile .metric.usd { color: #ef4444; }
+/* Footer row: amount, date, customer */
+.order-tile .row-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #64748b;
+  font-size: 12px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
 
-.order-tile .row-foot { display: flex; align-items: center; justify-content: space-between; color: #64748b; font-size: 12px; }
-.order-tile .customer { color: #64748b; }
+.order-tile .amount {
+  color: #10b981;
+  font-weight: 800;
+  font-size: 14px;
+}
 
-.order-tile .row-actions { display:flex; gap:8px; margin-top:8px; }
-.order-tile .row-actions .btn { padding: 6px 10px; }
+.order-tile .aff-code {
+  color: #8b5cf6;
+  font-weight: 700;
+  font-size: 12px;
+  margin-left: 6px;
+  background: #f3e8ff;
+  border: 1px solid #c4b5fd;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
 
+.order-tile .customer {
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* Action buttons */
+.order-tile .row-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.order-tile .row-actions .btn {
+  padding: 6px 10px;
+}
+
+/* Responsive adjustments */
 @media (max-width: 700px) {
-  .order-tile .row-head { align-items: flex-start; }
-  .order-tile .row-foot { flex-direction: column; align-items: flex-start; gap: 6px; }
+  /* Keep two-column layout on mobile */
+  .order-tile .row-head {
+    gap: 10px;
+  }
+  
+  .order-tile .box-left {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .order-tile .box-right {
+    min-width: 150px;
+  }
+  
+  .order-tile .game-name {
+    font-size: 14px;
+  }
+  
+  .order-tile .state {
+    font-size: 10px;
+    padding: 2px 6px;
+    margin-left: 6px;
+  }
+  
+  .order-tile .package-name {
+    font-size: 12px;
+  }
+  
+  .order-tile .quantity-label {
+    font-size: 12px;
+  }
+  
+  .order-tile .box-left .ref-label {
+    font-size: 10px;
+  }
+  
+  .order-tile .box-left .ref-value {
+    font-size: 13px;
+    padding: 5px 8px;
+  }
+  
+  .order-tile .id-label {
+    font-size: 10px;
+  }
+  
+  .order-tile .hex {
+    font-size: 11px;
+    padding: 5px 6px;
+  }
+  
+  .order-tile .btn-copy {
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+  
+  .order-tile .row-foot {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .order-tile .amount {
+    font-size: 13px;
+  }
+  
+  .order-tile .aff-code {
+    font-size: 11px;
+    padding: 1px 4px;
+  }
 }

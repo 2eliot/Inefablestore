@@ -1304,9 +1304,12 @@ window.refreshGallery = refreshGallery;
       const diam = itemsArr.length
         ? itemsArr.map(it => `${parseInt(it.qty||1,10)}x ${fixMb(it.title||'')}`).join(' · ')
         : ((qtyTotal > 1 ? `${qtyTotal}x ` : '') + (fixMb(o.item_title) || ''));
-      // Display order amount with currency directly
-      const amountDisp = `${Number(o.amount||0)} ${o.currency || ''}`.trim();
-      const statusIcon = o.status === 'approved' ? 'OK' : o.status === 'rejected' ? 'X' : '...';
+      // Display order amount with currency directly, rounded
+      const amountRounded = Math.round(Number(o.amount||0));
+      const amountDisp = `${amountRounded} ${o.currency || ''}`.trim();
+      // Add affiliate code if present
+      const affiliateTag = o.affiliate_code ? ` <span class="aff-code">(${fixMb(o.affiliate_code)})</span>` : '';
+      const statusIcon = o.status === 'approved' ? 'Procesado' : o.status === 'rejected' ? 'Rechazado' : 'Procesando';
       const statusClass = o.status === 'approved' ? 'ok' : o.status === 'rejected' ? 'rej' : 'pend';
       const playerId = fixMb(o.customer_id || '-') ;
       const txRef = fixMb(o.reference || '-') ;
@@ -1314,22 +1317,27 @@ window.refreshGallery = refreshGallery;
       const isGift = (o.package_category || '').toLowerCase() === 'gift';
       tile.innerHTML = `
         <div class=\"row-head\">
-          <div>
-            <div class=\"ref\">${txRef} <span class=\"state ${statusClass}\">${statusIcon}</span></div>
-            <div class=\"sub\">${gameName}</div>
+          <div class=\"box-left\">
+            <div class=\"game-name\">${gameName} <span class=\"state ${statusClass}\">${statusIcon}</span></div>
+            <div class=\"package-name\">${diam || ''}</div>
+            <div class=\"quantity-label\">Cantidad: <span class=\"quantity-value\">${itemsArr.length ? qtyTotal : 1}</span></div>
+            <div class=\"ref-section\">
+              <div class=\"ref-label\">REFERENCIA</div>
+              <div class=\"ref-value\">${txRef}</div>
+            </div>
           </div>
           <div class=\"box-right\">
-            <code class=\"hex\">${playerId}</code>
-            <button class=\"btn-copy\" type=\"button\" data-copy=\"${playerId}\">Copiar</button>
+            <div class=\"id-section\">
+              <div class=\"id-label\">${o.customer_zone ? `ID - ZONA ID` : `ID`}</div>
+              <code class=\"hex\">${playerId}${o.customer_zone ? ` - ${o.customer_zone}` : ''}</code>
+              <button class=\"btn-copy\" type=\"button\" data-copy=\"${playerId}\">Copiar</button>
+            </div>
           </div>
         </div>
-        <div class=\"row-metrics\">
-          <div class=\"metric diam\"><span>${diam || ''}</span> <span>Cantidad: ${itemsArr.length ? qtyTotal : 1}</span></div>
-          <div class=\"metric usd\"><span>${amountDisp}</span></div>
-        </div>
         <div class=\"row-foot\">
+          <div class=\"amount\">${amountDisp}${affiliateTag}</div>
           <div>${when}</div>
-          <div class=\"customer\">ID: ${playerId} - ${o.name || o.email || 'Cliente'}</div>
+          <div class=\"customer\">${o.name || o.email || 'Cliente'}${o.phone ? ' - ' + o.phone : ''}</div>
         </div>
         ${isGift ? `
         <div class=\"row-actions\"> 
@@ -1344,8 +1352,6 @@ window.refreshGallery = refreshGallery;
         </div>
       `;
 
-      const cust = tile.querySelector('.row-foot .customer');
-      if (cust) { cust.textContent = 'ID: ' + playerId + (o.customer_zone ? ' - ZONA: ' + o.customer_zone : '') + (o.phone ? ' - TEL: ' + o.phone : '') + ' - ' + (fixMb(o.name) || fixMb(o.email) || 'Cliente'); }
       ordersList.appendChild(tile);
     });
   }
