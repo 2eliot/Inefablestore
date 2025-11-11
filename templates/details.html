@@ -215,6 +215,75 @@
 </section>
 {% endif %}
 
+<!-- Footer -->
+<footer class="site-footer">
+  <div class="footer-container">
+    <!-- Left Section: Brand & Features -->
+    <div class="footer-left">
+      {% if logo_url %}
+        <div class="footer-logo">
+          <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" />
+        </div>
+      {% else %}
+        <div class="footer-brand">
+          <span class="brand-highlight">{{ site_name|default('INEFABLE')|upper }}</span><span class="brand-secondary">STORE</span>
+        </div>
+      {% endif %}
+      <p class="footer-desc">Tu tienda de confianza para recargas de juegos, Gift Cards y productos digitales. Entrega inmediata y segura.</p>
+      <div class="footer-features">
+        <div class="feature-item">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+          </svg>
+          <span>Compra Segura</span>
+        </div>
+        <div class="feature-item">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M13 10h5l-6 6-6-6h5V3h2v7zm-9 9h16v-5h2v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-6h2v5z"/>
+          </svg>
+          <span>Entrega Rápida</span>
+        </div>
+        <div class="feature-item">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+          </svg>
+          <span>Soporte 24/7</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Section: Links & Social -->
+    <div class="footer-right">
+      <div class="footer-actions">
+        <a href="/terms" class="footer-btn">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+          </svg>
+          Términos
+        </a>
+        <div class="footer-social">
+          <a class="social-icon whatsapp" href="https://api.whatsapp.com/send?phone=%2B584125712917" target="_blank" rel="noopener" aria-label="WhatsApp" title="WhatsApp">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.52 3.48A11.77 11.77 0 0 0 12 0 11.9 11.9 0 0 0 .11 12.26a11.75 11.75 0 0 0 1.73 6.06L0 24l5.86-1.84a11.9 11.9 0 0 0 6.06 1.63h.01A11.89 11.89 0 0 0 24 12.02a11.8 11.8 0 0 0-3.48-8.54zM12 21.26h-.01a9.86 9.86 0 0 1-5.02-1.37l-.36-.21-3.47 1.09 1.14-3.38-.24-.35a9.83 9.83 0 0 1-1.52-5.26A9.9 9.9 0 0 1 12 2.02a9.85 9.85 0 0 1 9.9 9.9 9.86 9.86 0 0 1-9.9 9.34z"/><path d="M17.27 14.16c-.27-.14-1.6-.79-1.85-.87s-.43-.14-.61.14-.7.87-.86 1.05-.32.2-.59.07a8.06 8.06 0 0 1-2.36-1.45 8.8 8.8 0 0 1-1.63-2 .51.51 0 0 1 .11-.58c.1-.1.27-.32.41-.47a1.92 1.92 0 0 0 .27-.45.52.52 0 0 0 0-.5c0-.14-.61-1.47-.84-2s-.44-.45-.61-.46h-.52a1 1 0 0 0-.73.34 3.06 3.06 0 0 0-.95 2.27a5.32 5.32 0 0 0 1.12 2.84 12.16 12.16 0 0 0 4.64 4 15.86 15.86 0 0 0 1.58.58 3.8 3.8 0 0 0 1.76.11 2.87 2.87 0 0 0 1.89-1.33 2.36 2.36 0 0 0 .16-1.33c-.06-.11-.25-.18-.52-.32z"/></svg>
+          </a>
+          <a class="social-icon instagram" href="https://www.instagram.com/inefable_store_12/" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zm5.25-3a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25z"/></svg>
+          </a>
+          <a class="social-icon facebook" href="https://www.facebook.com/InefablestoreR/" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 12.06C22 6.51 17.52 2 12 2S2 6.51 2 12.06c0 5.01 3.66 9.16 8.44 9.94v-7.03H7.9v-2.9h2.54V9.41c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.23.2 2.23.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.77l-.44 2.9h-2.33v7.03C18.34 21.22 22 17.07 22 12.06z"/></svg>
+          </a>
+          <a class="social-icon tiktok" href="https://www.tiktok.com/@inefablestore" target="_blank" rel="noopener" aria-label="TikTok" title="TikTok">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg>
+          </a>
+        </div>
+      </div>
+      <div class="footer-copy">
+        <p>© {{ now_ve().year }} {{ site_name|default('Inefablestore') }}</p>
+        <p class="footer-rights">Todos los derechos reservados</p>
+      </div>
+    </div>
+  </div>
+</footer>
+
 <div id="auth-modal" class="auth-modal" hidden>
   <div class="auth-card">
     <button class="icon-btn auth-close" aria-label="Cerrar">✕</button>
@@ -257,30 +326,6 @@
       </div>
     </div>
   </div>
-  <!-- Footer inside content block -->
-  <footer class="site-footer">
-    <div class="wrap">
-      <div class="copyline">
-        <span>© Inefable Store</span>
-        <span>•</span>
-        <a href="/terms" target="_blank" style="color:#22c55e;">Términos de uso</a>
-      </div>
-      <div class="contact-line">
-        <span class="label">Contactos:</span>
-        <div class="socials">
-          <a class="icon-btn" href="https://facebook.com/" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22 12.06C22 6.51 17.52 2 12 2S2 6.51 2 12.06c0 5.01 3.66 9.16 8.44 9.94v-7.03H7.9v-2.9h2.54V9.41c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.23.2 2.23.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.77l-.44 2.9h-2.33v7.03C18.34 21.22 22 17.07 22 12.06z"/></svg>
-          </a>
-          <a class="icon-btn" href="https://instagram.com/" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zm5.25-3a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25z"/></svg>
-          </a>
-          <a class="icon-btn" href="https://wa.me/" target="_blank" rel="noopener" aria-label="WhatsApp" title="WhatsApp">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.52 3.48A11.77 11.77 0 0 0 12 0 11.9 11.9 0 0 0 .11 12.26a11.75 11.75 0 0 0 1.73 6.06L0 24l5.86-1.84a11.9 11.9 0 0 0 6.06 1.63h.01A11.89 11.89 0 0 0 24 12.02a11.8 11.8 0 0 0-3.48-8.54zM12 21.26h-.01a9.86 9.86 0 0 1-5.02-1.37l-.36-.21-3.47 1.09 1.14-3.38-.24-.35a9.83 9.83 0 0 1-1.52-5.26A9.9 9.9 0 0 1 12 2.02a9.85 9.85 0 0 1 9.9 9.9 9.86 9.86 0 0 1-9.9 9.34z"/><path d="M17.27 14.16c-.27-.14-1.6-.79-1.85-.87s-.43-.14-.61.14-.7.87-.86 1.05-.32.2-.59.07a8.06 8.06 0 0 1-2.36-1.45 8.8 8.8 0 0 1-1.63-2 .51.51 0 0 1 .11-.58c.1-.1.27-.32.41-.47a1.92 1.92 0 0 0 .27-.45.52.52 0 0 0 0-.5c0-.14-.61-1.47-.84-2s-.44-.45-.61-.46h-.52a1 1 0 0 0-.73.34 3.06 3.06 0 0 0-.95 2.27 5.32 5.32 0 0 0 1.12 2.84 12.16 12.16 0 0 0 4.64 4 15.86 15.86 0 0 0 1.58.58 3.8 3.8 0 0 0 1.76.11 2.87 2.87 0 0 0 1.89-1.33 2.36 2.36 0 0 0 .16-1.33c-.06-.11-.25-.18-.52-.32z"/></svg>
-          </a>
-        </div>
-      </div>
-    </div>
-  </footer>
 </div>
 {% endblock %}
 
