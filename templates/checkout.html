@@ -107,9 +107,9 @@
     </div>
     <a href="/" class="brand">
       {% if logo_url %}
-        <img src="{{ logo_url }}" alt="InefableStore" class="logo"/>
+        <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="logo"/>
       {% else %}
-        <span class="logo-text">InefableStore</span>
+        <span class="logo-text">{{ site_name|default('InefableStore') }}</span>
       {% endif %}
     </a>
     <div class="right-actions"></div>
@@ -132,8 +132,8 @@
     <div id="co-timer" style="text-align:center; font-weight:800;">30:00</div>
     <div class="co-actions">
       <div class="ref-group">
-        <label for="co-ref" class="ref-label">Referencia de pago (6 dígitos)</label>
-        <input id="co-ref" class="input" type="text" inputmode="numeric" pattern="[0-9]{6}" placeholder="Ej: 123456" maxlength="6" minlength="6" required>
+        <label for="co-ref" class="ref-label" style="text-align: center;">COLOQUE LOS ULTIMOS 6 DIGITOS</label>
+        <input id="co-ref" class="input" type="text" inputmode="numeric" pattern="[0-9]{6}" placeholder="NUMERO DE REFERENCIA DE PAGO" maxlength="6" minlength="6" required style="text-align: center;">
         <div class="digit-counter">
           <div class="digit-dot" id="dot-1"></div>
           <div class="digit-dot" id="dot-2"></div>
@@ -142,8 +142,8 @@
           <div class="digit-dot" id="dot-5"></div>
           <div class="digit-dot" id="dot-6"></div>
         </div>
-        <div class="ref-counter-text" id="ref-counter">0/6 dígitos</div>
-        <div class="ref-hint">Ingresa exactamente los 6 dígitos de tu referencia de pago.</div>
+        <div class="ref-counter-text" id="ref-counter" style="text-align: center;">0/6 dígitos</div>
+        <div class="ref-hint" style="text-align: center;">Ingresa exactamente los 6 dígitos de tu referencia de pago.</div>
         <div id="ref-error" style="color: #ef4444; font-size: 12px; margin-top: 4px; display: none;"></div>
       </div>
       <button id="btn-co-confirm" class="btn primary" type="button" style="margin-top:10px;">Confirmar Pago</button>

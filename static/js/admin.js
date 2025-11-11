@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     byTitle: new Map(), // title => id
   };
   // Config elements
+  const inputSiteName = document.getElementById('site-name');
+  const btnSaveSiteName = document.getElementById('btn-save-site-name');
   const inputLogo = document.getElementById('logo-path');
   const btnSaveLogo = document.getElementById('btn-save-logo');
   const btnPasteLogo = document.getElementById('btn-paste-logo');
@@ -583,6 +585,38 @@ window.fetchPayments = fetchPayments;
   }
 
   // =====================
+  // Config: site name get/set
+  // =====================
+  async function fetchSiteName() {
+    try {
+      const res = await fetch('/admin/config/site_name');
+      const data = await res.json();
+      if (inputSiteName && data && data.ok) {
+        inputSiteName.value = data.site_name || 'InefableStore';
+      }
+      window.fetchSiteName = fetchSiteName;
+    } catch (_) { /* ignore */ }
+  }
+
+  async function saveSiteName() {
+    if (!inputSiteName) return;
+    const site_name = inputSiteName.value.trim();
+    if (!site_name) {
+      throw new Error('El nombre del sitio no puede estar vacío');
+    }
+    const res = await fetch('/admin/config/site_name', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ site_name })
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || 'No se pudo guardar');
+    }
+    return res.json();
+  }
+
+  // =====================
   // Config: logo get/set
   // =====================
   async function fetchLogo() {
@@ -621,6 +655,20 @@ window.fetchLogo = fetchLogo;
       throw new Error(txt || 'No se pudo guardar');
     }
     return res.json();
+  }
+
+  if (btnSaveSiteName) {
+    btnSaveSiteName.addEventListener('click', async () => {
+      try {
+        btnSaveSiteName.disabled = true;
+        await saveSiteName();
+        toast('Nombre del sitio guardado');
+      } catch (e) {
+        toast(e.message);
+      } finally {
+        btnSaveSiteName.disabled = false;
+      }
+    });
   }
 
   if (btnSaveLogo) {
@@ -664,6 +712,7 @@ window.fetchLogo = fetchLogo;
       }
       // If Config tab is opened, refresh rate and payments forms
       if (tab.dataset.target === '#tab-config') {
+        fetchSiteName();
         fetchRate();
         fetchPayments();
         fetchMailInfo();

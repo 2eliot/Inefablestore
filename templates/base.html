@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>InefableStore Admin</title>
+    <title>{{ site_name|default('InefableStore') }}</title>
     {% block styles %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css', v='3') }}">
     {% endblock %}
@@ -13,7 +13,7 @@
     {% block header %}
       <header class="topbar">
         <button id="admin-hamburger" class="btn-ghost" aria-label="Menú" title="Menú" style="margin-right:8px; display:none;">☰</button>
-        <div class="brand">InefableStore Admin</div>
+        <div class="brand">{{ site_name|default('InefableStore') }}</div>
       </header>
     {% endblock %}
 

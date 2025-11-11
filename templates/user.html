@@ -38,9 +38,9 @@
     </div>
     <a href="/" class="brand">
       {% if logo_url %}
-        <img src="{{ logo_url }}" alt="InefableStore" class="logo"/>
+        <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="logo"/>
       {% else %}
-        <span class="logo-text">InefableStore</span>
+        <span class="logo-text">{{ site_name|default('InefableStore') }}</span>
       {% endif %}
     </a>
     <div class="right-actions">

@@ -5,9 +5,11 @@
 <style>
   .terms-wrap { max-width: 900px; margin: 28px auto; padding: 0 16px 40px; color: #e5e7eb; }
   .terms-wrap h1 { font-size: 28px; font-weight: 900; margin: 12px 0; }
-  .terms-wrap h2 { font-size: 20px; font-weight: 800; margin: 18px 0 8px; }
-  .terms-wrap p, .terms-wrap li { color: #cbd5e1; }
-  .terms-wrap .card { background: rgba(3,7,18,0.6); border:1px solid rgba(148,163,184,0.22); border-radius: 14px; padding: 16px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
+  .terms-wrap h2 { font-size: 20px; font-weight: 800; margin: 18px 0 8px; color: #22c55e; }
+  .terms-wrap p, .terms-wrap li { color: #cbd5e1; line-height: 1.6; }
+  .terms-wrap ul { margin: 12px 0; padding-left: 24px; }
+  .terms-wrap li { margin-bottom: 8px; }
+  .terms-wrap .card { background: rgba(3,7,18,0.6); border:1px solid rgba(148,163,184,0.22); border-radius: 14px; padding: 24px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
 </style>
 {% endblock %}
 
@@ -17,9 +19,9 @@
     <div class="left-actions"></div>
     <a href="/" class="brand">
       {% if logo_url %}
-        <img src="{{ logo_url }}" alt="InefableStore" class="logo"/>
+        <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="logo"/>
       {% else %}
-        <span class="logo-text">InefableStore</span>
+        <span class="logo-text">{{ site_name|default('InefableStore') }}</span>
       {% endif %}
     </a>
     <div class="right-actions"></div>
@@ -30,23 +32,68 @@
 {% block content %}
 <section class="terms-wrap">
   <div class="card">
-    <h1>Términos de uso</h1>
-    <p>Bienvenido a InefableStore. Al utilizar nuestros servicios, aceptas estos términos.</p>
+    <h1>Términos y Condiciones</h1>
 
-    <h2>1. Compras y pagos</h2>
-    <p>Las compras se procesan según el método elegido (Pago Móvil o Binance). Las referencias deben ser válidas.</p>
+    <h2>1. Aceptación de los términos</h2>
+    <p>Al acceder y utilizar los servicios de {{ site_name|default('Tindo Store') }}, el usuario declara haber leído, comprendido y aceptado íntegramente los presentes Términos y Condiciones. En caso de no estar de acuerdo con alguna disposición, se recomienda abstenerse de utilizar la plataforma.</p>
 
-    <h2>2. Reembolsos</h2>
-    <p>Los reembolsos están sujetos a evaluación caso por caso. Contáctanos por nuestras redes ante cualquier inconveniente.</p>
+    <h2>2. Servicios ofrecidos</h2>
+    <p>{{ site_name|default('Tindo Store') }} se dedica a la comercialización de productos digitales relacionados con videojuegos, Gift Cards y otros servicios digitales.</p>
+    <ul>
+      <li>Recargas por ID (Free Fire, Blood Strike, Mobile Legends, Arena Breakout, entre otros).</li>
+      <li>Recargas internas (cuentas preconfiguradas o vinculadas).</li>
+      <li>Tarjetas de regalo digitales (PlayStation, Xbox, Google Play, etc.).</li>
+      <li>Códigos canjeables, promociones digitales y otros servicios complementarios.</li>
+    </ul>
+    <p>Todos los productos son entregados de manera digital al correo electrónico, cuenta o plataforma indicada por el cliente.</p>
 
-    <h2>3. Entregas digitales</h2>
-    <p>Para categorías Gift Cards, recibirás un código digital tras la aprobación de tu orden.</p>
+    <h2>3. Plazos de entrega</h2>
+    <p>El tiempo estimado de entrega oscila entre 5 minutos y 1 hora, dependiendo del tipo de recarga y la disponibilidad del sistema.</p>
+    <p>En circunstancias excepcionales, el plazo podrá extenderse por motivos técnicos o de verificación. En tales casos, el cliente será notificado oportunamente.</p>
 
-    <h2>4. Soporte</h2>
-    <p>Estamos disponibles por Facebook, Instagram y WhatsApp.</p>
+    <h2>4. Condiciones de pago</h2>
+    <ul>
+      <li>Únicamente se procesarán pagos confirmados el mismo día de la solicitud.</li>
+      <li>No se aceptan pagos diferidos, programados o efectuados en fechas posteriores.</li>
+      <li>Es responsabilidad del cliente verificar que el monto, método y referencia del pago sean correctos antes de enviar el comprobante.</li>
+    </ul>
 
-    <h2>5. Modificaciones</h2>
-    <p>Podemos actualizar estos términos. Te recomendamos revisarlos periódicamente.</p>
+    <h2>5. Responsabilidad sobre los datos del cliente</h2>
+    <ul>
+      <li>El cliente deberá proporcionar de forma correcta y completa su ID, correo electrónico, región o cuenta de juego.</li>
+      <li>{{ site_name|default('Tindo Store') }} no se hace responsable por errores derivados de datos incorrectos suministrados por el cliente.</li>
+      <li>Una vez procesado el pedido, este no podrá ser modificado ni cancelado.</li>
+    </ul>
+
+    <h2>6. Política de devoluciones y reembolsos</h2>
+    <ul>
+      <li>Debido a la naturaleza digital de los productos, no se aceptan devoluciones ni reembolsos.</li>
+      <li>Todos los códigos y recargas son verificados antes de su entrega.</li>
+      <li>No se garantiza compatibilidad con consolas modificadas, cuentas bloqueadas o fuera de la región correspondiente.</li>
+    </ul>
+
+    <h2>7. Disponibilidad y precios</h2>
+    <ul>
+      <li>Los precios y la disponibilidad de los productos pueden variar sin previo aviso.</li>
+      <li>Las promociones tendrán validez únicamente durante el período indicado.</li>
+      <li>{{ site_name|default('Tindo Store') }} se reserva el derecho de suspender o modificar productos y servicios en cualquier momento.</li>
+    </ul>
+
+    <h2>8. Seguridad y uso responsable</h2>
+    <ul>
+      <li>Queda estrictamente prohibido utilizar los servicios de {{ site_name|default('Tindo Store') }} para actividades fraudulentas, ilícitas o que contravengan los términos de uso de las plataformas de juego.</li>
+      <li>{{ site_name|default('Tindo Store') }} se reserva el derecho de suspender o bloquear a los usuarios que incumplan estas condiciones.</li>
+    </ul>
+
+    <h2>9. Soporte 24/7</h2>
+    <ul>
+      <li>{{ site_name|default('Tindo Store') }} ofrece atención al cliente las 24 horas del día, los 7 días de la semana, a través de los canales oficiales de contacto.</li>
+      <li>El soporte está destinado a resolver dudas, incidencias con pedidos y asistencia general relacionada con los servicios ofrecidos.</li>
+      <li>El tiempo de respuesta puede variar según la demanda, pero se garantiza la atención continua.</li>
+    </ul>
+
+    <h2>10. Modificaciones de los términos</h2>
+    <p>{{ site_name|default('Tindo Store') }} podrá actualizar o modificar los presentes Términos y Condiciones en cualquier momento. Es responsabilidad del usuario revisar periódicamente esta sección para mantenerse informado de los cambios.</p>
   </div>
 </section>
 {% endblock %}

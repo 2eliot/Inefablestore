@@ -23,6 +23,11 @@ def now_ve():
     """Return current datetime in Venezuela timezone (GMT-4)"""
     return datetime.now(VE_TIMEZONE)
 
+# Make now_ve available in all templates
+@app.context_processor
+def inject_now_ve():
+    return dict(now_ve=now_ve)
+
 # Ensure instance folder exists for local SQLite default
 os.makedirs(app.instance_path, exist_ok=True)
 
@@ -195,6 +200,7 @@ def send_email_html(to_email: str, subject: str, html_body: str, text_body: str 
 
 def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackageItem'):
     # Brand title instead of logo; support via WhatsApp if configured
+    site_name = get_config_value("site_name", "InefableStore")
     support_url = get_config_value("support_url", "") or "#"
     whatsapp_url = get_config_value("whatsapp_url", "https://api.whatsapp.com/send?phone=%2B584125712917&context=Aff7qdKb5GW1QQopWoY5hu5m7aqDlXIwIePiy5n9tHAbOwwr7S_MpuFfFShRCkwT3obW4f_deI_-Pn-lIqpXebAyMVygTiqDvi2nUus8r-8gIUZPXawe5ygyCSYTu_9gnBCaSb_Hpta6aVnEAFw&source=FB_Page&app=facebook&entry_point=page_cta&fbclid=IwY2xjawNIxQhleHRuA2FlbQIxMABicmlkETAzV1c0cGtnNWZ0NDRLeFBLAR7pcNiHoxI3HNYArGiUIh2FTQpQWZSpIC2UBGHmUgayIhB8A4ziqRKz2Ttq1g_aem_vO-bNFKE2SRZSSZHa_Faow") or support_url or "#"
     privacy_url = get_config_value("privacy_url", "") or "#"
@@ -274,7 +280,7 @@ def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackage
 <head>
   <meta charset=\"UTF-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-  <title>Orden Aprobada - Inefable Store</title>
+  <title>Orden Aprobada - {site_name}</title>
   <style type=\"text/css\">body, table, td, a {{ font-family: Arial, sans-serif; }}</style>
 </head>
 <body style=\"margin:0; padding:0; background-color:#1a1a1a;\">
@@ -283,7 +289,7 @@ def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackage
       <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"max-width:600px; background-color:#2c2c2c; border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,0.4);\">
         <tr>
           <td align=\"center\" style=\"padding:26px 20px 16px;\">
-            <div style=\"display:inline-block; font-weight:900; font-size:22px; letter-spacing:1px; color:#ffffff;\">INEFABLESTOR</div>
+            <div style=\"display:inline-block; font-weight:900; font-size:22px; letter-spacing:1px; color:#ffffff;\">{site_name.upper()}</div>
           </td>
         </tr>
         <tr>
@@ -320,8 +326,8 @@ def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackage
         </tr>
         <tr>
           <td style=\"padding:30px 40px 20px;\">
-            <p style=\"color:#cccccc; font-size:16px; line-height:24px;\">Agradecemos su preferencia y confianza en Inefable Store. Si necesita asistencia adicional o tiene alguna consulta, no dude en contactarnos. ¡Estamos para servirle!</p>
-            <p style=\"color:#f4f4f4; font-size:16px; line-height:24px; margin-bottom:0;\">Atentamente,<br>El equipo de Inefable Store</p>
+            <p style=\"color:#cccccc; font-size:16px; line-height:24px;\">Agradecemos su preferencia y confianza en {site_name}. Si necesita asistencia adicional o tiene alguna consulta, no dude en contactarnos. ¡Estamos para servirle!</p>
+            <p style=\"color:#f4f4f4; font-size:16px; line-height:24px; margin-bottom:0;\">Atentamente,<br>El equipo de {site_name}</p>
           </td>
         </tr>
         <tr>
@@ -335,7 +341,7 @@ def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackage
         </tr>
         <tr>
           <td align=\"center\" style=\"padding:20px 40px; background-color:#383838; border-radius:0 0 8px 8px;\">
-            <p style=\"color:#999999; font-size:12px; line-height:18px; margin:0;\">&copy; {now_ve().year} Inefable Store. Todos los derechos reservados.</p>
+            <p style=\"color:#999999; font-size:12px; line-height:18px; margin:0;\">&copy; {now_ve().year} {site_name}. Todos los derechos reservados.</p>
             <p style=\"color:#999999; font-size:12px; line-height:18px; margin-top:5px;\"><a href=\"{unsubscribe_url}\" target=\"_blank\" style=\"color:#009688; text-decoration:underline;\">Darse de baja</a> | <a href=\"{privacy_url}\" target=\"_blank\" style=\"color:#009688; text-decoration:underline;\">Política de Privacidad</a></p>
           </td>
         </tr>
@@ -1046,11 +1052,13 @@ def index():
     """Public storefront index page with header and configurable logo."""
     logo_url = get_config_value("logo_path", "")
     banner_url = get_config_value("mid_banner_path", "")
-    return render_template("index.html", logo_url=logo_url, banner_url=banner_url)
+    site_name = get_config_value("site_name", "InefableStore")
+    return render_template("index.html", logo_url=logo_url, banner_url=banner_url, site_name=site_name)
 
 @app.route("/terms")
 def terms_page():
-    return render_template("terms.html")
+    site_name = get_config_value("site_name", "InefableStore")
+    return render_template("terms.html", site_name=site_name)
 
 @app.route("/user")
 def user_page():
@@ -1059,11 +1067,13 @@ def user_page():
     is_admin = (role == "admin")
     is_affiliate = (role == "affiliate")
     logo_url = get_config_value("logo_path", "")
-    return render_template("user.html", is_admin=is_admin, is_affiliate=is_affiliate, logo_url=logo_url)
+    site_name = get_config_value("site_name", "InefableStore")
+    return render_template("user.html", is_admin=is_admin, is_affiliate=is_affiliate, logo_url=logo_url, site_name=site_name)
 
 @app.route("/admin")
 def admin_page():
-    return render_template("admin.html")
+    site_name = get_config_value("site_name", "InefableStore")
+    return render_template("admin.html", site_name=site_name)
 
 @app.route("/store/hero")
 def store_hero():
@@ -1128,6 +1138,27 @@ def admin_config_logo_set():
     data = request.get_json(silent=True) or {}
     set_config_value("logo_path", (data.get("logo_path") or "").strip())
     return jsonify({"ok": True})
+
+
+@app.route("/admin/config/site_name", methods=["GET"])
+def admin_config_site_name_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "site_name": get_config_value("site_name", "InefableStore")})
+
+
+@app.route("/admin/config/site_name", methods=["POST"])
+def admin_config_site_name_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    site_name = (data.get("site_name") or "").strip()
+    if not site_name:
+        return jsonify({"ok": False, "error": "El nombre del sitio no puede estar vacío"}), 400
+    set_config_value("site_name", site_name)
+    return jsonify({"ok": True, "site_name": site_name})
 
 
 @app.route("/admin/config/mid_banner", methods=["GET"])
@@ -1462,10 +1493,12 @@ def store_game_detail(gid: int):
         related = rel_q.limit(4).all()
     except Exception:
         related = []
+    site_name = get_config_value("site_name", "InefableStore")
     return render_template(
         "details.html",
         game=game,
         logo_url=logo_url,
+        site_name=site_name,
         active_login_game_id=active_login_game_id,
         player_lookup_region=player_lookup_region,
         player_lookup_regions=player_lookup_regions,
@@ -1481,7 +1514,8 @@ def store_checkout(gid: int):
     if not game or not game.active:
         return redirect(url_for("index"))
     logo_url = get_config_value("logo_path", "")
-    return render_template("checkout.html", gid=gid, logo_url=logo_url)
+    site_name = get_config_value("site_name", "InefableStore")
+    return render_template("checkout.html", gid=gid, logo_url=logo_url, site_name=site_name)
 
 
 # ===============
