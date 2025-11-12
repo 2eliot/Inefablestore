@@ -26,6 +26,7 @@
       <button class="tab" data-target="#tab-images" aria-selected="false">Imágenes</button>
       <button class="tab" data-target="#tab-config" aria-selected="false">Configuración</button>
       <button class="tab" data-target="#tab-affiliates" aria-selected="false">Afiliados</button>
+      <button class="tab" data-target="#tab-blocked" aria-selected="false">IDs Bloqueados</button>
     </nav>
   </aside>
 
@@ -57,6 +58,45 @@
           <div class="empty-state">
             <h3>Sin solicitudes</h3>
             <p>Cuando los afiliados pidan retiro aparecerán aquí.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IDs Bloqueados -->
+    <div id="tab-blocked" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>IDs Bloqueados</h2>
+        <div class="actions">
+          <button id="btn-blocked-refresh" class="btn" type="button">Refrescar</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <form id="blocked-form" class="config-form" onsubmit="return false;">
+          <div class="form-row">
+            <label for="blocked-customer-id">ID de jugador</label>
+            <input id="blocked-customer-id" type="text" placeholder="Ej: 123456789">
+          </div>
+          <div class="form-row">
+            <label for="blocked-reason">Motivo</label>
+            <input id="blocked-reason" type="text" placeholder="Opcional">
+          </div>
+          <div class="form-row">
+            <label>Activo</label>
+            <input id="blocked-active" type="checkbox" checked>
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-blocked-add" class="btn primary" type="button">Agregar/Actualizar</button>
+            </div>
+          </div>
+        </form>
+
+        <div id="blocked-list" class="orders-list">
+          <div class="empty-state">
+            <h3>Sin IDs bloqueados</h3>
+            <p>Agrega IDs de jugadores que desees bloquear para impedir que generen órdenes.</p>
           </div>
         </div>
       </div>

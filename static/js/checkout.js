@@ -11,6 +11,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const coDiscNote = document.getElementById('co-disc-note');
   const refError = document.getElementById('ref-error');
   const refCounter = document.getElementById('ref-counter');
+  const blockedOverlay = document.getElementById('blocked-overlay');
+  const blockedClose = document.getElementById('blocked-close');
+  const blockedWhats = document.getElementById('blocked-whatsapp');
+  const waLink = (root.getAttribute('data-whatsapp') || '').trim();
   let isReferenceValid = false;
 
   let allItems = [];
@@ -212,6 +216,11 @@ document.addEventListener('DOMContentLoaded', () => {
     btnConfirm.disabled = true;
   }
 
+  if (blockedClose && blockedOverlay) {
+    blockedClose.addEventListener('click', () => { blockedOverlay.style.display = 'none'; blockedOverlay.setAttribute('aria-hidden', 'true'); });
+    blockedOverlay.addEventListener('click', (e) => { if (e.target === blockedOverlay) { blockedOverlay.style.display = 'none'; blockedOverlay.setAttribute('aria-hidden', 'true'); } });
+  }
+
   // Function to update visual digit indicators
   function updateDigitIndicators(length) {
     // Update dots
@@ -386,6 +395,16 @@ document.addEventListener('DOMContentLoaded', () => {
           signal: controller.signal
         });
         const data = await res.json().catch(() => ({}));
+        if (res.status === 403) {
+          if (blockedOverlay) {
+            if (blockedWhats) blockedWhats.href = waLink || '#';
+            blockedOverlay.style.display = 'flex';
+            blockedOverlay.removeAttribute('aria-hidden');
+          } else {
+            throw new Error((data && data.error) || 'Este ID está bloqueado.');
+          }
+          return;
+        }
         if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo crear la orden');
         const wrap = document.getElementById('checkout');
         if (wrap) {

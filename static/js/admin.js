@@ -56,9 +56,139 @@ document.addEventListener('DOMContentLoaded', () => {
         h3.style.display = 'none';
       }
     });
-    // Apply current selection filter if any
-    filterPackagesBySelect();
   }
+
+  // =====================
+  // Blocked Customers (Player IDs)
+  // =====================
+  // Elements for Blocked Customers tab (declare before use)
+  const btnBlockedRefresh = document.getElementById('btn-blocked-refresh');
+  const blockedList = document.getElementById('blocked-list');
+  const blockedForm = document.getElementById('blocked-form');
+  const blockedCustomerId = document.getElementById('blocked-customer-id');
+  const blockedReason = document.getElementById('blocked-reason');
+  const blockedActive = document.getElementById('blocked-active');
+  const btnBlockedAdd = document.getElementById('btn-blocked-add');
+  async function fetchBlocked() {
+    if (!blockedList) return;
+    blockedList.innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
+    try {
+      const res = await fetch('/admin/blocked-customers');
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo listar');
+      renderBlocked(data.blocked || []);
+    } catch (e) {
+      blockedList.innerHTML = `<div class="empty-state"><p>${e.message || 'Error'}</p></div>`;
+    }
+  }
+
+  function renderBlocked(items) {
+    if (!blockedList) return;
+    blockedList.innerHTML = '';
+    if (!items || items.length === 0) {
+      blockedList.innerHTML = '<div class="empty-state"><h3>Sin IDs bloqueados</h3><p>Agrega IDs de jugadores que desees bloquear.</p></div>';
+      return;
+    }
+    items.forEach(r => {
+      const card = document.createElement('div');
+      card.className = 'order-card';
+      const when = r.created_at ? new Date(r.created_at).toLocaleString() : '';
+      card.innerHTML = `
+        <div class="order-head">
+          <div>
+            <div class="order-id">#${r.id} · ${r.customer_id}</div>
+            <div class="order-meta">
+              <span>${r.reason ? r.reason : ''}</span>
+              <span class="badge ${r.active ? 'approved' : 'rejected'}">${r.active ? 'ACTIVO' : 'INACTIVO'}</span>
+            </div>
+          </div>
+          <div class="box-right">
+            <div class="metric usd"><span>${when}</span></div>
+          </div>
+        </div>
+        <div class="order-actions">
+          <button class="btn btn-blocked-toggle" data-id="${r.id}" data-active="${r.active ? '1' : '0'}">${r.active ? 'Desactivar' : 'Activar'}</button>
+          <button class="btn btn-blocked-del" data-id="${r.id}">Eliminar</button>
+        </div>
+      `;
+      blockedList.appendChild(card);
+    });
+  }
+
+  async function addOrUpdateBlocked() {
+    const payload = {
+      customer_id: blockedCustomerId ? (blockedCustomerId.value || '').trim() : '',
+      reason: blockedReason ? (blockedReason.value || '').trim() : '',
+      active: blockedActive ? !!blockedActive.checked : true,
+    };
+    if (!payload.customer_id) { toast && toast('Ingrese un ID de jugador'); return; }
+    const res = await fetch('/admin/blocked-customers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar');
+    // Clear only reason checkbox keep id for series
+    if (blockedReason) blockedReason.value = '';
+    await fetchBlocked();
+  }
+
+  if (btnBlockedAdd) {
+    btnBlockedAdd.addEventListener('click', async () => {
+      try {
+        btnBlockedAdd.disabled = true;
+        await addOrUpdateBlocked();
+        toast && toast('Guardado');
+      } catch (e) {
+        toast && toast(e.message || 'Error');
+      } finally {
+        btnBlockedAdd.disabled = false;
+      }
+    });
+  }
+
+  if (btnBlockedRefresh) {
+    btnBlockedRefresh.addEventListener('click', fetchBlocked);
+  }
+
+  if (blockedList) {
+    blockedList.addEventListener('click', async (e) => {
+      const del = e.target.closest('.btn-blocked-del');
+      const tog = e.target.closest('.btn-blocked-toggle');
+      if (del) {
+        const id = del.getAttribute('data-id');
+        if (!id) return;
+        try {
+          del.disabled = true;
+          const res = await fetch(`/admin/blocked-customers/${id}`, { method: 'DELETE' });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo eliminar');
+          await fetchBlocked();
+        } catch (err) {
+          toast && toast(err.message || 'Error');
+        } finally {
+          del.disabled = false;
+        }
+      }
+      if (tog) {
+        const id = tog.getAttribute('data-id');
+        const cur = tog.getAttribute('data-active') === '1';
+        try {
+          tog.disabled = true;
+          const res = await fetch(`/admin/blocked-customers/${id}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: !cur })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo actualizar');
+          await fetchBlocked();
+        } catch (err) {
+          toast && toast(err.message || 'Error');
+        } finally {
+          tog.disabled = false;
+        }
+      }
+    });
+  }
+  
   // Payments config
   const pmBank = document.getElementById('pm-bank');
   const pmName = document.getElementById('pm-name');
@@ -584,6 +714,25 @@ window.fetchPayments = fetchPayments;
 
   }
 
+  // Wire tabs click (if not already wired by server)
+  if (tabs && tabs.length) {
+    tabs.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        tabs.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const target = btn.dataset.target;
+        activateTab(target);
+        // Lazy-load per tab
+        if (target === '#tab-orders') { fetchOrders(); fetchAffWithdrawalsForOrders(); }
+        if (target === '#tab-images') { if (gallery) await fetchImages(); }
+        if (target === '#tab-config') { fetchSiteName(); fetchLogo(); fetchMidBanner(); fetchActiveLoginGame(); fetchPayments(); }
+        if (target === '#tab-affiliates') { fetchAffiliates(); fetchAffWithdrawals(); populatePackagesForAffiliateScope && populatePackagesForAffiliateScope(); }
+        if (target === '#tab-packages') { fetchPackages(); }
+        if (target === '#tab-blocked') { fetchBlocked(); }
+      });
+    });
+  }
+
   // =====================
   // Config: site name get/set
   // =====================
@@ -744,6 +893,7 @@ window.fetchLogo = fetchLogo;
   if (active) activateTab(active.dataset.target);
   // If landing on Orders, fetch initially
   if (document.querySelector('#tab-orders.active')) { fetchOrders(); fetchAffWithdrawalsForOrders(); }
+  if (document.querySelector('#tab-blocked.active')) { fetchBlocked(); }
   // Do not select a payment method by default on load
   showPaySection();
   // Always hide mail/session blocks (fallback)

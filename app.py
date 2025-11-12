@@ -500,6 +500,15 @@ class User(db.Model):
     password_hash = db.Column(db.String(300), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+# Customer ID blocks
+class BlockedCustomer(db.Model):
+    __tablename__ = "blocked_customers"
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.String(200), nullable=False)
+    reason = db.Column(db.String(300), default="")
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 # Initialize
 with app.app_context():
     db.create_all()
@@ -1515,7 +1524,8 @@ def store_checkout(gid: int):
         return redirect(url_for("index"))
     logo_url = get_config_value("logo_path", "")
     site_name = get_config_value("site_name", "InefableStore")
-    return render_template("checkout.html", gid=gid, logo_url=logo_url, site_name=site_name)
+    whatsapp_url = get_config_value("whatsapp_url", "https://api.whatsapp.com/send?phone=%2B584125712917")
+    return render_template("checkout.html", gid=gid, logo_url=logo_url, site_name=site_name, whatsapp_url=whatsapp_url)
 
 
 # ===============
@@ -1571,6 +1581,18 @@ def create_order():
         customer_id = (data.get("customer_id") or "").strip()
         customer_zone = (data.get("customer_zone") or "").strip()
         special_code = (data.get("special_code") or "").strip()
+
+        # Blocklist check for player IDs
+        try:
+            if customer_id:
+                blk = BlockedCustomer.query.filter(
+                    db.func.lower(BlockedCustomer.customer_id) == customer_id.lower(),
+                    BlockedCustomer.active == True
+                ).first()
+                if blk:
+                    return jsonify({"ok": False, "error": "Este ID de jugador está bloqueado. Contacta soporte"}), 403
+        except Exception:
+            pass
 
         if not reference:
             return jsonify({"ok": False, "error": "Referencia requerida"}), 400
@@ -1816,6 +1838,83 @@ def admin_orders_list():
         })
     return jsonify({"ok": True, "orders": out})
 
+
+# ==============================
+# Blocked Customers (Player IDs) API
+# ==============================
+
+@app.route("/admin/blocked-customers", methods=["GET"])
+def admin_blocked_customers_list():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    rows = BlockedCustomer.query.order_by(BlockedCustomer.created_at.desc()).all()
+    return jsonify({
+        "ok": True,
+        "blocked": [
+            {
+                "id": r.id,
+                "customer_id": r.customer_id,
+                "reason": r.reason or "",
+                "active": bool(r.active),
+                "created_at": (r.created_at.isoformat() if r.created_at else "")
+            }
+            for r in rows
+        ]
+    })
+
+@app.route("/admin/blocked-customers", methods=["POST"])
+def admin_blocked_customers_create():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    customer_id = (data.get("customer_id") or "").strip()
+    reason = (data.get("reason") or "").strip()
+    if not customer_id:
+        return jsonify({"ok": False, "error": "customer_id requerido"}), 400
+    # Avoid duplicates (case-insensitive)
+    existing = BlockedCustomer.query.filter(db.func.lower(BlockedCustomer.customer_id) == customer_id.lower()).first()
+    if existing:
+        # If exists, update fields instead of creating a duplicate
+        existing.reason = reason or existing.reason
+        existing.active = bool(data.get("active", True))
+        db.session.commit()
+        return jsonify({"ok": True, "blocked": {"id": existing.id, "customer_id": existing.customer_id, "reason": existing.reason or "", "active": bool(existing.active)}})
+    row = BlockedCustomer(customer_id=customer_id, reason=reason, active=bool(data.get("active", True)))
+    db.session.add(row)
+    db.session.commit()
+    return jsonify({"ok": True, "blocked": {"id": row.id, "customer_id": row.customer_id, "reason": row.reason or "", "active": bool(row.active)}})
+
+@app.route("/admin/blocked-customers/<int:bid>", methods=["PATCH", "PUT"])
+def admin_blocked_customers_update(bid: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    row = BlockedCustomer.query.get(bid)
+    if not row:
+        return jsonify({"ok": False, "error": "No encontrado"}), 404
+    if "customer_id" in data and str(data.get("customer_id") or "").strip():
+        row.customer_id = str(data.get("customer_id")).strip()
+    if "reason" in data:
+        row.reason = (data.get("reason") or "").strip()
+    if "active" in data:
+        row.active = bool(data.get("active"))
+    db.session.commit()
+    return jsonify({"ok": True, "blocked": {"id": row.id, "customer_id": row.customer_id, "reason": row.reason or "", "active": bool(row.active)}})
+
+@app.route("/admin/blocked-customers/<int:bid>", methods=["DELETE"])
+def admin_blocked_customers_delete(bid: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    row = BlockedCustomer.query.get(bid)
+    if not row:
+        return jsonify({"ok": False, "error": "No encontrado"}), 404
+    db.session.delete(row)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 @app.route("/orders/my", methods=["GET"])
 def orders_my():
