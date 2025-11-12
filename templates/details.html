@@ -117,7 +117,10 @@
     </div>
 
     <div class="step-card">
-      <div class="step-title" data-step="2">Selecciona tu producto</div>
+      <div class="step-title" data-step="2" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <span>Selecciona tu producto</span>
+        <button id="btn-leer" type="button" class="link" style="color:#22c55e; font-weight:800; text-decoration:underline; background:none; border:none; cursor:pointer; display:none;">Leer</button>
+      </div>
       <div id="items-grid" class="items-grid"><!-- items --></div>
       <div style="margin-top:10px; text-align:center;">
         <button id="btn-more" class="btn" type="button" hidden>Ver más</button>
@@ -165,6 +168,18 @@
     </div>
   </div>
 </section>
+<div id="pkg-info-modal" class="auth-modal" hidden>
+  <div class="auth-card" style="max-width:720px;">
+    <button class="icon-btn auth-close" data-close-pkg-info aria-label="Cerrar">✕</button>
+    <div class="auth-body">
+      <div class="auth-title">Información del producto</div>
+      <div class="card" style="background: rgba(2,6,23,0.6); color:#e5e7eb; border:1px solid rgba(148,163,184,0.30); border-radius:12px;">
+        <div id="pkg-info-content" style="padding:12px 16px; white-space:pre-wrap;"></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop"></div>
+</div>
 <!-- Footer móvil: selección actual -->
 <div id="mfs" class="mobile-footer-sel" hidden aria-live="polite">
   <div class="mfs-icon" aria-hidden="true">💎</div>
@@ -331,7 +346,7 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/store.js', v='3') }}" defer></script>
-<script src="{{ url_for('static', filename='js/details.js', v='4') }}" defer></script>
+<script src="{{ url_for('static', filename='js/details.js', v='5') }}" defer></script>
 {% endblock %}
 
 

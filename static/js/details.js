@@ -14,6 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnMore = document.getElementById('btn-more');
   const btnPayBSD = document.getElementById('pay-bsd');
   const btnPayUSD = document.getElementById('pay-usd');
+  // Package info (Leer) modal
+  const btnLeer = document.getElementById('btn-leer');
+  const pkgInfoModal = document.getElementById('pkg-info-modal');
+  const pkgInfoContent = document.getElementById('pkg-info-content');
+  const btnClosePkgInfo = document.querySelector('[data-close-pkg-info]');
   // Mobile footer selection
   const mfs = document.getElementById('mfs');
   const mfsTitle = document.getElementById('mfs-title');
@@ -90,6 +95,25 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRightLogin.addEventListener('click', () => {
       const modal = document.getElementById('auth-modal');
       if (modal) modal.removeAttribute('hidden');
+    });
+  }
+
+  // Open/close package info modal via "Leer" button
+  if (btnLeer && pkgInfoModal) {
+    btnLeer.addEventListener('click', () => {
+      pkgInfoModal.removeAttribute('hidden');
+    });
+  }
+  if (btnClosePkgInfo && pkgInfoModal) {
+    btnClosePkgInfo.addEventListener('click', () => {
+      pkgInfoModal.setAttribute('hidden', '');
+    });
+  }
+  if (pkgInfoModal) {
+    pkgInfoModal.addEventListener('click', (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains('modal-backdrop')) {
+        pkgInfoModal.setAttribute('hidden', '');
+      }
     });
   }
 
@@ -475,6 +499,17 @@ document.addEventListener('DOMContentLoaded', () => {
         grid.querySelectorAll('.item-pill').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         selectedItemIndex = items.indexOf(it);
+        // Toggle 'Leer' button based on special flag and description
+        if (btnLeer) {
+          const isSpecial = ((it.sticker || '').toLowerCase() === 'special');
+          const hasDesc = !!(it.description && String(it.description).trim());
+          if (isSpecial && hasDesc) {
+            btnLeer.style.display = 'inline';
+            if (pkgInfoContent) pkgInfoContent.textContent = String(it.description || '');
+          } else {
+            btnLeer.style.display = 'none';
+          }
+        }
         persistState();
         updateMobileFooter();
         ensureDesktopQty();
@@ -489,6 +524,16 @@ document.addEventListener('DOMContentLoaded', () => {
         selPrice.textContent = formatPrice(total);
         sumPrice.textContent = formatPrice(total);
         ensureDesktopQty();
+        if (btnLeer) {
+          const isSpecial = ((it.sticker || '').toLowerCase() === 'special');
+          const hasDesc = !!(it.description && String(it.description).trim());
+          if (isSpecial && hasDesc) {
+            btnLeer.style.display = 'inline';
+            if (pkgInfoContent) pkgInfoContent.textContent = String(it.description || '');
+          } else {
+            btnLeer.style.display = 'none';
+          }
+        }
       }
       // Autoselect first visible if none selected yet
       grid.appendChild(b);

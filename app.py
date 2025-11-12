@@ -2117,7 +2117,7 @@ def store_game_items(gid: int):
     return jsonify({
         "ok": True,
         "items": [
-            {"id": it.id, "title": it.title, "price": it.price, "sticker": (it.sticker or ""), "icon_path": (it.icon_path or "")}
+            {"id": it.id, "title": it.title, "price": it.price, "description": (it.description or ""), "sticker": (it.sticker or ""), "icon_path": (it.icon_path or "")}
             for it in items
         ]
     })

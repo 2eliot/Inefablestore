@@ -2319,11 +2319,13 @@ if (btnSaveHero) {
         const priceEl = row.querySelector('.it-price');
         const specialEl = row.querySelector('.it-special');
         const iconEl = row.querySelector('.it-icon');
+        const descEl = row.querySelector('.it-desc');
         const payload = {
           title: titleEl ? titleEl.value.trim() : '',
           price: priceEl ? parseFloat(priceEl.value || '0') : 0,
           sticker: specialEl && specialEl.checked ? 'special' : '',
-          icon_path: iconEl ? iconEl.value.trim() : ''
+          icon_path: iconEl ? iconEl.value.trim() : '',
+          description: descEl ? descEl.value.trim() : ''
         };
         try {
           btnItemSave.disabled = true;
@@ -2401,6 +2403,7 @@ if (btnSaveHero) {
             <button class="btn btn-item-delete" type="button">Eliminar</button>
           </div>
         </div>
+        <textarea class="it-desc" placeholder="Descripción para paquetes especiales (mostrada al hacer clic en 'Leer' en la tienda)" style="grid-column:1 / -1; min-height:70px; ${(it.sticker||'').toLowerCase()==='special' ? '' : 'display:none;'}">${it.description || ''}</textarea>
       `;
       return row;
     };
