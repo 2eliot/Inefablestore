@@ -2176,6 +2176,7 @@ if (btnSaveHero) {
       const btnItemDelete = e.target.closest('.btn-item-delete');
       const btnItemSave = e.target.closest('.btn-item-save');
       const btnItemPickIcon = e.target.closest('.btn-item-pick-icon');
+      const btnSpecialDescSave = e.target.closest('.btn-special-desc-save');
       if (btnDel) {
         const id = btnDel.getAttribute('data-id');
         if (!id) return;
@@ -2319,13 +2320,11 @@ if (btnSaveHero) {
         const priceEl = row.querySelector('.it-price');
         const specialEl = row.querySelector('.it-special');
         const iconEl = row.querySelector('.it-icon');
-        const descEl = row.querySelector('.it-desc');
         const payload = {
           title: titleEl ? titleEl.value.trim() : '',
           price: priceEl ? parseFloat(priceEl.value || '0') : 0,
           sticker: specialEl && specialEl.checked ? 'special' : '',
-          icon_path: iconEl ? iconEl.value.trim() : '',
-          description: descEl ? descEl.value.trim() : ''
+          icon_path: iconEl ? iconEl.value.trim() : ''
         };
         try {
           btnItemSave.disabled = true;
@@ -2403,11 +2402,28 @@ if (btnSaveHero) {
             <button class="btn btn-item-delete" type="button">Eliminar</button>
           </div>
         </div>
-        <textarea class="it-desc" placeholder="Descripción para paquetes especiales (mostrada al hacer clic en 'Leer' en la tienda)" style="grid-column:1 / -1; min-height:70px; ${(it.sticker||'').toLowerCase()==='special' ? '' : 'display:none;'}">${it.description || ''}</textarea>
       `;
       return row;
     };
     if (specials.length > 0) specials.forEach(it => list.appendChild(addRow(it)));
+    // If there are specials, add a single description textarea for ALL specials in this package
+    if (specials.length > 0) {
+      const pkgContainer = list.closest('.pkg-content');
+      const pkgRoot = list.closest('.pkg-item');
+      const pkgDescInput = pkgRoot ? pkgRoot.querySelector('.edit-desc') : null;
+      const wrap = document.createElement('div');
+      wrap.style.gridColumn = '1 / -1';
+      wrap.style.margin = '10px 0 0';
+      wrap.innerHTML = `
+        <div style="border-top:1px solid rgba(148,163,184,0.35); margin:10px 0;"></div>
+        <h4 style="margin:0 0 6px;">Descripción para paquetes especiales</h4>
+        <textarea class="special-desc" style="width:100%; min-height:90px;">${pkgDescInput ? (pkgDescInput.value || '') : ''}</textarea>
+        <div style="margin-top:6px; display:flex; gap:6px;">
+          <button class="btn btn-special-desc-save" type="button">Guardar descripción</button>
+        </div>
+      `;
+      list.appendChild(wrap);
+    }
     if (normals.length > 0) {
       const sep = document.createElement('div');
       sep.style.borderTop = '1px solid rgba(148,163,184,0.35)';

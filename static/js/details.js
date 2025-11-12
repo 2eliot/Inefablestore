@@ -19,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const pkgInfoModal = document.getElementById('pkg-info-modal');
   const pkgInfoContent = document.getElementById('pkg-info-content');
   const btnClosePkgInfo = document.querySelector('[data-close-pkg-info]');
+  // Package-level description source (admin set per package)
+  const gameDescEl = document.getElementById('game-desc');
   // Mobile footer selection
   const mfs = document.getElementById('mfs');
   const mfsTitle = document.getElementById('mfs-title');
@@ -499,13 +501,14 @@ document.addEventListener('DOMContentLoaded', () => {
         grid.querySelectorAll('.item-pill').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         selectedItemIndex = items.indexOf(it);
-        // Toggle 'Leer' button based on special flag and description
+        // Toggle 'Leer' button based on special flag and package-level description
         if (btnLeer) {
           const isSpecial = ((it.sticker || '').toLowerCase() === 'special');
-          const hasDesc = !!(it.description && String(it.description).trim());
+          const pkgDesc = gameDescEl ? String(gameDescEl.textContent || '').trim() : '';
+          const hasDesc = !!pkgDesc;
           if (isSpecial && hasDesc) {
             btnLeer.style.display = 'inline';
-            if (pkgInfoContent) pkgInfoContent.textContent = String(it.description || '');
+            if (pkgInfoContent) pkgInfoContent.textContent = pkgDesc;
           } else {
             btnLeer.style.display = 'none';
           }
