@@ -419,6 +419,8 @@ class StorePackage(db.Model):
     # category: 'mobile' (JUEGOS MOBILE) or 'gift' (GIFT CARDS)
     category = db.Column(db.String(20), default="mobile")
     description = db.Column(db.Text, default="")
+    # independent description for special items (shown in 'Leer')
+    special_description = db.Column(db.Text, default="")
     # whether this game requires an extra Zone ID
     requires_zone_id = db.Column(db.Boolean, default=False)
     sort_order = db.Column(db.Integer, default=0)
@@ -523,6 +525,10 @@ with app.app_context():
             db.session.commit()
         if "description" not in cols:
             db.session.execute(text("ALTER TABLE store_packages ADD COLUMN description TEXT DEFAULT ''"))
+            db.session.commit()
+        # new: independent special_description used by 'Leer' for special items
+        if "special_description" not in cols:
+            db.session.execute(text("ALTER TABLE store_packages ADD COLUMN special_description TEXT DEFAULT ''"))
             db.session.commit()
         if "requires_zone_id" not in cols:
             db.session.execute(text("ALTER TABLE store_packages ADD COLUMN requires_zone_id INTEGER DEFAULT 0"))
@@ -2150,6 +2156,8 @@ def admin_game_items_create(gid: int):
     data = request.get_json(silent=True) or {}
     title = (data.get("title") or "").strip()
     description = (data.get("description") or "").strip()
+    special_description = (data.get("special_description") or "").strip()
+    special_description = (data.get("special_description") or "").strip()
     sticker = (data.get("sticker") or "").strip()
     icon_path = (data.get("icon_path") or "").strip()
     try:
@@ -2248,6 +2256,7 @@ def admin_packages_update(pid: int):
     image_path = data.get("image_path")
     category = data.get("category")
     description = data.get("description")
+    special_description = data.get("special_description")
     requires_zone_id = data.get("requires_zone_id")
     active = data.get("active")
     if name is not None:
@@ -2261,6 +2270,8 @@ def admin_packages_update(pid: int):
         item.category = c
     if description is not None:
         item.description = (description or '').strip()
+    if special_description is not None:
+        item.special_description = (special_description or '').strip()
     if requires_zone_id is not None:
         item.requires_zone_id = bool(requires_zone_id)
     if active is not None:
@@ -2292,7 +2303,7 @@ def admin_packages_list():
     return jsonify({
         "ok": True,
         "packages": [
-            {"id": p.id, "name": p.name, "image_path": p.image_path, "active": p.active, "category": (p.category or 'mobile'), "description": (p.description or ''), "requires_zone_id": bool(p.requires_zone_id), "sort_order": int(p.sort_order or 0)}
+            {"id": p.id, "name": p.name, "image_path": p.image_path, "active": p.active, "category": (p.category or 'mobile'), "description": (p.description or ''), "special_description": (p.special_description or ''), "requires_zone_id": bool(p.requires_zone_id), "sort_order": int(p.sort_order or 0)}
             for p in items
         ]
     })
@@ -2313,7 +2324,7 @@ def admin_packages_create():
         category = "mobile"
     if not name or not image_path:
         return jsonify({"ok": False, "error": "Nombre e imagen requeridos"}), 400
-    item = StorePackage(name=name, image_path=image_path, active=True, category=category, description=description, requires_zone_id=requires_zone_id)
+    item = StorePackage(name=name, image_path=image_path, active=True, category=category, description=description, special_description=special_description, requires_zone_id=requires_zone_id)
     db.session.add(item)
     db.session.commit()
     return jsonify({"ok": True, "package": {"id": item.id, "name": item.name, "image_path": item.image_path, "active": item.active}})

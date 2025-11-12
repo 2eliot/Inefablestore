@@ -91,6 +91,7 @@
       <span class="pill">Cash back</span>
     </div>
     <p class="game-desc" id="game-desc">{{ game.description }}</p>
+    <p id="game-special-desc" hidden>{{ game.special_description }}</p>
     <div class="selected-box" id="selected-box" hidden>
       <div class="selected-title" id="selected-title"></div>
       <div class="selected-price" id="selected-price"></div>
@@ -346,7 +347,7 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/store.js', v='3') }}" defer></script>
-<script src="{{ url_for('static', filename='js/details.js', v='5') }}" defer></script>
+<script src="{{ url_for('static', filename='js/details.js', v='6') }}" defer></script>
 {% endblock %}
 
 

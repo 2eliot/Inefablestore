@@ -1986,6 +1986,7 @@ window.fetchHero = fetchHero;
             <option value="gift" ${p.category === 'gift' ? 'selected' : ''}>Gift Cards</option>
           </select>
           <textarea class="edit-desc" placeholder="Descripción del juego" style="min-height:60px;">${p.description || ''}</textarea>
+          <input class="edit-special-desc" type="hidden" value="${(p.special_description || '').replace(/"/g, '&quot;')}">
           <label style="display:flex; align-items:center; gap:8px; margin:4px 0;">
             <input class="edit-active" type="checkbox" ${p.active ? 'checked' : ''}/> Activo
           </label>
@@ -2177,6 +2178,33 @@ if (btnSaveHero) {
       const btnItemSave = e.target.closest('.btn-item-save');
       const btnItemPickIcon = e.target.closest('.btn-item-pick-icon');
       const btnSpecialDescSave = e.target.closest('.btn-special-desc-save');
+
+      // Save single special description for the package
+      if (btnSpecialDescSave) {
+        const pkg = btnSpecialDescSave.closest('.pkg-item');
+        const game = btnSpecialDescSave.closest('.game-items');
+        const gid = (pkg && pkg.getAttribute('data-id')) || (game && game.getAttribute('data-gid'));
+        if (!gid) { toast('No se encontró el ID del juego'); return; }
+        const textEl = (pkg || game).querySelector('.special-desc');
+        const editSpecDesc = pkg ? pkg.querySelector('.edit-special-desc') : null;
+        const special_description = textEl ? textEl.value.trim() : '';
+        try {
+          btnSpecialDescSave.disabled = true;
+          const res = await fetch(`/admin/packages/${gid}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ special_description })
+          });
+          if (!res.ok) throw new Error('No se pudo guardar');
+          if (editSpecDesc) editSpecDesc.value = special_description;
+          toast('Descripción guardada');
+        } catch (err) {
+          toast(err.message || 'Error al guardar descripción');
+        } finally {
+          btnSpecialDescSave.disabled = false;
+        }
+        return;
+      }
       if (btnDel) {
         const id = btnDel.getAttribute('data-id');
         if (!id) return;
@@ -2410,7 +2438,7 @@ if (btnSaveHero) {
     if (specials.length > 0) {
       const pkgContainer = list.closest('.pkg-content');
       const pkgRoot = list.closest('.pkg-item');
-      const pkgDescInput = pkgRoot ? pkgRoot.querySelector('.edit-desc') : null;
+      const pkgDescInput = pkgRoot ? pkgRoot.querySelector('.edit-special-desc') : null;
       const wrap = document.createElement('div');
       wrap.style.gridColumn = '1 / -1';
       wrap.style.margin = '10px 0 0';
