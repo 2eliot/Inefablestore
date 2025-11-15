@@ -2518,6 +2518,8 @@ def admin_stats_summary():
                 except Exception:
                     pass
 
+            # Acumular revenue solo de ítems con costo definido para calcular comisión correcta
+            revenue_with_cost = 0.0
             for iid, agg in items_map.items():
                 it = items_by_id.get(iid)
                 if not it:
@@ -2534,30 +2536,11 @@ def admin_stats_summary():
                 if profit_val < 0.0:
                     profit_val = 0.0
                 total_profit_net += profit_val
+                # Acumular revenue solo de ítems con costo para comisión
+                revenue_with_cost += revenue
 
-            if use_affiliate:
-                subtotal = 0.0
-                try:
-                    if (o.items_json or "").strip():
-                        payload = json.loads(o.items_json or "[]")
-                        if isinstance(payload, list):
-                            for ent in payload:
-                                q = int(ent.get("qty") or 1)
-                                if q <= 0:
-                                    q = 1
-                                try:
-                                    p = float(ent.get("price") or 0.0)
-                                except Exception:
-                                    p = 0.0
-                                subtotal += (p * q)
-                except Exception:
-                    subtotal = 0.0
-                if subtotal <= 0.0:
-                    try:
-                        amt_usd = amount_to_usd(o.amount or 0.0, o.currency or "USD")
-                    except Exception:
-                        amt_usd = 0.0
-                    subtotal = amt_usd
+            # Calcular comisión del influencer solo sobre revenue de ítems con costo
+            if use_affiliate and revenue_with_cost > 0.0:
                 comm_pct = 0.0
                 try:
                     if su:
@@ -2572,9 +2555,9 @@ def admin_stats_summary():
                             comm_pct = float(su.commission_mobile_percent or 0.0)
                 except Exception:
                     comm_pct = 0.0
-                if comm_pct > 0 and subtotal > 0:
+                if comm_pct > 0:
                     try:
-                        inc = round(subtotal * (comm_pct / 100.0), 2)
+                        inc = round(revenue_with_cost * (comm_pct / 100.0), 2)
                     except Exception:
                         inc = 0.0
                     total_commission_affiliates += inc
@@ -2681,6 +2664,8 @@ def admin_stats_package(pkg_id: int):
                 except Exception:
                     pass
 
+            # Acumular revenue solo de ítems con costo definido para calcular comisión correcta
+            revenue_with_cost = 0.0
             for iid, agg in items_map.items():
                 it = items_by_id.get(iid)
                 if not it:
@@ -2723,30 +2708,11 @@ def admin_stats_package(pkg_id: int):
                     profit_val = 0.0
                 rec["profit_total_usd"] = rec.get("profit_total_usd", 0.0) + profit_val
                 total_profit_net += profit_val
+                # Acumular revenue solo de ítems con costo para comisión
+                revenue_with_cost += revenue
 
-            if use_affiliate:
-                subtotal = 0.0
-                try:
-                    if (o.items_json or "").strip():
-                        payload = json.loads(o.items_json or "[]")
-                        if isinstance(payload, list):
-                            for ent in payload:
-                                q = int(ent.get("qty") or 1)
-                                if q <= 0:
-                                    q = 1
-                                try:
-                                    p = float(ent.get("price") or 0.0)
-                                except Exception:
-                                    p = 0.0
-                                subtotal += (p * q)
-                except Exception:
-                    subtotal = 0.0
-                if subtotal <= 0.0:
-                    try:
-                        amt_usd = amount_to_usd(o.amount or 0.0, o.currency or "USD")
-                    except Exception:
-                        amt_usd = 0.0
-                    subtotal = amt_usd
+            # Calcular comisión del influencer solo sobre revenue de ítems con costo
+            if use_affiliate and revenue_with_cost > 0.0:
                 comm_pct = 0.0
                 try:
                     if su:
@@ -2757,9 +2723,9 @@ def admin_stats_package(pkg_id: int):
                             comm_pct = float(su.commission_mobile_percent or 0.0)
                 except Exception:
                     comm_pct = 0.0
-                if comm_pct > 0 and subtotal > 0:
+                if comm_pct > 0:
                     try:
-                        inc = round(subtotal * (comm_pct / 100.0), 2)
+                        inc = round(revenue_with_cost * (comm_pct / 100.0), 2)
                     except Exception:
                         inc = 0.0
                     total_commission_affiliates += inc
