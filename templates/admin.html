@@ -23,6 +23,7 @@
     <nav class="tabs" id="adminTabs" role="tablist" aria-label="Pestañas de administración">
       <button class="tab active" data-target="#tab-orders" aria-selected="true">Órdenes</button>
       <button class="tab" data-target="#tab-packages" aria-selected="false">Paquetes</button>
+      <button class="tab" data-target="#tab-stats" aria-selected="false">Estadísticas</button>
       <button class="tab" data-target="#tab-images" aria-selected="false">Imágenes</button>
       <button class="tab" data-target="#tab-config" aria-selected="false">Configuración</button>
       <button class="tab" data-target="#tab-affiliates" aria-selected="false">Afiliados</button>
@@ -58,6 +59,47 @@
           <div class="empty-state">
             <h3>Sin solicitudes</h3>
             <p>Cuando los afiliados pidan retiro aparecerán aquí.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Estadísticas -->
+    <div id="tab-stats" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Estadísticas</h2>
+        <div class="actions">
+          <button id="btn-stats-save-all" class="btn primary" type="button">Guardar todas las ganancias</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="form-row">
+          <label for="stats-pkg-select">Paquete</label>
+          <select id="stats-pkg-select">
+            <option value="">— Selecciona un paquete —</option>
+          </select>
+        </div>
+        <div id="stats-items" class="orders-list">
+          <div class="empty-state">
+            <h3>Sin datos</h3>
+            <p>Selecciona un paquete para ver sus estadísticas.</p>
+          </div>
+        </div>
+        <div id="stats-summary" style="margin-top:16px; display:none;">
+          <h3>Resumen de ganancias</h3>
+          <div class="orders-list">
+            <div class="order-card">
+              <div class="order-head">
+                <div>
+                  <div class="order-id">Ganancias</div>
+                  <div class="order-meta">
+                    <span>Total neto paquetes con ganancia (USD): <strong id="stats-total-net">$0.00</strong></span>
+                    <span>Total comisiones influencers (USD): <strong id="stats-total-aff">$0.00</strong></span>
+                    <span>Ganancia total de la web (después de influencers, USD): <strong id="stats-total-after">$0.00</strong></span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

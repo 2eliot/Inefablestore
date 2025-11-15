@@ -241,6 +241,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnPackagesRefresh = document.getElementById('btn-packages-refresh');
   const pkgList = document.getElementById('pkg-list');
   const pkgSelect = document.getElementById('pkg-select');
+  // Stats tab elements
+  const statsPkgSelect = document.getElementById('stats-pkg-select');
+  const statsItems = document.getElementById('stats-items');
+  const statsSummary = document.getElementById('stats-summary');
+  const statsTotalNet = document.getElementById('stats-total-net');
+  const statsTotalAff = document.getElementById('stats-total-aff');
+  const statsTotalAfter = document.getElementById('stats-total-after');
+  const btnStatsSaveAll = document.getElementById('btn-stats-save-all');
   // Orders elements
   const btnOrdersRefresh = document.getElementById('btn-orders-refresh');
   const ordersList = document.getElementById('orders-list');
@@ -728,8 +736,178 @@ window.fetchPayments = fetchPayments;
         if (target === '#tab-config') { fetchSiteName(); fetchLogo(); fetchMidBanner(); fetchActiveLoginGame(); fetchPayments(); }
         if (target === '#tab-affiliates') { fetchAffiliates(); fetchAffWithdrawals(); populatePackagesForAffiliateScope && populatePackagesForAffiliateScope(); }
         if (target === '#tab-packages') { fetchPackages(); }
+        if (target === '#tab-stats') { fetchStatsPackages(); fetchGlobalStatsSummary(); }
         if (target === '#tab-blocked') { fetchBlocked(); }
       });
+    });
+  }
+
+  // =====================
+  // Stats: helpers
+  // =====================
+  function fmtUSD(n) {
+    try { return Number(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }); }
+    catch (_) { return `$${n}`; }
+  }
+
+  async function fetchGlobalStatsSummary() {
+    if (!statsSummary || !statsTotalNet || !statsTotalAff || !statsTotalAfter) return;
+    try {
+      const res = await fetch('/admin/stats/summary');
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar resumen global');
+      const s = data.summary || {};
+      statsSummary.style.display = 'block';
+      statsTotalNet.textContent = fmtUSD(s.total_profit_net_usd || 0);
+      statsTotalAff.textContent = fmtUSD(s.total_affiliate_commission_usd || 0);
+      statsTotalAfter.textContent = fmtUSD(s.total_profit_after_affiliates_usd || 0);
+    } catch (e) {
+      // Si falla, mantenemos el bloque visible pero con ceros
+      statsSummary.style.display = 'block';
+      statsTotalNet.textContent = fmtUSD(0);
+      statsTotalAff.textContent = fmtUSD(0);
+      statsTotalAfter.textContent = fmtUSD(0);
+    }
+  }
+
+  async function fetchStatsPackages() {
+    if (!statsPkgSelect) return;
+    try {
+      const res = await fetch('/admin/stats/packages');
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo listar paquetes');
+      statsPkgSelect.innerHTML = '<option value="">— Selecciona un paquete —</option>';
+      (data.packages || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = String(p.id);
+        opt.textContent = `${p.name} (${p.category || '-'})`;
+        statsPkgSelect.appendChild(opt);
+      });
+      if ((data.packages || []).length === 0) {
+        if (statsItems) {
+          statsItems.innerHTML = '<div class="empty-state"><h3>Sin paquetes</h3><p>Crea paquetes para ver estadísticas.</p></div>';
+        }
+        if (statsSummary) statsSummary.style.display = 'none';
+      }
+    } catch (e) {
+      if (statsItems) {
+        statsItems.innerHTML = `<div class="empty-state"><p>${e.message || 'Error'}</p></div>`;
+      }
+      if (statsSummary) statsSummary.style.display = 'none';
+    }
+  }
+
+  async function fetchStatsForPackage(pkgId) {
+    if (!statsItems || !pkgId) return;
+    statsItems.innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
+    try {
+      const res = await fetch(`/admin/stats/package/${pkgId}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar estadísticas');
+      const items = data.items || [];
+      if (!items.length) {
+        statsItems.innerHTML = '<div class="empty-state"><h3>Sin datos</h3><p>Define una ganancia neta para los ítems de este paquete para que aparezcan aquí.</p></div>'; // texto legacy pero funcional
+      } else {
+        statsItems.innerHTML = '';
+        items.forEach(it => {
+          const row = document.createElement('div');
+          row.className = 'stats-row';
+          row.dataset.itemId = String(it.id);
+          row.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid #e2e8f0;">
+              <div style="flex:1; min-width:0;">
+                <div style="font-weight:600; color:#0f172a; margin-bottom:2px;">${it.title}</div>
+                <div style="font-size:12px; color:#64748b; display:flex; flex-wrap:wrap; gap:8px;">
+                  <span>Precio web: <strong>${fmtUSD(it.price)}</strong></span>
+                  <span>Unidades totales: <strong>${it.qty_total || 0}</strong></span>
+                  <span>Sin influencer: <strong>${it.qty_normal || 0}</strong></span>
+                  <span>Con influencer: <strong>${it.qty_with_affiliate || 0}</strong></span>
+                </div>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; min-width:190px;">
+                <label style="font-size:12px; color:#475569;">Costo por unidad (USD)</label>
+                <input type="number" step="0.01" min="0" class="stats-profit-input" value="${Number(it.cost_unit_usd || 0).toFixed(2)}" style="width:120px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:4px;" />
+                <div style="font-size:11px; color:#64748b;">Ganancia estándar/unidad: <strong>${fmtUSD(it.profit_unit_std_usd || 0)}</strong></div>
+                <div style="font-size:12px; color:#0f172a;">Ganancia total (todas las ventas): <strong>${fmtUSD(it.total_profit_net_usd || 0)}</strong></div>
+              </div>
+            </div>
+          `;
+          statsItems.appendChild(row);
+        });
+      }
+
+      // Resumen global se maneja por separado
+    } catch (e) {
+      statsItems.innerHTML = `<div class="empty-state"><p>${e.message || 'Error'}</p></div>`;
+      if (statsSummary) statsSummary.style.display = 'none';
+    }
+  }
+
+  async function saveItemNetProfit(itemId, value) {
+    // Enviar costo por unidad en USD; el backend lo guarda en la columna profit_net_usd
+    const payload = { cost_unit_usd: value };
+    const res = await fetch(`/admin/package/item/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      let msg = 'No se pudo guardar la ganancia';
+      try { const d = await res.json(); msg = d.error || msg; } catch (_) {}
+      throw new Error(msg);
+    }
+  }
+
+  if (statsPkgSelect) {
+    statsPkgSelect.addEventListener('change', () => {
+      const val = statsPkgSelect.value || '';
+      if (!val) {
+        if (statsItems) {
+          statsItems.innerHTML = '<div class="empty-state"><h3>Sin datos</h3><p>Selecciona un paquete para ver sus estadísticas.</p></div>';
+        }
+        // Mantener siempre visible el resumen global
+        fetchGlobalStatsSummary();
+        return;
+      }
+      fetchStatsForPackage(val);
+    });
+  }
+
+  if (btnStatsSaveAll) {
+    btnStatsSaveAll.addEventListener('click', async () => {
+      if (!statsItems) return;
+      const cards = statsItems.querySelectorAll('.stats-row');
+      if (!cards || !cards.length) {
+        toast && toast('No hay ítems para guardar');
+        return;
+      }
+      try {
+        btnStatsSaveAll.disabled = true;
+        const tasks = [];
+        cards.forEach(card => {
+          const itemId = card.dataset.itemId;
+          const input = card.querySelector('.stats-profit-input');
+          if (!itemId || !input) return;
+          let val = parseFloat(input.value || '0');
+          if (Number.isNaN(val) || val < 0) val = 0;
+          tasks.push(saveItemNetProfit(itemId, val));
+        });
+        if (tasks.length === 0) {
+          toast && toast('No hay cambios para guardar');
+        } else {
+          await Promise.all(tasks);
+          toast && toast('Ganancias guardadas');
+          if (statsPkgSelect && statsPkgSelect.value) {
+            await fetchStatsForPackage(statsPkgSelect.value);
+          }
+          // Actualizar resumen global después de guardar
+          fetchGlobalStatsSummary();
+        }
+      } catch (err) {
+        toast && toast(err.message || 'Error');
+      } finally {
+        btnStatsSaveAll.disabled = false;
+      }
     });
   }
 

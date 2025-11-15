@@ -660,8 +660,8 @@ html { overflow-x: hidden; width: 100%; }
    ============================== */
 .site-footer {
   margin-top: 20px;
-  background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
-  border-top: 1px solid #333;
+  background: #2b2f36; /* match header base color */
+  border-top: 1px solid #484f59; /* match header border color */
   position: static;
 }
 
