@@ -245,8 +245,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const statsPkgSelect = document.getElementById('stats-pkg-select');
   const statsItems = document.getElementById('stats-items');
   const statsSummary = document.getElementById('stats-summary');
-  const statsTotalNet = document.getElementById('stats-total-net');
-  const statsTotalAff = document.getElementById('stats-total-aff');
   const statsTotalAfter = document.getElementById('stats-total-after');
   const btnStatsSaveAll = document.getElementById('btn-stats-save-all');
   // Orders elements
@@ -751,21 +749,17 @@ window.fetchPayments = fetchPayments;
   }
 
   async function fetchGlobalStatsSummary() {
-    if (!statsSummary || !statsTotalNet || !statsTotalAff || !statsTotalAfter) return;
+    if (!statsSummary || !statsTotalAfter) return;
     try {
       const res = await fetch('/admin/stats/summary');
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar resumen global');
       const s = data.summary || {};
       statsSummary.style.display = 'block';
-      statsTotalNet.textContent = fmtUSD(s.total_profit_net_usd || 0);
-      statsTotalAff.textContent = fmtUSD(s.total_affiliate_commission_usd || 0);
       statsTotalAfter.textContent = fmtUSD(s.total_profit_after_affiliates_usd || 0);
     } catch (e) {
       // Si falla, mantenemos el bloque visible pero con ceros
       statsSummary.style.display = 'block';
-      statsTotalNet.textContent = fmtUSD(0);
-      statsTotalAff.textContent = fmtUSD(0);
       statsTotalAfter.textContent = fmtUSD(0);
     }
   }
