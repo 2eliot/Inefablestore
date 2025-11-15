@@ -2518,8 +2518,23 @@ def admin_stats_summary():
                 except Exception:
                     pass
 
-            # Acumular revenue solo de ítems con costo definido para calcular comisión correcta
-            revenue_with_cost = 0.0
+            # Determinar comisión del influencer una vez por orden
+            comm_pct = 0.0
+            if use_affiliate and su:
+                try:
+                    comm_pct = float(su.commission_percent or 0.0)
+                    try:
+                        pkg = StorePackage.query.get(o.store_package_id)
+                    except Exception:
+                        pkg = None
+                    if pkg and (pkg.category or "").lower() == "gift" and float(su.commission_gift_percent or 0.0) > 0:
+                        comm_pct = float(su.commission_gift_percent or 0.0)
+                    elif pkg and (pkg.category or "").lower() == "mobile" and float(su.commission_mobile_percent or 0.0) > 0:
+                        comm_pct = float(su.commission_mobile_percent or 0.0)
+                except Exception:
+                    comm_pct = 0.0
+
+            # Calcular ganancia por cada ítem, restando comisión individualmente si aplica
             for iid, agg in items_map.items():
                 it = items_by_id.get(iid)
                 if not it:
@@ -2531,36 +2546,21 @@ def admin_stats_summary():
                 revenue = float(agg.get("revenue") or 0.0)
                 if qty <= 0:
                     continue
+                
+                # Si usó código de influencer, restar comisión del revenue antes de calcular ganancia
+                if use_affiliate and comm_pct > 0:
+                    commission_item = round(revenue * (comm_pct / 100.0), 2)
+                    total_commission_affiliates += commission_item
+                    net_revenue = revenue - commission_item
+                else:
+                    net_revenue = revenue
+                
+                # Ganancia = revenue neto (después de comisión) - costo
                 total_cost = cost_unit * qty
-                profit_val = revenue - total_cost
+                profit_val = net_revenue - total_cost
                 if profit_val < 0.0:
                     profit_val = 0.0
                 total_profit_net += profit_val
-                # Acumular revenue solo de ítems con costo para comisión
-                revenue_with_cost += revenue
-
-            # Calcular comisión del influencer solo sobre revenue de ítems con costo
-            if use_affiliate and revenue_with_cost > 0.0:
-                comm_pct = 0.0
-                try:
-                    if su:
-                        comm_pct = float(su.commission_percent or 0.0)
-                        try:
-                            pkg = StorePackage.query.get(o.store_package_id)
-                        except Exception:
-                            pkg = None
-                        if pkg and (pkg.category or "").lower() == "gift" and float(su.commission_gift_percent or 0.0) > 0:
-                            comm_pct = float(su.commission_gift_percent or 0.0)
-                        elif pkg and (pkg.category or "").lower() == "mobile" and float(su.commission_mobile_percent or 0.0) > 0:
-                            comm_pct = float(su.commission_mobile_percent or 0.0)
-                except Exception:
-                    comm_pct = 0.0
-                if comm_pct > 0:
-                    try:
-                        inc = round(revenue_with_cost * (comm_pct / 100.0), 2)
-                    except Exception:
-                        inc = 0.0
-                    total_commission_affiliates += inc
         except Exception:
             continue
 
@@ -2569,7 +2569,8 @@ def admin_stats_summary():
         "summary": {
             "total_profit_net_usd": round(total_profit_net, 2),
             "total_affiliate_commission_usd": round(total_commission_affiliates, 2),
-            "total_profit_after_affiliates_usd": round(total_profit_net - total_commission_affiliates, 2),
+            # total_profit_net ya tiene las comisiones descontadas por ítem
+            "total_profit_after_affiliates_usd": round(total_profit_net, 2),
         },
     })
 
@@ -2664,8 +2665,19 @@ def admin_stats_package(pkg_id: int):
                 except Exception:
                     pass
 
-            # Acumular revenue solo de ítems con costo definido para calcular comisión correcta
-            revenue_with_cost = 0.0
+            # Determinar comisión del influencer una vez por orden
+            comm_pct = 0.0
+            if use_affiliate and su:
+                try:
+                    comm_pct = float(su.commission_percent or 0.0)
+                    if (pkg.category or "").lower() == "gift" and float(su.commission_gift_percent or 0.0) > 0:
+                        comm_pct = float(su.commission_gift_percent or 0.0)
+                    elif (pkg.category or "").lower() == "mobile" and float(su.commission_mobile_percent or 0.0) > 0:
+                        comm_pct = float(su.commission_mobile_percent or 0.0)
+                except Exception:
+                    comm_pct = 0.0
+
+            # Calcular ganancia por cada ítem, restando comisión individualmente si aplica
             for iid, agg in items_map.items():
                 it = items_by_id.get(iid)
                 if not it:
@@ -2682,6 +2694,15 @@ def admin_stats_package(pkg_id: int):
                 revenue = float(agg.get("revenue") or 0.0)
                 if qty <= 0:
                     continue
+                
+                # Si usó código de influencer, restar comisión del revenue antes de calcular ganancia
+                if use_affiliate and comm_pct > 0:
+                    commission_item = round(revenue * (comm_pct / 100.0), 2)
+                    total_commission_affiliates += commission_item
+                    net_revenue = revenue - commission_item
+                else:
+                    net_revenue = revenue
+                
                 rec = stats.setdefault(
                     iid,
                     {
@@ -2701,34 +2722,13 @@ def admin_stats_package(pkg_id: int):
                     rec["qty_with_affiliate"] += qty
                 else:
                     rec["qty_normal"] += qty
-                # Ganancia real = ingresos - costo
+                # Ganancia = revenue neto (después de comisión) - costo
                 total_cost = cost_unit * qty
-                profit_val = revenue - total_cost
+                profit_val = net_revenue - total_cost
                 if profit_val < 0.0:
                     profit_val = 0.0
                 rec["profit_total_usd"] = rec.get("profit_total_usd", 0.0) + profit_val
                 total_profit_net += profit_val
-                # Acumular revenue solo de ítems con costo para comisión
-                revenue_with_cost += revenue
-
-            # Calcular comisión del influencer solo sobre revenue de ítems con costo
-            if use_affiliate and revenue_with_cost > 0.0:
-                comm_pct = 0.0
-                try:
-                    if su:
-                        comm_pct = float(su.commission_percent or 0.0)
-                        if (pkg.category or "").lower() == "gift" and float(su.commission_gift_percent or 0.0) > 0:
-                            comm_pct = float(su.commission_gift_percent or 0.0)
-                        elif (pkg.category or "").lower() == "mobile" and float(su.commission_mobile_percent or 0.0) > 0:
-                            comm_pct = float(su.commission_mobile_percent or 0.0)
-                except Exception:
-                    comm_pct = 0.0
-                if comm_pct > 0:
-                    try:
-                        inc = round(revenue_with_cost * (comm_pct / 100.0), 2)
-                    except Exception:
-                        inc = 0.0
-                    total_commission_affiliates += inc
         except Exception:
             continue
 
@@ -2772,7 +2772,8 @@ def admin_stats_package(pkg_id: int):
         "summary": {
             "total_profit_net_usd": round(total_profit_net, 2),
             "total_affiliate_commission_usd": round(total_commission_affiliates, 2),
-            "total_profit_after_affiliates_usd": round(total_profit_net - total_commission_affiliates, 2),
+            # total_profit_net ya tiene las comisiones descontadas por ítem
+            "total_profit_after_affiliates_usd": round(total_profit_net, 2),
         },
     })
 
