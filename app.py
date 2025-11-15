@@ -2518,7 +2518,7 @@ def admin_stats_summary():
                 except Exception:
                     pass
 
-            # Determinar comisión del influencer una vez por orden
+            # Determinar comisión del influencer una vez por orden (solo para registro)
             comm_pct = 0.0
             if use_affiliate and su:
                 try:
@@ -2534,7 +2534,7 @@ def admin_stats_summary():
                 except Exception:
                     comm_pct = 0.0
 
-            # Calcular ganancia por cada ítem, restando comisión individualmente si aplica
+            # Calcular ganancia por cada ítem
             for iid, agg in items_map.items():
                 it = items_by_id.get(iid)
                 if not it:
@@ -2547,17 +2547,14 @@ def admin_stats_summary():
                 if qty <= 0:
                     continue
                 
-                # Si usó código de influencer, restar comisión del revenue antes de calcular ganancia
+                # Registrar comisión del influencer (solo informativo)
                 if use_affiliate and comm_pct > 0:
                     commission_item = round(revenue * (comm_pct / 100.0), 2)
                     total_commission_affiliates += commission_item
-                    net_revenue = revenue - commission_item
-                else:
-                    net_revenue = revenue
                 
-                # Ganancia = revenue neto (después de comisión) - costo
+                # Ganancia = precio pagado por cliente (ya incluye descuento si usó código) - costo
                 total_cost = cost_unit * qty
-                profit_val = net_revenue - total_cost
+                profit_val = revenue - total_cost
                 if profit_val < 0.0:
                     profit_val = 0.0
                 total_profit_net += profit_val
@@ -2665,7 +2662,7 @@ def admin_stats_package(pkg_id: int):
                 except Exception:
                     pass
 
-            # Determinar comisión del influencer una vez por orden
+            # Determinar comisión del influencer una vez por orden (solo para registro)
             comm_pct = 0.0
             if use_affiliate and su:
                 try:
@@ -2677,7 +2674,7 @@ def admin_stats_package(pkg_id: int):
                 except Exception:
                     comm_pct = 0.0
 
-            # Calcular ganancia por cada ítem, restando comisión individualmente si aplica
+            # Calcular ganancia por cada ítem
             for iid, agg in items_map.items():
                 it = items_by_id.get(iid)
                 if not it:
@@ -2695,13 +2692,10 @@ def admin_stats_package(pkg_id: int):
                 if qty <= 0:
                     continue
                 
-                # Si usó código de influencer, restar comisión del revenue antes de calcular ganancia
+                # Registrar comisión del influencer (solo informativo)
                 if use_affiliate and comm_pct > 0:
                     commission_item = round(revenue * (comm_pct / 100.0), 2)
                     total_commission_affiliates += commission_item
-                    net_revenue = revenue - commission_item
-                else:
-                    net_revenue = revenue
                 
                 rec = stats.setdefault(
                     iid,
@@ -2722,9 +2716,9 @@ def admin_stats_package(pkg_id: int):
                     rec["qty_with_affiliate"] += qty
                 else:
                     rec["qty_normal"] += qty
-                # Ganancia = revenue neto (después de comisión) - costo
+                # Ganancia = precio pagado por cliente (ya incluye descuento si usó código) - costo
                 total_cost = cost_unit * qty
-                profit_val = net_revenue - total_cost
+                profit_val = revenue - total_cost
                 if profit_val < 0.0:
                     profit_val = 0.0
                 rec["profit_total_usd"] = rec.get("profit_total_usd", 0.0) + profit_val
