@@ -1681,6 +1681,56 @@ def create_order():
             special_code=special_code,
         )
         # If client sent multiple items, store them in items_json
+        # Apply influencer discount if special_code provided
+        discount_fraction = 0.0
+        item_discounts_map = {}  # iid -> discount fraction for tiered discounts (mobile)
+        if special_code:
+            try:
+                su = SpecialUser.query.filter(
+                    db.func.lower(SpecialUser.code) == special_code.lower(),
+                    SpecialUser.active == True
+                ).first()
+                if su:
+                    discount_fraction = float(su.discount_percent or 0.0) / 100.0
+                    # Check category-specific discounts
+                    try:
+                        pkg = StorePackage.query.get(gid)
+                        if pkg:
+                            cat = (pkg.category or '').lower()
+                            if cat == 'gift' and float(su.discount_gift_percent or 0.0) > 0:
+                                discount_fraction = float(su.discount_gift_percent or 0.0) / 100.0
+                            elif cat == 'mobile':
+                                # For mobile, calculate tiered per-item discounts
+                                max_pct = 10.0
+                                min_pct = 4.0
+                                try:
+                                    mset = float(su.discount_mobile_percent or 0.0)
+                                    if mset > 0:
+                                        max_pct = max(min(mset, 100.0), min_pct)
+                                except Exception:
+                                    pass
+                                # Get all items sorted by price
+                                all_pkg_items = GamePackageItem.query.filter_by(
+                                    store_package_id=gid, active=True
+                                ).order_by(GamePackageItem.price.asc()).all()
+                                n = len(all_pkg_items)
+                                if n >= 1:
+                                    if n == 1:
+                                        item_discounts_map[all_pkg_items[0].id] = max_pct / 100.0
+                                    else:
+                                        step = (max_pct - min_pct) / (n - 1)
+                                        for idx, it in enumerate(all_pkg_items):
+                                            pct = max_pct - step * idx
+                                            pct = max(min_pct, min(max_pct, pct))
+                                            item_discounts_map[it.id] = pct / 100.0
+                                # Use first item discount as general if not overridden
+                                if all_pkg_items:
+                                    discount_fraction = item_discounts_map.get(all_pkg_items[0].id, discount_fraction)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        
         try:
             raw_items = data.get("items")
             items_list = []
@@ -1696,12 +1746,19 @@ def create_order():
                     gi = GamePackageItem.query.get(iid)
                     if not gi:
                         continue
+                    
+                    # Calculate actual price with discount if applicable
+                    base_price = float(gi.price or 0.0)
+                    # Check if this item has specific discount (mobile tiered)
+                    item_discount = item_discounts_map.get(iid, discount_fraction)
+                    actual_price = base_price * (1.0 - item_discount)
+                    
                     items_list.append({
                         "item_id": gi.id,
                         "qty": qty,
                         "title": gi.title,
-                        "price": float(gi.price or 0.0),
-                        "cost_unit_usd": float(gi.profit_net_usd or 0.0),  # Guardar costo al momento de la orden
+                        "price": round(actual_price, 2),  # Guardar precio con descuento aplicado
+                        "cost_unit_usd": float(gi.profit_net_usd or 0.0),
                     })
             if items_list:
                 o.items_json = json.dumps(items_list)
