@@ -1701,6 +1701,7 @@ def create_order():
                         "qty": qty,
                         "title": gi.title,
                         "price": float(gi.price or 0.0),
+                        "cost_unit_usd": float(gi.profit_net_usd or 0.0),  # Guardar costo al momento de la orden
                     })
             if items_list:
                 o.items_json = json.dumps(items_list)
@@ -2479,7 +2480,7 @@ def admin_stats_summary():
                         scope_ok = False
                 use_affiliate = scope_ok
 
-            # items_map: iid -> {qty, revenue}
+            # items_map: iid -> {qty, revenue, cost_total}
             items_map = {}
             try:
                 if (o.items_json or "").strip():
@@ -2499,21 +2500,28 @@ def admin_stats_summary():
                                 p = float(ent.get("price") or 0.0)
                             except Exception:
                                 p = 0.0
-                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0}
+                            # Usar costo guardado en la orden, o costo actual si no existe
+                            it = items_by_id.get(iid)
+                            cost_unit = float(ent.get("cost_unit_usd") or (it.profit_net_usd if it else 0.0) or 0.0)
+                            
+                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
                             cur["qty"] += q
                             cur["revenue"] += (p * q)
+                            cur["cost_total"] += (cost_unit * q)
                             items_map[iid] = cur
             except Exception:
                 items_map = {}
             if not items_map and o.item_id:
+                # Legacy: single item orders without items_json
                 try:
                     iid = int(o.item_id)
                     if iid > 0:
                         it = items_by_id.get(iid)
                         if it:
-                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0}
+                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
                             cur["qty"] += 1
                             cur["revenue"] += float(it.price or 0.0)
+                            cur["cost_total"] += float(it.profit_net_usd or 0.0)
                             items_map[iid] = cur
                 except Exception:
                     pass
@@ -2539,12 +2547,11 @@ def admin_stats_summary():
                 it = items_by_id.get(iid)
                 if not it:
                     continue
-                cost_unit = float(it.profit_net_usd or 0.0)
-                if cost_unit <= 0.0:
-                    continue
                 qty = int(agg.get("qty") or 0)
                 revenue = float(agg.get("revenue") or 0.0)
-                if qty <= 0:
+                cost_total = float(agg.get("cost_total") or 0.0)
+                
+                if qty <= 0 or cost_total <= 0.0:
                     continue
                 
                 # Registrar comisión del influencer (solo informativo)
@@ -2552,9 +2559,8 @@ def admin_stats_summary():
                     commission_item = round(revenue * (comm_pct / 100.0), 2)
                     total_commission_affiliates += commission_item
                 
-                # Ganancia = precio pagado por cliente (ya incluye descuento si usó código) - costo
-                total_cost = cost_unit * qty
-                profit_val = revenue - total_cost
+                # Ganancia = precio pagado por cliente - costo guardado en la orden
+                profit_val = revenue - cost_total
                 if profit_val < 0.0:
                     profit_val = 0.0
                 total_profit_net += profit_val
@@ -2622,7 +2628,7 @@ def admin_stats_package(pkg_id: int):
                         scope_ok = False
                 use_affiliate = scope_ok
 
-            # items_map: iid -> {qty, revenue}
+            # items_map: iid -> {qty, revenue, cost_total}
             items_map = {}
             try:
                 if (o.items_json or "").strip():
@@ -2642,9 +2648,14 @@ def admin_stats_package(pkg_id: int):
                                 p = float(ent.get("price") or 0.0)
                             except Exception:
                                 p = 0.0
-                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0}
+                            # Usar costo guardado en la orden, o costo actual si no existe
+                            it = items_by_id.get(iid)
+                            cost_unit = float(ent.get("cost_unit_usd") or (it.profit_net_usd if it else 0.0) or 0.0)
+                            
+                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
                             cur["qty"] += q
                             cur["revenue"] += (p * q)
+                            cur["cost_total"] += (cost_unit * q)
                             items_map[iid] = cur
             except Exception:
                 items_map = {}
@@ -2655,9 +2666,10 @@ def admin_stats_package(pkg_id: int):
                     if iid > 0:
                         it = items_by_id.get(iid)
                         if it:
-                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0}
+                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
                             cur["qty"] += 1
                             cur["revenue"] += float(it.price or 0.0)
+                            cur["cost_total"] += float(it.profit_net_usd or 0.0)
                             items_map[iid] = cur
                 except Exception:
                     pass
@@ -2679,18 +2691,21 @@ def admin_stats_package(pkg_id: int):
                 it = items_by_id.get(iid)
                 if not it:
                     continue
-                cost_unit = float(it.profit_net_usd or 0.0)
-                if cost_unit <= 0.0:
+                
+                qty = int(agg.get("qty") or 0)
+                revenue = float(agg.get("revenue") or 0.0)
+                cost_total = float(agg.get("cost_total") or 0.0)
+                
+                if qty <= 0 or cost_total <= 0.0:
                     continue
+                
+                # Costo actual del ítem (para mostrar en UI)
+                cost_unit = float(it.profit_net_usd or 0.0)
                 # Precio estándar y ganancia estándar por unidad (informativa)
                 price_std = float(it.price or 0.0)
                 profit_unit_std = price_std - cost_unit
                 if profit_unit_std < 0.0:
                     profit_unit_std = 0.0
-                qty = int(agg.get("qty") or 0)
-                revenue = float(agg.get("revenue") or 0.0)
-                if qty <= 0:
-                    continue
                 
                 # Registrar comisión del influencer (solo informativo)
                 if use_affiliate and comm_pct > 0:
@@ -2716,9 +2731,8 @@ def admin_stats_package(pkg_id: int):
                     rec["qty_with_affiliate"] += qty
                 else:
                     rec["qty_normal"] += qty
-                # Ganancia = precio pagado por cliente (ya incluye descuento si usó código) - costo
-                total_cost = cost_unit * qty
-                profit_val = revenue - total_cost
+                # Ganancia = precio pagado por cliente - costo guardado en las órdenes
+                profit_val = revenue - cost_total
                 if profit_val < 0.0:
                     profit_val = 0.0
                 rec["profit_total_usd"] = rec.get("profit_total_usd", 0.0) + profit_val
