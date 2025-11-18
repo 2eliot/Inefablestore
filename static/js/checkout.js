@@ -406,16 +406,8 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
         if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo crear la orden');
-        const wrap = document.getElementById('checkout');
-        if (wrap) {
-          wrap.innerHTML = `
-            <div style="max-width:720px;margin:40px auto;text-align:center;color:#e5e7eb;">
-              <div style="background:#10b981;color:#062a1d;font-weight:900;padding:14px;border-radius:12px;">¡Gracias por tu compra!</div>
-              <p style="margin-top:12px;">Tu orden #${data.order_id} ha sido registrada y será procesada por nuestro equipo.</p>
-              <p>Te redirigiremos al inicio en unos segundos...</p>
-            </div>`;
-        }
-        setTimeout(() => { window.location.href = '/'; }, 3000);
+        // Redirect to dedicated thank-you page
+        window.location.href = `/gracias/${encodeURIComponent(data.order_id)}`;
       } catch (err) {
         const msg = (err && err.name === 'AbortError') ? 'La solicitud tardó demasiado. Intenta de nuevo.' : (err.message || 'No se pudo crear la orden');
         alert(msg);

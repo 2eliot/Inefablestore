@@ -1239,6 +1239,24 @@ def admin_config_mid_banner_set():
     return jsonify({"ok": True})
 
 
+@app.route("/admin/config/thanks_image", methods=["GET"])
+def admin_config_thanks_image_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "thanks_image_path": get_config_value("thanks_image_path", "")})
+
+
+@app.route("/admin/config/thanks_image", methods=["POST"])
+def admin_config_thanks_image_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    set_config_value("thanks_image_path", (data.get("thanks_image_path") or "").strip())
+    return jsonify({"ok": True})
+
+
 @app.route("/admin/config/rate", methods=["GET"])
 def admin_config_rate_get():
     user = session.get("user")
@@ -1577,6 +1595,18 @@ def store_checkout(gid: int):
     site_name = get_config_value("site_name", "InefableStore")
     whatsapp_url = get_config_value("whatsapp_url", "https://api.whatsapp.com/send?phone=%2B584125712917")
     return render_template("checkout.html", gid=gid, logo_url=logo_url, site_name=site_name, whatsapp_url=whatsapp_url)
+
+
+@app.route("/gracias/<int:oid>")
+def thanks_order(oid: int):
+    """Simple thank-you page after placing an order."""
+    try:
+        logo_url = get_config_value("logo_path", "")
+        site_name = get_config_value("site_name", "InefableStore")
+    except Exception:
+        logo_url = ""
+        site_name = "InefableStore"
+    return render_template("thanks.html", order_id=oid, logo_url=logo_url, site_name=site_name)
 
 
 # ===============
@@ -2470,6 +2500,12 @@ def admin_packages_delete(pid: int):
 def get_config_value(key: str, default: str = "") -> str:
     row = AppConfig.query.filter_by(key=key).first()
     return row.value if row else default
+
+
+@app.context_processor
+def inject_cfg_helpers():
+    # Expose get_config_value so templates can access AppConfig values
+    return dict(get_config_value=get_config_value)
 
 
 @app.route("/admin/stats/packages", methods=["GET"])

@@ -25,6 +25,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSaveMidBanner = document.getElementById('btn-save-mid-banner');
   const btnPickMidBanner = document.getElementById('btn-pick-mid-banner');
   const midBannerPreview = document.getElementById('mid-banner-preview');
+  // Thanks image config
+  const inputThanksImage = document.getElementById('thanks-image-path');
+  const btnSaveThanksImage = document.getElementById('btn-save-thanks-image');
+  const btnPickThanksImage = document.getElementById('btn-pick-thanks-image');
+  const thanksImagePreview = document.getElementById('thanks-image-preview');
   // Hero config
   const hero1 = document.getElementById('hero-1');
   const hero2 = document.getElementById('hero-2');
@@ -56,6 +61,24 @@ document.addEventListener('DOMContentLoaded', () => {
         h3.style.display = 'none';
       }
     });
+  }
+
+  // Save Thanks image
+  if (btnSaveThanksImage) {
+    btnSaveThanksImage.addEventListener('click', async () => {
+      try {
+        btnSaveThanksImage.disabled = true;
+        await saveThanksImage();
+        toast && toast('Imagen de gracias guardada');
+      } catch (e) {
+        toast && toast(e.message || 'No se pudo guardar');
+      } finally {
+        btnSaveThanksImage.disabled = false;
+      }
+    });
+  }
+  if (inputThanksImage) {
+    inputThanksImage.addEventListener('input', showThanksImagePreview);
   }
 
   // =====================
@@ -386,6 +409,39 @@ document.addEventListener('DOMContentLoaded', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mid_banner_path })
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || 'No se pudo guardar');
+    }
+    return res.json();
+  }
+
+  // Thanks image helpers
+  function showThanksImagePreview() {
+    if (!inputThanksImage || !thanksImagePreview) return;
+    const url = (inputThanksImage.value || '').trim();
+    if (url) { thanksImagePreview.src = url; thanksImagePreview.style.display = 'inline-block'; }
+    else { thanksImagePreview.style.display = 'none'; }
+  }
+
+  async function fetchThanksImage() {
+    try {
+      const res = await fetch('/admin/config/thanks_image');
+      const data = await res.json();
+      if (inputThanksImage) {
+        inputThanksImage.value = (data && data.thanks_image_path) || '';
+        showThanksImagePreview();
+      }
+      window.fetchThanksImage = fetchThanksImage;
+    } catch (_) { /* ignore */ }
+  }
+
+  async function saveThanksImage() {
+    if (!inputThanksImage) return;
+    const thanks_image_path = (inputThanksImage.value || '').trim();
+    const res = await fetch('/admin/config/thanks_image', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thanks_image_path })
     });
     if (!res.ok) {
       const txt = await res.text();
@@ -731,7 +787,7 @@ window.fetchPayments = fetchPayments;
         // Lazy-load per tab
         if (target === '#tab-orders') { fetchOrders(); fetchAffWithdrawalsForOrders(); }
         if (target === '#tab-images') { if (gallery) await fetchImages(); }
-        if (target === '#tab-config') { fetchSiteName(); fetchLogo(); fetchMidBanner(); fetchActiveLoginGame(); fetchPayments(); }
+        if (target === '#tab-config') { fetchSiteName(); fetchLogo(); fetchMidBanner(); fetchThanksImage(); fetchActiveLoginGame(); fetchPayments(); }
         if (target === '#tab-affiliates') { fetchAffiliates(); fetchAffWithdrawals(); populatePackagesForAffiliateScope && populatePackagesForAffiliateScope(); }
         if (target === '#tab-packages') { fetchPackages(); }
         if (target === '#tab-stats') { fetchStatsPackages(); fetchGlobalStatsSummary(); }
@@ -1915,6 +1971,7 @@ window.fetchHero = fetchHero;
   // Fetch current config on load of admin page (after element refs are defined)
   window.fetchLogo && window.fetchLogo();
   window.fetchMidBanner && window.fetchMidBanner();
+  window.fetchThanksImage && window.fetchThanksImage();
   window.fetchHero && window.fetchHero();
   window.fetchRate && window.fetchRate();
   window.fetchPayments && window.fetchPayments();
@@ -1979,6 +2036,9 @@ window.fetchHero = fetchHero;
   }
   if (btnPickMidBanner) {
     btnPickMidBanner.addEventListener('click', () => openLogoPicker(inputMidBanner));
+  }
+  if (btnPickThanksImage) {
+    btnPickThanksImage.addEventListener('click', () => openLogoPicker(inputThanksImage));
   }
   if (btnPickHero1) btnPickHero1.addEventListener('click', () => openLogoPicker(hero1));
   if (btnPickHero2) btnPickHero2.addEventListener('click', () => openLogoPicker(hero2));
