@@ -171,24 +171,25 @@ html { overflow-x: hidden; width: 100%; }
   border-color: var(--price-accent);
   color: #0b0f14;
   box-shadow: 0 6px 16px rgba(16,185,129,0.28);
-}
 #btn-buy.btn.primary:hover,
 #btn-confirm-pay.btn.primary:hover,
 #btn-co-confirm.btn.primary:hover {
   filter: brightness(1.05);
 }
-/* Make the Paste button green */
+/* Make the Paste button transparent with visible text and green color */
 #btn-paste-ref {
-  background: var(--price-accent);
-  border-color: var(--price-accent);
-  color: #0b0f14;
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--price-accent) !important;
   font-weight: 900;
+  box-shadow: none !important;
 }
-#btn-paste-ref:hover { filter: brightness(1.05); }
+#btn-paste-ref:hover { opacity: 0.9; }
 
 /* Checkout discount breakdown */
 #co-disc-note {
   background: #1f2329;
+/* ... */
   border: 1px solid #30363d;
   border-radius: 14px;
   padding: 14px 16px;

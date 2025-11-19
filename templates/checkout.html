@@ -18,7 +18,7 @@
   .co-actions { margin-top: 10px; }
   .co-actions .btn { width: 100%; }
   /* Reference input emphasis */
-  .ref-group { display:grid; gap:8px; }
+  .ref-group { display:grid; gap:8px; justify-items: center; }
   .ref-label { color:#cbd5e1; font-weight:800; font-size:13px; letter-spacing:.2px; }
   .ref-hint { color: #94a3b8; font-size: 12px; margin-top: -2px; }
   #co-ref.input { 
@@ -33,6 +33,26 @@
   }
   #co-ref.input::placeholder { color: #94a3b8; }
   #co-ref.input:focus { border-color:#94a3b8; box-shadow: 0 0 0 3px rgba(148,163,184,0.25); }
+  /* Wrapper to place the Paste button inside the input */
+  .ref-input-wrap { position: relative; width: 100%; max-width: 480px; margin: 0 auto; }
+  .ref-input-wrap #co-ref.input { width: 100%; box-sizing: border-box; padding-right: 120px; padding-left: 120px; }
+  .ref-input-wrap #btn-paste-ref {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    height: calc(100% - 8px);
+    padding: 0 14px;
+    min-width: 90px;
+    width: auto !important;
+    z-index: 1;
+    background: transparent !important;
+    border: none !important;
+    color: var(--price-accent) !important;
+    box-shadow: none !important;
+    font-weight: 900 !important;
+    border-left: 1px solid rgba(148,163,184,0.28) !important;
+  }
   .co-hint { color: #94a3b8; font-size: 12px; margin-top: 6px; text-align: center; }
   /* Discount price styling */
   .price-old { text-decoration: line-through; color: rgba(148,163,184,0.6); margin-right: 8px; font-weight: 800; }
@@ -42,6 +62,12 @@
   #co-disc-note { background: #2b2f36; border:1px solid #3a3f47; border-radius: 14px; padding: 12px; margin: 0 0 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); color:#e2e8f0; text-align:center; font-weight:900; width: 100%; max-width: 100%; }
   .co-disc-note { text-align:center; color:#e2e8f0; font-weight:900; }
   .co-disc-note[hidden] { display: none; }
+  /* Phone tweaks: keep input text fully visible and centered */
+  @media (max-width: 480px) {
+    .ref-input-wrap { max-width: 100%; }
+    .ref-input-wrap #btn-paste-ref { right: 4px; min-width: 72px; padding: 0 10px; }
+    .ref-input-wrap #co-ref.input { padding-right: 92px; padding-left: 92px; font-size: 14px; }
+  }
   /* Button disabled state - very visual */
   #btn-co-confirm {
     position: relative;
@@ -149,7 +175,7 @@
             <path d="M12 16l-6-6h12l-6 6z"/>
           </svg>
         </div>
-        <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;">
+        <div class="ref-input-wrap">
           <input id="co-ref" class="input" type="text" inputmode="numeric" pattern="[0-9]{6}" placeholder="NUMERO DE REFERENCIA DE PAGO" maxlength="6" minlength="6" required style="text-align: center;">
           <button id="btn-paste-ref" type="button" class="btn" aria-label="Pegar referencia" title="Pegar" style="font-weight:800;">Pegar</button>
         </div>
