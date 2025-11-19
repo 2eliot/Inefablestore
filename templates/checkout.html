@@ -149,7 +149,10 @@
             <path d="M12 16l-6-6h12l-6 6z"/>
           </svg>
         </div>
-        <input id="co-ref" class="input" type="text" inputmode="numeric" pattern="[0-9]{6}" placeholder="NUMERO DE REFERENCIA DE PAGO" maxlength="6" minlength="6" required style="text-align: center;">
+        <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;">
+          <input id="co-ref" class="input" type="text" inputmode="numeric" pattern="[0-9]{6}" placeholder="NUMERO DE REFERENCIA DE PAGO" maxlength="6" minlength="6" required style="text-align: center;">
+          <button id="btn-paste-ref" type="button" class="btn" aria-label="Pegar referencia" title="Pegar" style="font-weight:800;">Pegar</button>
+        </div>
         <div class="digit-counter">
           <div class="digit-dot" id="dot-1"></div>
           <div class="digit-dot" id="dot-2"></div>

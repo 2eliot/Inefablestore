@@ -334,6 +334,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
+  // Paste button support: read clipboard and apply same logic
+  const btnPasteRef = document.getElementById('btn-paste-ref');
+  if (btnPasteRef) {
+    btnPasteRef.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        const digits = String(text || '').replace(/\D/g, '');
+        const last6 = digits.slice(-6);
+        coRef.value = last6;
+        updateDigitIndicators(last6.length);
+        isReferenceValid = false;
+        if (refError) { refError.style.display = 'none'; refError.textContent = ''; }
+        if (btnConfirm) btnConfirm.disabled = last6.length !== 6;
+        if (last6.length === 6) {
+          checkReferenceAvailability(last6);
+        }
+        coRef.focus();
+      } catch (_) {
+        // If clipboard API not allowed, fall back to focusing the field so user can Ctrl+V
+        coRef.focus();
+      }
+    });
+  }
+  
   // Function to check if reference is already in use
   async function checkReferenceAvailability(reference) {
     try {

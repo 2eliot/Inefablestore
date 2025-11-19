@@ -177,6 +177,14 @@ html { overflow-x: hidden; width: 100%; }
 #btn-co-confirm.btn.primary:hover {
   filter: brightness(1.05);
 }
+/* Make the Paste button green */
+#btn-paste-ref {
+  background: var(--price-accent);
+  border-color: var(--price-accent);
+  color: #0b0f14;
+  font-weight: 900;
+}
+#btn-paste-ref:hover { filter: brightness(1.05); }
 
 /* Checkout discount breakdown */
 #co-disc-note {
