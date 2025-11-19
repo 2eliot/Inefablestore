@@ -120,17 +120,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderHeader() {
     const t = computeTotals();
-    // If discount active, show new price then old price struck-through
+    // Default header: simple total
+    coTotal.textContent = `Total a pagar: ${formatPriceFor(t.displayCurrency, t.amount)}`;
+    if (coDiscNote) { coDiscNote.setAttribute('hidden', ''); coDiscNote.innerHTML = ''; }
+
+    // If discount via creator code is active, show detailed breakdown
     if (allItems && selectedIndex >= 0 && selectedIndex < allItems.length && window.__validRef && window.__validRef.discount) {
-      if (t.baseBeforeDiscount > t.amount) {
-        coTotal.innerHTML = `Total a pagar: <span class="price-new">${formatPriceFor(t.displayCurrency, t.amount)}</span> <span class="price-old">${formatPriceFor(t.displayCurrency, t.baseBeforeDiscount)}</span>`;
-        const pct = Math.round(Number(window.__validRef.discount || 0) * 100);
-        if (coDiscNote) { coDiscNote.textContent = `${pct}% de descuento activo`; coDiscNote.removeAttribute('hidden'); }
-        return;
+      const frac = Number(window.__validRef.discount || 0);
+      const pct = (frac * 100).toFixed(1).replace(/\.?0$/, ''); // 10.0 -> 10, 10.5 stays
+      // Unit price in current display currency
+      const it = allItems[selectedIndex];
+      const unitUsd = Number(it.price || 0);
+      const displayUnit = (t.displayCurrency === 'BSD' && rate && rate > 0) ? unitUsd * rate : unitUsd;
+      const qty = Math.max(1, quantity || 1);
+      // Compose styled breakdown (keeps theme colors; green accent comes from CSS var)
+      const thanks = (window.__validRef && window.__validRef.code) ? `Gracias por usar el código de ${window.__validRef.code}` : '';
+      coTotal.textContent = `Total a pagar: ${formatPriceFor(t.displayCurrency, t.amount)}`;
+      if (coDiscNote) {
+        coDiscNote.innerHTML = `
+          <div class="co-badge">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M20 7h-2.18A3 3 0 0 0 15 3a3 3 0 0 0-3 3 3 3 0 0 0-3-3 3 3 0 0 0-2.82 4H4a1 1 0 0 0-1 1v3h18V8a1 1 0 0 0-1-1zM9 5a1 1 0 1 1 0 2H7.82A1.82 1.82 0 0 1 9 5zm6 0a1.82 1.82 0 0 1 1.18 3H15a1 1 0 1 1 0-2zM3 13v6a1 1 0 0 0 1 1h7v-7H3zm10 0v7h7a1 1 0 0 0 1-1v-6h-8z"/></svg>
+            <span>${pct}% de descuento aplicado</span>
+          </div>
+          <div class="co-total">Total a pagar: ${formatPriceFor(t.displayCurrency, t.amount)}</div>
+          <div class="co-old">Precio original: ${formatPriceFor(t.displayCurrency, t.baseBeforeDiscount)}</div>
+          <div class="co-qty">Cantidad: ${qty}</div>
+        `;
+        coDiscNote.removeAttribute('hidden');
       }
     }
-    coTotal.textContent = `Total a pagar: ${formatPriceFor(t.displayCurrency, t.amount)}`;
-    if (coDiscNote) coDiscNote.setAttribute('hidden', '');
+
+    // When no discount: show simple block with total and quantity
+    if ((!window.__validRef || !window.__validRef.discount) && coDiscNote) {
+      coDiscNote.innerHTML = `
+        <div class="co-total">Total a pagar: ${formatPriceFor(t.displayCurrency, t.amount)}</div>
+        <div class="co-qty">Cantidad: ${Math.max(1, quantity || 1)}</div>
+      `;
+      coDiscNote.removeAttribute('hidden');
+    }
   }
 
   function renderInfo() {
@@ -164,7 +191,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     // Optional player info lines (kept at top if present)
     // Player ID (qCid) intentionally hidden from checkout UI, but still used internally
-    if (qZid) addItem('id', qZid);
     if (currency === 'BSD') {
       // Show PM bank/name/phone/id
       addItem('bank', (paymentsCfg && paymentsCfg.pm_bank) || '');
@@ -272,6 +298,30 @@ document.addEventListener('DOMContentLoaded', () => {
       // Check for duplicate reference when 6 digits are entered
       if (value.length === 6) {
         checkReferenceAvailability(value);
+      }
+    });
+
+    // On paste: extract only last 6 digits from any pasted text
+    coRef.addEventListener('paste', (e) => {
+      e.preventDefault();
+      try {
+        const clip = (e.clipboardData || window.clipboardData);
+        const text = (clip && typeof clip.getData === 'function') ? (clip.getData('text') || '') : '';
+        const digits = String(text || '').replace(/\D/g, '');
+        const last6 = digits.slice(-6);
+        coRef.value = last6;
+        // Update UI
+        updateDigitIndicators(last6.length);
+        // Reset/hide previous error
+        isReferenceValid = false;
+        if (refError) { refError.style.display = 'none'; refError.textContent = ''; }
+        // Enable/disable confirm and trigger availability check
+        if (btnConfirm) btnConfirm.disabled = last6.length !== 6;
+        if (last6.length === 6) {
+          checkReferenceAvailability(last6);
+        }
+      } catch (_) {
+        // Fallback: let the normal input handler sanitize afterwards
       }
     });
   }

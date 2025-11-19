@@ -178,6 +178,38 @@ html { overflow-x: hidden; width: 100%; }
   filter: brightness(1.05);
 }
 
+/* Checkout discount breakdown */
+#co-disc-note {
+  background: #1f2329;
+  border: 1px solid #30363d;
+  border-radius: 14px;
+  padding: 14px 16px;
+  color: #e5e7eb;
+  text-align: center;
+  max-width: 720px;
+  margin: 10px auto 0;
+}
+#co-disc-note .co-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--price-accent);
+  color: #062a1d;
+  font-weight: 900;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+#co-disc-note .co-badge svg { width: 16px; height: 16px; }
+#co-disc-note .co-old { text-decoration: line-through; opacity: 0.6; margin-top: 6px; display:block; }
+#co-disc-note .co-qty { margin-top: 6px; }
+#co-disc-note .co-unit { margin-top: 2px; }
+#co-disc-note .co-total { margin-top: 8px; font-size: 22px; font-weight: 900; color:#e5e7eb; }
+#co-disc-note .co-thanks { margin-top: 4px; font-size: 12px; color: #94a3b8; }
+
+/* Hide legacy green banner on checkout (content still updated for accessibility) */
+#co-total { display: none !important; }
+
 /* Auth modal: make primary button gray */
 .auth-card .btn.primary,
 .auth-card .btn.primary.full {
@@ -200,6 +232,9 @@ html { overflow-x: hidden; width: 100%; }
 .packages-head { display:flex; align-items:center; justify-content: space-between; margin-bottom: 10px; }
 .packages-title { margin: 0; color: #ffffff; }
 .packages-nav { display:flex; gap: 8px; }
+/* Center title for Related Packages section */
+#related-packages .packages-head { justify-content: center; }
+#related-packages .packages-title { text-align: center; }
 .packages-nav button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid #2a2a2a; background: #111111; color: #e5e7eb; cursor: pointer; }
 .packages-rail { display:flex; gap: 22px; overflow-x: auto; scroll-behavior: smooth; padding-bottom: 8px; justify-content: center; flex-wrap: nowrap; 
   /* Hide scrollbar line while keeping scroll */
@@ -216,20 +251,34 @@ html { overflow-x: hidden; width: 100%; }
 @media (min-width: 900px) {
   #rail-mobile .pkg-card,
   #rail-gift .pkg-card,
-  #rail-best .pkg-card {
+  #rail-best .pkg-card,
+  #related-packages .pkg-card {
     flex: 0 0 200px;
     min-width: 200px;
     max-width: 200px;
   }
   /* Add inner gutters and adjust gap so 5 cards still fit nicely without touching edges */
   #rail-mobile.packages-rail,
-  #rail-gift.packages-rail {
+  #rail-gift.packages-rail,
+  #related-packages .packages-rail {
     padding-left: 12px;
     padding-right: 12px;
     /* Container max 1200px, section has 12px L/R padding => 1200 - 24 = 1176px content.
        Rail adds 12px L/R padding => 1176 - 24 = 1152px for items + gaps.
        For 5 cards of 200px: remaining 1152 - 1000 = 152; 152/4 gaps = 38px. */
     gap: 38px;
+  }
+  /* Force 5 columns for related packages on desktop using grid */
+  #related-packages .packages-rail {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    overflow: visible;
+    justify-content: center;
+  }
+  #related-packages .pkg-card {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
   }
 }
 .pkg-thumb { width: 100%; aspect-ratio: 1 / 1; background-size: cover; background-position: center; border-radius: 16px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); }
@@ -709,7 +758,7 @@ html { overflow-x: hidden; width: 100%; }
 }
 
 .footer-desc {
-  color: #94a3b8;
+  color: #ffffff;
   font-size: 14px;
   line-height: 1.6;
   max-width: 500px;
@@ -738,10 +787,7 @@ html { overflow-x: hidden; width: 100%; }
 
 /* Right Section */
 .footer-right {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  align-items: flex-end;
+  display: contents;
 }
 
 .footer-actions {
@@ -789,11 +835,13 @@ html { overflow-x: hidden; width: 100%; }
 .social-icon {
   width: 42px;
   height: 42px;
-  border-radius: 50%;
+  border-radius: 0;
   display: grid;
   place-items: center;
   text-decoration: none;
   transition: all 0.3s;
+  background: transparent;
+  color: inherit;
 }
 
 .social-icon svg {
@@ -802,34 +850,39 @@ html { overflow-x: hidden; width: 100%; }
 }
 
 .social-icon.whatsapp {
-  background: #25D366;
-  color: #fff;
+  background: transparent;
+  color: #25D366;
 }
 
 .social-icon.instagram {
-  background: linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
-  color: #fff;
+  background: transparent;
+  color: #E4405F;
 }
 
 .social-icon.facebook {
-  background: #1877F2;
-  color: #fff;
+  background: transparent;
+  color: #1877F2;
 }
 
 .social-icon.tiktok {
-  background: #000;
-  color: #fff;
+  background: transparent;
+  color: #000000;
 }
 
 .social-icon:hover {
   transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+  box-shadow: none;
+  opacity: 0.9;
 }
 
 .footer-copy {
-  text-align: right;
+  text-align: center;
   color: #64748b;
   font-size: 13px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #3a3f47;
+  grid-column: 1 / -1;
 }
 
 .footer-copy p {
@@ -893,7 +946,7 @@ html { overflow-x: hidden; width: 100%; }
     padding: 12px 20px;
     background: transparent;
     border-radius: 50px;
-    border: 1.5px solid rgba(34, 197, 94, 0.3);
+    border: none;
   }
   
   .feature-item svg {
