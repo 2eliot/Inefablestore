@@ -126,7 +126,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // If discount via creator code is active, show detailed breakdown
     if (allItems && selectedIndex >= 0 && selectedIndex < allItems.length && window.__validRef && window.__validRef.discount) {
-      const frac = Number(window.__validRef.discount || 0);
+      // Derive the exact discount fraction actually applied (item-specific overrides win)
+      let frac = Number(window.__validRef.discount || 0);
+      try {
+        const it = allItems[selectedIndex];
+        if (it && Array.isArray(window.__validRef.item_discounts)) {
+          const hit = window.__validRef.item_discounts.find(x => Number(x.item_id) === Number(it.id));
+          if (hit && typeof hit.discount === 'number') frac = Number(hit.discount || 0);
+        }
+      } catch(_){}
       const pct = (frac * 100).toFixed(1).replace(/\.?0$/, ''); // 10.0 -> 10, 10.5 stays
       // Unit price in current display currency
       const it = allItems[selectedIndex];
