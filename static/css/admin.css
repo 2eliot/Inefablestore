@@ -66,8 +66,13 @@ body { overflow-x: hidden; }
 .order-actions { display:flex; gap:8px; margin-top:8px; }
 .admin-drawer { position: fixed; inset: 0; z-index: 80; }
 .admin-drawer .drawer-backdrop { position: absolute; inset: 0; background: rgba(2,6,23,0.5); backdrop-filter: blur(2px); }
-.admin-drawer .drawer-panel { position: absolute; top: 0; bottom: 0; left: 0; width: 78vw; max-width: 320px; background: #ffffff; border-right: 1px solid #e2e8f0; box-shadow: 6px 0 24px rgba(0,0,0,0.2); transform: translateX(-100%); transition: transform 200ms ease; padding: 10px; }
+.admin-drawer .drawer-panel { position: absolute; top: 0; bottom: 0; left: 0; width: 78vw; max-width: 320px; background: #0b0f14; color: #e5e7eb; border-right: 1px solid #334155; box-shadow: 6px 0 24px rgba(0,0,0,0.35); transform: translateX(-100%); transition: transform 200ms ease; padding: 10px; }
 .admin-drawer:not([hidden]) .drawer-panel { transform: translateX(0); }
+
+/* Dark styles for tabs inside the admin mobile drawer */
+.admin-drawer .drawer-panel .tabs .tab { color: #e5e7eb; border-color: transparent; background: transparent; }
+.admin-drawer .drawer-panel .tabs .tab:hover { background: #111827; }
+.admin-drawer .drawer-panel .tabs .tab.active { background: #065f46; border-color: #065f46; color: #d1fae5; }
 
 @media (max-width: 900px) {
   .container { padding: 10px; }
@@ -239,7 +244,7 @@ body { overflow-x: hidden; }
 
 .order-tile .box-left .ref-value {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  color: #0f172a;
+  color: #000000;
   background: #dbeafe;
   border: 1px solid #93c5fd;
   padding: 6px 12px;
@@ -446,7 +451,7 @@ body { overflow-x: hidden; }
    ========================== */
 body.theme-admin-dark { background: #0b0f14; color: #e5e7eb; }
 body.theme-admin-dark .container { background: transparent; color: #e5e7eb; }
-body.theme-admin-dark .sidebar { background: #0b1220; border-color: #334155; }
+body.theme-admin-dark .sidebar { background: #000000; border-color: #1f2937; }
 body.theme-admin-dark .tabs .tab { color: #e5e7eb; border-color: transparent; }
 body.theme-admin-dark .tabs .tab:hover { background: #111827; }
 body.theme-admin-dark .tabs .tab.active { background: #065f46; border-color: #065f46; color: #d1fae5; }
@@ -463,14 +468,14 @@ body.theme-admin-dark .kv .k,
 body.theme-admin-dark .kv .v { color: #e5e7eb; }
 body.theme-admin-dark .empty-state h3 { color: #e5e7eb; }
 /* Cards and tiles */
-body.theme-admin-dark .order-tile { background: #0b1220; border-color: #334155; color: #e5e7eb; box-shadow: 0 6px 16px rgba(0,0,0,0.4); }
+body.theme-admin-dark .order-tile { background: #000000; border-color: #1f2937; color: #e5e7eb; box-shadow: 0 6px 16px rgba(0,0,0,0.5); }
 body.theme-admin-dark .order-tile .package-name { color: #94a3b8; }
 body.theme-admin-dark .order-tile .quantity-label { color: #e5e7eb; }
-body.theme-admin-dark .order-tile .ref-value { background: #0b1220; border-color: #334155; color: #e5e7eb; }
+body.theme-admin-dark .order-tile .ref-value { background: #f3f4f6; border-color: #e5e7eb; color: #000000; }
 body.theme-admin-dark .order-tile .hex { background: #0b1220; border-color: #334155; color: #e5e7eb; }
 body.theme-admin-dark .order-tile .row-foot { border-top-color: #1f2937; color: #94a3b8; }
 /* Image cards */
-body.theme-admin-dark .image-card { background: #0b1220; border-color: #334155; }
+body.theme-admin-dark .image-card { background: #000000; border-color: #1f2937; }
 body.theme-admin-dark .image-card .btn-del-ov { box-shadow: 0 4px 10px rgba(0,0,0,0.45); }
 /* Forms */
 body.theme-admin-dark .config-form input,
@@ -485,3 +490,18 @@ body.theme-admin-dark #tab-packages .pkg-header .name { color: #0b0f14 !importan
 /* Orders tab: make package titles white */
 body.theme-admin-dark #tab-orders .order-tile .game-name,
 body.theme-admin-dark #tab-orders .order-tile .package-name { color: #e5e7eb !important; }
+/* Packages tab: force black text on white editor UI */
+body.theme-admin-dark #tab-packages,
+body.theme-admin-dark #tab-packages h1,
+body.theme-admin-dark #tab-packages h2,
+body.theme-admin-dark #tab-packages h3,
+body.theme-admin-dark #tab-packages h4,
+body.theme-admin-dark #tab-packages p,
+body.theme-admin-dark #tab-packages label { color: #0f172a !important; }
+
+body.theme-admin-dark #tab-packages .pkg-item,
+body.theme-admin-dark #tab-packages .pkg-content { color: #0f172a !important; }
+
+body.theme-admin-dark #tab-packages .config-form input,
+body.theme-admin-dark #tab-packages .config-form select,
+body.theme-admin-dark #tab-packages .config-form textarea { background: #ffffff !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
