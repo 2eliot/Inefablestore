@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ site_name|default('InefableStore') }}</title>
     {% block styles %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css', v='3') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css', v='4') }}">
     {% endblock %}
   </head>
-  <body>
+  <body class="{{ body_class|default('') }}">
     <div class="scale-wrap">
     {% block header %}
       <header class="topbar">

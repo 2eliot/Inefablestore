@@ -439,3 +439,49 @@ body { overflow-x: hidden; }
     padding: 1px 4px;
   }
 }
+
+/* ==========================
+   Admin Dark Theme (scoped)
+   Activated when body has class .theme-admin-dark
+   ========================== */
+body.theme-admin-dark { background: #0b0f14; color: #e5e7eb; }
+body.theme-admin-dark .container { background: transparent; color: #e5e7eb; }
+body.theme-admin-dark .sidebar { background: #0b1220; border-color: #334155; }
+body.theme-admin-dark .tabs .tab { color: #e5e7eb; border-color: transparent; }
+body.theme-admin-dark .tabs .tab:hover { background: #111827; }
+body.theme-admin-dark .tabs .tab.active { background: #065f46; border-color: #065f46; color: #d1fae5; }
+body.theme-admin-dark .panel-header, 
+body.theme-admin-dark .panel-body { color: #e5e7eb; }
+body.theme-admin-dark h1,
+body.theme-admin-dark h2,
+body.theme-admin-dark h3,
+body.theme-admin-dark h4,
+body.theme-admin-dark p,
+body.theme-admin-dark label,
+body.theme-admin-dark .order-meta,
+body.theme-admin-dark .kv .k,
+body.theme-admin-dark .kv .v { color: #e5e7eb; }
+body.theme-admin-dark .empty-state h3 { color: #e5e7eb; }
+/* Cards and tiles */
+body.theme-admin-dark .order-tile { background: #0b1220; border-color: #334155; color: #e5e7eb; box-shadow: 0 6px 16px rgba(0,0,0,0.4); }
+body.theme-admin-dark .order-tile .package-name { color: #94a3b8; }
+body.theme-admin-dark .order-tile .quantity-label { color: #e5e7eb; }
+body.theme-admin-dark .order-tile .ref-value { background: #0b1220; border-color: #334155; color: #e5e7eb; }
+body.theme-admin-dark .order-tile .hex { background: #0b1220; border-color: #334155; color: #e5e7eb; }
+body.theme-admin-dark .order-tile .row-foot { border-top-color: #1f2937; color: #94a3b8; }
+/* Image cards */
+body.theme-admin-dark .image-card { background: #0b1220; border-color: #334155; }
+body.theme-admin-dark .image-card .btn-del-ov { box-shadow: 0 4px 10px rgba(0,0,0,0.45); }
+/* Forms */
+body.theme-admin-dark .config-form input,
+body.theme-admin-dark .config-form select { background: #0b1220; border-color: #334155; color: #e5e7eb; }
+/* Modal */
+body.theme-admin-dark .modal-dialog { background: #0b1220; border-color: #334155; }
+body.theme-admin-dark .modal-header { border-bottom-color: #334155; }
+/* Package header name: keep black on white cards */
+body.theme-admin-dark .pkg-header .name { color: #0f172a; }
+/* Stronger override specifically in Packages tab */
+body.theme-admin-dark #tab-packages .pkg-header .name { color: #0b0f14 !important; opacity: 1 !important; }
+/* Orders tab: make package titles white */
+body.theme-admin-dark #tab-orders .order-tile .game-name,
+body.theme-admin-dark #tab-orders .order-tile .package-name { color: #e5e7eb !important; }

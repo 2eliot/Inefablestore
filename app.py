@@ -50,6 +50,15 @@ else:
         app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(app.instance_path, "inefablestore.sqlite")
 
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key")
+# Session lifetime: keep login active for 3 hours
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=3)
+
+@app.before_request
+def _make_session_permanent():
+    try:
+        session.permanent = True
+    except Exception:
+        pass
 
 DEFAULT_UPLOAD = os.path.join(app.root_path, "static", "uploads")
 app.config["UPLOAD_FOLDER"] = os.environ.get("UPLOAD_FOLDER", DEFAULT_UPLOAD)
@@ -1133,7 +1142,7 @@ def user_page():
 @app.route("/admin")
 def admin_page():
     site_name = get_config_value("site_name", "InefableStore")
-    return render_template("admin.html", site_name=site_name)
+    return render_template("admin.html", site_name=site_name, body_class="theme-admin-dark")
 
 @app.route("/store/hero")
 def store_hero():
