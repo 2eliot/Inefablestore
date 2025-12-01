@@ -15,7 +15,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const blockedClose = document.getElementById('blocked-close');
   const blockedWhats = document.getElementById('blocked-whatsapp');
   const waLink = (root.getAttribute('data-whatsapp') || '').trim();
+  const gname = (root.getAttribute('data-gname') || '').trim();
+  const gimg = (root.getAttribute('data-gimg') || '').trim();
   let isReferenceValid = false;
+
+  // Render basic game block immediately to avoid waiting for fetches
+  (function initialHeader(){
+    if (!coTotal) return;
+    const gameBlock = `
+      <div style="display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:8px;">
+        ${gimg ? `<img src="${gimg}" alt="${gname || 'Juego'}" style="width:56px; height:56px; object-fit:cover; border-radius:10px; border:2px solid rgba(255,255,255,0.25); box-shadow:0 2px 8px rgba(0,0,0,0.35);">` : ''}
+        ${gname ? `<div style=\"color:#0b0f14; background:rgba(255,255,255,0.75); padding:2px 8px; border-radius:8px; font-weight:900;\">${gname}</div>` : ''}
+      </div>`;
+    coTotal.innerHTML = `
+      ${gameBlock}
+      <div style=\"font-weight:900;\">Total a pagar: <span style=\"color:#10b981;\">...</span></div>
+    `;
+  })();
 
   let allItems = [];
   let rate = 0;
@@ -120,8 +136,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderHeader() {
     const t = computeTotals();
-    // Default header: simple total
-    coTotal.textContent = `Total a pagar: ${formatPriceFor(t.displayCurrency, t.amount)}`;
+    // Compose item summary for the TOP banner
+    let itemLine = '';
+    try {
+      if (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) {
+        const it = allItems[selectedIndex];
+        const unitUsd = Number(it.price || 0);
+        const displayUnit = (t.displayCurrency === 'BSD' && rate && rate > 0) ? unitUsd * rate : unitUsd;
+        const qty = Math.max(1, quantity || 1);
+        itemLine = `${qty} x ${it.title} · ${formatPriceFor(t.displayCurrency, displayUnit)} c/u`;
+      }
+    } catch(_) {}
+    // Compose game card (image + name) if available
+    const gameBlock = `
+      <div style="display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:8px;">
+        ${gimg ? `<img src="${gimg}" alt="${gname || 'Juego'}" style="width:56px; height:56px; object-fit:cover; border-radius:10px; border:2px solid rgba(255,255,255,0.25); box-shadow:0 2px 8px rgba(0,0,0,0.35);">` : ''}
+        ${gname ? `<div style=\"color:#0b0f14; background:rgba(255,255,255,0.5); padding:2px 8px; border-radius:8px; font-weight:900;\">${gname}</div>` : ''}
+      </div>`;
+    // Top banner now shows total, quantity and the selected item line
+    coTotal.innerHTML = `
+      ${gameBlock}
+      <div style="font-weight:900;">Total a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
+      <div style="opacity:.9; font-weight:800; margin-top:4px;">Cantidad: ${Math.max(1, quantity || 1)}</div>
+      ${itemLine ? `<div style=\"opacity:.95; font-weight:800; margin-top:6px;\">${itemLine}</div>` : ''}
+    `;
     if (coDiscNote) { coDiscNote.setAttribute('hidden', ''); coDiscNote.innerHTML = ''; }
 
     // If discount via creator code is active, show detailed breakdown
@@ -143,14 +181,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const qty = Math.max(1, quantity || 1);
       // Compose styled breakdown (keeps theme colors; green accent comes from CSS var)
       const thanks = (window.__validRef && window.__validRef.code) ? `Gracias por usar el código de ${window.__validRef.code}` : '';
-      coTotal.textContent = `Total a pagar: ${formatPriceFor(t.displayCurrency, t.amount)}`;
+      coTotal.innerHTML = `
+        ${gameBlock}
+        <div style=\"font-weight:900;\">Total a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
+        <div style=\"opacity:.9; font-weight:800; margin-top:4px;\">Cantidad: ${Math.max(1, quantity || 1)}</div>
+        ${itemLine ? `<div style=\"opacity:.95; font-weight:800; margin-top:6px;\">${itemLine}</div>` : ''}
+      `;
       if (coDiscNote) {
         coDiscNote.innerHTML = `
           <div class="co-badge">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M20 7h-2.18A3 3 0 0 0 15 3a3 3 0 0 0-3 3 3 3 0 0 0-3-3 3 3 0 0 0-2.82 4H4a1 1 0 0 0-1 1v3h18V8a1 1 0 0 0-1-1zM9 5a1 1 0 1 1 0 2H7.82A1.82 1.82 0 0 1 9 5zm6 0a1.82 1.82 0 0 1 1.18 3H15a1 1 0 1 1 0-2zM3 13v6a1 1 0 0 0 1 1h7v-7H3zm10 0v7h7a1 1 0 0 0 1-1v-6h-8z"/></svg>
             <span>${pct}% de descuento aplicado</span>
           </div>
-          <div class="co-total">Total a pagar: ${formatPriceFor(t.displayCurrency, t.amount)}</div>
+          <div class="co-total">Total a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
           <div class="co-old">Precio original: ${formatPriceFor(t.displayCurrency, t.baseBeforeDiscount)}</div>
           <div class="co-qty">Cantidad: ${qty}</div>
         `;
@@ -161,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // When no discount: show simple block with total and quantity
     if ((!window.__validRef || !window.__validRef.discount) && coDiscNote) {
       coDiscNote.innerHTML = `
-        <div class="co-total">Total a pagar: ${formatPriceFor(t.displayCurrency, t.amount)}</div>
+        <div class="co-total">Total a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
         <div class="co-qty">Cantidad: ${Math.max(1, quantity || 1)}</div>
       `;
       coDiscNote.removeAttribute('hidden');
@@ -255,37 +298,31 @@ document.addEventListener('DOMContentLoaded', () => {
     blockedOverlay.addEventListener('click', (e) => { if (e.target === blockedOverlay) { blockedOverlay.style.display = 'none'; blockedOverlay.setAttribute('aria-hidden', 'true'); } });
   }
 
-  // Function to update visual digit indicators
+  // Function to update visual digit indicators (dynamic up to 21)
   function updateDigitIndicators(length) {
-    // Update dots
-    for (let i = 1; i <= 6; i++) {
-      const dot = document.getElementById(`dot-${i}`);
-      if (dot) {
-        if (i <= length) {
-          dot.classList.add('filled');
-        } else {
-          dot.classList.remove('filled');
-        }
-      }
+    const maxLen = 21;
+    const cnt = Math.max(0, Math.min(maxLen, Number(length || 0)));
+    const wrap = document.getElementById('digit-counter');
+    if (wrap) {
+      // Rebuild dots according to current length
+      const dots = new Array(cnt).fill(0).map(() => '<div class="digit-dot filled"></div>').join('');
+      wrap.innerHTML = dots;
     }
-    // Update counter text
     if (refCounter) {
-      refCounter.textContent = `${length}/6 dígitos`;
-      if (length === 6) {
-        refCounter.style.color = '#10b981';
-      } else {
-        refCounter.style.color = '#94a3b8';
-      }
+      // Show only the count to avoid implying a fixed length
+      refCounter.textContent = `${cnt}`;
+      // Green when within valid range (1..21)
+      refCounter.style.color = (cnt >= 1 && cnt <= 21) ? '#10b981' : '#94a3b8';
     }
   }
 
-  // Reference validation: only allow digits and exactly 6 characters
+  // Reference input: allow only digits, enable when 1..21 (máximo 21)
   if (coRef) {
     coRef.addEventListener('input', (e) => {
       // Remove non-digit characters
       let value = e.target.value.replace(/\D/g, '');
-      // Limit to 6 digits
-      value = value.substring(0, 6);
+      // Limit to 21 digits
+      value = value.substring(0, 21);
       e.target.value = value;
       
       // Update visual indicators
@@ -300,33 +337,33 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Enable/disable button based on length
       if (btnConfirm) {
-        btnConfirm.disabled = value.length !== 6;
+        btnConfirm.disabled = !(value.length >= 1 && value.length <= 21);
       }
       
-      // Check for duplicate reference when 6 digits are entered
-      if (value.length === 6) {
+      // Check for duplicate reference when at least 1 digit
+      if (value.length >= 1) {
         checkReferenceAvailability(value);
       }
     });
 
-    // On paste: extract only last 6 digits from any pasted text
+    // On paste: keep digits up to 21 and enable when 1..21
     coRef.addEventListener('paste', (e) => {
       e.preventDefault();
       try {
         const clip = (e.clipboardData || window.clipboardData);
         const text = (clip && typeof clip.getData === 'function') ? (clip.getData('text') || '') : '';
         const digits = String(text || '').replace(/\D/g, '');
-        const last6 = digits.slice(-6);
-        coRef.value = last6;
+        const only = digits.substring(0, 21);
+        coRef.value = only;
         // Update UI
-        updateDigitIndicators(last6.length);
+        updateDigitIndicators(only.length);
         // Reset/hide previous error
         isReferenceValid = false;
         if (refError) { refError.style.display = 'none'; refError.textContent = ''; }
         // Enable/disable confirm and trigger availability check
-        if (btnConfirm) btnConfirm.disabled = last6.length !== 6;
-        if (last6.length === 6) {
-          checkReferenceAvailability(last6);
+        if (btnConfirm) btnConfirm.disabled = !(only.length >= 1 && only.length <= 21);
+        if (only.length >= 1) {
+          checkReferenceAvailability(only);
         }
       } catch (_) {
         // Fallback: let the normal input handler sanitize afterwards
@@ -341,14 +378,14 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const text = await navigator.clipboard.readText();
         const digits = String(text || '').replace(/\D/g, '');
-        const last6 = digits.slice(-6);
-        coRef.value = last6;
-        updateDigitIndicators(last6.length);
+        const only = digits.substring(0, 21);
+        coRef.value = only;
+        updateDigitIndicators(only.length);
         isReferenceValid = false;
         if (refError) { refError.style.display = 'none'; refError.textContent = ''; }
-        if (btnConfirm) btnConfirm.disabled = last6.length !== 6;
-        if (last6.length === 6) {
-          checkReferenceAvailability(last6);
+        if (btnConfirm) btnConfirm.disabled = !(only.length >= 1 && only.length <= 21);
+        if (only.length >= 1) {
+          checkReferenceAvailability(only);
         }
         coRef.focus();
       } catch (_) {
@@ -422,15 +459,15 @@ document.addEventListener('DOMContentLoaded', () => {
     btnConfirm.addEventListener('click', async () => {
       const ref = coRef ? coRef.value.trim() : '';
       if (!ref) { alert('Ingrese la referencia'); return; }
-      // Validate exactly 6 digits
-      if (ref.length !== 6 || !/^\d{6}$/.test(ref)) {
-        alert('La referencia debe tener exactamente 6 dígitos');
+      // Validate numeric with máximo 21 (1..21)
+      if (!(ref.length >= 1 && ref.length <= 21 && /^\d+$/.test(ref))) {
+        alert('La referencia debe ser numérica y tener máximo 21 dígitos');
         return;
       }
-      // Check if reference validation passed
+      // Check if reference validation passed (allow submission on network errors)
       if (!isReferenceValid) {
-        alert('Por favor, ingrese una referencia válida');
-        return;
+        // Still allow, backend validates again; just warn
+        // alert('Por favor, ingrese una referencia válida');
       }
       // Prepare order payload
       const item = (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) ? allItems[selectedIndex] : null;

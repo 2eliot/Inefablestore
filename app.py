@@ -1603,7 +1603,15 @@ def store_checkout(gid: int):
     logo_url = get_config_value("logo_path", "")
     site_name = get_config_value("site_name", "InefableStore")
     whatsapp_url = get_config_value("whatsapp_url", "https://api.whatsapp.com/send?phone=%2B584125712917")
-    return render_template("checkout.html", gid=gid, logo_url=logo_url, site_name=site_name, whatsapp_url=whatsapp_url)
+    return render_template(
+        "checkout.html",
+        gid=gid,
+        logo_url=logo_url,
+        site_name=site_name,
+        whatsapp_url=whatsapp_url,
+        game_name=game.name,
+        game_image=game.image_path,
+    )
 
 
 @app.route("/gracias/<int:oid>")
@@ -1686,9 +1694,9 @@ def create_order():
 
         if not reference:
             return jsonify({"ok": False, "error": "Referencia requerida"}), 400
-        # Validate reference is exactly 6 digits
-        if not (reference.isdigit() and len(reference) == 6):
-            return jsonify({"ok": False, "error": "La referencia debe tener exactamente 6 dígitos"}), 400
+        # Validate reference is numeric with maximum 21 digits (1..21)
+        if not (reference.isdigit() and 1 <= len(reference) <= 21):
+            return jsonify({"ok": False, "error": "La referencia debe ser numérica (máximo 21 dígitos)"}), 400
         # Check if reference already exists in pending orders
         existing_pending = Order.query.filter(
             Order.reference == reference,
