@@ -2567,8 +2567,8 @@ def admin_stats_summary():
     total_profit_net = 0.0
     total_commission_affiliates = 0.0
 
-    cutoff = get_stats_reset_cutoff()
-    approved_orders = Order.query.filter(Order.status == "approved", Order.created_at >= cutoff).all()
+    # Lifetime stats: do not restrict by weekly cutoff so resets don't wipe accumulated totals
+    approved_orders = Order.query.filter(Order.status == "approved").all()
     for o in approved_orders:
         try:
             use_affiliate = False
@@ -2668,9 +2668,11 @@ def admin_stats_summary():
                 if use_affiliate and comm_pct > 0:
                     commission_item = round(revenue * (comm_pct / 100.0), 2)
                     total_commission_affiliates += commission_item
-                
-                # Ganancia = precio pagado por cliente - costo guardado en la orden
-                profit_val = revenue - cost_total
+                    # Restar comisión del influencer de la ganancia
+                    profit_val = revenue - cost_total - commission_item
+                else:
+                    # Ganancia = precio pagado por cliente - costo guardado en la orden
+                    profit_val = revenue - cost_total
                 if profit_val < 0.0:
                     profit_val = 0.0
                 total_profit_net += profit_val
@@ -2711,11 +2713,10 @@ def admin_stats_package(pkg_id: int):
     total_profit_net = 0.0
     total_commission_affiliates = 0.0
 
-    cutoff = get_stats_reset_cutoff()
+    # Lifetime stats per package (no cutoff)
     approved_orders = Order.query.filter(
         Order.store_package_id == pkg_id,
         Order.status == "approved",
-        Order.created_at >= cutoff,
     ).all()
     for o in approved_orders:
         try:
@@ -2821,7 +2822,10 @@ def admin_stats_package(pkg_id: int):
                 if use_affiliate and comm_pct > 0:
                     commission_item = round(revenue * (comm_pct / 100.0), 2)
                     total_commission_affiliates += commission_item
-                
+                    # Restar comisión del influencer de la ganancia
+                    profit_val = revenue - cost_total - commission_item
+                else:
+                    profit_val = revenue - cost_total
                 rec = stats.setdefault(
                     iid,
                     {
@@ -2830,6 +2834,7 @@ def admin_stats_package(pkg_id: int):
                         "price": price_std,
                         "cost_unit_usd": cost_unit,
                         "profit_unit_std_usd": profit_unit_std,
+                        "revenue_total_usd": 0.0,
                         "qty_total": 0,
                         "qty_normal": 0,
                         "qty_with_affiliate": 0,
@@ -2841,8 +2846,8 @@ def admin_stats_package(pkg_id: int):
                     rec["qty_with_affiliate"] += qty
                 else:
                     rec["qty_normal"] += qty
-                # Ganancia = precio pagado por cliente - costo guardado en las órdenes
-                profit_val = revenue - cost_total
+                # acumular revenue para poder calcular promedio real
+                rec["revenue_total_usd"] = rec.get("revenue_total_usd", 0.0) + revenue
                 if profit_val < 0.0:
                     profit_val = 0.0
                 rec["profit_total_usd"] = rec.get("profit_total_usd", 0.0) + profit_val
@@ -2851,6 +2856,28 @@ def admin_stats_package(pkg_id: int):
             continue
 
     items_out = []
+    # Preparar mapa de descuentos estándar para mostrar "Con descuento"
+    discount_display_map = {}
+    try:
+        if (pkg.category or '').lower() == 'mobile':
+            # Ordenar ítems por precio ascendente y asignar porcentajes del 10% al 4%
+            sorted_items = sorted(items, key=lambda x: float(x.price or 0.0))
+            n = len(sorted_items)
+            if n == 1:
+                discount_display_map[sorted_items[0].id] = 0.10
+            elif n > 1:
+                max_pct = 0.10
+                min_pct = 0.04
+                step = (max_pct - min_pct) / (n - 1)
+                for idx, itx in enumerate(sorted_items):
+                    pct = max_pct - step * idx
+                    if pct < min_pct:
+                        pct = min_pct
+                    if pct > max_pct:
+                        pct = max_pct
+                    discount_display_map[itx.id] = pct
+    except Exception:
+        discount_display_map = {}
     # Ensure all items of the package are present in the response, even if
     # they have no recorded orders yet. Stats (qty/total) will be zero in
     # that case so the admin can still define profit_net_usd from the UI.
@@ -2869,6 +2896,7 @@ def admin_stats_package(pkg_id: int):
                 "price": price_std,
                 "cost_unit_usd": cost_unit,
                 "profit_unit_std_usd": profit_unit_std,
+                "revenue_total_usd": 0.0,
                 "qty_total": 0,
                 "qty_normal": 0,
                 "qty_with_affiliate": 0,
@@ -2876,6 +2904,14 @@ def admin_stats_package(pkg_id: int):
             },
         )
         rec_out = dict(base)
+        # calcular ganancia estándar/unidad "Con descuento" según esquema 10%..4% (mobile)
+        disc = float(discount_display_map.get(it.id, 0.0) or 0.0)
+        price_with_disc = price_std * (1.0 - disc)
+        profit_with_disc = price_with_disc - cost_unit
+        if profit_with_disc < 0.0:
+            profit_with_disc = 0.0
+        # expone este valor en el campo usado por el frontend para "Con descuento"
+        rec_out["profit_unit_real_avg_usd"] = round(profit_with_disc, 2)
         rec_out["total_profit_net_usd"] = round(float(base.get("profit_total_usd") or 0.0), 2)
         items_out.append(rec_out)
 
