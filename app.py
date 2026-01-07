@@ -444,19 +444,24 @@ def amount_to_usd(amount: float, currency: str) -> float:
 
 
 def get_stats_reset_cutoff() -> datetime:
-    """Return the datetime (naive, server time) of the last weekly reset.
+    """Return the datetime (naive, UTC) of the last weekly reset at 17:00 VET (GMT-4).
 
-    Business rule: stats are counted from the last Sunday at 20:00 (8 PM).
-    This function computes that cutoff based on the current server time.
+    Regla de negocio: el corte semanal es el domingo a las 17:00 hora de Venezuela.
+    Para comparar con columnas almacenadas como naive UTC (datetime.utcnow()),
+    se convierte el corte a UTC y se retorna naive.
     """
-    now = datetime.utcnow()
-    # Python weekday: Monday=0 .. Sunday=6
-    days_since_sunday = (now.weekday() - 6) % 7
-    last_sunday = now.replace(hour=20, minute=0, second=0, microsecond=0) - timedelta(days=days_since_sunday)
-    # If it's before Sunday 20:00 today, go one week back
-    if now < last_sunday:
-        last_sunday = last_sunday - timedelta(days=7)
-    return last_sunday
+    # Hora actual en Venezuela (GMT-4)
+    ve_now = now_ve()
+    # Python weekday: Monday=0 .. Sunday=6; Sunday=6
+    days_since_sunday = (ve_now.weekday() - 6) % 7
+    # Candidato: este domingo 17:00 VET
+    ve_candidate = ve_now.replace(hour=17, minute=0, second=0, microsecond=0) - timedelta(days=days_since_sunday)
+    # Si todavía no hemos llegado al domingo 17:00 VET de esta semana, usar el domingo anterior
+    if ve_now < ve_candidate:
+        ve_candidate = ve_candidate - timedelta(days=7)
+    # Convertir a UTC y retornar naive (para comparar con timestamps guardados en UTC naive)
+    utc_dt = ve_candidate.astimezone(timezone.utc)
+    return utc_dt.replace(tzinfo=None)
 
 
 class StorePackage(db.Model):
@@ -2490,6 +2495,7 @@ def admin_packages_create():
     image_path = (data.get("image_path") or "").strip()
     category = (data.get("category") or "mobile").strip().lower()
     description = (data.get("description") or "").strip()
+    special_description = (data.get("special_description") or "").strip()
     requires_zone_id = bool(data.get("requires_zone_id", False))
     if category not in ("mobile", "gift"):
         category = "mobile"
@@ -2567,8 +2573,17 @@ def admin_stats_summary():
     total_profit_net = 0.0
     total_commission_affiliates = 0.0
 
-    # Lifetime stats: do not restrict by weekly cutoff so resets don't wipe accumulated totals
-    approved_orders = Order.query.filter(Order.status == "approved").all()
+    # Optional period filter
+    period = (request.args.get("period") or "").strip().lower()
+    if period == "weekly":
+        cutoff = get_stats_reset_cutoff()
+        approved_orders = Order.query.filter(
+            Order.status == "approved",
+            Order.created_at >= cutoff,
+        ).all()
+    else:
+        # Lifetime stats: do not restrict by weekly cutoff so resets don't wipe accumulated totals
+        approved_orders = Order.query.filter(Order.status == "approved").all()
     for o in approved_orders:
         try:
             use_affiliate = False
@@ -2713,11 +2728,21 @@ def admin_stats_package(pkg_id: int):
     total_profit_net = 0.0
     total_commission_affiliates = 0.0
 
-    # Lifetime stats per package (no cutoff)
-    approved_orders = Order.query.filter(
-        Order.store_package_id == pkg_id,
-        Order.status == "approved",
-    ).all()
+    # Optional period filter per package
+    period = (request.args.get("period") or "").strip().lower()
+    if period == "weekly":
+        cutoff = get_stats_reset_cutoff()
+        approved_orders = Order.query.filter(
+            Order.store_package_id == pkg_id,
+            Order.status == "approved",
+            Order.created_at >= cutoff,
+        ).all()
+    else:
+        # Lifetime stats per package (no cutoff)
+        approved_orders = Order.query.filter(
+            Order.store_package_id == pkg_id,
+            Order.status == "approved",
+        ).all()
     for o in approved_orders:
         try:
             use_affiliate = False

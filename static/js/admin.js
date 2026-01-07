@@ -807,7 +807,7 @@ window.fetchPayments = fetchPayments;
   async function fetchGlobalStatsSummary() {
     if (!statsSummary || !statsTotalAfter) return;
     try {
-      const res = await fetch('/admin/stats/summary');
+      const res = await fetch('/admin/stats/summary?period=weekly');
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar resumen global');
       const s = data.summary || {};
@@ -851,7 +851,7 @@ window.fetchPayments = fetchPayments;
     if (!statsItems || !pkgId) return;
     statsItems.innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
     try {
-      const res = await fetch(`/admin/stats/package/${pkgId}`);
+      const res = await fetch(`/admin/stats/package/${pkgId}?period=weekly`);
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar estadísticas');
       const items = data.items || [];
