@@ -141,7 +141,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (mfsMinus) mfsMinus.addEventListener('click', () => setQuantity((quantity || 1) - 1));
 
   
-  const inputName = document.getElementById('full-name');
   const inputEmail = document.getElementById('email');
   const inputPhone = document.getElementById('phone');
   const inputPhoneLocal = document.getElementById('phone-local');
@@ -731,7 +730,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const data = {
       customer_id: isGift ? '' : (inputCustomerId ? inputCustomerId.value.trim() : ''),
       customer_zone: (requiresZone && !isGift && inputCustomerZone) ? (inputCustomerZone.value.trim()) : '',
-      name: inputName ? inputName.value.trim() : '',
       email: inputEmail ? inputEmail.value.trim() : '',
       phone: inputPhone ? inputPhone.value.trim() : '',
       currency,
@@ -759,7 +757,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (chkSave) chkSave.checked = true;
     if (!isGift && inputCustomerId && state.customer_id && !inputCustomerId.value) inputCustomerId.value = state.customer_id;
     if (!isGift && requiresZone && inputCustomerZone && state.customer_zone && !inputCustomerZone.value) inputCustomerZone.value = state.customer_zone;
-    if (inputName && state.name) inputName.value = state.name;
     if (inputEmail && state.email) inputEmail.value = state.email;
     if (inputPhone && state.phone) {
       // Try to split +CC local
@@ -792,7 +789,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/auth/profile');
       const data = await res.json();
       if (data && data.ok && data.profile) {
-        if (inputName) inputName.value = data.profile.name || '';
         if (inputEmail) inputEmail.value = data.profile.email || '';
         if (inputPhone) inputPhone.value = data.profile.phone || '';
         applied = true;
@@ -805,7 +801,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Wire inputs to persist
-  [inputName, inputEmail, inputPhone].forEach(el => {
+  [inputEmail, inputPhone].forEach(el => {
     if (!el) return;
     el.addEventListener('input', () => { if (chkSave && chkSave.checked) persistState(); });
   });
@@ -937,7 +933,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sel: String(selectedItemIndex),
         cur: currency,
         method,
-        n: (inputName && inputName.value.trim()) || '',
+        n: '',
         e: (inputEmail && inputEmail.value.trim()) || '',
         p: (inputPhone && inputPhone.value.trim()) || '',
         q: String(Math.max(1, quantity || 1))

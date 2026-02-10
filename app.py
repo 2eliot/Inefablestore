@@ -11,6 +11,7 @@ import smtplib
 import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import secrets
 
 # Create Flask app
 app = Flask(__name__, instance_relative_config=True)
@@ -556,6 +557,17 @@ class User(db.Model):
     email = db.Column(db.String(200), unique=True, nullable=False)
     phone = db.Column(db.String(80), default="")
     password_hash = db.Column(db.String(300), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PasswordResetCode(db.Model):
+    __tablename__ = "password_reset_codes"
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(200), nullable=False, index=True)
+    code_hash = db.Column(db.String(300), nullable=False)
+    attempts = db.Column(db.Integer, default=0)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # Customer ID blocks
@@ -1144,6 +1156,14 @@ def user_page():
     site_name = get_config_value("site_name", "InefableStore")
     return render_template("user.html", is_admin=is_admin, is_affiliate=is_affiliate, logo_url=logo_url, site_name=site_name)
 
+
+@app.route("/reset-password")
+def reset_password_page():
+    # Public page used when user can't login
+    logo_url = get_config_value("logo_path", "")
+    site_name = get_config_value("site_name", "InefableStore")
+    return render_template("reset_password.html", logo_url=logo_url, site_name=site_name)
+
 @app.route("/admin")
 def admin_page():
     site_name = get_config_value("site_name", "InefableStore")
@@ -1547,8 +1567,30 @@ def store_best_sellers():
     )
     ids = [row[0] for row in agg if row[0] is not None]
     if not ids:
-        # No approved sales yet -> return empty list (do not show latest)
-        return jsonify({"packages": []})
+        # No approved sales yet -> return a stable fallback list so the homepage
+        # section doesn't appear to "disappear".
+        try:
+            items = (
+                StorePackage.query
+                .filter(StorePackage.active == True)
+                .order_by(StorePackage.sort_order.asc(), StorePackage.created_at.desc())
+                .limit(12)
+                .all()
+            )
+        except Exception:
+            items = (
+                StorePackage.query
+                .filter(StorePackage.active == True)
+                .order_by(StorePackage.created_at.desc())
+                .limit(12)
+                .all()
+            )
+        return jsonify({
+            "packages": [
+                {"id": p.id, "name": p.name, "image_path": p.image_path, "category": (p.category or 'mobile')}
+                for p in items
+            ]
+        })
     # fetch package rows keeping order by counts
     rows = StorePackage.query.filter(StorePackage.id.in_(ids), StorePackage.active == True).all()
     by_id = {p.id: p for p in rows}
@@ -3090,6 +3132,103 @@ def auth_register():
     db.session.commit()
     session["user"] = {"email": u.email, "role": "user", "user_id": u.id, "name": u.name}
     return jsonify({"ok": True, "user": session["user"]})
+
+
+@app.route("/auth/password_reset/request", methods=["POST"])
+def auth_password_reset_request():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    # Always return generic OK to avoid user enumeration
+    if not email:
+        return jsonify({"ok": True})
+
+    # Only for normal users
+    u = User.query.filter(db.func.lower(User.email) == email.lower()).first()
+    if not u:
+        return jsonify({"ok": True})
+
+    # Invalidate previous unused codes for this email
+    try:
+        PasswordResetCode.query.filter(
+            db.func.lower(PasswordResetCode.email) == email.lower(),
+            PasswordResetCode.used_at.is_(None)
+        ).delete(synchronize_session=False)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    expires = datetime.utcnow() + timedelta(minutes=15)
+    row = PasswordResetCode(
+        email=email,
+        code_hash=generate_password_hash(code),
+        attempts=0,
+        expires_at=expires,
+    )
+    db.session.add(row)
+    db.session.commit()
+
+    subject = "Código para recuperar tu contraseña – Inefable Store"
+    html = f"""
+    <div style=\"font-family:Arial,Helvetica,sans-serif;line-height:1.5;color:#111;\">
+      <h2 style=\"margin:0 0 10px;\">Recuperar contraseña</h2>
+      <p>Tu código de recuperación es:</p>
+      <div style=\"font-size:28px;font-weight:800;letter-spacing:6px;padding:12px 16px;border:1px solid #ddd;border-radius:12px;display:inline-block;\">{code}</div>
+      <p style=\"margin-top:12px;\">Este código expira en 15 minutos. Si no fuiste tú, ignora este correo.</p>
+    </div>
+    """
+    text = f"Tu código de recuperación es: {code}. Expira en 15 minutos."
+    try:
+        send_email_html(email, subject, html, text)
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
+
+@app.route("/auth/password_reset/confirm", methods=["POST"])
+def auth_password_reset_confirm():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    code = (data.get("code") or "").strip()
+    new_password = data.get("new_password") or ""
+
+    if not email or not code or not new_password:
+        return jsonify({"ok": False, "error": "Datos incompletos"}), 400
+    if len(new_password) < 6:
+        return jsonify({"ok": False, "error": "La contraseña debe tener al menos 6 caracteres"}), 400
+
+    # Find latest unused code
+    row = PasswordResetCode.query.filter(
+        db.func.lower(PasswordResetCode.email) == email.lower(),
+        PasswordResetCode.used_at.is_(None)
+    ).order_by(PasswordResetCode.created_at.desc()).first()
+
+    if not row:
+        return jsonify({"ok": False, "error": "Código inválido"}), 400
+    if row.expires_at and datetime.utcnow() > row.expires_at:
+        return jsonify({"ok": False, "error": "Código expirado"}), 400
+    if (row.attempts or 0) >= 5:
+        return jsonify({"ok": False, "error": "Demasiados intentos"}), 400
+
+    ok = False
+    try:
+        ok = check_password_hash(row.code_hash, code)
+    except Exception:
+        ok = False
+
+    if not ok:
+        row.attempts = int(row.attempts or 0) + 1
+        db.session.commit()
+        return jsonify({"ok": False, "error": "Código inválido"}), 400
+
+    u = User.query.filter(db.func.lower(User.email) == email.lower()).first()
+    if not u:
+        return jsonify({"ok": False, "error": "Usuario no encontrado"}), 404
+
+    u.password_hash = generate_password_hash(new_password)
+    row.used_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":

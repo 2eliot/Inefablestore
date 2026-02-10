@@ -259,6 +259,293 @@ document.addEventListener('DOMContentLoaded', () => {
   updateHeaderOnScroll();
   window.addEventListener('scroll', updateHeaderOnScroll, { passive: true });
 
+  // =====================
+  // Header search
+  // =====================
+  const headerSearch = document.getElementById('header-search');
+  const isHome = !!document.getElementById('rail-best');
+
+  function norm(s) {
+    return String(s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+  }
+
+  function applySearchFilter(qRaw) {
+    if (!isHome) return;
+    const q = norm(qRaw).trim();
+    const rails = ['#rail-best', '#rail-mobile', '#rail-gift']
+      .map(sel => document.querySelector(sel))
+      .filter(Boolean);
+    rails.forEach(r => {
+      r.querySelectorAll('.pkg-card').forEach(card => {
+        const name = norm(card.querySelector('.pkg-name')?.textContent || card.textContent || '');
+        const show = !q || name.includes(q);
+        card.style.display = show ? '' : 'none';
+      });
+    });
+  }
+
+  if (headerSearch) {
+    const headerSearchWrap = headerSearch.closest('.header-search');
+    const isPhone = () => window.matchMedia('(max-width: 520px)').matches;
+
+    // Suggestions dropdown
+    let sg = null;
+    let sgItems = []; // { id, name, href, category }
+    let sgActiveIndex = -1;
+    let sgCache = null;
+    let sgCachePromise = null;
+
+    function ensureSuggestEl() {
+      if (!headerSearchWrap) return null;
+      if (sg) return sg;
+      sg = document.createElement('div');
+      sg.className = 'search-suggest';
+      sg.setAttribute('hidden', '');
+      headerSearchWrap.appendChild(sg);
+      return sg;
+    }
+
+    function collectFromDom() {
+      if (!isHome) return [];
+      const seen = new Set();
+      const out = [];
+      ['#rail-best', '#rail-mobile', '#rail-gift'].forEach(sel => {
+        const r = document.querySelector(sel);
+        if (!r) return;
+        r.querySelectorAll('.pkg-card').forEach(card => {
+          const name = (card.querySelector('.pkg-name')?.textContent || '').trim();
+          const href = (card && card.onclick) ? '' : '';
+          // home.js binds click to navigate using id; we can parse from dataset if present.
+          // As fallback we build /store/package/<id> only if we can infer id.
+          // But cards do not store id in DOM; so we keep name-only for filtering.
+          if (!name) return;
+          const key = norm(name);
+          if (seen.has(key)) return;
+          seen.add(key);
+          out.push({ id: null, name, href: null, category: '' });
+        });
+      });
+      return out;
+    }
+
+    async function fetchAllPackages() {
+      if (sgCache) return sgCache;
+      if (sgCachePromise) return sgCachePromise;
+      sgCachePromise = (async () => {
+        const res = [];
+        try {
+          const [m, g] = await Promise.all([
+            fetch('/store/packages?category=mobile').then(r => r.json()).catch(() => ({})),
+            fetch('/store/packages?category=gift').then(r => r.json()).catch(() => ({})),
+          ]);
+          (m && m.packages || []).forEach(p => res.push({ id: p.id, name: p.name, category: p.category || '', href: `/store/package/${p.id}` }));
+          (g && g.packages || []).forEach(p => res.push({ id: p.id, name: p.name, category: p.category || '', href: `/store/package/${p.id}` }));
+        } catch (_) {}
+        // Dedup by normalized name
+        const seen = new Set();
+        const out = [];
+        res.forEach(p => {
+          const key = norm(p.name);
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          out.push(p);
+        });
+        sgCache = out;
+        return out;
+      })();
+      return sgCachePromise;
+    }
+
+    function scoreCandidate(q, cand) {
+      const name = norm(cand.name);
+      if (!q) return 0;
+      if (name === q) return 100;
+      if (name.startsWith(q)) return 80;
+      if (name.includes(q)) return 60;
+      // token overlap
+      const qt = q.split(/\s+/).filter(Boolean);
+      const nt = name.split(/\s+/).filter(Boolean);
+      let hit = 0;
+      qt.forEach(t => { if (t.length >= 2 && nt.some(x => x.startsWith(t))) hit++; });
+      return hit ? 40 + hit * 5 : 0;
+    }
+
+    function renderSuggest(list, qRaw) {
+      const el = ensureSuggestEl();
+      if (!el) return;
+      const q = norm(qRaw).trim();
+      if (!q || !list || list.length === 0) {
+        el.innerHTML = '';
+        el.setAttribute('hidden', '');
+        sgItems = [];
+        sgActiveIndex = -1;
+        return;
+      }
+      const ranked = list
+        .map(x => ({ x, s: scoreCandidate(q, x) }))
+        .filter(o => o.s > 0)
+        .sort((a,b) => b.s - a.s)
+        .slice(0, 6)
+        .map(o => o.x);
+
+      sgItems = ranked;
+      sgActiveIndex = -1;
+      el.innerHTML = '';
+      ranked.forEach((it, idx) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'sg-item';
+        const icon = document.createElement('div');
+        icon.className = 'sg-icon';
+        icon.textContent = (it.name || '?').trim().slice(0, 1).toUpperCase();
+        const txt = document.createElement('div');
+        txt.innerHTML = `<div class="sg-title"></div><div class="sg-sub"></div>`;
+        txt.querySelector('.sg-title').textContent = it.name || '';
+        const sub = it.category ? String(it.category) : 'Ver juego';
+        txt.querySelector('.sg-sub').textContent = sub;
+        b.appendChild(icon);
+        b.appendChild(txt);
+        b.addEventListener('click', () => {
+          if (it.href) {
+            window.location.href = it.href;
+          } else {
+            // On home without href: keep filtering
+            headerSearch.value = it.name || '';
+            applySearchFilter(it.name || '');
+            el.setAttribute('hidden', '');
+          }
+        });
+        el.appendChild(b);
+      });
+      if (ranked.length) el.removeAttribute('hidden');
+      else el.setAttribute('hidden', '');
+    }
+
+    async function updateSuggest() {
+      const q = (headerSearch.value || '').trim();
+      if (!q) {
+        const el = ensureSuggestEl();
+        if (el) { el.innerHTML = ''; el.setAttribute('hidden', ''); }
+        return;
+      }
+      if (isHome) {
+        // home cards may load async; re-collect each time
+        renderSuggest(collectFromDom(), q);
+      } else {
+        const all = await fetchAllPackages();
+        renderSuggest(all, q);
+      }
+    }
+
+    // Apply from URL (home only)
+    try {
+      const url = new URL(window.location.href);
+      const q = url.searchParams.get('q') || '';
+      if (q) {
+        headerSearch.value = q;
+        // Filter after home.js injected cards
+        setTimeout(() => applySearchFilter(q), 0);
+      }
+    } catch (_) {}
+
+    function openMobileSearch() {
+      if (!headerSearchWrap) return;
+      headerSearchWrap.classList.add('open');
+      // Focus after layout
+      setTimeout(() => {
+        try { headerSearch.focus(); } catch (_) {}
+      }, 0);
+    }
+
+    function closeMobileSearch() {
+      if (!headerSearchWrap) return;
+      headerSearchWrap.classList.remove('open');
+    }
+
+    // Tap on icon wrapper opens the dropdown on phone
+    if (headerSearchWrap) {
+      headerSearchWrap.addEventListener('click', (e) => {
+        if (!isPhone()) return;
+        // If it's closed, first tap opens and prevents typing/navigating side effects
+        if (!headerSearchWrap.classList.contains('open')) {
+          e.preventDefault();
+          e.stopPropagation();
+          openMobileSearch();
+        }
+      });
+    }
+
+    // Close on outside click (phone only)
+    document.addEventListener('click', (e) => {
+      if (!isPhone()) return;
+      if (!headerSearchWrap) return;
+      if (!headerSearchWrap.classList.contains('open')) return;
+      if (headerSearchWrap.contains(e.target)) return;
+      closeMobileSearch();
+    });
+
+    // Close suggestions on outside click
+    document.addEventListener('click', (e) => {
+      if (!headerSearchWrap) return;
+      const el = ensureSuggestEl();
+      if (!el || el.hasAttribute('hidden')) return;
+      if (headerSearchWrap.contains(e.target)) return;
+      el.setAttribute('hidden', '');
+    });
+
+    // Close on Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (!headerSearchWrap) return;
+      if (!headerSearchWrap.classList.contains('open')) return;
+      closeMobileSearch();
+    });
+
+    headerSearch.addEventListener('input', () => {
+      if (isHome) {
+        applySearchFilter(headerSearch.value);
+      }
+      updateSuggest();
+    });
+
+    headerSearch.addEventListener('keydown', (e) => {
+      // Arrow navigation for suggestions
+      const el = ensureSuggestEl();
+      const open = el && !el.hasAttribute('hidden');
+      if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        const btns = Array.from(el.querySelectorAll('.sg-item'));
+        if (!btns.length) return;
+        if (e.key === 'ArrowDown') sgActiveIndex = Math.min(btns.length - 1, sgActiveIndex + 1);
+        else sgActiveIndex = Math.max(0, sgActiveIndex - 1);
+        btns.forEach((b, i) => b.classList.toggle('active', i === sgActiveIndex));
+        return;
+      }
+      if (open && e.key === 'Enter' && sgActiveIndex >= 0) {
+        e.preventDefault();
+        const btns = Array.from(el.querySelectorAll('.sg-item'));
+        const b = btns[sgActiveIndex];
+        if (b) b.click();
+        return;
+      }
+      if (open && e.key === 'Escape') {
+        el.setAttribute('hidden', '');
+        return;
+      }
+
+      if (e.key !== 'Enter') return;
+      const q = (headerSearch.value || '').trim();
+      if (!q) return;
+      if (!isHome) {
+        const url = new URL(window.location.href);
+        window.location.href = '/?q=' + encodeURIComponent(q);
+      } else {
+        applySearchFilter(q);
+        try { headerSearch.blur(); } catch (_) {}
+      }
+    });
+  }
+
   // Drawer: mobile categories
   (function wireDrawerCategories(){
     if (!leftDrawer) return;

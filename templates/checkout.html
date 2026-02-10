@@ -4,17 +4,17 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='2') }}">
 <style>
   .co-wrap { max-width: 900px; margin: 0 auto; padding: 16px 12px 28px; }
-  .co-banner { background: var(--price-accent, #10b981); color: #0b0f14; font-weight: 900; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 16px; }
+  .co-banner { background: #10b981; color: #0b0f14; font-weight: 900; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 16px; }
   /* Charcoal card style */
-  .co-card { background: #2b2f36; border:1px solid #3a3f47; border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
-  .co-card h3 { margin: 0 0 8px; color: #e2e8f0; font-weight: 900; text-align:center; padding-bottom:10px; border-bottom:1px solid #3a3f47; }
+  .co-card { background: rgba(43,47,54,0.4); border:1px solid rgba(148,163,184,0.1); border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
+  .co-card h3 { margin: 0 0 8px; color: #e2e8f0; font-weight: 900; text-align:center; padding-bottom:10px; border-bottom:1px solid rgba(148,163,184,0.1); }
   /* Info rows with icon + value + copy */
   #co-info { display:grid; gap:12px; }
   .co-item { display:grid; grid-template-columns: 28px 1fr auto; align-items:center; gap:10px; }
   .co-ico { width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:#cbd5e1; }
   .co-val { color:#e2e8f0; font-weight:800; }
-  .copy-btn { border:1px solid #3a3f47; background: #1f2329; color:#e2e8f0; border-radius:8px; padding:6px 8px; font-size:12px; cursor:pointer; }
-  .copy-btn:hover { background: #262b32; }
+  .copy-btn { border:1px solid rgba(148,163,184,0.1); background: rgba(43,47,54,0.3); color:#e2e8f0; border-radius:8px; padding:6px 8px; font-size:12px; cursor:pointer; }
+  .copy-btn:hover { background: rgba(43,47,54,0.45); border-color: rgba(148,163,184,0.18); }
   .co-actions { margin-top: 10px; }
   .co-actions .btn { width: 100%; }
   /* Reference input emphasis */
@@ -24,15 +24,15 @@
   #co-ref.input { 
     padding: 12px 14px; 
     border-width: 2px; 
-    border-color: rgba(148,163,184,0.55); 
+    border-color: rgba(148,163,184,0.25); 
     border-radius: 10px;
-    background: rgba(2,6,23,0.5);
+    background: rgba(43,47,54,0.3);
     color:#e5e7eb;
     outline: none;
     transition: box-shadow .15s ease, border-color .15s ease;
   }
   #co-ref.input::placeholder { color: #94a3b8; }
-  #co-ref.input:focus { border-color:#94a3b8; box-shadow: 0 0 0 3px rgba(148,163,184,0.25); }
+  #co-ref.input:focus { border-color:#10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
   /* Wrapper to place the Paste button inside the input */
   .ref-input-wrap { position: relative; width: 100%; max-width: 480px; margin: 0 auto; }
   .ref-input-wrap #co-ref.input { width: 100%; box-sizing: border-box; padding-right: 120px; padding-left: 120px; }
@@ -48,7 +48,7 @@
     z-index: 1;
     background: transparent !important;
     border: none !important;
-    color: var(--price-accent) !important;
+    color: #10b981 !important;
     box-shadow: none !important;
     font-weight: 900 !important;
     border-left: 1px solid rgba(148,163,184,0.28) !important;
@@ -59,7 +59,7 @@
   .price-new { color: #0b0f14; background: rgba(255,255,255,0.5); padding: 2px 8px; border-radius: 8px; font-weight: 900; }
   .discount-badge { text-decoration: line-through; color: #cbd5e1; border: 2px solid rgba(148,163,184,0.35); padding: 2px 6px; border-radius: 8px; font-weight: 900; margin-right: 8px; background: rgba(148,163,184,0.15); }
   /* Discount block styled like other cards */
-  #co-disc-note { background: #2b2f36; border:1px solid #3a3f47; border-radius: 14px; padding: 12px; margin: 0 0 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); color:#e2e8f0; text-align:center; font-weight:900; width: 100%; max-width: 100%; }
+  #co-disc-note { background: rgba(43,47,54,0.4); border:1px solid rgba(148,163,184,0.1); border-radius: 14px; padding: 12px; margin: 0 0 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); color:#e2e8f0; text-align:center; font-weight:900; width: 100%; max-width: 100%; }
   .co-disc-note { text-align:center; color:#e2e8f0; font-weight:900; }
   .co-disc-note[hidden] { display: none; }
   /* Phone tweaks: keep input text fully visible and centered */
@@ -76,14 +76,14 @@
   #btn-co-confirm:disabled {
     opacity: 0.35;
     cursor: not-allowed;
-    background: #2b2f36 !important;
+    background: rgba(43,47,54,0.3) !important;
     color: #6b7280 !important;
-    border: 2px dashed #4b5563 !important;
+    border: 2px dashed rgba(148,163,184,0.25) !important;
     transform: none !important;
     filter: grayscale(1);
   }
   #btn-co-confirm:disabled:hover {
-    background: #2b2f36 !important;
+    background: rgba(43,47,54,0.3) !important;
     transform: none !important;
   }
   #btn-co-confirm:not(:disabled) {
@@ -105,8 +105,8 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #3a3f47;
-    border: 2px solid #4b5563;
+    background: rgba(43,47,54,0.45);
+    border: 2px solid rgba(148,163,184,0.18);
     transition: all 0.2s ease;
   }
   .digit-dot.filled {
@@ -149,7 +149,15 @@
         <span class="logo-text">{{ site_name|default('InefableStore') }}</span>
       {% endif %}
     </a>
-    <div class="right-actions"></div>
+    <div class="right-actions">
+      <div class="header-search" role="search">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input id="header-search" type="search" placeholder="Buscar Juegos" autocomplete="off" />
+      </div>
+    </div>
   </div>
 </header>
 {% endblock %}
@@ -159,7 +167,7 @@
   <div class="co-banner" id="co-total">
     <div style="display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:8px;">
       {% if game_image %}
-        <img src="{{ game_image }}" alt="{{ game_name or 'Juego' }}" style="width:40px; height:40px; object-fit:cover; border-radius:8px; border:1px solid #3a3f47;">
+        <img src="{{ game_image }}" alt="{{ game_name or 'Juego' }}" style="width:40px; height:40px; object-fit:cover; border-radius:8px; border:1px solid rgba(148,163,184,0.18);">
       {% endif %}
       {% if game_name %}
         <div style="color:#0b0f14; background:rgba(255,255,255,0.75); padding:2px 8px; border-radius:8px; font-weight:900;">{{ game_name }}</div>
