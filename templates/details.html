@@ -110,11 +110,11 @@
       <div class="step-title" data-step="1">Ingrese su ID</div>
       {% if scrape_enabled and active_login_game_id and (active_login_game_id|int) == game.id %}
       <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;">
-        <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID">
+        <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
         <button id="btn-verify-player" class="btn" type="button">Verificar</button>
       </div>
       {% else %}
-      <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID">
+      <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
       {% endif %}
       {% if game.requires_zone_id %}
       <input id="customer-zone" class="input" type="text" placeholder="Ingresa tu Zona ID">

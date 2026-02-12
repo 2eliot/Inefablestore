@@ -343,6 +343,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (inputPhoneLocal) inputPhoneLocal.addEventListener('input', updateCombinedPhone);
 
+  // Player ID: numeric-only
+  if (inputCustomerId) {
+    inputCustomerId.addEventListener('input', () => {
+      const raw = inputCustomerId.value || '';
+      const clean = raw.replace(/\D+/g, '');
+      if (raw !== clean) inputCustomerId.value = clean;
+    });
+  }
+
   function updateMobileFooter() {
     if (!mfs) return;
     const show = selectedItemIndex >= 0;
@@ -912,6 +921,11 @@ document.addEventListener('DOMContentLoaded', () => {
           if (inputCustomerId) inputCustomerId.focus();
           return;
         }
+        if (inputCustomerId && !/^\d+$/.test(inputCustomerId.value.trim())) {
+          alert('El ID de jugador debe contener solo números');
+          inputCustomerId.focus();
+          return;
+        }
         if (requiresZone && inputCustomerZone && !inputCustomerZone.value.trim()) {
           alert('Ingresa tu Zona ID');
           inputCustomerZone.focus();
@@ -922,6 +936,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (chkSave && chkSave.checked) persistState();
       const gid = root.getAttribute('data-game-id');
       const method = (currency === 'BSD') ? 'pm' : 'binance';
+      // Require email before proceeding
+      const emailVal = (inputEmail && inputEmail.value.trim()) || '';
+      if (!emailVal) {
+        alert('Ingresa tu correo');
+        if (inputEmail) inputEmail.focus();
+        return;
+      }
       // Require phone before proceeding to checkout
       updateCombinedPhone();
       if (!inputPhone || !inputPhone.value.trim()) {
@@ -934,7 +955,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cur: currency,
         method,
         n: '',
-        e: (inputEmail && inputEmail.value.trim()) || '',
+        e: emailVal,
         p: (inputPhone && inputPhone.value.trim()) || '',
         q: String(Math.max(1, quantity || 1))
       };
