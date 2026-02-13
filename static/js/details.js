@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const playerNickname = document.getElementById('player-nickname');
   const btnRightLogin = document.getElementById('btn-right-login');
   const activeLogin = (root.getAttribute('data-active-login') === '1');
+  const scrapeEnabled = (root.getAttribute('data-scrape-enabled') === '1');
   // Hide Step 1 (player ID) for gift category and renumber badges/texts
   if (isGift && inputCustomerId) {
     const stepCard = inputCustomerId.closest('.step-card');
@@ -349,6 +350,54 @@ document.addEventListener('DOMContentLoaded', () => {
       const raw = inputCustomerId.value || '';
       const clean = raw.replace(/\D+/g, '');
       if (raw !== clean) inputCustomerId.value = clean;
+    });
+  }
+
+  // Verify player by UID (scraping) - only if enabled for this game
+  if (btnVerifyPlayer && inputCustomerId && playerNickname && activeLogin && scrapeEnabled) {
+    let verifying = false;
+    async function doVerify() {
+      if (verifying) return;
+      const uid = (inputCustomerId.value || '').trim();
+      if (!uid) {
+        playerNickname.style.color = '#fca5a5';
+        playerNickname.textContent = 'Ingresa tu ID';
+        return;
+      }
+      if (!/^\d+$/.test(uid)) {
+        playerNickname.style.color = '#fca5a5';
+        playerNickname.textContent = 'El ID debe ser numérico';
+        return;
+      }
+      verifying = true;
+      btnVerifyPlayer.disabled = true;
+      playerNickname.style.color = '#94a3b8';
+      playerNickname.textContent = 'Verificando...';
+      try {
+        const url = `/store/player/verify?gid=${encodeURIComponent(gid || '')}&uid=${encodeURIComponent(uid)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok || !data || !data.ok) {
+          throw new Error((data && data.error) || 'No se pudo verificar');
+        }
+        const nick = (data.nick || '').toString().trim();
+        if (!nick) throw new Error('ID no encontrado');
+        playerNickname.style.color = '#86efac';
+        playerNickname.textContent = `Nick: ${nick}`;
+      } catch (e) {
+        playerNickname.style.color = '#fca5a5';
+        playerNickname.textContent = (e && e.message) ? e.message : 'No se pudo verificar';
+      } finally {
+        verifying = false;
+        btnVerifyPlayer.disabled = false;
+      }
+    }
+    btnVerifyPlayer.addEventListener('click', doVerify);
+    inputCustomerId.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        doVerify();
+      }
     });
   }
 

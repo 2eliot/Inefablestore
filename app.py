@@ -1,7 +1,12 @@
 import os
-import shutil
-from datetime import datetime, timedelta, timezone
 import json
+import re
+import time
+import urllib.request
+import urllib.error
+import html as _html
+import hashlib
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
@@ -20,6 +25,7 @@ load_dotenv()
 # Configure Venezuela timezone (GMT-4)
 VE_TIMEZONE = timezone(timedelta(hours=-4))
 
+# ... (rest of the code remains the same)
 def now_ve():
     """Return current datetime in Venezuela timezone (GMT-4)"""
     return datetime.now(VE_TIMEZONE)
@@ -83,6 +89,116 @@ MAIL_SMTP_PORT = int(os.environ.get("MAIL_SMTP_PORT", "587"))
 ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "")  # default destination for new order alerts
 
 db = SQLAlchemy(app)
+
+_PLAYER_SCRAPE_CACHE = {}
+
+
+def _player_cache_get(key: str):
+    try:
+        ent = _PLAYER_SCRAPE_CACHE.get(key)
+        if not ent:
+            return None
+        exp = float(ent.get("exp") or 0)
+        if exp and time.time() > exp:
+            _PLAYER_SCRAPE_CACHE.pop(key, None)
+            return None
+        return ent.get("val")
+    except Exception:
+        return None
+
+
+def _player_cache_set(key: str, val, ttl_seconds: int = 600):
+    try:
+        _PLAYER_SCRAPE_CACHE[key] = {"val": val, "exp": time.time() + int(ttl_seconds or 0)}
+    except Exception:
+        pass
+
+
+def _scrape_ffmania_nick(uid: str) -> str:
+    url = f"https://www.freefiremania.com.br/cuenta/{uid}.html"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            raw = resp.read() or b""
+    except urllib.error.HTTPError as e:
+        if int(getattr(e, "code", 0) or 0) == 404:
+            return ""
+        raise
+    html_txt = raw.decode("utf-8", errors="ignore")
+
+    # Convert HTML to plain-ish text to make extraction resilient to markup changes/ads.
+    txt = html_txt
+    txt = re.sub(r"(?is)<(script|style)[^>]*>.*?</\\1>", " ", txt)
+    txt = re.sub(r"(?i)<br\\s*/?>", "\n", txt)
+    txt = re.sub(r"(?i)</(p|div|tr|li|h1|h2|h3|table|section|article)>", "\n", txt)
+    txt = re.sub(r"(?is)<[^>]+>", " ", txt)
+    txt = _html.unescape(txt)
+    txt = re.sub(r"[\t\r]+", " ", txt)
+    txt = re.sub(r"[ ]{2,}", " ", txt)
+    txt = re.sub(r"\n{2,}", "\n", txt)
+
+    patterns = [
+        r"(?im)^\s*Nombre\s*:\s*(.+?)\s*$",
+        r"(?im)^\s*Nome\s*:\s*(.+?)\s*$",
+        r"(?im)^\s*Nick\s*:\s*(.+?)\s*$",
+        r"\"nick\"\s*:\s*\"([^\"]+)\"",
+    ]
+    nick = ""
+    for pat in patterns:
+        m = re.search(pat, txt, flags=re.IGNORECASE)
+        if m:
+            nick = (m.group(1) or "").strip()
+            break
+    nick = re.sub(r"\s+", " ", nick).strip()
+    return nick
+
+
+@app.route("/store/player/verify")
+def store_player_verify():
+    scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
+    if not scrape_enabled:
+        return jsonify({"ok": False, "error": "Verificación deshabilitada"}), 403
+
+    uid = (request.args.get("uid") or "").strip()
+    gid_raw = (request.args.get("gid") or "").strip()
+    if not uid or not uid.isdigit():
+        return jsonify({"ok": False, "error": "ID inválido"}), 400
+    if not gid_raw or not gid_raw.isdigit():
+        return jsonify({"ok": False, "error": "Juego inválido"}), 400
+
+    active_login_game_id = (get_config_value("active_login_game_id", "") or "").strip()
+    if not active_login_game_id or active_login_game_id != gid_raw:
+        return jsonify({"ok": False, "error": "Verificación no disponible para este juego"}), 403
+
+    game = StorePackage.query.get(int(gid_raw))
+    if not game or not getattr(game, "active", False):
+        return jsonify({"ok": False, "error": "Juego no encontrado"}), 404
+
+    cache_key = f"ffmania:{uid}"
+    cached = _player_cache_get(cache_key)
+    if cached is not None:
+        if not cached:
+            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+        return jsonify({"ok": True, "uid": uid, "nick": cached, "cached": True})
+
+    try:
+        nick = _scrape_ffmania_nick(uid)
+    except Exception:
+        return jsonify({"ok": False, "error": "No se pudo verificar el ID"}), 502
+
+    # Cache both hits and misses for short time to reduce external traffic
+    _player_cache_set(cache_key, nick, ttl_seconds=600)
+    if not nick:
+        return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+    return jsonify({"ok": True, "uid": uid, "nick": nick, "cached": False})
 
 # ==============================
 # Serve uploaded files (runtime uploads)
