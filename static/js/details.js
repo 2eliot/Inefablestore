@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnRightLogin = document.getElementById('btn-right-login');
   const activeLogin = (root.getAttribute('data-active-login') === '1');
   const scrapeEnabled = (root.getAttribute('data-scrape-enabled') === '1');
+  let verifiedNick = '';
   // Hide Step 1 (player ID) for gift category and renumber badges/texts
   if (isGift && inputCustomerId) {
     const stepCard = inputCustomerId.closest('.step-card');
@@ -353,52 +354,126 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Verify player by UID (scraping) - only if enabled for this game
-  if (btnVerifyPlayer && inputCustomerId && playerNickname && activeLogin && scrapeEnabled) {
+  if (inputCustomerId && playerNickname && activeLogin && scrapeEnabled) {
     let verifying = false;
-    async function doVerify() {
+    let verifyTimer = null;
+    let lastUidRequested = '';
+    let lastUidVerified = '';
+    let inflightController = null;
+
+    function cacheKey(uid) {
+      return `ffnick:${String(uid || '').trim()}`;
+    }
+
+    function getCachedNick(uid) {
+      try { return (localStorage.getItem(cacheKey(uid)) || '').toString().trim(); } catch (_) { return ''; }
+    }
+
+    function setCachedNick(uid, nick) {
+      try { localStorage.setItem(cacheKey(uid), (nick || '').toString()); } catch (_) {}
+    }
+
+    function setNickUIOk(nick) {
+      verifiedNick = nick || '';
+      try { root.dataset.verifiedNick = verifiedNick; } catch (_) {}
+      if (!verifiedNick) return;
+      playerNickname.style.color = '#86efac';
+      playerNickname.textContent = `Nick: ${verifiedNick}`;
+    }
+
+    function setNickUILoading() {
+      playerNickname.style.color = '#94a3b8';
+      playerNickname.textContent = 'Verificando...';
+    }
+
+    function setNickUIErr(msg) {
+      verifiedNick = '';
+      try { root.dataset.verifiedNick = ''; } catch (_) {}
+      playerNickname.style.color = '#fca5a5';
+      playerNickname.textContent = msg || 'No se pudo verificar';
+    }
+
+    async function doVerify(opts) {
+      const silent = !!(opts && opts.silent);
       if (verifying) return;
       const uid = (inputCustomerId.value || '').trim();
       if (!uid) {
-        playerNickname.style.color = '#fca5a5';
-        playerNickname.textContent = 'Ingresa tu ID';
+        if (!silent) setNickUIErr('Ingresa tu ID');
         return;
       }
       if (!/^\d+$/.test(uid)) {
-        playerNickname.style.color = '#fca5a5';
-        playerNickname.textContent = 'El ID debe ser numérico';
+        if (!silent) setNickUIErr('El ID debe ser numérico');
         return;
       }
+      if (uid === lastUidVerified) {
+        const n0 = getCachedNick(uid);
+        if (n0) setNickUIOk(n0);
+        return;
+      }
+      const cached = getCachedNick(uid);
+      if (cached) {
+        lastUidVerified = uid;
+        setNickUIOk(cached);
+        return;
+      }
+      if (inflightController) {
+        try { inflightController.abort(); } catch (_) {}
+        inflightController = null;
+      }
+      inflightController = new AbortController();
+      lastUidRequested = uid;
       verifying = true;
-      btnVerifyPlayer.disabled = true;
-      playerNickname.style.color = '#94a3b8';
-      playerNickname.textContent = 'Verificando...';
+      if (btnVerifyPlayer) btnVerifyPlayer.disabled = true;
+      if (!silent) setNickUILoading();
       try {
         const url = `/store/player/verify?gid=${encodeURIComponent(gid || '')}&uid=${encodeURIComponent(uid)}`;
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: inflightController.signal });
         const data = await res.json();
-        if (!res.ok || !data || !data.ok) {
-          throw new Error((data && data.error) || 'No se pudo verificar');
-        }
+        if (uid !== lastUidRequested) return;
+        if (!res.ok || !data || !data.ok) throw new Error((data && data.error) || 'No se pudo verificar');
         const nick = (data.nick || '').toString().trim();
         if (!nick) throw new Error('ID no encontrado');
-        playerNickname.style.color = '#86efac';
-        playerNickname.textContent = `Nick: ${nick}`;
+        setCachedNick(uid, nick);
+        lastUidVerified = uid;
+        setNickUIOk(nick);
       } catch (e) {
-        playerNickname.style.color = '#fca5a5';
-        playerNickname.textContent = (e && e.message) ? e.message : 'No se pudo verificar';
+        if (e && e.name === 'AbortError') return;
+        if (!silent) setNickUIErr((e && e.message) ? e.message : 'No se pudo verificar');
+        setCachedNick(uid, '');
       } finally {
         verifying = false;
-        btnVerifyPlayer.disabled = false;
+        if (btnVerifyPlayer) btnVerifyPlayer.disabled = false;
       }
     }
-    btnVerifyPlayer.addEventListener('click', doVerify);
+
+    if (btnVerifyPlayer) btnVerifyPlayer.addEventListener('click', () => doVerify({ silent: false }));
     inputCustomerId.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        doVerify();
+        doVerify({ silent: false });
       }
     });
+    inputCustomerId.addEventListener('input', () => {
+      const uid = (inputCustomerId.value || '').trim();
+      if (!uid) {
+        verifiedNick = '';
+        playerNickname.textContent = '';
+        return;
+      }
+      if (verifyTimer) clearTimeout(verifyTimer);
+      verifyTimer = setTimeout(() => {
+        doVerify({ silent: true });
+      }, 500);
+    });
+
+    try {
+      const uid0 = (inputCustomerId.value || '').trim();
+      const nick0 = uid0 ? getCachedNick(uid0) : '';
+      if (uid0 && nick0) {
+        lastUidVerified = uid0;
+        setNickUIOk(nick0);
+      }
+    } catch (_) {}
   }
 
   function updateMobileFooter() {
@@ -1011,6 +1086,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isGift && inputCustomerId) {
         paramsObj.cid = inputCustomerId.value.trim();
       }
+      try {
+        const nn = (root && root.dataset && root.dataset.verifiedNick) ? String(root.dataset.verifiedNick || '').trim() : '';
+        if (nn) paramsObj.nn = nn;
+      } catch (_) {}
       if (!isGift && requiresZone && inputCustomerZone) {
         paramsObj.zid = inputCustomerZone.value.trim();
       }

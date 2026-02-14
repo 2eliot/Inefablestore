@@ -126,7 +126,7 @@ def _scrape_ffmania_nick(uid: str) -> str:
         method="GET",
     )
     try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             raw = resp.read() or b""
     except urllib.error.HTTPError as e:
         if int(getattr(e, "code", 0) or 0) == 404:

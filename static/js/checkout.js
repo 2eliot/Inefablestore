@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const qCur = qs.get('cur');
   const qMethod = qs.get('method'); // 'pm' | 'binance'
   const qCid = qs.get('cid');
+  const qNick = (qs.get('nn') || '').trim();
   const qZid = qs.get('zid');
   const qRefCode = (qs.get('rc') || '').trim();
   const qName = qs.get('n') || '';
@@ -153,12 +154,25 @@ document.addEventListener('DOMContentLoaded', () => {
         ${gimg ? `<img src="${gimg}" alt="${gname || 'Juego'}" style="width:56px; height:56px; object-fit:cover; border-radius:10px; border:2px solid rgba(255,255,255,0.25); box-shadow:0 2px 8px rgba(0,0,0,0.35);">` : ''}
         ${gname ? `<div style=\"color:#0b0f14; background:rgba(255,255,255,0.5); padding:2px 8px; border-radius:8px; font-weight:900;\">${gname}</div>` : ''}
       </div>`;
+    const playerBlock = (() => {
+      const uid = (qCid || '').trim();
+      const nn = (qNick || '').trim();
+      if (!uid && !nn) return '';
+      const label = nn ? `Jugador: ${nn}` : `ID: ${uid}`;
+      const sub = (uid && nn) ? `<div style="opacity:.95; font-weight:900; margin-top:4px;">ID: ${uid}</div>` : '';
+      return `
+        <div style="margin-top:8px; display:grid; gap:2px; justify-items:center;">
+          <div style="color:#0b0f14; background:rgba(255,255,255,0.65); padding:2px 10px; border-radius:10px; font-weight:900;">${label}</div>
+          ${sub}
+        </div>`;
+    })();
     // Top banner now shows total, quantity and the selected item line
     coTotal.innerHTML = `
       ${gameBlock}
       <div style="font-weight:900;">Total a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
       <div style="opacity:.9; font-weight:800; margin-top:4px;">Cantidad: ${Math.max(1, quantity || 1)}</div>
       ${itemLine ? `<div style=\"opacity:.95; font-weight:800; margin-top:6px;\">${itemLine}</div>` : ''}
+      ${playerBlock}
     `;
     if (coDiscNote) { coDiscNote.setAttribute('hidden', ''); coDiscNote.innerHTML = ''; }
 
