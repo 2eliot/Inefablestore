@@ -2441,22 +2441,22 @@ def admin_orders_set_status(oid: int):
                 webb_ff_game_id = None
 
             if webb_ff_game_id and o.store_package_id == webb_ff_game_id:
-                # Determinar package_id (monto 1-9) desde el item seleccionado
+                # ── Mapeo item_id (Web A) → package_id (Web B) ──
+                # Env var WEBB_FF_ITEM_MAP formato: "item_id_A:pkg_id_B,item_id_A:pkg_id_B,..."
+                # Ejemplo: "12:1,13:2,14:3,15:4,16:5"
+                # Los 5 montos de Web B son: 1=110💎, 2=341💎, 3=572💎, 4=1166💎, 5=2376💎
                 package_id_webb = None
                 try:
-                    if o.item_id:
-                        it_obj = GamePackageItem.query.get(o.item_id)
-                        if it_obj and it_obj.sort_order:
-                            package_id_webb = int(it_obj.sort_order)
-                        elif it_obj:
-                            # Fallback: usar posición del item en el juego
-                            items_ordered = GamePackageItem.query.filter_by(
-                                store_package_id=o.store_package_id, active=True
-                            ).order_by(GamePackageItem.sort_order.asc(), GamePackageItem.id.asc()).all()
-                            for idx, it_row in enumerate(items_ordered, start=1):
-                                if it_row.id == o.item_id:
-                                    package_id_webb = idx
-                                    break
+                    item_map_raw = os.environ.get("WEBB_FF_ITEM_MAP", "").strip()
+                    if item_map_raw and o.item_id:
+                        for pair in item_map_raw.split(","):
+                            pair = pair.strip()
+                            if ":" not in pair:
+                                continue
+                            a_id_str, b_pkg_str = pair.split(":", 1)
+                            if int(a_id_str.strip()) == int(o.item_id):
+                                package_id_webb = int(b_pkg_str.strip())
+                                break
                 except Exception:
                     pass
 
