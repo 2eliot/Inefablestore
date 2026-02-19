@@ -1819,6 +1819,14 @@ window.refreshGallery = refreshGallery;
         });
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo actualizar');
+        // Mostrar resultado de recarga automática Web B si aplica
+        if (data.webb_recarga) {
+          if (data.webb_recarga.ok) {
+            toast(`✅ Recarga exitosa: ${data.webb_recarga.package} | PIN: ${data.webb_recarga.pin}`, 'success');
+          } else {
+            toast(`⚠️ Orden aprobada pero recarga falló: ${data.webb_recarga.error}`, 'error');
+          }
+        }
         await fetchOrders();
       } catch (err) {
         toast(err.message || 'Error');
