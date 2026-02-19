@@ -1773,10 +1773,25 @@ window.refreshGallery = refreshGallery;
             : `<input class=\"input gift-code\" data-id=\"${o.id}\" type=\"text\" placeholder=\"C\u00f3digo para el cliente\" value=\"${o.delivery_code || ''}\" style=\"flex:1; min-width:220px;\" />`
           }
         </div>` : ''}
-        <div class=\"row-actions\">
-          <button class=\"btn btn-approve\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Aprobar</button>
-          <button class=\"btn btn-reject\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Rechazar</button>
-        </div>
+        ${(() => {
+          const ffGameId = window._WEBB_FF_GAME_ID ? parseInt(window._WEBB_FF_GAME_ID) : null;
+          const isFF = ffGameId && o.store_package_id === ffGameId;
+          const ffQty = isFF
+            ? (itemsArr.length ? itemsArr.reduce((s, it) => s + parseInt(it.qty||1,10), 0) : 1)
+            : 0;
+          if (isFF && ffQty > 1 && o.status === 'pending') {
+            let btns = `<div class=\"row-actions\" style=\"flex-wrap:wrap;gap:6px;\">`;
+            for (let i = 0; i < ffQty; i++) {
+              btns += `<button class=\"btn btn-approve-ff\" data-id=\"${o.id}\" data-index=\"${i}\" data-total=\"${ffQty}\" ${i > 0 ? 'disabled' : ''} style=\"min-width:130px;\">Recargar ${i+1}/${ffQty}</button>`;
+            }
+            btns += `<button class=\"btn btn-reject\" data-id=\"${o.id}\">Rechazar</button></div>`;
+            return btns;
+          }
+          return `<div class=\"row-actions\">
+            <button class=\"btn btn-approve\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Aprobar</button>
+            <button class=\"btn btn-reject\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Rechazar</button>
+          </div>`;
+        })()}
       `;
 
       ordersList.appendChild(tile);
@@ -1792,6 +1807,59 @@ window.refreshGallery = refreshGallery;
         try { await navigator.clipboard.writeText(value); toast('Copiado'); } catch(_) { toast('No se pudo copiar'); }
         return;
       }
+      // ── Botón de recarga individual FF (qty > 1) ──
+      const btnFF = e.target.closest('.btn-approve-ff');
+      if (btnFF) {
+        const id = btnFF.getAttribute('data-id');
+        const recarga_index = parseInt(btnFF.getAttribute('data-index'));
+        const total_recargas = parseInt(btnFF.getAttribute('data-total'));
+        btnFF.disabled = true;
+        btnFF.textContent = `Recargando ${recarga_index+1}/${total_recargas}...`;
+        try {
+          const res = await fetch(`/admin/orders/${id}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'approved', recarga_index, total_recargas })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo actualizar');
+          if (data.webb_recarga && data.webb_recarga.ok) {
+            btnFF.textContent = `✅ ${recarga_index+1}/${total_recargas} OK`;
+            btnFF.style.background = '#16a34a';
+            toast(`✅ Recarga ${recarga_index+1}/${total_recargas}: ${data.webb_recarga.package} | PIN: ${data.webb_recarga.pin}`, 'success');
+            // Activar siguiente botón después de 30s (si no es el último)
+            if (!data.webb_recarga.is_last) {
+              const nextBtn = ordersList.querySelector(`.btn-approve-ff[data-id="${id}"][data-index="${recarga_index+1}"]`);
+              if (nextBtn) {
+                let secs = 30;
+                nextBtn.textContent = `Recargar ${recarga_index+2}/${total_recargas} (${secs}s)`;
+                const interval = setInterval(() => {
+                  secs--;
+                  if (secs <= 0) {
+                    clearInterval(interval);
+                    nextBtn.disabled = false;
+                    nextBtn.textContent = `Recargar ${recarga_index+2}/${total_recargas}`;
+                  } else {
+                    nextBtn.textContent = `Recargar ${recarga_index+2}/${total_recargas} (${secs}s)`;
+                  }
+                }, 1000);
+              }
+            } else {
+              await fetchOrders();
+            }
+          } else if (data.webb_recarga) {
+            btnFF.disabled = false;
+            btnFF.textContent = `Recargar ${recarga_index+1}/${total_recargas}`;
+            toast(`⚠️ Recarga ${recarga_index+1}/${total_recargas} falló: ${data.webb_recarga.error}`, 'error');
+          }
+        } catch (err) {
+          btnFF.disabled = false;
+          btnFF.textContent = `Recargar ${recarga_index+1}/${total_recargas}`;
+          toast(err.message || 'Error');
+        }
+        return;
+      }
+
       const btnA = e.target.closest('.btn-approve');
       const btnR = e.target.closest('.btn-reject');
       const btn = btnA || btnR;

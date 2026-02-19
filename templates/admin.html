@@ -1,4 +1,8 @@
 {% extends 'base.html' %}
+{% block scripts %}
+<script>window._WEBB_FF_GAME_ID = "{{ webb_ff_game_id|default('') }}";</script>
+<script src="{{ url_for('static', filename='js/admin.js', v='11') }}" defer></script>
+{% endblock %}
 {% block content %}
 <style>
   /* Softer green styling for payment method selector */

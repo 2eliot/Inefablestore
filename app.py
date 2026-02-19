@@ -1276,7 +1276,8 @@ def user_page():
 @app.route("/admin")
 def admin_page():
     site_name = get_config_value("site_name", "InefableStore")
-    return render_template("admin.html", site_name=site_name, body_class="theme-admin-dark")
+    webb_ff_game_id = os.environ.get("WEBB_FF_GAME_ID", "")
+    return render_template("admin.html", site_name=site_name, body_class="theme-admin-dark", webb_ff_game_id=webb_ff_game_id)
 
 @app.route("/store/hero")
 def store_hero():
@@ -2420,6 +2421,8 @@ def admin_orders_set_status(oid: int):
         pass
 
     # ── Auto-recarga en Web B (solo para el juego Free Fire configurado) ──
+    # recarga_index: índice 0-based de la recarga a ejecutar (para órdenes con qty > 1)
+    # total_recargas: total de recargas en la orden (para saber cuándo marcar delivered)
     webb_result = None
     webb_error = None
     try:
@@ -2427,25 +2430,27 @@ def admin_orders_set_status(oid: int):
         webb_token = os.environ.get("WEBB_API_TOKEN", "").strip()
         webb_ff_game_id_raw = os.environ.get("WEBB_FF_GAME_ID", "").strip()
 
-        # Solo ejecutar si está configurado y el pedido es del juego Free Fire
-        if (
-            status == "approved"
-            and prev_status != "approved"
-            and webb_url
-            and webb_token
-            and webb_ff_game_id_raw
-        ):
+        recarga_index = data.get("recarga_index")  # None = recarga única (comportamiento anterior)
+        total_recargas = data.get("total_recargas", 1)
+        try:
+            total_recargas = int(total_recargas)
+        except Exception:
+            total_recargas = 1
+
+        # Ejecutar recarga si: configurado, orden aprobada, y es juego FF
+        # Para múltiples recargas: status ya es "approved" desde la primera,
+        # así que solo verificamos que no sea "delivered" aún
+        is_ff_order = False
+        package_id_webb = None
+        if webb_url and webb_token and webb_ff_game_id_raw:
             try:
                 webb_ff_game_id = int(webb_ff_game_id_raw)
             except ValueError:
                 webb_ff_game_id = None
 
             if webb_ff_game_id and o.store_package_id == webb_ff_game_id:
+                is_ff_order = True
                 # ── Mapeo item_id (Web A) → package_id (Web B) ──
-                # Env var WEBB_FF_ITEM_MAP formato: "item_id_A:pkg_id_B,item_id_A:pkg_id_B,..."
-                # Ejemplo: "12:1,13:2,14:3,15:4,16:5"
-                # Los 5 montos de Web B son: 1=110💎, 2=341💎, 3=572💎, 4=1166💎, 5=2376💎
-                package_id_webb = None
                 try:
                     item_map_raw = os.environ.get("WEBB_FF_ITEM_MAP", "").strip()
                     if item_map_raw and o.item_id:
@@ -2460,45 +2465,72 @@ def admin_orders_set_status(oid: int):
                 except Exception:
                     pass
 
-                if package_id_webb and 1 <= package_id_webb <= 9:
-                    player_id = (o.customer_id or "").strip()
-                    if player_id:
+        should_recharge = (
+            is_ff_order
+            and package_id_webb and 1 <= package_id_webb <= 9
+            and status == "approved"
+            and o.status in ("approved", "delivered")  # permite recargas sucesivas
+            and (recarga_index is None or prev_status != "approved" or recarga_index is not None)
+        )
+
+        if should_recharge:
+            player_id = (o.customer_id or "").strip()
+            if player_id:
+                try:
+                    resp = _requests_lib.post(
+                        f"{webb_url}/api/v1/ejecutar-recarga",
+                        json={
+                            "player_id": player_id,
+                            "package_id": package_id_webb,
+                            "order_id": o.id,
+                            "recarga_index": recarga_index,
+                        },
+                        headers={
+                            "Authorization": f"Bearer {webb_token}",
+                            "Content-Type": "application/json",
+                        },
+                        timeout=30,
+                    )
+                    webb_data = resp.json()
+                    if webb_data.get("ok"):
+                        pin_entregado = webb_data.get("pin", "")
+                        # Acumular PINs en delivery_codes_json
                         try:
-                            resp = _requests_lib.post(
-                                f"{webb_url}/api/v1/ejecutar-recarga",
-                                json={
-                                    "player_id": player_id,
-                                    "package_id": package_id_webb,
-                                    "order_id": o.id,
-                                },
-                                headers={
-                                    "Authorization": f"Bearer {webb_token}",
-                                    "Content-Type": "application/json",
-                                },
-                                timeout=30,
-                            )
-                            webb_data = resp.json()
-                            if webb_data.get("ok"):
-                                # Recarga exitosa → marcar como entregado
-                                o.status = "delivered"
-                                # Guardar el PIN en delivery_code para referencia
-                                pin_entregado = webb_data.get("pin", "")
-                                if pin_entregado:
-                                    o.delivery_code = pin_entregado
-                                db.session.commit()
-                                webb_result = webb_data
-                            else:
-                                webb_error = webb_data.get("error", "Error desconocido en Web B")
-                        except _requests_lib.exceptions.Timeout:
-                            webb_error = "Web B no respondió en 30 segundos (puede estar despertando en Render)"
-                        except Exception as exc:
-                            webb_error = str(exc)
+                            existing_pins = json.loads(o.delivery_codes_json or "[]")
+                            if not isinstance(existing_pins, list):
+                                existing_pins = []
+                        except Exception:
+                            existing_pins = []
+                        if pin_entregado:
+                            existing_pins.append(pin_entregado)
+                            o.delivery_codes_json = json.dumps(existing_pins)
+                            o.delivery_code = existing_pins[0]  # compatibilidad legacy
+                        # Si es la última recarga → marcar como delivered
+                        is_last = (recarga_index is None) or (int(recarga_index) + 1 >= total_recargas)
+                        if is_last:
+                            o.status = "delivered"
+                        db.session.commit()
+                        webb_result = webb_data
+                        webb_result["pins_so_far"] = existing_pins
+                        webb_result["is_last"] = is_last
+                    else:
+                        webb_error = webb_data.get("error", "Error desconocido en Web B")
+                except _requests_lib.exceptions.Timeout:
+                    webb_error = "Web B no respondió en 30 segundos (puede estar despertando en Render)"
+                except Exception as exc:
+                    webb_error = str(exc)
     except Exception as exc:
         webb_error = str(exc)
 
     response_payload = {"ok": True}
     if webb_result:
-        response_payload["webb_recarga"] = {"ok": True, "pin": webb_result.get("pin", ""), "package": webb_result.get("package", "")}
+        response_payload["webb_recarga"] = {
+            "ok": True,
+            "pin": webb_result.get("pin", ""),
+            "package": webb_result.get("package", ""),
+            "pins_so_far": webb_result.get("pins_so_far", []),
+            "is_last": webb_result.get("is_last", True),
+        }
     if webb_error:
         response_payload["webb_recarga"] = {"ok": False, "error": webb_error}
 
