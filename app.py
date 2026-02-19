@@ -2474,46 +2474,47 @@ def admin_orders_set_status(oid: int):
             player_id = (o.customer_id or "").strip()
             if player_id:
                 try:
-                    # Llamar a /api.php con usuario+contraseña (API existente en Web B)
-                    import urllib.parse as _urlparse
-                    api_url = (
-                        f"{webb_url}/api.php"
-                        f"?action=recarga"
-                        f"&usuario={_urlparse.quote(webb_user)}"
-                        f"&clave={_urlparse.quote(webb_pass)}"
-                        f"&tipo=recargaPinFreefire"
-                        f"&monto={package_id_webb}"
-                        f"&numero=1"
+                    # 1. Login en Web B para obtener sesión
+                    sess_b = _requests_lib.Session()
+                    login_resp = sess_b.post(
+                        f"{webb_url}/auth",
+                        data={"correo": webb_user, "contrasena": webb_pass},
+                        timeout=30,
+                        allow_redirects=True,
                     )
-                    resp = _requests_lib.get(api_url, timeout=30)
-                    webb_data = resp.json()
-                    # /api.php responde con {"status":"success","pins":[...]} o {"status":"error","message":"..."}
-                    if webb_data.get("status") == "success":
-                        pins_resp = webb_data.get("pins", [])
-                        pin_entregado = pins_resp[0] if isinstance(pins_resp, list) and pins_resp else webb_data.get("pin", "")
-                        # Acumular PINs
-                        try:
-                            existing_pins = json.loads(o.delivery_codes_json or "[]")
-                            if not isinstance(existing_pins, list):
-                                existing_pins = []
-                        except Exception:
-                            existing_pins = []
-                        if pin_entregado:
-                            existing_pins.append(pin_entregado)
-                            o.delivery_codes_json = json.dumps(existing_pins)
-                            o.delivery_code = existing_pins[0]
-                        is_last = (recarga_index is None) or (int(recarga_index) + 1 >= total_recargas)
-                        if is_last:
-                            o.status = "delivered"
-                        db.session.commit()
-                        webb_result = {
-                            "pin": pin_entregado,
-                            "package": webb_data.get("paquete", f"Paquete {package_id_webb}"),
-                            "pins_so_far": existing_pins,
-                            "is_last": is_last,
-                        }
+                    # Verificar que el login fue exitoso (redirige a / o /juego/...)
+                    if "/auth" in login_resp.url:
+                        webb_error = "Login en Web B fallido: credenciales incorrectas"
                     else:
-                        webb_error = webb_data.get("message", "Error desconocido en Web B")
+                        # 2. POST al formulario de freefire_id con player_id y package_id
+                        recarga_resp = sess_b.post(
+                            f"{webb_url}/validar/freefire_id",
+                            data={
+                                "monto": str(package_id_webb),
+                                "player_id": player_id,
+                            },
+                            timeout=30,
+                            allow_redirects=True,
+                        )
+                        # La recarga es exitosa si redirige a ?compra=exitosa
+                        if "compra=exitosa" in recarga_resp.url:
+                            is_last = (recarga_index is None) or (int(recarga_index) + 1 >= total_recargas)
+                            if is_last:
+                                o.status = "delivered"
+                            db.session.commit()
+                            webb_result = {
+                                "pin": "",
+                                "package": f"Paquete {package_id_webb}",
+                                "pins_so_far": [],
+                                "is_last": is_last,
+                            }
+                        else:
+                            # Intentar extraer mensaje de error del HTML
+                            import re as _re
+                            flash_match = _re.search(
+                                r'class=["\'].*?alert.*?["\'][^>]*>([^<]{5,200})', recarga_resp.text
+                            )
+                            webb_error = flash_match.group(1).strip() if flash_match else "Recarga no completada en Web B"
                 except _requests_lib.exceptions.Timeout:
                     webb_error = "Web B no respondió en 30 segundos (puede estar despertando en Render)"
                 except Exception as exc:

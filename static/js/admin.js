@@ -1826,7 +1826,7 @@ window.refreshGallery = refreshGallery;
           if (data.webb_recarga && data.webb_recarga.ok) {
             btnFF.textContent = `✅ ${recarga_index+1}/${total_recargas} OK`;
             btnFF.style.background = '#16a34a';
-            toast(`✅ Recarga ${recarga_index+1}/${total_recargas}: ${data.webb_recarga.package} | PIN: ${data.webb_recarga.pin}`, 'success');
+            toast(`✅ Recarga ${recarga_index+1}/${total_recargas} enviada a Revendedores51`, 'success');
             // Activar siguiente botón después de 30s (si no es el último)
             if (!data.webb_recarga.is_last) {
               const nextBtn = ordersList.querySelector(`.btn-approve-ff[data-id="${id}"][data-index="${recarga_index+1}"]`);
@@ -1890,7 +1890,7 @@ window.refreshGallery = refreshGallery;
         // Mostrar resultado de recarga automática Web B si aplica
         if (data.webb_recarga) {
           if (data.webb_recarga.ok) {
-            toast(`✅ Recarga exitosa: ${data.webb_recarga.package} | PIN: ${data.webb_recarga.pin}`, 'success');
+            toast(`✅ Recarga enviada a Revendedores51 exitosamente`, 'success');
           } else {
             toast(`⚠️ Orden aprobada pero recarga falló: ${data.webb_recarga.error}`, 'error');
           }
