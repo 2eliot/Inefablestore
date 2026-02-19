@@ -2420,29 +2420,28 @@ def admin_orders_set_status(oid: int):
     except Exception:
         pass
 
-    # ── Auto-recarga en Web B (solo para el juego Free Fire configurado) ──
-    # recarga_index: índice 0-based de la recarga a ejecutar (para órdenes con qty > 1)
-    # total_recargas: total de recargas en la orden (para saber cuándo marcar delivered)
+    # ── Auto-recarga en Web B via /api.php (usuario+contraseña) ──
+    # Variables requeridas: WEBB_URL, WEBB_USER, WEBB_PASS, WEBB_FF_GAME_ID, WEBB_FF_ITEM_MAP
+    # recarga_index: índice 0-based para órdenes con qty > 1
     webb_result = None
     webb_error = None
     try:
-        webb_url = os.environ.get("WEBB_URL", "").strip().rstrip("/")
-        webb_token = os.environ.get("WEBB_API_TOKEN", "").strip()
+        webb_url  = os.environ.get("WEBB_URL", "").strip().rstrip("/")
+        webb_user = os.environ.get("WEBB_USER", "").strip()
+        webb_pass = os.environ.get("WEBB_PASS", "").strip()
         webb_ff_game_id_raw = os.environ.get("WEBB_FF_GAME_ID", "").strip()
 
-        recarga_index = data.get("recarga_index")  # None = recarga única (comportamiento anterior)
+        recarga_index  = data.get("recarga_index")
         total_recargas = data.get("total_recargas", 1)
         try:
             total_recargas = int(total_recargas)
         except Exception:
             total_recargas = 1
 
-        # Ejecutar recarga si: configurado, orden aprobada, y es juego FF
-        # Para múltiples recargas: status ya es "approved" desde la primera,
-        # así que solo verificamos que no sea "delivered" aún
-        is_ff_order = False
+        # Resolver package_id de Web B desde el item del pedido
         package_id_webb = None
-        if webb_url and webb_token and webb_ff_game_id_raw:
+        is_ff_order = False
+        if webb_url and webb_user and webb_pass and webb_ff_game_id_raw:
             try:
                 webb_ff_game_id = int(webb_ff_game_id_raw)
             except ValueError:
@@ -2450,7 +2449,6 @@ def admin_orders_set_status(oid: int):
 
             if webb_ff_game_id and o.store_package_id == webb_ff_game_id:
                 is_ff_order = True
-                # ── Mapeo item_id (Web A) → package_id (Web B) ──
                 try:
                     item_map_raw = os.environ.get("WEBB_FF_ITEM_MAP", "").strip()
                     if item_map_raw and o.item_id:
@@ -2469,32 +2467,31 @@ def admin_orders_set_status(oid: int):
             is_ff_order
             and package_id_webb and 1 <= package_id_webb <= 9
             and status == "approved"
-            and o.status in ("approved", "delivered")  # permite recargas sucesivas
-            and (recarga_index is None or prev_status != "approved" or recarga_index is not None)
+            and o.status in ("approved", "delivered")
         )
 
         if should_recharge:
             player_id = (o.customer_id or "").strip()
             if player_id:
                 try:
-                    resp = _requests_lib.post(
-                        f"{webb_url}/api/v1/ejecutar-recarga",
-                        json={
-                            "player_id": player_id,
-                            "package_id": package_id_webb,
-                            "order_id": o.id,
-                            "recarga_index": recarga_index,
-                        },
-                        headers={
-                            "Authorization": f"Bearer {webb_token}",
-                            "Content-Type": "application/json",
-                        },
-                        timeout=30,
+                    # Llamar a /api.php con usuario+contraseña (API existente en Web B)
+                    import urllib.parse as _urlparse
+                    api_url = (
+                        f"{webb_url}/api.php"
+                        f"?action=recarga"
+                        f"&usuario={_urlparse.quote(webb_user)}"
+                        f"&clave={_urlparse.quote(webb_pass)}"
+                        f"&tipo=recargaPinFreefire"
+                        f"&monto={package_id_webb}"
+                        f"&numero=1"
                     )
+                    resp = _requests_lib.get(api_url, timeout=30)
                     webb_data = resp.json()
-                    if webb_data.get("ok"):
-                        pin_entregado = webb_data.get("pin", "")
-                        # Acumular PINs en delivery_codes_json
+                    # /api.php responde con {"status":"success","pins":[...]} o {"status":"error","message":"..."}
+                    if webb_data.get("status") == "success":
+                        pins_resp = webb_data.get("pins", [])
+                        pin_entregado = pins_resp[0] if isinstance(pins_resp, list) and pins_resp else webb_data.get("pin", "")
+                        # Acumular PINs
                         try:
                             existing_pins = json.loads(o.delivery_codes_json or "[]")
                             if not isinstance(existing_pins, list):
@@ -2504,17 +2501,19 @@ def admin_orders_set_status(oid: int):
                         if pin_entregado:
                             existing_pins.append(pin_entregado)
                             o.delivery_codes_json = json.dumps(existing_pins)
-                            o.delivery_code = existing_pins[0]  # compatibilidad legacy
-                        # Si es la última recarga → marcar como delivered
+                            o.delivery_code = existing_pins[0]
                         is_last = (recarga_index is None) or (int(recarga_index) + 1 >= total_recargas)
                         if is_last:
                             o.status = "delivered"
                         db.session.commit()
-                        webb_result = webb_data
-                        webb_result["pins_so_far"] = existing_pins
-                        webb_result["is_last"] = is_last
+                        webb_result = {
+                            "pin": pin_entregado,
+                            "package": webb_data.get("paquete", f"Paquete {package_id_webb}"),
+                            "pins_so_far": existing_pins,
+                            "is_last": is_last,
+                        }
                     else:
-                        webb_error = webb_data.get("error", "Error desconocido en Web B")
+                        webb_error = webb_data.get("message", "Error desconocido en Web B")
                 except _requests_lib.exceptions.Timeout:
                     webb_error = "Web B no respondió en 30 segundos (puede estar despertando en Render)"
                 except Exception as exc:
