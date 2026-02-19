@@ -17,6 +17,7 @@ import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import secrets
+import requests as _requests_lib
 
 # Create Flask app
 app = Flask(__name__, instance_relative_config=True)
@@ -2417,7 +2418,91 @@ def admin_orders_set_status(oid: int):
                     send_email_async(to_addr, f"Orden #{o.id} aprobada – Inefable Store", text)
     except Exception:
         pass
-    return jsonify({"ok": True})
+
+    # ── Auto-recarga en Web B (solo para el juego Free Fire configurado) ──
+    webb_result = None
+    webb_error = None
+    try:
+        webb_url = os.environ.get("WEBB_URL", "").strip().rstrip("/")
+        webb_token = os.environ.get("WEBB_API_TOKEN", "").strip()
+        webb_ff_game_id_raw = os.environ.get("WEBB_FF_GAME_ID", "").strip()
+
+        # Solo ejecutar si está configurado y el pedido es del juego Free Fire
+        if (
+            status == "approved"
+            and prev_status != "approved"
+            and webb_url
+            and webb_token
+            and webb_ff_game_id_raw
+        ):
+            try:
+                webb_ff_game_id = int(webb_ff_game_id_raw)
+            except ValueError:
+                webb_ff_game_id = None
+
+            if webb_ff_game_id and o.store_package_id == webb_ff_game_id:
+                # Determinar package_id (monto 1-9) desde el item seleccionado
+                package_id_webb = None
+                try:
+                    if o.item_id:
+                        it_obj = GamePackageItem.query.get(o.item_id)
+                        if it_obj and it_obj.sort_order:
+                            package_id_webb = int(it_obj.sort_order)
+                        elif it_obj:
+                            # Fallback: usar posición del item en el juego
+                            items_ordered = GamePackageItem.query.filter_by(
+                                store_package_id=o.store_package_id, active=True
+                            ).order_by(GamePackageItem.sort_order.asc(), GamePackageItem.id.asc()).all()
+                            for idx, it_row in enumerate(items_ordered, start=1):
+                                if it_row.id == o.item_id:
+                                    package_id_webb = idx
+                                    break
+                except Exception:
+                    pass
+
+                if package_id_webb and 1 <= package_id_webb <= 9:
+                    player_id = (o.customer_id or "").strip()
+                    if player_id:
+                        try:
+                            resp = _requests_lib.post(
+                                f"{webb_url}/api/v1/ejecutar-recarga",
+                                json={
+                                    "player_id": player_id,
+                                    "package_id": package_id_webb,
+                                    "order_id": o.id,
+                                },
+                                headers={
+                                    "Authorization": f"Bearer {webb_token}",
+                                    "Content-Type": "application/json",
+                                },
+                                timeout=30,
+                            )
+                            webb_data = resp.json()
+                            if webb_data.get("ok"):
+                                # Recarga exitosa → marcar como entregado
+                                o.status = "delivered"
+                                # Guardar el PIN en delivery_code para referencia
+                                pin_entregado = webb_data.get("pin", "")
+                                if pin_entregado:
+                                    o.delivery_code = pin_entregado
+                                db.session.commit()
+                                webb_result = webb_data
+                            else:
+                                webb_error = webb_data.get("error", "Error desconocido en Web B")
+                        except _requests_lib.exceptions.Timeout:
+                            webb_error = "Web B no respondió en 30 segundos (puede estar despertando en Render)"
+                        except Exception as exc:
+                            webb_error = str(exc)
+    except Exception as exc:
+        webb_error = str(exc)
+
+    response_payload = {"ok": True}
+    if webb_result:
+        response_payload["webb_recarga"] = {"ok": True, "pin": webb_result.get("pin", ""), "package": webb_result.get("package", "")}
+    if webb_error:
+        response_payload["webb_recarga"] = {"ok": False, "error": webb_error}
+
+    return jsonify(response_payload)
 
 
 @app.route("/store/package/<int:gid>/items")
