@@ -2477,12 +2477,12 @@ def admin_orders_set_status(oid: int):
                     # 1. Login en Web B para obtener sesión
                     sess_b = _requests_lib.Session()
                     login_resp = sess_b.post(
-                        f"{webb_url}/auth",
-                        data={"correo": webb_user, "contrasena": webb_pass},
+                        f"{webb_url}/login",
+                        data={"correo": webb_user, "contraseña": webb_pass},
                         timeout=30,
                         allow_redirects=True,
                     )
-                    # Verificar que el login fue exitoso (redirige a / o /juego/...)
+                    # Login exitoso si redirige a / (no queda en /auth)
                     if "/auth" in login_resp.url:
                         webb_error = "Login en Web B fallido: credenciales incorrectas"
                     else:
