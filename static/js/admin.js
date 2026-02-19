@@ -1736,8 +1736,8 @@ window.refreshGallery = refreshGallery;
       const amountDisp = `${amountRounded} ${o.currency || ''}`.trim();
       // Add affiliate code if present
       const affiliateTag = o.affiliate_code ? ` <span class="aff-code">(${fixMb(o.affiliate_code)})</span>` : '';
-      const statusIcon = o.status === 'approved' ? 'Procesado' : o.status === 'rejected' ? 'Rechazado' : 'Procesando';
-      const statusClass = o.status === 'approved' ? 'ok' : o.status === 'rejected' ? 'rej' : 'pend';
+      const statusIcon = o.status === 'approved' ? 'Aprobado' : o.status === 'rejected' ? 'Rechazado' : o.status === 'delivered' ? 'Entregado' : 'Pendiente';
+      const statusClass = (o.status === 'approved' || o.status === 'delivered') ? 'ok' : o.status === 'rejected' ? 'rej' : 'pend';
       const playerId = fixMb(o.customer_id || '-') ;
       const txRef = fixMb(o.reference || '-') ;
       const gameName = fixMb(o.package_name || '');
