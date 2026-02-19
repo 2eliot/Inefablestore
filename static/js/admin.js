@@ -1788,12 +1788,12 @@ window.refreshGallery = refreshGallery;
             for (let i = 0; i < ffQty; i++) {
               btns += `<button class=\"btn btn-approve-ff\" data-id=\"${o.id}\" data-index=\"${i}\" data-total=\"${ffQty}\" ${i > 0 ? 'disabled' : ''} style=\"min-width:130px;\">Recargar ${i+1}/${ffQty}</button>`;
             }
-            btns += `<button class=\"btn btn-reject\" data-id=\"${o.id}\">Rechazar</button></div>`;
+            btns += `<button class="btn btn-reject" data-id="${o.id}" style="margin-left:auto;background:#dc2626;">Rechazar</button></div>`;
             return btns;
           }
-          return `<div class=\"row-actions\">
-            <button class=\"btn btn-approve\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Aprobar</button>
-            <button class=\"btn btn-reject\" data-id=\"${o.id}\" ${o.status !== 'pending' ? 'disabled' : ''}>Rechazar</button>
+          return `<div class="row-actions" style="justify-content:space-between;">
+            <button class="btn btn-approve" data-id="${o.id}" ${o.status !== 'pending' ? 'disabled' : ''}>Aprobar</button>
+            <button class="btn btn-reject" data-id="${o.id}" ${o.status !== 'pending' ? 'disabled' : ''} style="background:#dc2626;">Rechazar</button>
           </div>`;
         })()}
       `;
