@@ -2594,11 +2594,12 @@ def admin_webb_mapeo():
   <h2>📦 Paquetes de Web B (Revendedores)</h2>
   <table class="webb-table">
     <tr><th>package_id Web B</th><th>Diamantes</th></tr>
-    <tr><td class="pkg-id">1</td><td>110 💎</td></tr>
-    <tr><td class="pkg-id">2</td><td>341 💎</td></tr>
-    <tr><td class="pkg-id">3</td><td>572 💎</td></tr>
-    <tr><td class="pkg-id">4</td><td>1.166 💎</td></tr>
-    <tr><td class="pkg-id">5</td><td>2.376 💎</td></tr>
+    <tr><td class="pkg-id">1</td><td>100+10 💎</td></tr>
+    <tr><td class="pkg-id">2</td><td>310+31 💎</td></tr>
+    <tr><td class="pkg-id">3</td><td>520+52 💎</td></tr>
+    <tr><td class="pkg-id">4</td><td>1.060+106 💎</td></tr>
+    <tr><td class="pkg-id">5</td><td>2.180+218 💎</td></tr>
+    <tr><td class="pkg-id">6</td><td>5.600+560 💎</td></tr>
   </table>
 </div>
 
@@ -2636,7 +2637,7 @@ def admin_webb_mapeo():
 """
 
     webb_packages = [
-        (1, "110 💎"), (2, "341 💎"), (3, "572 💎"), (4, "1.166 💎"), (5, "2.376 💎")
+        (1, "100+10 💎"), (2, "310+31 💎"), (3, "520+52 💎"), (4, "1.060+106 💎"), (5, "2.180+218 💎"), (6, "5.600+560 💎")
     ]
 
     all_items_options = ""
@@ -2665,7 +2666,7 @@ def admin_webb_mapeo():
 <script>
 function generateMap() {
   const pairs = [];
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 1; i <= 6; i++) {
     const sel = document.getElementById('sel_' + i);
     if (sel && sel.value) {
       pairs.push(sel.value + ':' + i);
