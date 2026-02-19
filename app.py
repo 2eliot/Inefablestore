@@ -2524,6 +2524,168 @@ def store_game_items(gid: int):
         ]
     })
 
+@app.route("/admin/webb-mapeo")
+def admin_webb_mapeo():
+    """Página de ayuda para configurar WEBB_FF_ITEM_MAP.
+    Muestra todos los juegos y sus items con IDs para facilitar el mapeo."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    packages = StorePackage.query.filter_by(active=True).order_by(StorePackage.sort_order.asc(), StorePackage.id.asc()).all()
+    data = []
+    for pkg in packages:
+        items = GamePackageItem.query.filter_by(store_package_id=pkg.id, active=True).order_by(GamePackageItem.sort_order.asc(), GamePackageItem.id.asc()).all()
+        data.append({
+            "id": pkg.id,
+            "name": pkg.name,
+            "category": pkg.category or "",
+            "items": [{"id": it.id, "title": it.title, "price": float(it.price or 0)} for it in items]
+        })
+
+    current_map = os.environ.get("WEBB_FF_ITEM_MAP", "")
+    current_game_id = os.environ.get("WEBB_FF_GAME_ID", "")
+
+    html = """<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Configurar WEBB_FF_ITEM_MAP</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:24px}
+  h1{color:#38bdf8;margin-bottom:4px}
+  .sub{color:#94a3b8;margin-bottom:24px;font-size:14px}
+  .card{background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #334155}
+  .game-title{font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:4px}
+  .game-id{font-size:12px;color:#64748b;margin-bottom:12px}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;padding:8px 12px;background:#0f172a;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  td{padding:8px 12px;border-top:1px solid #334155;font-size:14px}
+  .id-badge{background:#1d4ed8;color:#bfdbfe;padding:2px 8px;border-radius:6px;font-family:monospace;font-weight:700}
+  .price{color:#34d399}
+  .section{margin-top:32px}
+  .section h2{color:#f59e0b;font-size:16px;margin-bottom:8px}
+  .info-box{background:#1e293b;border:1px solid #f59e0b44;border-radius:10px;padding:16px;font-size:13px;color:#fcd34d;line-height:1.7}
+  .webb-table{width:100%;border-collapse:collapse;margin-top:12px}
+  .webb-table th{background:#0f172a;color:#94a3b8;font-size:12px;padding:8px 12px;text-align:left}
+  .webb-table td{padding:8px 12px;border-top:1px solid #334155;font-size:13px}
+  .pkg-id{color:#a78bfa;font-weight:700;font-family:monospace}
+  .env-box{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px 16px;font-family:monospace;font-size:13px;color:#86efac;margin-top:8px;word-break:break-all}
+  .current{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:12px;color:#94a3b8;margin-top:6px}
+  select,input{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 10px;font-size:13px}
+  button{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:8px 18px;cursor:pointer;font-size:13px;margin-top:8px}
+  button:hover{background:#1d4ed8}
+  #result-map{display:none}
+</style>
+</head>
+<body>
+<h1>🗺️ Configurar WEBB_FF_ITEM_MAP</h1>
+<p class="sub">Esta página te ayuda a obtener los IDs de los items de cada juego para configurar el mapeo con Web B (Revendedores).</p>
+""" + f"""
+<div class="section">
+  <h2>⚙️ Configuración actual en Render</h2>
+  <div class="info-box">
+    <b>WEBB_FF_GAME_ID</b> = <code style="color:#fff">{current_game_id or '(no configurado)'}</code><br>
+    <b>WEBB_FF_ITEM_MAP</b> = <code style="color:#fff">{current_map or '(no configurado)'}</code>
+  </div>
+</div>
+
+<div class="section">
+  <h2>📦 Paquetes de Web B (Revendedores)</h2>
+  <table class="webb-table">
+    <tr><th>package_id Web B</th><th>Diamantes</th></tr>
+    <tr><td class="pkg-id">1</td><td>110 💎</td></tr>
+    <tr><td class="pkg-id">2</td><td>341 💎</td></tr>
+    <tr><td class="pkg-id">3</td><td>572 💎</td></tr>
+    <tr><td class="pkg-id">4</td><td>1.166 💎</td></tr>
+    <tr><td class="pkg-id">5</td><td>2.376 💎</td></tr>
+  </table>
+</div>
+
+<div class="section">
+  <h2>🎮 Items de Web A (Inefable Store)</h2>
+"""
+
+    for pkg in data:
+        html += f"""
+<div class="card">
+  <div class="game-title">{pkg['name']}</div>
+  <div class="game-id">ID del juego (WEBB_FF_GAME_ID): <span style="color:#38bdf8;font-family:monospace;font-weight:700">{pkg['id']}</span> &nbsp;·&nbsp; Categoría: {pkg['category']}</div>
+  <table>
+    <tr><th>item_id (Web A)</th><th>Título</th><th>Precio USD</th></tr>
+"""
+        for it in pkg['items']:
+            html += f"""    <tr>
+      <td><span class="id-badge">{it['id']}</span></td>
+      <td>{it['title']}</td>
+      <td class="price">${it['price']:.2f}</td>
+    </tr>
+"""
+        html += "  </table>\n</div>\n"
+
+    html += """
+<div class="section">
+  <h2>🛠️ Generador de WEBB_FF_ITEM_MAP</h2>
+  <p style="color:#94a3b8;font-size:13px">Selecciona qué item de Web A corresponde a cada paquete de Web B y genera el valor listo para copiar en Render.</p>
+  <table class="webb-table" id="mapper-table">
+    <tr>
+      <th>Package Web B</th>
+      <th>Diamantes</th>
+      <th>Item Web A (selecciona)</th>
+    </tr>
+"""
+
+    webb_packages = [
+        (1, "110 💎"), (2, "341 💎"), (3, "572 💎"), (4, "1.166 💎"), (5, "2.376 💎")
+    ]
+
+    all_items_options = ""
+    for pkg in data:
+        all_items_options += f'<optgroup label="{pkg["name"]} (juego ID={pkg["id"]})">'
+        for it in pkg['items']:
+            all_items_options += f'<option value="{it["id"]}">[ID {it["id"]}] {it["title"]} (${it["price"]:.2f})</option>'
+        all_items_options += '</optgroup>'
+
+    for b_pkg_id, diamonds in webb_packages:
+        html += f"""    <tr>
+      <td class="pkg-id">{b_pkg_id}</td>
+      <td>{diamonds}</td>
+      <td><select id="sel_{b_pkg_id}"><option value="">-- No mapear --</option>{all_items_options}</select></td>
+    </tr>
+"""
+
+    html += """  </table>
+  <button onclick="generateMap()">⚡ Generar WEBB_FF_ITEM_MAP</button>
+  <div id="result-map">
+    <p style="color:#94a3b8;font-size:13px;margin-top:16px">Copia este valor en la variable de entorno <b style="color:#f1f5f9">WEBB_FF_ITEM_MAP</b> en Render (Web A):</p>
+    <div class="env-box" id="map-output"></div>
+  </div>
+</div>
+
+<script>
+function generateMap() {
+  const pairs = [];
+  for (let i = 1; i <= 5; i++) {
+    const sel = document.getElementById('sel_' + i);
+    if (sel && sel.value) {
+      pairs.push(sel.value + ':' + i);
+    }
+  }
+  if (pairs.length === 0) {
+    alert('Selecciona al menos un item para mapear.');
+    return;
+  }
+  const result = pairs.join(',');
+  document.getElementById('map-output').textContent = result;
+  document.getElementById('result-map').style.display = 'block';
+}
+</script>
+</body>
+</html>"""
+
+    return html
+
+
 @app.route("/admin/package/<int:gid>/items", methods=["GET"])
 def admin_game_items_list(gid: int):
     user = session.get("user")
