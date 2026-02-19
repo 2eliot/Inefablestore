@@ -1275,6 +1275,9 @@ def user_page():
 
 @app.route("/admin")
 def admin_page():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return redirect("/?next=/admin")
     site_name = get_config_value("site_name", "InefableStore")
     webb_ff_game_id = os.environ.get("WEBB_FF_GAME_ID", "")
     return render_template("admin.html", site_name=site_name, body_class="theme-admin-dark", webb_ff_game_id=webb_ff_game_id)
