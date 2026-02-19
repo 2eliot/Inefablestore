@@ -360,6 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastUidRequested = '';
     let lastUidVerified = '';
     let inflightController = null;
+    const verifyBtnDefaultText = btnVerifyPlayer ? (btnVerifyPlayer.textContent || 'Verificar') : 'Verificar';
 
     function cacheKey(uid) {
       return `ffnick:${String(uid || '').trim()}`;
@@ -379,11 +380,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!verifiedNick) return;
       playerNickname.style.color = '#86efac';
       playerNickname.textContent = `Nick: ${verifiedNick}`;
+      if (btnVerifyPlayer) {
+        btnVerifyPlayer.textContent = 'Verificado';
+        btnVerifyPlayer.disabled = false;
+      }
     }
 
     function setNickUILoading() {
       playerNickname.style.color = '#94a3b8';
       playerNickname.textContent = 'Verificando...';
+      if (btnVerifyPlayer) {
+        btnVerifyPlayer.textContent = 'Verificando...';
+        btnVerifyPlayer.disabled = true;
+      }
     }
 
     function setNickUIErr(msg) {
@@ -391,6 +400,10 @@ document.addEventListener('DOMContentLoaded', () => {
       try { root.dataset.verifiedNick = ''; } catch (_) {}
       playerNickname.style.color = '#fca5a5';
       playerNickname.textContent = msg || 'No se pudo verificar';
+      if (btnVerifyPlayer) {
+        btnVerifyPlayer.textContent = verifyBtnDefaultText;
+        btnVerifyPlayer.disabled = false;
+      }
     }
 
     async function doVerify(opts) {
@@ -423,8 +436,11 @@ document.addEventListener('DOMContentLoaded', () => {
       inflightController = new AbortController();
       lastUidRequested = uid;
       verifying = true;
-      if (btnVerifyPlayer) btnVerifyPlayer.disabled = true;
-      if (!silent) setNickUILoading();
+      if (!silent) {
+        setNickUILoading();
+      } else {
+        if (btnVerifyPlayer) btnVerifyPlayer.disabled = true;
+      }
       try {
         const url = `/store/player/verify?gid=${encodeURIComponent(gid || '')}&uid=${encodeURIComponent(uid)}`;
         const res = await fetch(url, { signal: inflightController.signal });
@@ -442,9 +458,18 @@ document.addEventListener('DOMContentLoaded', () => {
         setCachedNick(uid, '');
       } finally {
         verifying = false;
-        if (btnVerifyPlayer) btnVerifyPlayer.disabled = false;
+        if (btnVerifyPlayer) {
+          if (String(btnVerifyPlayer.textContent || '').trim() === 'Verificando...') {
+            btnVerifyPlayer.textContent = verifyBtnDefaultText;
+          }
+          btnVerifyPlayer.disabled = false;
+        }
       }
     }
+
+    try {
+      root.__doVerifyPlayer = doVerify;
+    } catch (_) {}
 
     if (btnVerifyPlayer) btnVerifyPlayer.addEventListener('click', () => doVerify({ silent: false }));
     inputCustomerId.addEventListener('keydown', (e) => {
@@ -457,7 +482,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const uid = (inputCustomerId.value || '').trim();
       if (!uid) {
         verifiedNick = '';
+        try { root.dataset.verifiedNick = ''; } catch (_) {}
         playerNickname.textContent = '';
+        if (btnVerifyPlayer) {
+          btnVerifyPlayer.textContent = verifyBtnDefaultText;
+          btnVerifyPlayer.disabled = false;
+        }
         return;
       }
       if (verifyTimer) clearTimeout(verifyTimer);
@@ -1037,7 +1067,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (btnBuy) {
-    btnBuy.addEventListener('click', () => {
+    btnBuy.addEventListener('click', async () => {
       if (selectedItemIndex < 0) return alert('Selecciona un paquete');
       if (!isGift) {
         if (!inputCustomerId || !inputCustomerId.value.trim()) {
@@ -1056,6 +1086,21 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
       }
+
+      // If user clicks fast, try to verify quietly for a short time so checkout can show nick.
+      try {
+        if (!isGift && inputCustomerId && activeLogin && scrapeEnabled) {
+          const uid = (inputCustomerId.value || '').trim();
+          const nn = (root && root.dataset) ? String(root.dataset.verifiedNick || '').trim() : '';
+          if (uid && !nn && root.__doVerifyPlayer) {
+            await Promise.race([
+              root.__doVerifyPlayer({ silent: true }),
+              new Promise((res) => setTimeout(res, 1100)),
+            ]);
+          }
+        }
+      } catch (_) {}
+
       // Persist current selection if user opted
       if (chkSave && chkSave.checked) persistState();
       const gid = root.getAttribute('data-game-id');

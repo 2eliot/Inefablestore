@@ -22,14 +22,33 @@ document.addEventListener('DOMContentLoaded', () => {
   // Render basic game block immediately to avoid waiting for fetches
   (function initialHeader(){
     if (!coTotal) return;
-    const gameBlock = `
-      <div style="display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:8px;">
-        ${gimg ? `<img src="${gimg}" alt="${gname || 'Juego'}" style="width:56px; height:56px; object-fit:cover; border-radius:10px; border:2px solid rgba(255,255,255,0.25); box-shadow:0 2px 8px rgba(0,0,0,0.35);">` : ''}
-        ${gname ? `<div style=\"color:#0b0f14; background:rgba(255,255,255,0.75); padding:2px 8px; border-radius:8px; font-weight:900;\">${gname}</div>` : ''}
-      </div>`;
+    const qs0 = new URLSearchParams(window.location.search);
+    const qCid0 = (qs0.get('cid') || '').trim();
+    const qNick0 = (qs0.get('nn') || '').trim();
+    const qZid0 = (qs0.get('zid') || '').trim();
+    if (!qCid0) {
+      coTotal.setAttribute('hidden', '');
+      return;
+    }
+    const leftImg = gimg ? `<img src="${gimg}" alt="${gname || 'Juego'}" style="width:56px; height:56px; object-fit:cover; border-radius:12px; border:2px solid rgba(255,255,255,0.25); box-shadow:0 2px 8px rgba(0,0,0,0.35);">` : '';
+    const titleLine = gname ? `<div style="font-weight:900;">Juego: ${gname}</div>` : '';
+    let nn0 = qNick0;
+    if (!nn0) {
+      try { nn0 = (localStorage.getItem(`ffnick:${qCid0}`) || '').toString().trim(); } catch (_) { nn0 = ''; }
+    }
+    const idLabel0 = qZid0 ? 'ID/Zona ID' : 'ID';
+    const idValue0 = qZid0 ? `${qCid0}/${qZid0}` : qCid0;
+    const idLine = `<div style="color:#0b0f14; font-weight:900; line-height:1.15;">${idLabel0}: ${idValue0}</div>`;
+    const nameLine = nn0 ? `<div style="color:#0b0f14; font-weight:900; line-height:1.15;">Nombre: ${nn0}</div>` : '';
     coTotal.innerHTML = `
-      ${gameBlock}
-      <div style=\"font-weight:900;\">Total a pagar: <span style=\"color:#10b981;\">...</span></div>
+      <div style="display:flex; align-items:center; gap:12px; justify-content:center;">
+        ${leftImg ? `<div style="flex:0 0 auto;">${leftImg}</div>` : ''}
+        <div style="flex:0 1 auto; min-width:0; text-align:left; display:grid; gap:2px; justify-items:start;">
+          ${titleLine}
+          ${idLine}
+          ${nameLine}
+        </div>
+      </div>
     `;
   })();
 
@@ -136,6 +155,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderHeader() {
+    if (!coTotal) return;
+    if (!(qCid || '').trim()) {
+      coTotal.setAttribute('hidden', '');
+      return;
+    }
+    try { coTotal.removeAttribute('hidden'); } catch (_) {}
     const t = computeTotals();
     // Compose item summary for the TOP banner
     let itemLine = '';
@@ -148,31 +173,39 @@ document.addEventListener('DOMContentLoaded', () => {
         itemLine = `${qty} x ${it.title} · ${formatPriceFor(t.displayCurrency, displayUnit)} c/u`;
       }
     } catch(_) {}
-    // Compose game card (image + name) if available
-    const gameBlock = `
-      <div style="display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:8px;">
-        ${gimg ? `<img src="${gimg}" alt="${gname || 'Juego'}" style="width:56px; height:56px; object-fit:cover; border-radius:10px; border:2px solid rgba(255,255,255,0.25); box-shadow:0 2px 8px rgba(0,0,0,0.35);">` : ''}
-        ${gname ? `<div style=\"color:#0b0f14; background:rgba(255,255,255,0.5); padding:2px 8px; border-radius:8px; font-weight:900;\">${gname}</div>` : ''}
-      </div>`;
+    // Compose game header (image left, data right)
+    const leftImg = gimg ? `<img src="${gimg}" alt="${gname || 'Juego'}" style="width:56px; height:56px; object-fit:cover; border-radius:12px; border:2px solid rgba(255,255,255,0.25); box-shadow:0 2px 8px rgba(0,0,0,0.35);">` : '';
+    const titleLine = gname ? `<div style="font-weight:900;">Juego: ${gname}</div>` : '';
     const playerBlock = (() => {
       const uid = (qCid || '').trim();
-      const nn = (qNick || '').trim();
-      if (!uid && !nn) return '';
-      const label = nn ? `Jugador: ${nn}` : `ID: ${uid}`;
-      const sub = (uid && nn) ? `<div style="opacity:.95; font-weight:900; margin-top:4px;">ID: ${uid}</div>` : '';
+      let nn = (qNick || '').trim();
+      const zid = (qZid || '').trim();
+      if (!nn && uid) {
+        try {
+          nn = (localStorage.getItem(`ffnick:${uid}`) || '').toString().trim();
+        } catch (_) { nn = ''; }
+      }
+      // Only show this block when the flow actually includes player validation (cid present)
+      if (!uid) return '';
+      const safeName = nn || '';
+      const nameLine = safeName ? `<div style="color:#0b0f14; font-weight:900; line-height:1.15;">Nombre: ${safeName}</div>` : '';
+      const idLabel = zid ? 'ID/Zona ID' : 'ID';
+      const idValue = zid ? `${uid}/${zid}` : uid;
       return `
-        <div style="margin-top:8px; display:grid; gap:2px; justify-items:center;">
-          <div style="color:#0b0f14; background:rgba(255,255,255,0.65); padding:2px 10px; border-radius:10px; font-weight:900;">${label}</div>
-          ${sub}
+        <div style="display:grid; gap:2px; justify-items:start; text-align:left;">
+          <div style="color:#0b0f14; font-weight:900; line-height:1.15;">${idLabel}: ${idValue}</div>
+          ${nameLine}
         </div>`;
     })();
-    // Top banner now shows total, quantity and the selected item line
+    // Top banner shows only player identity (totals are already shown below)
     coTotal.innerHTML = `
-      ${gameBlock}
-      <div style="font-weight:900;">Total a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
-      <div style="opacity:.9; font-weight:800; margin-top:4px;">Cantidad: ${Math.max(1, quantity || 1)}</div>
-      ${itemLine ? `<div style=\"opacity:.95; font-weight:800; margin-top:6px;\">${itemLine}</div>` : ''}
-      ${playerBlock}
+      <div style="display:flex; align-items:center; gap:12px; justify-content:center;">
+        ${leftImg ? `<div style="flex:0 0 auto;">${leftImg}</div>` : ''}
+        <div style="flex:0 1 auto; min-width:0; text-align:left; display:grid; gap:2px; justify-items:start;">
+          ${titleLine}
+          ${playerBlock}
+        </div>
+      </div>
     `;
     if (coDiscNote) { coDiscNote.setAttribute('hidden', ''); coDiscNote.innerHTML = ''; }
 
@@ -196,10 +229,13 @@ document.addEventListener('DOMContentLoaded', () => {
       // Compose styled breakdown (keeps theme colors; green accent comes from CSS var)
       const thanks = (window.__validRef && window.__validRef.code) ? `Gracias por usar el código de ${window.__validRef.code}` : '';
       coTotal.innerHTML = `
-        ${gameBlock}
-        <div style=\"font-weight:900;\">Total a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
-        <div style=\"opacity:.9; font-weight:800; margin-top:4px;\">Cantidad: ${Math.max(1, quantity || 1)}</div>
-        ${itemLine ? `<div style=\"opacity:.95; font-weight:800; margin-top:6px;\">${itemLine}</div>` : ''}
+        <div style="display:flex; align-items:center; gap:12px; justify-content:center;">
+          ${leftImg ? `<div style=\"flex:0 0 auto;\">${leftImg}</div>` : ''}
+          <div style="flex:0 1 auto; min-width:0; text-align:left; display:grid; gap:2px; justify-items:start;">
+            ${titleLine}
+            ${playerBlock}
+          </div>
+        </div>
       `;
       if (coDiscNote) {
         coDiscNote.innerHTML = `
@@ -207,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M20 7h-2.18A3 3 0 0 0 15 3a3 3 0 0 0-3 3 3 3 0 0 0-3-3 3 3 0 0 0-2.82 4H4a1 1 0 0 0-1 1v3h18V8a1 1 0 0 0-1-1zM9 5a1 1 0 1 1 0 2H7.82A1.82 1.82 0 0 1 9 5zm6 0a1.82 1.82 0 0 1 1.18 3H15a1 1 0 1 1 0-2zM3 13v6a1 1 0 0 0 1 1h7v-7H3zm10 0v7h7a1 1 0 0 0 1-1v-6h-8z"/></svg>
             <span>${pct}% de descuento aplicado</span>
           </div>
-          <div class="co-total">Total a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
+          <div class="co-total">Monto a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
           <div class="co-old">Precio original: ${formatPriceFor(t.displayCurrency, t.baseBeforeDiscount)}</div>
           <div class="co-qty">Cantidad: ${qty}</div>
         `;
@@ -218,7 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // When no discount: show simple block with total and quantity
     if ((!window.__validRef || !window.__validRef.discount) && coDiscNote) {
       coDiscNote.innerHTML = `
-        <div class="co-total">Total a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
+        <div class="co-total">Monto a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
         <div class="co-qty">Cantidad: ${Math.max(1, quantity || 1)}</div>
       `;
       coDiscNote.removeAttribute('hidden');
