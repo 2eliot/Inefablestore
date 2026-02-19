@@ -1753,13 +1753,17 @@ window.refreshGallery = refreshGallery;
               <div class=\"ref-value\">${txRef}</div>
             </div>
           </div>
-          <div class=\"box-right\">
-            <div class=\"id-section\">
-              <div class=\"id-label\">${o.customer_zone ? `ID - ZONA ID` : `ID`}</div>
-              <code class=\"hex\">${playerId}${o.customer_zone ? ` - ${o.customer_zone}` : ''}</code>
-              <button class=\"btn-copy\" type=\"button\" data-copy=\"${playerId}\">Copiar</button>
+          ${(() => {
+            const _ffId = window._WEBB_FF_GAME_ID ? parseInt(window._WEBB_FF_GAME_ID) : null;
+            if (_ffId && o.store_package_id === _ffId) return '';
+            return `<div class="box-right">
+            <div class="id-section">
+              <div class="id-label">${o.customer_zone ? 'ID - ZONA ID' : 'ID'}</div>
+              <code class="hex">${playerId}${o.customer_zone ? ' - ' + o.customer_zone : ''}</code>
+              <button class="btn-copy" type="button" data-copy="${playerId}">Copiar</button>
             </div>
-          </div>
+          </div>`;
+          })()}
         </div>
         <div class=\"row-foot\">
           <div class=\"amount\">${amountDisp}${affiliateTag}</div>
