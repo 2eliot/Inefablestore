@@ -2535,7 +2535,7 @@ def admin_webb_mapeo():
     packages = StorePackage.query.filter_by(active=True).order_by(StorePackage.sort_order.asc(), StorePackage.id.asc()).all()
     data = []
     for pkg in packages:
-        items = GamePackageItem.query.filter_by(store_package_id=pkg.id, active=True).order_by(GamePackageItem.sort_order.asc(), GamePackageItem.id.asc()).all()
+        items = GamePackageItem.query.filter_by(store_package_id=pkg.id, active=True).order_by(GamePackageItem.id.asc()).all()
         data.append({
             "id": pkg.id,
             "name": pkg.name,
