@@ -1755,7 +1755,17 @@ window.refreshGallery = refreshGallery;
           </div>
           ${(() => {
             const _ffId = window._WEBB_FF_GAME_ID ? parseInt(window._WEBB_FF_GAME_ID) : null;
-            if (_ffId && o.store_package_id === _ffId) return '';
+            const _isFF = _ffId && o.store_package_id === _ffId;
+            let _isAutomated = false;
+            if (_isFF && o.item_id && window._WEBB_FF_ITEM_MAP) {
+              for (const pair of window._WEBB_FF_ITEM_MAP.split(',')) {
+                const parts = pair.trim().split(':');
+                if (parts.length === 2 && parseInt(parts[0].trim()) === parseInt(o.item_id)) {
+                  _isAutomated = true; break;
+                }
+              }
+            }
+            if (_isAutomated) return '';
             return `<div class="box-right">
             <div class="id-section">
               <div class="id-label">${o.customer_zone ? 'ID - ZONA ID' : 'ID'}</div>
