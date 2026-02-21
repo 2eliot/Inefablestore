@@ -206,9 +206,10 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
         if csrf:
             post_headers["X-CSRF-Token"] = csrf
         bs_pid = get_config_value("bs_package_id", "") or ""
+        bs_sid = get_config_value("bs_server_id", "-1") or "-1"
         post_data = {
             "uid": role_id,
-            "sid": "-1",
+            "sid": bs_sid,
             "pid": bs_pid,
             "product": "bloodstrike",
             "checkrole": "1",
@@ -227,7 +228,21 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
                 break
         if resp.status_code != 200:
             return ""
-        data = resp.json()
+        try:
+            data = resp.json()
+        except Exception:
+            # Some responses may be plain text
+            txt = resp.text.strip()
+            if txt.startswith('{"code":'):
+                data = json.loads(txt)
+            else:
+                return ""
+        # Handle error codes
+        if int(data.get("code") or 0) != 200:
+            # 201 = USER ID não existe, 404 = not found, etc.
+            print(f"[BS] API error: {data.get('info', '')}")
+            return ""
+        # Extract username from various possible structures
         username = (
             (data.get("data") or {}).get("username")
             or (data.get("data") or {}).get("nickname")
@@ -235,6 +250,7 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
             or data.get("username")
             or data.get("nickname")
             or data.get("name")
+            or data.get("info")  # some APIs return username in info field
             or ""
         )
         if username:
@@ -1677,6 +1693,25 @@ def admin_config_bs_package_id_set():
     val = (data.get("bs_package_id") or "").strip()
     set_config_value("bs_package_id", val)
     return jsonify({"ok": True, "bs_package_id": val})
+
+
+@app.route("/admin/config/bs_server_id", methods=["GET"])
+def admin_config_bs_server_id_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "bs_server_id": get_config_value("bs_server_id", "-1")})
+
+
+@app.route("/admin/config/bs_server_id", methods=["POST"])
+def admin_config_bs_server_id_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    val = (data.get("bs_server_id") or "").strip()
+    set_config_value("bs_server_id", val)
+    return jsonify({"ok": True, "bs_server_id": val})
 
 
 def _allowed_file(filename: str) -> bool:

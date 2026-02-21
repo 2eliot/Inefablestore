@@ -2288,24 +2288,37 @@ window.fetchHero = fetchHero;
   // Config: Blood Strike package ID (Smile.One verification)
   // =====================
   const inputBsPackageId = document.getElementById('bs-package-id');
+  const inputBsServerId = document.getElementById('bs-server-id');
   const btnSaveBsPackageId = document.getElementById('btn-save-bs-package-id');
 
   async function fetchBsPackageId() {
     try {
-      const res = await fetch('/admin/config/bs_package_id');
-      const data = await res.json();
-      if (res.ok && data && data.ok && inputBsPackageId) {
-        inputBsPackageId.value = data.bs_package_id || '';
+      const [res1, res2] = await Promise.all([
+        fetch('/admin/config/bs_package_id'),
+        fetch('/admin/config/bs_server_id')
+      ]);
+      const data1 = await res1.json();
+      const data2 = await res2.json();
+      if (res1.ok && data1 && data1.ok && inputBsPackageId) {
+        inputBsPackageId.value = data1.bs_package_id || '';
+      }
+      if (res2.ok && data2 && data2.ok && inputBsServerId) {
+        inputBsServerId.value = data2.bs_server_id || '';
       }
     } catch (_) { /* ignore */ }
   }
 
   async function saveBsPackageId() {
-    const val = inputBsPackageId ? String(inputBsPackageId.value || '').trim() : '';
-    const res = await fetch('/admin/config/bs_package_id', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bs_package_id: val })
-    });
-    if (!res.ok) { const t = await res.text(); throw new Error(t || 'No se pudo guardar'); }
+    const pkgVal = inputBsPackageId ? String(inputBsPackageId.value || '').trim() : '';
+    const srvVal = inputBsServerId ? String(inputBsServerId.value || '').trim() : '';
+    await Promise.all([
+      fetch('/admin/config/bs_package_id', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bs_package_id: pkgVal })
+      }),
+      fetch('/admin/config/bs_server_id', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bs_server_id: srvVal })
+      })
+    ]);
   }
 
   if (btnSaveBsPackageId) {
