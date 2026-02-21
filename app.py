@@ -171,7 +171,7 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
             "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
         })
         # Step 1: GET the Blood Strike page to obtain session cookies + CSRF token
-        page_url = "https://www.smile.one/br/bloodstrike"
+        page_url = "https://www.smile.one/br/merchant/game/bloodstrike?source=other"
         page = sess.get(page_url, timeout=8)
         print(f"[BS] page status={page.status_code} cookies={dict(sess.cookies)}")
         # Extract CSRF token if present (common patterns)
