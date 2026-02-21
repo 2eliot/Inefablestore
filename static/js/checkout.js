@@ -547,7 +547,14 @@ document.addEventListener('DOMContentLoaded', () => {
         phone,
         customer_id,
         customer_zone,
-        special_code: qRefCode || ''
+        special_code: qRefCode || '',
+        nn: (function() {
+          const uid = customer_id;
+          if (!uid) return '';
+          try {
+            return (localStorage.getItem(`ffnick:${uid}`) || '').toString().trim();
+          } catch (_) { return ''; }
+        })()
       };
       // UI loading state
       const originalText = btnConfirm.textContent;
