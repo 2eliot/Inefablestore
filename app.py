@@ -166,11 +166,11 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
     """Consulta la API interna de Smile.One Brasil para obtener el nickname de Blood Strike."""
     try:
         resp = _requests_lib.post(
-            "https://www.smile.one/merchant/bloodstrike/checkrole",
-            data={"role_id": role_id, "product": "bloodstrike"},
+            "https://www.smile.one/merchant/bloodstrike/checkrole?product=bloodstrike",
+            data={"role_id": role_id},
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Referer": "https://www.smile.one/br/bloodstrike",
+                "Referer": "https://www.smile.one/br/merchant/game/bloodstrike",
                 "Origin": "https://www.smile.one",
                 "Accept": "application/json, text/javascript, */*; q=0.01",
                 "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
