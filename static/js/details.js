@@ -37,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnRightLogin = document.getElementById('btn-right-login');
   const activeLogin = (root.getAttribute('data-active-login') === '1');
   const scrapeEnabled = (root.getAttribute('data-scrape-enabled') === '1');
+  const bsPackageId = (root.getAttribute('data-bs-package-id') || '').trim();
+  const isBsPackage = bsPackageId && String(gid) === String(bsPackageId);
   let verifiedNick = '';
   // Hide Step 1 (player ID) for gift category and renumber badges/texts
   if (isGift && inputCustomerId) {
@@ -354,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (inputCustomerId && playerNickname && activeLogin && scrapeEnabled) {
+  if (inputCustomerId && playerNickname && scrapeEnabled && (activeLogin || isBsPackage)) {
     let verifying = false;
     let verifyTimer = null;
     let lastUidRequested = '';
@@ -442,7 +444,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnVerifyPlayer) btnVerifyPlayer.disabled = true;
       }
       try {
-        const url = `/store/player/verify?gid=${encodeURIComponent(gid || '')}&uid=${encodeURIComponent(uid)}`;
+        const verifyPath = isBsPackage ? '/store/player/verify/bloodstrike' : '/store/player/verify';
+        const url = `${verifyPath}?gid=${encodeURIComponent(gid || '')}&uid=${encodeURIComponent(uid)}`;
         const res = await fetch(url, { signal: inflightController.signal });
         const data = await res.json();
         if (uid !== lastUidRequested) return;
@@ -1089,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // If user clicks fast, try to verify quietly for a short time so checkout can show nick.
       try {
-        if (!isGift && inputCustomerId && activeLogin && scrapeEnabled) {
+        if (!isGift && inputCustomerId && scrapeEnabled && (activeLogin || isBsPackage)) {
           const uid = (inputCustomerId.value || '').trim();
           const nn = (root && root.dataset) ? String(root.dataset.verifiedNick || '').trim() : '';
           if (uid && !nn && root.__doVerifyPlayer) {

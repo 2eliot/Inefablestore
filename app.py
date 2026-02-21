@@ -162,6 +162,68 @@ def _scrape_ffmania_nick(uid: str) -> str:
     return nick
 
 
+def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
+    """Consulta la API interna de Smile.One Brasil para obtener el nickname de Blood Strike."""
+    try:
+        resp = _requests_lib.post(
+            "https://www.smile.one/merchant/bloodstrike/checkrole",
+            data={"role_id": role_id, "product": "bloodstrike"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Referer": "https://www.smile.one/br/bloodstrike",
+                "Origin": "https://www.smile.one",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+            },
+            timeout=8,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # Smile.One returns {"code": 200, "data": {"username": "Nick™"}} on success
+        if int(data.get("code") or 0) == 200:
+            username = (
+                data.get("data", {}).get("username")
+                or data.get("username")
+                or ""
+            )
+            return username.strip()
+        return ""
+    except Exception:
+        return ""
+
+
+@app.route("/store/player/verify/bloodstrike")
+def store_player_verify_bloodstrike():
+    scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
+    if not scrape_enabled:
+        return jsonify({"ok": False, "error": "Verificación deshabilitada"}), 403
+
+    uid = (request.args.get("uid") or "").strip()
+    gid_raw = (request.args.get("gid") or "").strip()
+    if not uid or not uid.isdigit():
+        return jsonify({"ok": False, "error": "ID inválido"}), 400
+
+    bs_package_id = (get_config_value("bs_package_id", "") or "").strip()
+    if not bs_package_id or bs_package_id != gid_raw:
+        return jsonify({"ok": False, "error": "Verificación no disponible para este juego"}), 403
+
+    cache_key = f"bs_smileone:{uid}"
+    cached = _player_cache_get(cache_key)
+    if cached is not None:
+        if not cached:
+            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+        return jsonify({"ok": True, "uid": uid, "nick": cached, "cached": True})
+
+    nick = _scrape_smileone_bloodstrike_nick(uid)
+
+    _player_cache_set(cache_key, nick, ttl_seconds=600)
+    if not nick:
+        return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+    return jsonify({"ok": True, "uid": uid, "nick": nick, "cached": False})
+
+
 @app.route("/store/player/verify")
 def store_player_verify():
     scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
@@ -1544,6 +1606,27 @@ def admin_config_active_login_game_set():
     # allow empty to disable
     set_config_value("active_login_game_id", val)
     return jsonify({"ok": True, "active_login_game_id": val})
+
+
+@app.route("/admin/config/bs_package_id", methods=["GET"])
+def admin_config_bs_package_id_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "bs_package_id": get_config_value("bs_package_id", "")})
+
+
+@app.route("/admin/config/bs_package_id", methods=["POST"])
+def admin_config_bs_package_id_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    val = (data.get("bs_package_id") or "").strip()
+    set_config_value("bs_package_id", val)
+    return jsonify({"ok": True, "bs_package_id": val})
+
+
 def _allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -1724,6 +1807,7 @@ def store_game_detail(gid: int):
         return redirect(url_for("index"))
     logo_url = get_config_value("logo_path", "")
     active_login_game_id = get_config_value("active_login_game_id", "")
+    bs_package_id = get_config_value("bs_package_id", "")
     player_lookup_region = get_config_value("player_lookup_default_region", "US")
     player_lookup_regions = get_config_value("player_lookup_regions_default", "US,BR,ME,PK,CIS,ID,LATAM,MX")
     scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
@@ -1748,6 +1832,7 @@ def store_game_detail(gid: int):
         logo_url=logo_url,
         site_name=site_name,
         active_login_game_id=active_login_game_id,
+        bs_package_id=bs_package_id,
         player_lookup_region=player_lookup_region,
         player_lookup_regions=player_lookup_regions,
         scrape_enabled=scrape_enabled,

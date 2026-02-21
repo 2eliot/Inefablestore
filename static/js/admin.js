@@ -2281,6 +2281,47 @@ window.fetchHero = fetchHero;
       }
     });
   }
+
+  // =====================
+  // Config: Blood Strike package ID (Smile.One verification)
+  // =====================
+  const inputBsPackageId = document.getElementById('bs-package-id');
+  const btnSaveBsPackageId = document.getElementById('btn-save-bs-package-id');
+
+  async function fetchBsPackageId() {
+    try {
+      const res = await fetch('/admin/config/bs_package_id');
+      const data = await res.json();
+      if (res.ok && data && data.ok && inputBsPackageId) {
+        inputBsPackageId.value = data.bs_package_id || '';
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  async function saveBsPackageId() {
+    const val = inputBsPackageId ? String(inputBsPackageId.value || '').trim() : '';
+    const res = await fetch('/admin/config/bs_package_id', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bs_package_id: val })
+    });
+    if (!res.ok) { const t = await res.text(); throw new Error(t || 'No se pudo guardar'); }
+  }
+
+  if (btnSaveBsPackageId) {
+    btnSaveBsPackageId.addEventListener('click', async () => {
+      try {
+        btnSaveBsPackageId.disabled = true;
+        await saveBsPackageId();
+        toast('ID de paquete Blood Strike guardado');
+      } catch (e) {
+        toast(e.message || 'Error');
+      } finally {
+        btnSaveBsPackageId.disabled = false;
+      }
+    });
+  }
+
+  fetchBsPackageId();
+
     let specCount = 0;
     items.forEach(p => {
       const isGift = (p.category || 'mobile') === 'gift';
