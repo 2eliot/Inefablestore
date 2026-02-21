@@ -174,31 +174,50 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
         page_url = "https://www.smile.one/br/merchant/game/bloodstrike?source=other"
         page = sess.get(page_url, timeout=8)
         print(f"[BS] page status={page.status_code} cookies={dict(sess.cookies)}")
-        # Extract CSRF token if present (common patterns)
+        # Extract CSRF token from _csrf cookie (Yii2 PHP serialized format)
+        # Cookie value: "...%3Bs%3A32%3A%220ze4k_...%22%7D" -> extract the 32-char token
         csrf = ""
-        for pat in [r'_token["\s]+value=["\']([^"\']+)', r'"csrf[_-]?token"\s*:\s*"([^"]+)"', r'name="_token"\s+value="([^"]+)"']:
-            m = re.search(pat, page.text)
+        raw_csrf_cookie = sess.cookies.get("_csrf", "")
+        try:
+            import urllib.parse as _urlparse
+            decoded = _urlparse.unquote(raw_csrf_cookie)
+            # PHP serialized: i:1;s:32:"TOKEN_HERE";}
+            m = re.search(r'i:1;s:\d+:"([^"]+)"', decoded)
             if m:
                 csrf = m.group(1)
-                break
+        except Exception:
+            pass
+        # Fallback: search in HTML
+        if not csrf:
+            for pat in [r'name="_csrf"\s+value="([^"]+)"', r'"csrf"\s*:\s*"([^"]+)"']:
+                m = re.search(pat, page.text)
+                if m:
+                    csrf = m.group(1)
+                    break
         print(f"[BS] csrf={csrf!r}")
-        # Step 2: POST checkrole with session cookies
+        # Step 2: POST checkrole with session cookies + CSRF header
+        post_headers = {
+            "Referer": page_url,
+            "Origin": "https://www.smile.one",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        if csrf:
+            post_headers["X-CSRF-Token"] = csrf
         post_data = {"role_id": role_id, "product": "bloodstrike"}
         if csrf:
-            post_data["_token"] = csrf
-        resp = sess.post(
+            post_data["_csrf"] = csrf
+        # Try known endpoint variants
+        for _endpoint in [
             "https://www.smile.one/merchant/bloodstrike/checkrole",
-            data=post_data,
-            headers={
-                "Referer": page_url,
-                "Origin": "https://www.smile.one",
-                "Accept": "application/json, text/javascript, */*; q=0.01",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "X-Requested-With": "XMLHttpRequest",
-            },
-            timeout=8,
-        )
-        print(f"[BS] checkrole status={resp.status_code} body={resp.text[:300]}")
+            "https://www.smile.one/br/merchant/game/bloodstrike/checkrole",
+            "https://www.smile.one/merchant/checkrole",
+        ]:
+            resp = sess.post(_endpoint, data=post_data, headers=post_headers, timeout=8)
+            print(f"[BS] {_endpoint} -> {resp.status_code} {resp.text[:150]}")
+            if resp.status_code == 200:
+                break
         if resp.status_code != 200:
             return ""
         data = resp.json()
