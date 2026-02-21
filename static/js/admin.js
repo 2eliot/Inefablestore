@@ -1741,12 +1741,14 @@ window.refreshGallery = refreshGallery;
       const playerId = fixMb(o.customer_id || '-') ;
       const txRef = fixMb(o.reference || '-') ;
       const gameName = fixMb(o.package_name || '');
+      const playerNick = fixMb(o.customer_name || '');
       const isGift = (o.package_category || '').toLowerCase() === 'gift';
       tile.innerHTML = `
         <div class=\"row-head\">
           <div class=\"box-left\">
             <div class=\"game-name\">${gameName} <span class=\"state ${statusClass}\">${statusIcon}</span></div>
             <div class=\"package-name\">${diam || ''}</div>
+            ${playerNick ? `<div class=\"package-name\" style=\"color:#86efac;font-size:12px;\">👤 ${playerNick}</div>` : ''}
             <div class=\"quantity-label\">Cantidad: <span class=\"quantity-value\">${itemsArr.length ? qtyTotal : 1}</span></div>
             <div class=\"ref-section\">
               <div class=\"ref-label\">REFERENCIA</div>

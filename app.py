@@ -1933,6 +1933,7 @@ def create_order():
         customer_id = (data.get("customer_id") or "").strip()
         customer_zone = (data.get("customer_zone") or "").strip()
         special_code = (data.get("special_code") or "").strip()
+        verified_nick = (data.get("nn") or "").strip()
 
         if not email:
             return jsonify({"ok": False, "error": "Correo requerido"}), 400
@@ -1983,7 +1984,7 @@ def create_order():
             phone=phone,
             customer_id=customer_id,
             customer_zone=customer_zone,
-            customer_name=name or email or customer_id,
+            customer_name=verified_nick or name or email or customer_id,
             status="pending",
             special_code=special_code,
         )
@@ -2242,6 +2243,7 @@ def admin_orders_list():
             "items": items_payload,
             "customer_id": x.customer_id,
             "customer_zone": x.customer_zone or "",
+            "customer_name": x.customer_name or "",
             "name": x.name,
             "email": x.email,
             "phone": x.phone,
