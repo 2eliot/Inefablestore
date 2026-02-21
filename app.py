@@ -165,21 +165,31 @@ def _scrape_ffmania_nick(uid: str) -> str:
 def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
     """Consulta la API interna de Smile.One Brasil para obtener el nickname de Blood Strike."""
     try:
-        resp = _requests_lib.post(
-            "https://www.smile.one/merchant/bloodstrike/checkrole?product=bloodstrike",
-            data={"role_id": role_id},
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Referer": "https://www.smile.one/br/merchant/game/bloodstrike",
-                "Origin": "https://www.smile.one",
-                "Accept": "application/json, text/javascript, */*; q=0.01",
-                "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "X-Requested-With": "XMLHttpRequest",
-            },
-            timeout=8,
-        )
-        print(f"[BS] status={resp.status_code} body={resp.text[:300]}")
+        _bs_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Referer": "https://www.smile.one/br/merchant/game/bloodstrike",
+            "Origin": "https://www.smile.one",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        # Try multiple endpoint variants
+        _candidates = [
+            ("https://www.smile.one/merchant/checkrole", {"role_id": role_id, "product": "bloodstrike"}),
+            ("https://www.smile.one/merchant/checkrole?product=bloodstrike", {"role_id": role_id}),
+            ("https://www.smile.one/br/merchant/checkrole", {"role_id": role_id, "product": "bloodstrike"}),
+            ("https://www.smile.one/br/merchant/game/bloodstrike/checkrole", {"role_id": role_id}),
+        ]
+        resp = None
+        for _url, _data in _candidates:
+            _r = _requests_lib.post(_url, data=_data, headers=_bs_headers, timeout=8, allow_redirects=True)
+            print(f"[BS] {_url} -> {_r.status_code} {_r.text[:120]}")
+            if _r.status_code == 200:
+                resp = _r
+                break
+        if resp is None:
+            return ""
         resp.raise_for_status()
         data = resp.json()
         # Buscar username en cualquier nivel del JSON
