@@ -179,18 +179,26 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
             },
             timeout=8,
         )
+        print(f"[BS] status={resp.status_code} body={resp.text[:300]}")
         resp.raise_for_status()
         data = resp.json()
-        # Smile.One returns {"code": 200, "data": {"username": "Nick™"}} on success
-        if int(data.get("code") or 0) == 200:
-            username = (
-                data.get("data", {}).get("username")
-                or data.get("username")
-                or ""
-            )
+        # Buscar username en cualquier nivel del JSON
+        username = (
+            (data.get("data") or {}).get("username")
+            or (data.get("data") or {}).get("nickname")
+            or (data.get("data") or {}).get("name")
+            or data.get("username")
+            or data.get("nickname")
+            or data.get("name")
+            or ""
+        )
+        if username:
             return username.strip()
+        # Si code != 200 loguear para diagnóstico
+        print(f"[BS] JSON completo: {data}")
         return ""
-    except Exception:
+    except Exception as e:
+        print(f"[BS] Error: {e}")
         return ""
 
 
