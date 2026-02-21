@@ -205,13 +205,13 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
         }
         if csrf:
             post_headers["X-CSRF-Token"] = csrf
-        post_data = {"role_id": role_id, "product": "bloodstrike"}
+        post_data = {"role_id": role_id}
         if csrf:
             post_data["_csrf"] = csrf
         # Try known endpoint variants
         for _endpoint in [
+            "https://www.smile.one/br/merchant/game/checkrole?product=bloodstrike",
             "https://www.smile.one/merchant/bloodstrike/checkrole",
-            "https://www.smile.one/br/merchant/game/bloodstrike/checkrole",
             "https://www.smile.one/merchant/checkrole",
         ]:
             resp = sess.post(_endpoint, data=post_data, headers=post_headers, timeout=8)
