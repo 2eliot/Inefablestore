@@ -205,7 +205,14 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
         }
         if csrf:
             post_headers["X-CSRF-Token"] = csrf
-        post_data = {"role_id": role_id}
+        bs_pid = get_config_value("bs_package_id", "") or ""
+        post_data = {
+            "uid": role_id,
+            "sid": "-1",
+            "pid": bs_pid,
+            "product": "bloodstrike",
+            "checkrole": "1",
+        }
         if csrf:
             post_data["_csrf"] = csrf
         # Try known endpoint variants
