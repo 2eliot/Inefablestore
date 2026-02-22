@@ -1731,6 +1731,7 @@ window.refreshGallery = refreshGallery;
     items.forEach(o => {
       const tile = document.createElement('div');
       tile.className = 'order-tile';
+      tile.setAttribute('data-customer-name', o.customer_name || '');
       const when = new Date(o.created_at).toLocaleString();
       const juego = o.package_name || `#${o.store_package_id}`;
       const itemsArr = Array.isArray(o.items) ? o.items : [];
@@ -1758,7 +1759,7 @@ window.refreshGallery = refreshGallery;
           <div class=\"box-left\">
             <div class=\"game-name\">${gameName} <span class=\"state ${statusClass}\">${statusIcon}</span></div>
             <div class=\"package-name\">${diam || ''}</div>
-            ${playerNick ? `<div class=\"package-name\" style=\"color:#86efac;font-size:12px;\">👤 ${playerNick}</div>` : ''}
+            ${playerNick && playerNick !== (o.name||'').trim() && playerNick !== (o.email||'').trim() ? `<div class=\"package-name\" style=\"color:#86efac;font-size:12px;\">👤 ${playerNick}</div>` : ''}
             <div class=\"quantity-label\">Cantidad: <span class=\"quantity-value\">${itemsArr.length ? qtyTotal : 1}</span></div>
             <div class=\"ref-section\">
               <div class=\"ref-label\">REFERENCIA</div>
@@ -1858,7 +1859,19 @@ window.refreshGallery = refreshGallery;
         const id = btnFF.getAttribute('data-id');
         const recarga_index = parseInt(btnFF.getAttribute('data-index'));
         const total_recargas = parseInt(btnFF.getAttribute('data-total'));
-        if (!confirm(`⚠️ Esta recarga es AUTOMÁTICA e IRREVERSIBLE. ¿Enviar recarga ${recarga_index+1}/${total_recargas}?`)) return;
+        const tile = btnFF.closest('.order-tile');
+        const _game = tile ? (tile.querySelector('.game-name')?.textContent || '').trim() : '';
+        const _pid = tile ? (tile.querySelector('.hex')?.textContent || '').trim() : '';
+        const _ref = tile ? (tile.querySelector('.ref-value')?.textContent || '').trim() : '';
+        const _nick = tile ? (tile.getAttribute('data-customer-name') || '') : '';
+        const msg = `⚠️ RECARGA AUTOMÁTICA E IRREVERSIBLE\n\n` +
+          `Juego: ${_game}\n` +
+          `ID: ${_pid}\n` +
+          (_nick ? `Nombre: ${_nick}\n` : '') +
+          `Referencia: ${_ref}\n` +
+          `Recarga: ${recarga_index+1}/${total_recargas}\n\n` +
+          `¿Confirmar envío?`;
+        if (!confirm(msg)) return;
         btnFF.disabled = true;
         btnFF.textContent = `Recargando ${recarga_index+1}/${total_recargas}...`;
         try {
@@ -1912,14 +1925,24 @@ window.refreshGallery = refreshGallery;
       if (!btn) return;
       const id = btn.getAttribute('data-id');
       const status = btnA ? 'approved' : 'rejected';
-      // Double confirmation for FF auto-recharge
+      // Confirmation for FF auto-recharge
       if (btnA) {
         const tile = btnA.closest('.order-tile');
         const ffGameId = window._WEBB_FF_GAME_ID ? parseInt(window._WEBB_FF_GAME_ID) : null;
         const tileText = tile ? (tile.textContent || '').toLowerCase() : '';
         const isFFTile = (ffGameId && tileText.includes('free fire')) || tileText.includes('free fire');
         if (isFFTile) {
-          if (!confirm('⚠️ Esta recarga de Free Fire es AUTOMÁTICA e IRREVERSIBLE. ¿Continuar?')) return;
+          const _game = tile ? (tile.querySelector('.game-name')?.textContent || '').trim() : '';
+          const _pid = tile ? (tile.querySelector('.hex')?.textContent || '').trim() : '';
+          const _ref = tile ? (tile.querySelector('.ref-value')?.textContent || '').trim() : '';
+          const _nick = tile ? (tile.getAttribute('data-customer-name') || '') : '';
+          const msg = `⚠️ RECARGA AUTOMÁTICA E IRREVERSIBLE\n\n` +
+            `Juego: ${_game}\n` +
+            `ID: ${_pid}\n` +
+            (_nick ? `Nombre: ${_nick}\n` : '') +
+            `Referencia: ${_ref}\n\n` +
+            `¿Confirmar envío?`;
+          if (!confirm(msg)) return;
         }
       }
       try {

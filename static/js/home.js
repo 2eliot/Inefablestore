@@ -99,6 +99,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function adjustRailAlignment(rail) {
     if (!rail) return;
+    // On desktop with grid layout, don't override justifyContent
+    const style = window.getComputedStyle(rail);
+    if (style.display === 'grid') return;
     // If content overflows horizontally, align to start to enable continuous scrolling
     const scrollable = rail.scrollWidth > rail.clientWidth + 2; // small tolerance
     rail.style.justifyContent = scrollable ? 'flex-start' : 'center';

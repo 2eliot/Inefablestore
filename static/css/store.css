@@ -19,7 +19,7 @@
   .item-pill .p { font-size: 12px; }
 }
 .packages:last-of-type { margin-bottom: 0; padding-bottom: 40px; }
-.featured { padding: 14px 12px 0; max-width: 1200px; margin: 0 auto; }
+.featured { padding: 14px 24px 0; max-width: 100%; margin: 0 auto; }
 .packages + .site-footer { margin-top: 36px; }
 .cat-filtered .site-footer { margin-top: 36px; }
 /* Tighten the rail bottom padding to avoid extra gap above footer */
@@ -49,7 +49,7 @@ html { overflow-x: hidden; width: 100%; }
 /* Header */
 .site-header { position: sticky; top: 0; border-bottom: 1px solid #000000; background: rgba(0,0,0,0.7); z-index: 35; transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
 .site-header.scrolled { background: rgba(0,0,0,0.85); border-bottom-color: rgba(15,42,82,0.7); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
-.site-header .container { display: grid; grid-template-columns: 32px auto 1fr auto; align-items: center; gap: 10px; padding: 8px 12px; max-width: 1200px; margin: 0 auto; }
+.site-header .container { display: grid; grid-template-columns: 32px auto 1fr auto; align-items: center; gap: 10px; padding: 8px 24px; max-width: 100%; margin: 0 auto; }
 .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; }
 .logo { height: 48px; display: block; }
 .logo-text { font-weight: 800; font-size: 24px; color: #fff; }
@@ -358,7 +358,7 @@ html { overflow-x: hidden; width: 100%; }
 .auth-card .btn.primary.full:hover { background: #000000; border-color: #000000; }
 
 /* Packages carousel */
-.packages { padding: 14px 12px 0; max-width: 1200px; margin: 0 auto; }
+.packages { padding: 14px 24px 0; max-width: 100%; margin: 0 auto; }
 /* Featured uses same head/rail/card styles, only container differs */
 .featured .packages-head { display:flex; align-items:center; justify-content: space-between; margin-bottom: 16px; }
 /* Extra breathing room under Juegos Mobile title */
@@ -383,36 +383,37 @@ html { overflow-x: hidden; width: 100%; }
 .packages-rail::-webkit-scrollbar { display: none; }
 
 .pkg-card { min-width: 190px; max-width: 220px; background: rgba(43,47,54,0.4); border: 1px solid rgba(148,163,184,0.1); border-radius: 18px; padding: 12px 12px 14px; color: #fff; box-shadow: 0 8px 20px rgba(0,0,0,0.35); flex: 0 0 auto; }
-/* Desktop: lock card width to fit exactly 5 cards in 1200px rails (with 22px gaps) */
+/* Desktop: show exactly 5 cards per row using grid */
 @media (min-width: 768px) {
-  #rail-mobile .pkg-card,
-  #rail-gift .pkg-card,
-  #rail-best .pkg-card {
-    flex: 0 0 200px;
-    min-width: 200px;
-    max-width: 200px;
-  }
-  /* Add inner gutters and adjust gap so 5 cards still fit nicely without touching edges */
-  #rail-mobile.packages-rail,
-  #rail-gift.packages-rail,
-  #related-packages .packages-rail {
-    padding-left: 12px;
-    padding-right: 12px;
-    gap: 20px;
-  }
-  /* Force 5 columns for related packages on desktop using grid */
-  section#related-packages .packages-rail {
+  .packages-rail {
     display: grid !important;
     grid-template-columns: repeat(5, 1fr) !important;
-    overflow: visible !important;
-    justify-content: center !important;
-    flex: none !important;
+    gap: 20px !important;
+    overflow: hidden !important;
+    /* Show only first row: card ~= aspect 1:1 + name + padding; clip everything else */
+    grid-template-rows: auto !important;
+    grid-auto-rows: 0 !important;
+    row-gap: 0 !important;
   }
-  #related-packages .pkg-card {
+  .packages-rail > .pkg-card:nth-child(n+6) {
+    visibility: hidden;
+    height: 0;
+    padding: 0;
+    margin: 0;
+    border: none;
+    overflow: hidden;
+  }
+  .packages-rail .pkg-card {
     min-width: 0 !important;
     max-width: none !important;
     width: 100% !important;
     flex: none !important;
+  }
+  /* Best sellers: keep 5 columns but smaller gap */
+  #best-sellers .packages-rail {
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 18px !important;
+    row-gap: 0 !important;
   }
 }
 .pkg-thumb { width: 100%; aspect-ratio: 1 / 1; background-size: contain; background-position: center; background-repeat: no-repeat; background-color: rgba(0,0,0,0.1); border-radius: 16px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); }
@@ -436,7 +437,7 @@ html { overflow-x: hidden; width: 100%; }
 }
 
 /* Mid-page banner spacing aligned with sections */
-.mid-banner { padding: 0 12px; max-width: 1200px; margin: 0 auto 60px; }
+.mid-banner { padding: 0 24px; max-width: 100%; margin: 0 auto 60px; }
 @media (max-width: 700px) {
   .mid-banner { padding: 0 2px; margin-bottom: 20px; }
 }
@@ -495,7 +496,7 @@ html { overflow-x: hidden; width: 100%; }
 
 /* Features */
 .features { padding: 32px 16px; }
-.features .container { max-width: 1200px; margin: 0 auto; }
+.features .container { max-width: 100%; margin: 0 auto; padding: 0 24px; }
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .card { border: 1px solid rgba(148,163,184,0.22); border-radius: 10px; padding: 16px; background: #0b0f14; color: #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
@@ -572,11 +573,11 @@ html { overflow-x: hidden; width: 100%; }
   .game-desc { display: none; }
 
   /* Packages: carousel with 2 cards visible on phones */
-  .packages { padding-left: 12px; padding-right: 12px; }
+  .packages { padding-left: 12px; padding-right: 12px; overflow: hidden; }
   .featured { padding-left: 12px; padding-right: 12px; }
-  .packages-rail { --rail-gap: 12px; display: flex; gap: var(--rail-gap); overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; touch-action: pan-x; flex-wrap: nowrap; justify-content: flex-start; padding-left: 6px; padding-right: 6px; }
-  /* Two cards per view with clear separation and side gutters */
-  .pkg-card { flex: 0 0 calc(50% - 9px); min-width: calc(50% - 9px); max-width: calc(50% - 9px); scroll-snap-align: start; margin: 0; }
+  .packages-rail { --rail-gap: 12px; display: flex; gap: var(--rail-gap); overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; touch-action: pan-x; flex-wrap: nowrap; justify-content: flex-start; padding-left: 0; padding-right: 0; }
+  /* Two cards per view filling exactly 100% */
+  .pkg-card { flex: 0 0 calc(50% - 6px); min-width: calc(50% - 6px); max-width: calc(50% - 6px); scroll-snap-align: start; margin: 0; }
   /* Best Sellers: 3 per row on phones */
   #best-sellers .packages-rail { --rail-gap: 10px; gap: var(--rail-gap); justify-content: flex-start; padding-left: 6px; padding-right: 6px; }
   /* Three cards per view: slightly undersize */
