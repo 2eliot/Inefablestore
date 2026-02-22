@@ -12,12 +12,9 @@
   .details-layout { padding-left: 10px; padding-right: 10px; overflow-x: hidden; }
   .details-left, .details-right { max-width: 100%; overflow-x: hidden; }
   .details-right .step-card { width: 100%; box-sizing: border-box; overflow: visible; }
-  .items-grid { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .item-pill { min-width: 0; box-sizing: border-box; padding: 10px; }
-  .item-pill .t {
+    .item-pill .t {
     font-size: 13px; font-weight: 800;
     white-space: normal; overflow-wrap: anywhere;
-    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
   .item-pill .p { font-size: 12px; }
 }
@@ -375,7 +372,7 @@ html { overflow-x: hidden; width: 100%; }
 #related-packages .packages-head { justify-content: center; }
 #related-packages .packages-title { text-align: center; }
 .packages-nav button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid #2a2a2a; background: #111111; color: #e5e7eb; cursor: pointer; }
-.packages-rail { display:flex; gap: 22px; overflow-x: auto; scroll-behavior: smooth; padding-bottom: 8px; justify-content: center; flex-wrap: nowrap; 
+.packages-rail { display:flex; gap: 22px; overflow-x: auto; scroll-behavior: smooth; padding-bottom: 8px; justify-content: center; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; touch-action: pan-x;
   /* Hide scrollbar line while keeping scroll */
   -ms-overflow-style: none; /* IE/Edge */
   scrollbar-width: none;    /* Firefox */
@@ -387,11 +384,10 @@ html { overflow-x: hidden; width: 100%; }
 
 .pkg-card { min-width: 190px; max-width: 220px; background: rgba(43,47,54,0.4); border: 1px solid rgba(148,163,184,0.1); border-radius: 18px; padding: 12px 12px 14px; color: #fff; box-shadow: 0 8px 20px rgba(0,0,0,0.35); flex: 0 0 auto; }
 /* Desktop: lock card width to fit exactly 5 cards in 1200px rails (with 22px gaps) */
-@media (min-width: 900px) {
+@media (min-width: 768px) {
   #rail-mobile .pkg-card,
   #rail-gift .pkg-card,
-  #rail-best .pkg-card,
-  #related-packages .pkg-card {
+  #rail-best .pkg-card {
     flex: 0 0 200px;
     min-width: 200px;
     max-width: 200px;
@@ -402,25 +398,24 @@ html { overflow-x: hidden; width: 100%; }
   #related-packages .packages-rail {
     padding-left: 12px;
     padding-right: 12px;
-    /* Container max 1200px, section has 12px L/R padding => 1200 - 24 = 1176px content.
-       Rail adds 12px L/R padding => 1176 - 24 = 1152px for items + gaps.
-       For 5 cards of 200px: remaining 1152 - 1000 = 152; 152/4 gaps = 38px. */
-    gap: 38px;
+    gap: 20px;
   }
   /* Force 5 columns for related packages on desktop using grid */
-  #related-packages .packages-rail {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    overflow: visible;
-    justify-content: center;
+  section#related-packages .packages-rail {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    overflow: visible !important;
+    justify-content: center !important;
+    flex: none !important;
   }
   #related-packages .pkg-card {
-    min-width: 0;
-    max-width: none;
-    width: 100%;
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    flex: none !important;
   }
 }
-.pkg-thumb { width: 100%; aspect-ratio: 1 / 1; background-size: cover; background-position: center; border-radius: 16px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); }
+.pkg-thumb { width: 100%; aspect-ratio: 1 / 1; background-size: contain; background-position: center; background-repeat: no-repeat; background-color: rgba(0,0,0,0.1); border-radius: 16px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); }
 .pkgs-mobile .pkg-thumb { margin-bottom: 10px; }
 #pkgs-mobile .pkg-thumb { margin-bottom: 10px; }
 .pkg-name { text-align: center; margin: 10px 0 0; font-size: 18px; font-weight: 900; text-shadow: 0 1px 0 rgba(0,0,0,0.3); }
@@ -579,7 +574,7 @@ html { overflow-x: hidden; width: 100%; }
   /* Packages: carousel with 2 cards visible on phones */
   .packages { padding-left: 12px; padding-right: 12px; }
   .featured { padding-left: 12px; padding-right: 12px; }
-  .packages-rail { --rail-gap: 12px; display: flex; gap: var(--rail-gap); overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; justify-content: flex-start; padding-left: 6px; padding-right: 6px; }
+  .packages-rail { --rail-gap: 12px; display: flex; gap: var(--rail-gap); overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; touch-action: pan-x; flex-wrap: nowrap; justify-content: flex-start; padding-left: 6px; padding-right: 6px; }
   /* Two cards per view with clear separation and side gutters */
   .pkg-card { flex: 0 0 calc(50% - 9px); min-width: calc(50% - 9px); max-width: calc(50% - 9px); scroll-snap-align: start; margin: 0; }
   /* Best Sellers: 3 per row on phones */
@@ -594,17 +589,14 @@ html { overflow-x: hidden; width: 100%; }
   .details-layout { padding-left: 10px; padding-right: 10px; overflow-x: hidden; }
   .details-left, .details-right { max-width: 100%; overflow-x: hidden; }
   .details-right .step-card { width: 100%; box-sizing: border-box; overflow: hidden; }
-  .items-grid { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .item-pill { white-space: normal; }
-  .item-pill .t { white-space: normal; overflow-wrap: anywhere; }
-}
+  }
  
 /* ==============================
    Details page
    ============================== */
 .details-layout { display: grid; grid-template-columns: 1fr; gap: 16px; padding: 18px 12px 28px; max-width: 1200px; margin: 0 auto; }
 @media (min-width: 900px) {
-  .details-layout { grid-template-columns: 420px 1fr; align-items: start; }
+  .details-layout { grid-template-columns: 1fr 300px; align-items: start; }
 }
 
 /* Desktop: show nav and hide hamburger (no change on PC) */
@@ -634,25 +626,40 @@ html { overflow-x: hidden; width: 100%; }
 .dd-item { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: center; padding: 12px; border-radius: 12px; color: #e5e7eb; text-decoration: none; font-weight: 800; }
 .dd-item:hover { background: rgba(255,255,255,0.06); }
 .dd-icon { width: 28px; height: 28px; display: inline-grid; place-items: center; background: rgba(255,255,255,0.08); border-radius: 8px; color: #e5e7eb; }
-.details-left .game-hero .banner { width: 100%; aspect-ratio: 16/9; background-size: cover; background-position: center; border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); }
-.details-left .game-title { margin: 10px 0 6px; font-size: 24px; font-weight: 900; color: #ffffff; }
-.details-left { background: rgba(43,47,54,0.4); border: 1px solid rgba(148,163,184,0.1); border-radius: 14px; padding: 12px; text-align: center; }
-.pill-row { display:flex; gap:8px; margin-bottom: 8px; justify-content: center; }
+.details-left .game-content { background: rgba(43,47,54,0.4); border: 1px solid rgba(148,163,184,0.1); border-radius: 14px; padding: 20px; }
+.details-left .game-content .game-header { display: flex; gap: 30px; align-items: center; margin-bottom: 0; }
+@media (max-width: 899px) {
+  .details-left .game-content .game-header { align-items: center; }
+}
+.details-left .game-content .game-image { text-align: center; display: flex; flex-direction: column; justify-content: center; height: 150px; }
+.details-left .game-content .game-image .banner { width: 150px; height: 150px; background-size: contain; background-position: center; background-repeat: no-repeat; background-color: rgba(0,0,0,0.2); border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); flex-shrink: 0; }
+.details-left .game-content .game-info .pill-row { justify-content: flex-start; margin-top: 8px; margin-bottom: 8px; }
+@media (max-width: 899px) {
+  .details-left .game-content .game-info .pill-row { margin-top: 6px; margin-bottom: 4px; }
+}
+.details-left .game-content .game-info { flex: 1; text-align: left; }
+.details-left .game-content .game-title { margin: 0 0 12px 0; font-size: 32px; font-weight: 900; color: #ffffff; }
+.pill-row { display:flex; gap:8px; margin-bottom: 16px; justify-content: flex-start; }
 .pill { display:inline-flex; align-items:center; gap:6px; border:1px solid #484f59; color:#cbd5e1; background: rgba(148,163,184,0.12); padding: 6px 10px; border-radius: 999px; font-weight: 800; font-size: 12px; }
-.game-desc { color:#cbd5e1; font-size: 14px; text-align: center; }
+.game-desc { color:#cbd5e1; font-size: 14px; text-align: left; margin-top: 12px; line-height: 1.5; }
 .selected-box { border:1px solid rgba(148,163,184,0.1); border-radius: 10px; padding: 12px; background: rgba(43,47,54,0.4); margin-top: 10px; display: grid; justify-items: center; text-align: center; }
 .selected-title { font-weight: 900; color:#ffffff; margin-bottom: 4px; }
 .selected-price { color: #10b981; font-weight: 800; }
+@media (min-width: 900px) {
+  .selected-box { display: none; }
+}
 
 .details-right .step-card { background: rgba(43,47,54,0.4); border:1px solid rgba(148,163,184,0.1); border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); overflow: visible; }
 .details-right .step-title { font-weight: 900; margin-bottom: 10px; color:#e2e8f0; }
 /* Step title number badge */
-.details-right .step-title[data-step] {
+.details-right .step-title[data-step],
+.details-left .step-title[data-step] {
   position: relative;
   padding-left: 44px; /* space for badge */
   line-height: 32px;
 }
-.details-right .step-title[data-step]::before {
+.details-right .step-title[data-step]::before,
+.details-left .step-title[data-step]::before {
   content: attr(data-step);
   position: absolute;
   left: 0;
@@ -670,8 +677,10 @@ html { overflow-x: hidden; width: 100%; }
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
 }
 @media (max-width: 700px) {
-  .details-right .step-title[data-step] { padding-left: 40px; line-height: 28px; }
-  .details-right .step-title[data-step]::before { width: 28px; height: 28px; border-radius: 7px; }
+  .details-right .step-title[data-step],
+  .details-left .step-title[data-step] { padding-left: 40px; line-height: 28px; }
+  .details-right .step-title[data-step]::before,
+  .details-left .step-title[data-step]::before { width: 28px; height: 28px; border-radius: 7px; }
 }
 /* Details form inputs styled with index colors */
 .details-right .input {
@@ -763,14 +772,39 @@ html { overflow-x: hidden; width: 100%; }
 .details-right .check input[type="checkbox"] { accent-color: #10b981; }
 .check { display:flex; align-items:center; gap:8px; color:#e2e8f0; margin: 8px 0; }
 
-.items-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-@media (min-width: 700px) { .items-grid { grid-template-columns: repeat(3, 1fr); } }
-.item-pill { display:block; text-align:center; padding: 12px; border-radius: 10px; border:1px solid rgba(148,163,184,0.1); background: rgba(43,47,54,0.4); color:#e2e8f0; cursor: pointer; font-weight: 800; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
-.item-pill:hover { border-color: #10b981; }
+.items-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+@media (min-width: 700px) { .items-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; } }
+.item-pill { display:block; text-align:center; padding: 16px 12px; border-radius: 12px; border:1px solid rgba(148,163,184,0.2); background: rgba(43,47,54,0.4); color:#e2e8f0; cursor: pointer; font-weight: 800; transition: all .15s ease; position: relative; overflow: hidden; }
+.item-pill:hover { border-color: #10b981; background: rgba(43,47,54,0.6); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 .item-pill:focus { outline: none; border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
-.item-pill .t { display:block; margin-bottom:6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-pill.selected { border-color: #10b981; background: rgba(16,185,129,0.2); }
+.item-pill .t { display:block; margin-bottom:6px; white-space: normal; line-height: 1.3; }
 .item-pill .p { display:block; color: #10b981; font-weight:900; }
 .item-pill.active { border-color: #10b981; background: rgba(16,185,129,0.12); }
+
+.packages-container {
+  background: rgba(43,47,54,0.4);
+  border: 1px solid rgba(148,163,184,0.1);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+}
+
+@media (max-width: 899px) {
+  .details-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .details-left { display: contents; }
+  .details-right { display: contents; }
+  .details-right .step-card { margin-bottom: 0; }
+  .details-left .game-content { order: 1; }
+  .details-right .step-card:nth-child(1) { order: 2; margin-top: 0; }
+  .details-left .packages-container { order: 3; margin-top: 0 !important; }
+  .details-right .step-card:nth-child(2) { order: 4; }
+  .details-right .step-card:nth-child(3) { order: 5; }
+}
 
 .pay-methods { display:grid; gap:8px; }
 .summary { display:flex; align-items:center; justify-content: space-between; margin-top: 10px; color:#e2e8f0; }

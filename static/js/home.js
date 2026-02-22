@@ -36,10 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const step = railStep(r);
     const first = r.querySelector('.pkg-card');
     if (!first || step <= 0) return;
-    // Reorder first -> end instantly and shift scroll to keep visual continuity
     r.appendChild(first);
     r.scrollLeft = Math.max(0, r.scrollLeft - step);
-    // Then perform a single smooth forward scroll of one step
     r.scrollTo({ left: r.scrollLeft + step, behavior: 'smooth' });
   }
   function rotateBackward(r) {
@@ -47,10 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const items = r.querySelectorAll('.pkg-card');
     if (!items || items.length === 0 || step <= 0) return;
     const last = items[items.length - 1];
-    // Place last -> front instantly and shift scroll to keep visual continuity
     r.insertBefore(last, r.firstChild);
     r.scrollLeft = r.scrollLeft + step;
-    // Then perform a single smooth backward scroll of one step
     r.scrollTo({ left: Math.max(0, r.scrollLeft - step), behavior: 'smooth' });
   }
   function moveHero(dir) {
@@ -116,6 +112,8 @@ document.addEventListener('DOMContentLoaded', () => {
     renderInto('#rail-best', (best && best.packages) || []);
     renderInto('#rail-mobile', (mobile && mobile.packages) || []);
     renderInto('#rail-gift', (gift && gift.packages) || []);
+    // Bind touch swipe after rails are populated
+    document.querySelectorAll('.packages-rail').forEach(bindTouchSwipe);
   });
 
   // Re-check alignment on resize
@@ -138,6 +136,41 @@ document.addEventListener('DOMContentLoaded', () => {
     // Move exactly one card at a time
     return delta;
   }
+
+  // Touch swipe for infinite scroll on mobile
+  function bindTouchSwipe(rail) {
+    if (!rail || rail._touchBound) return;
+    rail._touchBound = true;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let swiping = false;
+
+    rail.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      swiping = true;
+    }, { passive: true });
+
+    rail.addEventListener('touchmove', (e) => {
+      if (!swiping) return;
+      const dx = Math.abs(e.touches[0].clientX - touchStartX);
+      const dy = Math.abs(e.touches[0].clientY - touchStartY);
+      if (dy > dx) { swiping = false; }
+    }, { passive: true });
+
+    rail.addEventListener('touchend', (e) => {
+      if (!swiping) return;
+      swiping = false;
+      const touchEndX = e.changedTouches[0].clientX;
+      const diff = touchStartX - touchEndX;
+      if (Math.abs(diff) < 40) return;
+      adjustRailAlignment(rail);
+      if (diff > 0) rotateForward(rail);
+      else rotateBackward(rail);
+    }, { passive: true });
+  }
+  // Bind on all existing rails now and after data loads
+  document.querySelectorAll('.packages-rail').forEach(bindTouchSwipe);
 
   // Wire nav buttons via data-target
   document.addEventListener('click', (e) => {

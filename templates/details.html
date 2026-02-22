@@ -89,19 +89,36 @@
 
 <section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}" data-active-login="{{ 1 if (active_login_game_id|int) == game.id else 0 }}" data-bs-package-id="{{ bs_package_id|default('') }}" data-default-region="{{ player_lookup_region }}" data-scrape-enabled="{{ 1 if scrape_enabled else 0 }}">
   <div class="details-left">
-    <div class="game-hero">
-      <div class="banner" style="background-image:url('{{ game.image_path }}')"></div>
-      <h1 class="game-title">{{ game.name }}</h1>
+    <div class="game-content">
+      <div class="game-header">
+        <div class="game-image">
+          <div class="banner" style="background-image:url('{{ game.image_path }}')"></div>
+        </div>
+        <div class="game-info">
+          <h1 class="game-title">{{ game.name }}</h1>
+          <div class="pill-row">
+            <span class="pill">Pago seguro</span>
+            <span class="pill">Cash back</span>
+          </div>
+          <p class="game-desc" id="game-desc">{{ game.description }}</p>
+          <p id="game-special-desc" hidden>{{ game.special_description }}</p>
+        </div>
+      </div>
+      <div class="selected-box" id="selected-box" hidden>
+        <div class="selected-title" id="selected-title"></div>
+        <div class="selected-price" id="selected-price"></div>
+      </div>
     </div>
-    <div class="pill-row">
-      <span class="pill">Pago seguro</span>
-      <span class="pill">Cash back</span>
-    </div>
-    <p class="game-desc" id="game-desc">{{ game.description }}</p>
-    <p id="game-special-desc" hidden>{{ game.special_description }}</p>
-    <div class="selected-box" id="selected-box" hidden>
-      <div class="selected-title" id="selected-title"></div>
-      <div class="selected-price" id="selected-price"></div>
+    
+    <div class="packages-container" style="margin-top: 24px;">
+      <div class="step-title" data-step="2" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom: 16px;">
+        <span>2. Selecciona tu producto</span>
+        <button id="btn-leer" type="button" class="link" style="color:#22c55e; font-weight:800; text-decoration:underline; background:none; border:none; cursor:pointer; display:none;">Leer</button>
+      </div>
+      <div id="items-grid" class="items-grid"><!-- items --></div>
+      <div style="margin-top:10px; text-align:center;">
+        <button id="btn-more" class="btn" type="button" hidden>Ver más</button>
+      </div>
     </div>
   </div>
   <div class="details-right">
@@ -122,17 +139,6 @@
       {% if scrape_enabled and ((active_login_game_id and (active_login_game_id|int) == game.id) or (bs_package_id and (bs_package_id|int) == game.id)) %}
       <small id="player-nickname" class="ref-status" style="display:block; margin-top:6px; text-align:center;"></small>
       {% endif %}
-    </div>
-
-    <div class="step-card">
-      <div class="step-title" data-step="2" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-        <span>Selecciona tu producto</span>
-        <button id="btn-leer" type="button" class="link" style="color:#22c55e; font-weight:800; text-decoration:underline; background:none; border:none; cursor:pointer; display:none;">Leer</button>
-      </div>
-      <div id="items-grid" class="items-grid"><!-- items --></div>
-      <div style="margin-top:10px; text-align:center;">
-        <button id="btn-more" class="btn" type="button" hidden>Ver más</button>
-      </div>
     </div>
 
     <div class="step-card">

@@ -8,6 +8,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const fileInput = document.getElementById('file-input');
   const gallery = document.getElementById('gallery');
   const tpl = document.getElementById('image-card-tpl');
+  let lastOpenAt = 0;
+  let lastFilesSig = '';
+  let isUploading = false;
+  let processingChange = false;
   // Client-side index to resolve IDs when dataset is missing
   const imgIndex = {
     byPath: new Map(), // '/static/uploads/..' => id
@@ -1353,11 +1357,13 @@ window.refreshGallery = refreshGallery;
 window.refreshGallery = refreshGallery;
 
   async function uploadImage(file) {
+    console.log('[images] uploadImage called for:', file.name);
     const fd = new FormData();
     fd.append('image', file);
     const res = await fetch('/admin/images/upload', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo subir');
+    console.log('[images] uploadImage completed for:', file.name);
     return data.image;
   }
 
@@ -1385,21 +1391,23 @@ window.refreshGallery = refreshGallery;
     btnUpload.addEventListener('click', openPicker);
 
     const onFileChange = async () => {
+      console.log('[images] onFileChange triggered, files:', fileInput.files?.length || 0, 'processingChange:', processingChange, 'isUploading:', isUploading);
       if (isUploading) { console.log('[images] change ignored: upload in progress'); return; }
-      // Self-disable listener to prevent duplicate firing on some browsers
-      fileInput.removeEventListener('change', onFileChange);
+      // Prevent multiple executions with a flag
+      if (processingChange) { console.log('[images] change ignored: already processing'); return; }
+      processingChange = true;
+      console.log('[images] starting processing, setting processingChange=true');
       const files = Array.from(fileInput.files || []);
       const sig = files.map(f => `${f.name}|${f.size}|${f.lastModified}`).join(',');
       if (sig && sig === lastFilesSig) {
         console.log('[images] duplicate change ignored (same selection)');
         fileInput.value = '';
-        // Reattach listener
-        setTimeout(() => fileInput.addEventListener('change', onFileChange), 0);
+        processingChange = false;
         return;
       }
       lastFilesSig = sig;
       if (!files.length) {
-        setTimeout(() => fileInput.addEventListener('change', onFileChange), 0);
+        processingChange = false;
         return;
       }
       try {
@@ -1415,6 +1423,7 @@ window.refreshGallery = refreshGallery;
         for (let i = 0; i < unique.length; i++) {
           const f = unique[i];
           if (!f) continue;
+          console.log(`[images] loop iteration ${i+1}/${unique.length} for ${f.name}`);
           toast(`Subiendo ${i+1}/${unique.length}: ${f.name}`);
           await uploadImage(f);
         }
@@ -1423,12 +1432,13 @@ window.refreshGallery = refreshGallery;
       } catch (e) {
         toast(e.message || 'Error al subir', 'error');
       } finally {
+        console.log('[images] entering finally block, resetting processingChange');
         btnUpload.disabled = false;
         fileInput.value = '';
         isUploading = false;
+        processingChange = false;
+        console.log('[images] processingChange reset to false');
         setTimeout(() => { lastOpenAt = 0; lastFilesSig = ''; }, 200);
-        // Reattach listener after finishing
-        setTimeout(() => fileInput.addEventListener('change', onFileChange), 0);
       }
     };
 
@@ -1767,7 +1777,13 @@ window.refreshGallery = refreshGallery;
                 }
               }
             }
-            if (_isAutomated) return '';
+            if (_isAutomated) return `<div class="box-right">
+            <div class="id-section">
+              <div class="id-label">${o.customer_zone ? 'ID - ZONA ID' : 'ID'} <a href="#" class="btn-show-id" style="color:#22c55e;font-weight:800;text-decoration:underline;font-size:12px;margin-left:6px;">Ver</a></div>
+              <code class="hex" style="display:none;">${playerId}${o.customer_zone ? ' - ' + o.customer_zone : ''}</code>
+              <button class="btn-copy" type="button" data-copy="${playerId}" style="display:none;">Copiar</button>
+            </div>
+          </div>`;
             return `<div class="box-right">
             <div class="id-section">
               <div class="id-label">${o.customer_zone ? 'ID - ZONA ID' : 'ID'}</div>
@@ -1817,6 +1833,19 @@ window.refreshGallery = refreshGallery;
   if (btnOrdersRefresh) btnOrdersRefresh.addEventListener('click', fetchOrders);
   if (ordersList) {
     ordersList.addEventListener('click', async (e) => {
+      const showId = e.target.closest('.btn-show-id');
+      if (showId) {
+        e.preventDefault();
+        const section = showId.closest('.id-section');
+        if (section) {
+          const code = section.querySelector('.hex');
+          const copyBtn = section.querySelector('.btn-copy');
+          if (code) code.style.display = code.style.display === 'none' ? '' : 'none';
+          if (copyBtn) copyBtn.style.display = copyBtn.style.display === 'none' ? '' : 'none';
+          showId.textContent = code && code.style.display === 'none' ? 'Ver' : 'Ocultar';
+        }
+        return;
+      }
       const copy = e.target.closest('.btn-copy');
       if (copy) {
         const value = copy.getAttribute('data-copy') || '';
@@ -1829,6 +1858,7 @@ window.refreshGallery = refreshGallery;
         const id = btnFF.getAttribute('data-id');
         const recarga_index = parseInt(btnFF.getAttribute('data-index'));
         const total_recargas = parseInt(btnFF.getAttribute('data-total'));
+        if (!confirm(`⚠️ Esta recarga es AUTOMÁTICA e IRREVERSIBLE. ¿Enviar recarga ${recarga_index+1}/${total_recargas}?`)) return;
         btnFF.disabled = true;
         btnFF.textContent = `Recargando ${recarga_index+1}/${total_recargas}...`;
         try {
@@ -1882,6 +1912,16 @@ window.refreshGallery = refreshGallery;
       if (!btn) return;
       const id = btn.getAttribute('data-id');
       const status = btnA ? 'approved' : 'rejected';
+      // Double confirmation for FF auto-recharge
+      if (btnA) {
+        const tile = btnA.closest('.order-tile');
+        const ffGameId = window._WEBB_FF_GAME_ID ? parseInt(window._WEBB_FF_GAME_ID) : null;
+        const tileText = tile ? (tile.textContent || '').toLowerCase() : '';
+        const isFFTile = (ffGameId && tileText.includes('free fire')) || tileText.includes('free fire');
+        if (isFFTile) {
+          if (!confirm('⚠️ Esta recarga de Free Fire es AUTOMÁTICA e IRREVERSIBLE. ¿Continuar?')) return;
+        }
+      }
       try {
         btn.disabled = true;
         const payload = { status };
@@ -2005,38 +2045,7 @@ window.fetchHero = fetchHero;
     }
   }
 
-  async function uploadImage(file) {
-    const form = new FormData();
-    form.append('image', file);
-    const res = await fetch('/admin/images/upload', {
-      method: 'POST',
-      body: form
-    });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(txt || 'Error al subir');
-    }
-    return res.json();
-  }
-
-  if (btnUpload && fileInput) {
-    btnUpload.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', async () => {
-      const file = fileInput.files && fileInput.files[0];
-      if (!file) return;
-      try {
-        btnUpload.disabled = true;
-        const result = await uploadImage(file);
-        toast('Imagen subida');
-        await refreshGallery();
-      } catch (e) {
-        toast(e.message);
-      } finally {
-        btnUpload.disabled = false;
-        fileInput.value = '';
-      }
-    });
-  }
+  // Duplicate uploadImage function and event listeners removed - using the ones above
 
   if (btnRefresh) {
     btnRefresh.addEventListener('click', () => window.refreshGallery && window.refreshGallery());
