@@ -3192,12 +3192,12 @@ def admin_stats_summary():
     if period == "weekly":
         cutoff = get_stats_reset_cutoff()
         approved_orders = Order.query.filter(
-            Order.status == "approved",
+            Order.status.in_(["approved", "delivered"]),
             Order.created_at >= cutoff,
         ).all()
     else:
         # Lifetime stats: do not restrict by weekly cutoff so resets don't wipe accumulated totals
-        approved_orders = Order.query.filter(Order.status == "approved").all()
+        approved_orders = Order.query.filter(Order.status.in_(["approved", "delivered"])).all()
     for o in approved_orders:
         try:
             use_affiliate = False
@@ -3348,14 +3348,14 @@ def admin_stats_package(pkg_id: int):
         cutoff = get_stats_reset_cutoff()
         approved_orders = Order.query.filter(
             Order.store_package_id == pkg_id,
-            Order.status == "approved",
+            Order.status.in_(["approved", "delivered"]),
             Order.created_at >= cutoff,
         ).all()
     else:
         # Lifetime stats per package (no cutoff)
         approved_orders = Order.query.filter(
             Order.store_package_id == pkg_id,
-            Order.status == "approved",
+            Order.status.in_(["approved", "delivered"]),
         ).all()
     for o in approved_orders:
         try:
