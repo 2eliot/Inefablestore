@@ -2665,11 +2665,13 @@ def admin_orders_set_status(oid: int):
                         webb_error = "Login en Web B fallido: credenciales incorrectas"
                     else:
                         # 2. POST al formulario de freefire_id con player_id y package_id
+                        _webb_api_key = os.environ.get("WEBB_API_KEY", "").strip()
                         recarga_resp = sess_b.post(
                             f"{webb_url}/validar/freefire_id",
                             data={
                                 "monto": str(package_id_webb),
                                 "player_id": player_id,
+                                "webb_api_key": _webb_api_key,
                             },
                             timeout=30,
                             allow_redirects=True,
