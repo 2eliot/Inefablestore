@@ -2606,6 +2606,7 @@ def admin_orders_set_status(oid: int):
         webb_url     = os.environ.get("WEBB_URL", "").strip().rstrip("/")
         webb_api_key = os.environ.get("WEBB_API_KEY", "").strip()
         webb_ff_game_id_raw = os.environ.get("WEBB_FF_GAME_ID", "").strip()
+        print(f"[WEBB DEBUG] url={webb_url!r} key={bool(webb_api_key)} game_id={webb_ff_game_id_raw!r} order_pkg={o.store_package_id} item_id={o.item_id} status={status}")
 
         recarga_index  = data.get("recarga_index")
         total_recargas = data.get("total_recargas", 1)
@@ -2645,6 +2646,7 @@ def admin_orders_set_status(oid: int):
             and status == "approved"
             and o.status in ("approved", "delivered")
         )
+        print(f"[WEBB DEBUG] is_ff={is_ff_order} pkg_webb={package_id_webb} should={should_recharge} o.status={o.status}")
 
         if should_recharge:
             player_id = (o.customer_id or "").strip()
