@@ -2598,15 +2598,13 @@ def admin_orders_set_status(oid: int):
     except Exception:
         pass
 
-    # ── Auto-recarga en Web B via /api.php (usuario+contraseña) ──
-    # Variables requeridas: WEBB_URL, WEBB_USER, WEBB_PASS, WEBB_FF_GAME_ID, WEBB_FF_ITEM_MAP
-    # recarga_index: índice 0-based para órdenes con qty > 1
+    # ── Auto-recarga en Web B via API dedicada ──
+    # Variables requeridas: WEBB_URL, WEBB_API_KEY, WEBB_FF_GAME_ID, WEBB_FF_ITEM_MAP
     webb_result = None
     webb_error = None
     try:
-        webb_url  = os.environ.get("WEBB_URL", "").strip().rstrip("/")
-        webb_user = os.environ.get("WEBB_USER", "").strip()
-        webb_pass = os.environ.get("WEBB_PASS", "").strip()
+        webb_url     = os.environ.get("WEBB_URL", "").strip().rstrip("/")
+        webb_api_key = os.environ.get("WEBB_API_KEY", "").strip()
         webb_ff_game_id_raw = os.environ.get("WEBB_FF_GAME_ID", "").strip()
 
         recarga_index  = data.get("recarga_index")
@@ -2619,7 +2617,7 @@ def admin_orders_set_status(oid: int):
         # Resolver package_id de Web B desde el item del pedido
         package_id_webb = None
         is_ff_order = False
-        if webb_url and webb_user and webb_pass and webb_ff_game_id_raw:
+        if webb_url and webb_api_key and webb_ff_game_id_raw:
             try:
                 webb_ff_game_id = int(webb_ff_game_id_raw)
             except ValueError:
@@ -2652,51 +2650,33 @@ def admin_orders_set_status(oid: int):
             player_id = (o.customer_id or "").strip()
             if player_id:
                 try:
-                    # 1. Login en Web B para obtener sesión
-                    sess_b = _requests_lib.Session()
-                    login_resp = sess_b.post(
-                        f"{webb_url}/login",
-                        data={"correo": webb_user, "contraseña": webb_pass},
-                        timeout=30,
-                        allow_redirects=True,
+                    # Llamada directa a la API dedicada (sin sesión ni nonce)
+                    api_resp = _requests_lib.post(
+                        f"{webb_url}/api/recharge/freefire_id",
+                        data={
+                            "api_key":    webb_api_key,
+                            "player_id":  player_id,
+                            "package_id": str(package_id_webb),
+                        },
+                        timeout=60,
                     )
-                    # Login exitoso si redirige a / (no queda en /auth)
-                    if "/auth" in login_resp.url:
-                        webb_error = "Login en Web B fallido: credenciales incorrectas"
+                    api_data = api_resp.json()
+                    if api_data.get("ok"):
+                        is_last = (recarga_index is None) or (int(recarga_index) + 1 >= total_recargas)
+                        if is_last:
+                            o.status = "delivered"
+                        db.session.commit()
+                        webb_result = {
+                            "pin": "",
+                            "package": f"Paquete {package_id_webb}",
+                            "player_name": api_data.get("player_name", ""),
+                            "pins_so_far": [],
+                            "is_last": is_last,
+                        }
                     else:
-                        # 2. POST al formulario de freefire_id con player_id y package_id
-                        _webb_api_key = os.environ.get("WEBB_API_KEY", "").strip()
-                        recarga_resp = sess_b.post(
-                            f"{webb_url}/validar/freefire_id",
-                            data={
-                                "monto": str(package_id_webb),
-                                "player_id": player_id,
-                                "webb_api_key": _webb_api_key,
-                            },
-                            timeout=30,
-                            allow_redirects=True,
-                        )
-                        # La recarga es exitosa si redirige a ?compra=exitosa
-                        if "compra=exitosa" in recarga_resp.url:
-                            is_last = (recarga_index is None) or (int(recarga_index) + 1 >= total_recargas)
-                            if is_last:
-                                o.status = "delivered"
-                            db.session.commit()
-                            webb_result = {
-                                "pin": "",
-                                "package": f"Paquete {package_id_webb}",
-                                "pins_so_far": [],
-                                "is_last": is_last,
-                            }
-                        else:
-                            # Intentar extraer mensaje de error del HTML
-                            import re as _re
-                            flash_match = _re.search(
-                                r'class=["\'].*?alert.*?["\'][^>]*>([^<]{5,200})', recarga_resp.text
-                            )
-                            webb_error = flash_match.group(1).strip() if flash_match else "Recarga no completada en Web B"
+                        webb_error = api_data.get("error") or "Recarga no completada en Web B"
                 except _requests_lib.exceptions.Timeout:
-                    webb_error = "Web B no respondió en 30 segundos (puede estar despertando en Render)"
+                    webb_error = "Web B no respondió en 60 segundos"
                 except Exception as exc:
                     webb_error = str(exc)
     except Exception as exc:
