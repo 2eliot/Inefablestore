@@ -3274,8 +3274,6 @@ def admin_revendedores_mapping_data():
 
     packages = StorePackage.query.filter_by(active=True).order_by(StorePackage.sort_order.asc(), StorePackage.id.asc()).all()
     selected_package_id = request.args.get("store_package_id", type=int)
-    if not selected_package_id and packages:
-        selected_package_id = packages[0].id
 
     store_items = []
     mappings_by_item = {}
@@ -3284,13 +3282,22 @@ def admin_revendedores_mapping_data():
             store_package_id=selected_package_id,
             active=True,
         ).order_by(GamePackageItem.id.asc()).all()
-        item_ids = [it.id for it in store_items]
-        if item_ids:
-            rows = RevendedoresItemMapping.query.filter(
-                RevendedoresItemMapping.store_item_id.in_(item_ids),
-                RevendedoresItemMapping.active == True,
-            ).all()
-            mappings_by_item = {int(r.store_item_id): r for r in rows}
+    else:
+        # Sin juego seleccionado: mostrar todos los ítems activos para facilitar mapeo masivo.
+        store_items = GamePackageItem.query.filter_by(active=True).order_by(
+            GamePackageItem.store_package_id.asc(),
+            GamePackageItem.id.asc(),
+        ).all()
+
+    item_ids = [it.id for it in store_items]
+    if item_ids:
+        rows = RevendedoresItemMapping.query.filter(
+            RevendedoresItemMapping.store_item_id.in_(item_ids),
+            RevendedoresItemMapping.active == True,
+        ).all()
+        mappings_by_item = {int(r.store_item_id): r for r in rows}
+
+    package_name_by_id = {int(p.id): (p.name or "") for p in packages}
 
     catalog_rows = RevendedoresCatalogItem.query.filter_by(active=True).order_by(
         RevendedoresCatalogItem.remote_product_name.asc(),
@@ -3310,6 +3317,8 @@ def admin_revendedores_mapping_data():
                 "id": it.id,
                 "title": it.title,
                 "price": float(it.price or 0.0),
+                "store_package_id": it.store_package_id,
+                "store_package_name": package_name_by_id.get(int(it.store_package_id), ""),
                 "mapping": {
                     "id": mappings_by_item[it.id].id,
                     "remote_product_id": mappings_by_item[it.id].remote_product_id,
