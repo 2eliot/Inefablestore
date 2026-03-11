@@ -1103,6 +1103,26 @@ def _load_rev_catalog_from_local_db(db_path):
         return [], f"Error leyendo DB local de Revendedores: {str(exc)}"
 
 
+def _is_id_game_catalog_entry(ent):
+    if not isinstance(ent, dict):
+        return False
+    product_name = str(ent.get("remote_product_name") or "").strip().lower()
+    package_name = str(ent.get("remote_package_name") or "").strip().lower()
+    raw_json = str(ent.get("raw_json") or "").strip().lower()
+
+    # Prefer source-table signal from fallback DB: precios_*_id
+    if "source_table" in raw_json and "_id" in raw_json:
+        return True
+
+    # Generic signal for API payloads where names include "ID"
+    return (
+        product_name.endswith(" id")
+        or " id " in f" {product_name} "
+        or package_name.endswith(" id")
+        or " id " in f" {package_name} "
+    )
+
+
 def _get_order_auto_mapping(order_obj):
     try:
         if not order_obj or not order_obj.item_id:
@@ -3382,11 +3402,14 @@ def admin_revendedores_sync_catalog():
         if normalized:
             source = "local_db"
 
+    # Requisito operativo: solo catálogo de juegos tipo ID.
+    normalized = [ent for ent in normalized if _is_id_game_catalog_entry(ent)]
+
     if not normalized:
         detail = remote_error or "Sin detalle API"
         if fallback_error:
             detail += f" | Fallback local: {fallback_error}"
-        return jsonify({"ok": False, "error": f"No se pudo consultar catálogo de Revendedores: {detail}"}), 502
+        return jsonify({"ok": False, "error": f"No se pudo consultar catálogo de Revendedores (solo juegos ID): {detail}"}), 502
 
     created = 0
     updated = 0
