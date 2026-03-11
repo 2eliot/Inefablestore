@@ -3283,11 +3283,8 @@ def admin_revendedores_mapping_data():
             active=True,
         ).order_by(GamePackageItem.id.asc()).all()
     else:
-        # Sin juego seleccionado: mostrar todos los ítems activos para facilitar mapeo masivo.
-        store_items = GamePackageItem.query.filter_by(active=True).order_by(
-            GamePackageItem.store_package_id.asc(),
-            GamePackageItem.id.asc(),
-        ).all()
+        # Requiere selección explícita de juego para desplegar ítems.
+        store_items = []
 
     item_ids = [it.id for it in store_items]
     if item_ids:

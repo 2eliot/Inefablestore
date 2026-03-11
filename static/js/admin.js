@@ -319,8 +319,13 @@ document.addEventListener('DOMContentLoaded', () => {
       revStorePackage.appendChild(opt);
     });
 
+    const hasSelectedPackage = !!(revMappingData.selected_store_package_id && parseInt(revMappingData.selected_store_package_id, 10) > 0);
     if (!items.length) {
-      revMapList.innerHTML = '<div class="empty-state"><h3>Sin ítems</h3><p>Este juego no tiene ítems activos para mapear.</p></div>';
+      if (!hasSelectedPackage) {
+        revMapList.innerHTML = '<div class="empty-state"><h3>Selecciona un juego</h3><p>Primero elige un juego de InefableStore para mostrar sus ítems y mapearlos.</p></div>';
+      } else {
+        revMapList.innerHTML = '<div class="empty-state"><h3>Sin ítems</h3><p>Este juego no tiene ítems activos para mapear.</p></div>';
+      }
       return;
     }
 
