@@ -2,6 +2,8 @@ import os
 import json
 import re
 import time
+import zlib
+import sqlite3
 import urllib.request
 import urllib.error
 import html as _html
@@ -891,6 +893,13 @@ def _revendedores_env():
     return base_url, api_key, catalog_path, recharge_path
 
 
+def _synthetic_product_id(label):
+    txt = str(label or "").strip().lower()
+    if not txt:
+        return None
+    return 900000000 + (zlib.crc32(txt.encode("utf-8")) % 99999999)
+
+
 def _normalize_rev_catalog_payload(payload):
     if not isinstance(payload, dict):
         return []
@@ -942,6 +951,8 @@ def _normalize_rev_catalog_payload(payload):
             or raw.get("product")
             or ""
         )
+        if product_id is None:
+            product_id = _synthetic_product_id(product_name)
 
         active_val = raw.get("active", raw.get("activo", True))
         if isinstance(active_val, str):
@@ -959,6 +970,137 @@ def _normalize_rev_catalog_payload(payload):
         })
 
     return out
+
+
+def _revendedores_local_db_path():
+    return (
+        os.environ.get("REVENDEDORES_LOCAL_DB_PATH")
+        or os.environ.get("WEBB_DB_PATH")
+        or "/home/apps/web-b-revendedores/data/usuarios.db"
+    ).strip()
+
+
+def _normalize_bool_like(val, default=True):
+    if val is None:
+        return bool(default)
+    if isinstance(val, str):
+        return val.strip().lower() in ("1", "true", "yes", "si", "sí", "activo", "active", "on")
+    return bool(val)
+
+
+def _load_rev_catalog_from_local_db(db_path):
+    if not db_path:
+        return [], "REVENDEDORES_LOCAL_DB_PATH vacío"
+    if not os.path.isfile(db_path):
+        return [], f"No existe DB local: {db_path}"
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        rows_tables = cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'precios_%' ORDER BY name ASC"
+        ).fetchall()
+        table_names = [r[0] for r in rows_tables if r and r[0]]
+        out = []
+
+        for table in table_names:
+            if not re.match(r"^[A-Za-z0-9_]+$", table):
+                continue
+
+            info = cur.execute(f'PRAGMA table_info("{table}")').fetchall()
+            cols = [c[1] for c in info if c and len(c) > 1]
+            lower_map = {c.lower(): c for c in cols}
+
+            def pick_col(*candidates):
+                for key in candidates:
+                    col = lower_map.get(str(key).lower())
+                    if col:
+                        return col
+                return None
+
+            id_col = pick_col("id", "package_id", "paquete_id")
+            if not id_col:
+                continue
+
+            name_col = pick_col("nombre", "name", "titulo", "title", "package_name", "paquete")
+            active_col = pick_col("activo", "active", "habilitado", "enabled", "estado", "status")
+            product_id_col = pick_col("product_id", "producto_id", "game_id", "juego_id")
+            product_name_col = pick_col("product_name", "game_name", "juego", "producto", "categoria")
+
+            wanted_cols = [id_col]
+            for extra_col in (name_col, active_col, product_id_col, product_name_col):
+                if extra_col and extra_col not in wanted_cols:
+                    wanted_cols.append(extra_col)
+
+            select_cols = ", ".join([f'"{c}"' for c in wanted_cols])
+            data_rows = cur.execute(f'SELECT {select_cols} FROM "{table}"').fetchall()
+
+            default_product_name = table.replace("precios_", "").replace("_", " ").strip().title() or "Revendedores"
+            default_product_id = _synthetic_product_id(default_product_name)
+
+            for row in data_rows:
+                try:
+                    package_id = int(row[id_col])
+                except Exception:
+                    continue
+
+                product_id = None
+                if product_id_col:
+                    try:
+                        raw_val = row[product_id_col]
+                        if raw_val is not None and str(raw_val).strip() != "":
+                            product_id = int(raw_val)
+                    except Exception:
+                        product_id = None
+                if product_id is None:
+                    product_id = default_product_id
+
+                package_name = ""
+                if name_col:
+                    package_name = str(row[name_col] or "").strip()
+                if not package_name:
+                    package_name = f"Paquete {package_id}"
+
+                product_name = ""
+                if product_name_col:
+                    product_name = str(row[product_name_col] or "").strip()
+                if not product_name:
+                    product_name = default_product_name
+
+                active = True
+                if active_col:
+                    active = _normalize_bool_like(row[active_col], default=True)
+
+                raw_obj = {"source_table": table}
+                for c in wanted_cols:
+                    try:
+                        raw_obj[c] = row[c]
+                    except Exception:
+                        raw_obj[c] = None
+
+                out.append({
+                    "remote_product_id": product_id,
+                    "remote_product_name": product_name,
+                    "remote_package_id": package_id,
+                    "remote_package_name": package_name,
+                    "active": active,
+                    "raw_json": json.dumps(raw_obj, ensure_ascii=False),
+                })
+
+        conn.close()
+
+        if not out:
+            return [], "DB local sin tablas/filas compatibles de catálogo (precios_*)"
+
+        return out, None
+    except Exception as exc:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return [], f"Error leyendo DB local de Revendedores: {str(exc)}"
 
 
 def _get_order_auto_mapping(order_obj):
@@ -3207,6 +3349,10 @@ def admin_revendedores_sync_catalog():
     if not api_key:
         return jsonify({"ok": False, "error": "Configura REVENDEDORES_API_KEY o WEBB_API_KEY"}), 400
 
+    normalized = []
+    source = "api"
+    remote_error = ""
+
     try:
         resp = _requests_lib.get(
             f"{base_url}{catalog_path}",
@@ -3214,13 +3360,33 @@ def admin_revendedores_sync_catalog():
             headers={"X-API-Key": api_key},
             timeout=30,
         )
-        payload = resp.json()
+        if not resp.ok:
+            remote_error = f"HTTP {resp.status_code} en {catalog_path}"
+        else:
+            try:
+                payload = resp.json()
+            except Exception:
+                snippet = (resp.text or "").strip().replace("\n", " ")[:180]
+                remote_error = f"Respuesta no JSON en {catalog_path}: {snippet or 'vacía'}"
+            else:
+                normalized = _normalize_rev_catalog_payload(payload)
+                if not normalized:
+                    remote_error = f"Catálogo API sin ítems válidos en {catalog_path}"
     except Exception as exc:
-        return jsonify({"ok": False, "error": f"No se pudo consultar catálogo de Revendedores: {str(exc)}"}), 502
+        remote_error = f"No se pudo consultar catálogo API: {str(exc)}"
 
-    normalized = _normalize_rev_catalog_payload(payload)
+    fallback_error = ""
     if not normalized:
-        return jsonify({"ok": False, "error": "El catálogo remoto no devolvió items válidos"}), 400
+        local_db_path = _revendedores_local_db_path()
+        normalized, fallback_error = _load_rev_catalog_from_local_db(local_db_path)
+        if normalized:
+            source = "local_db"
+
+    if not normalized:
+        detail = remote_error or "Sin detalle API"
+        if fallback_error:
+            detail += f" | Fallback local: {fallback_error}"
+        return jsonify({"ok": False, "error": f"No se pudo consultar catálogo de Revendedores: {detail}"}), 502
 
     created = 0
     updated = 0
@@ -3260,6 +3426,7 @@ def admin_revendedores_sync_catalog():
 
     return jsonify({
         "ok": True,
+        "source": source,
         "created": created,
         "updated": updated,
         "total": len(normalized),
