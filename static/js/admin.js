@@ -285,6 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const affName = document.getElementById('aff-name');
   const affEmail = document.getElementById('aff-email');
   const affCode = document.getElementById('aff-code');
+  const affSecondaryCode = document.getElementById('aff-secondary-code');
   const affPass = document.getElementById('aff-pass');
   const affDiscMobile = document.getElementById('aff-disc-mobile');
   const affDiscGift = document.getElementById('aff-disc-gift');
@@ -1571,7 +1572,7 @@ window.refreshGallery = refreshGallery;
         <div class="pkg-header">
           <div>
             <div class="name">${u.name || '-'} <span class="badge">${u.active ? 'ACTIVO' : 'INACTIVO'}</span></div>
-            <div class="sub">Código: <strong>${u.code}</strong> · Email: <strong>${u.email || '-'}</strong> · Saldo: <strong>${fmtUSD(u.balance)}</strong> · Alcance: <strong>${u.scope || 'all'}${u.scope === 'package' && u.scope_package_id ? ' #'+u.scope_package_id : ''}</strong></div>
+            <div class="sub">Código: <strong>${u.code}</strong>${u.secondary_code ? ` · Adicional: <strong>${u.secondary_code}</strong>` : ''} · Email: <strong>${u.email || '-'}</strong> · Saldo: <strong>${fmtUSD(u.balance)}</strong> · Alcance: <strong>${u.scope || 'all'}${u.scope === 'package' && u.scope_package_id ? ' #'+u.scope_package_id : ''}</strong></div>
           </div>
           <div class="head-actions">
             <button class="btn btn-aff-save" data-id="${u.id}" type="button">Guardar</button>
@@ -1581,6 +1582,7 @@ window.refreshGallery = refreshGallery;
         <div class="pkg-content" style="display:grid; gap:6px;">
           <input class="aff-edit-name" type="text" value="${u.name || ''}" placeholder="Nombre" />
           <input class="aff-edit-code" type="text" value="${u.code || ''}" placeholder="Código" />
+          <input class="aff-edit-secondary-code" type="text" value="${u.secondary_code || ''}" placeholder="Código adicional (1 uso por ID)" />
           <input class="aff-edit-email" type="email" value="${u.email || ''}" placeholder="Email" />
           <input class="aff-edit-pass" type="password" value="" placeholder="Nueva contraseÃƒÆ’Ã‚Â±a (opcional)" />
           <div style="display:grid; gap:6px; grid-template-columns: 1fr 1fr;">
@@ -1607,6 +1609,7 @@ window.refreshGallery = refreshGallery;
       name: (affName && affName.value.trim()) || '',
       email: (affEmail && affEmail.value.trim()) || '',
       code: (affCode && affCode.value.trim()) || '',
+      secondary_code: (affSecondaryCode && affSecondaryCode.value.trim()) || '',
       password: (affPass && affPass.value) || '',
       discount_mobile_percent: (affDiscMobile && parseFloat(affDiscMobile.value || '0')) || 0,
       discount_gift_percent: (affDiscGift && parseFloat(affDiscGift.value || '0')) || 0,
@@ -1634,6 +1637,7 @@ window.refreshGallery = refreshGallery;
         if (affName) affName.value = '';
         if (affEmail) affEmail.value = '';
         if (affCode) affCode.value = '';
+        if (affSecondaryCode) affSecondaryCode.value = '';
         if (affPass) affPass.value = '';
         if (affDiscMobile) affDiscMobile.value = '';
         if (affDiscGift) affDiscGift.value = '';
@@ -1661,6 +1665,7 @@ window.refreshGallery = refreshGallery;
         const container = btnSave.closest('.pkg-item');
         const name = container.querySelector('.aff-edit-name')?.value.trim() || '';
         const code = container.querySelector('.aff-edit-code')?.value.trim() || '';
+        const secondary_code = container.querySelector('.aff-edit-secondary-code')?.value.trim() || '';
         const email = container.querySelector('.aff-edit-email')?.value.trim() || '';
         const password = container.querySelector('.aff-edit-pass')?.value || '';
         const discount_mobile_percent = parseFloat(container.querySelector('.aff-edit-disc-mobile')?.value || '0') || 0;
@@ -1672,7 +1677,7 @@ window.refreshGallery = refreshGallery;
         try {
           btnSave.disabled = true;
           const res = await fetch(`/admin/special/users/${id}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, code, email, password, discount_mobile_percent, discount_gift_percent, scope, scope_package_id, balance, active })
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, code, secondary_code, email, password, discount_mobile_percent, discount_gift_percent, scope, scope_package_id, balance, active })
           });
           if (!res.ok) throw new Error('No se pudo guardar');
           await fetchAffiliates();

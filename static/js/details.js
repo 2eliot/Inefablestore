@@ -1152,11 +1152,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!inputRefCode) return;
     const code = inputRefCode.value.trim();
     const gid = (() => { const r = document.getElementById('game-details'); return r ? r.getAttribute('data-game-id') : ''; })();
+    const cid = (!isGift && inputCustomerId) ? (inputCustomerId.value || '').trim() : '';
     validRef = null;
     if (!code) { if (refStatus) refStatus.textContent = ''; renderItems(allItems); return; }
     try {
       if (refStatus) { refStatus.style.color = '#94a3b8'; refStatus.textContent = 'Validando...'; }
-      const res = await fetch(`/store/special/validate?code=${encodeURIComponent(code)}&gid=${encodeURIComponent(gid||'')}`);
+      const qp = new URLSearchParams({ code, gid: gid || '' });
+      if (cid) qp.set('cid', cid);
+      const res = await fetch(`/store/special/validate?${qp.toString()}`);
       const data = await res.json();
       if (!res.ok || !data.ok || !data.allowed) throw new Error(data.error || 'Código inválido');
       validRef = { code, discount: Number(data.discount || 0), item_discounts: Array.isArray(data.item_discounts) ? data.item_discounts : null };

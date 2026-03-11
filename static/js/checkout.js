@@ -496,7 +496,10 @@ document.addEventListener('DOMContentLoaded', () => {
   (async function validateRefAtStart(){
     if (!qRefCode) return;
     try {
-      const res = await fetch(`/store/special/validate?code=${encodeURIComponent(qRefCode)}&gid=${encodeURIComponent(gid||'')}`);
+      const qCid = qs.get('cid') || '';
+      const qp = new URLSearchParams({ code: qRefCode, gid: gid || '' });
+      if (qCid) qp.set('cid', qCid);
+      const res = await fetch(`/store/special/validate?${qp.toString()}`);
       const data = await res.json();
       if (res.ok && data && data.ok && data.allowed) {
         window.__validRef = { code: qRefCode, discount: Number(data.discount || 0), item_discounts: Array.isArray(data.item_discounts) ? data.item_discounts : null };

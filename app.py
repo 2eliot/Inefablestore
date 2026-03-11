@@ -762,6 +762,7 @@ class SpecialUser(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), default="")
     code = db.Column(db.String(80), unique=True, nullable=False)
+    secondary_code = db.Column(db.String(80), unique=True, nullable=True)
     email = db.Column(db.String(200), unique=True, nullable=True)
     password_hash = db.Column(db.String(300), nullable=True)
     balance = db.Column(db.Float, default=0.0)  # earned commissions in USD
@@ -796,6 +797,39 @@ class AffiliateWithdrawal(db.Model):
     status = db.Column(db.String(20), default="pending")  # pending | approved | rejected
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     processed_at = db.Column(db.DateTime, nullable=True)
+
+
+class SpecialCodeUsage(db.Model):
+    __tablename__ = "special_code_usages"
+    id = db.Column(db.Integer, primary_key=True)
+    special_user_id = db.Column(db.Integer, nullable=False)
+    code = db.Column(db.String(80), nullable=False)  # normalized (lower)
+    customer_id = db.Column(db.String(120), nullable=False)
+    order_id = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("code", "customer_id", name="uq_special_code_customer"),
+    )
+
+
+def resolve_special_user_for_code(raw_code: str):
+    code = (raw_code or "").strip()
+    if not code:
+        return None, False
+    lowered = code.lower()
+    su = SpecialUser.query.filter(
+        db.func.lower(SpecialUser.code) == lowered,
+        SpecialUser.active == True,
+    ).first()
+    if su:
+        return su, False
+    su = SpecialUser.query.filter(
+        db.func.lower(SpecialUser.secondary_code) == lowered,
+        SpecialUser.active == True,
+    ).first()
+    if su:
+        return su, True
+    return None, False
 
 class User(db.Model):
     __tablename__ = "users"
@@ -887,6 +921,8 @@ with app.app_context():
             aff_cols = {row[1] for row in info_aff}
             if "email" not in aff_cols:
                 db.session.execute(text("ALTER TABLE special_users ADD COLUMN email TEXT"))
+            if "secondary_code" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN secondary_code TEXT"))
             if "password_hash" not in aff_cols:
                 db.session.execute(text("ALTER TABLE special_users ADD COLUMN password_hash TEXT"))
             if "discount_percent" not in aff_cols:
@@ -961,7 +997,7 @@ def admin_special_users_list():
     return jsonify({
         "ok": True,
         "users": [
-            {"id": u.id, "name": u.name, "code": u.code, "email": u.email or "", "balance": float(u.balance or 0.0), "active": bool(u.active),
+            {"id": u.id, "name": u.name, "code": u.code, "secondary_code": u.secondary_code or "", "email": u.email or "", "balance": float(u.balance or 0.0), "active": bool(u.active),
              "discount_percent": float(u.discount_percent or 0.0),
              "discount_mobile_percent": float(u.discount_mobile_percent or 0.0),
              "discount_gift_percent": float(u.discount_gift_percent or 0.0),
@@ -978,6 +1014,7 @@ def admin_special_users_create():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     code = (data.get("code") or "").strip()
+    secondary_code = (data.get("secondary_code") or "").strip()
     email = (data.get("email") or "").strip()
     password = (data.get("password") or "").strip()
     try:
@@ -994,6 +1031,13 @@ def admin_special_users_create():
         return jsonify({"ok": False, "error": "Código requerido"}), 400
     if SpecialUser.query.filter(db.func.lower(SpecialUser.code) == code.lower()).first():
         return jsonify({"ok": False, "error": "Código ya existe"}), 400
+    if secondary_code:
+        if SpecialUser.query.filter(db.func.lower(SpecialUser.code) == secondary_code.lower()).first():
+            return jsonify({"ok": False, "error": "El código adicional ya está en uso"}), 400
+        if SpecialUser.query.filter(db.func.lower(SpecialUser.secondary_code) == secondary_code.lower()).first():
+            return jsonify({"ok": False, "error": "El código adicional ya existe"}), 400
+        if secondary_code.lower() == code.lower():
+            return jsonify({"ok": False, "error": "El código adicional debe ser diferente al principal"}), 400
     if email:
         if SpecialUser.query.filter(db.func.lower(SpecialUser.email) == email.lower()).first():
             return jsonify({"ok": False, "error": "Email ya existe"}), 400
@@ -1003,7 +1047,7 @@ def admin_special_users_create():
             return float(data.get(key) or default)
         except Exception:
             return default
-    su = SpecialUser(name=name, code=code, email=email or None, active=bool(data.get("active", True)), balance=float(data.get("balance") or 0.0),
+    su = SpecialUser(name=name, code=code, secondary_code=secondary_code or None, email=email or None, active=bool(data.get("active", True)), balance=float(data.get("balance") or 0.0),
                      discount_percent=discount_percent,
                      discount_mobile_percent=fget("discount_mobile_percent", 0.0),
                      discount_gift_percent=fget("discount_gift_percent", 0.0),
@@ -1015,7 +1059,7 @@ def admin_special_users_create():
         su.password_hash = generate_password_hash(password)
     db.session.add(su)
     db.session.commit()
-    return jsonify({"ok": True, "user": {"id": su.id, "name": su.name, "code": su.code, "email": su.email or "", "balance": su.balance, "active": su.active,
+    return jsonify({"ok": True, "user": {"id": su.id, "name": su.name, "code": su.code, "secondary_code": su.secondary_code or "", "email": su.email or "", "balance": su.balance, "active": su.active,
             "discount_percent": su.discount_percent,
             "discount_mobile_percent": su.discount_mobile_percent,
             "discount_gift_percent": su.discount_gift_percent,
@@ -1037,7 +1081,23 @@ def admin_special_users_update(uid: int):
         if new_code and new_code.lower() != (su.code or '').lower():
             if SpecialUser.query.filter(db.func.lower(SpecialUser.code) == new_code.lower()).first():
                 return jsonify({"ok": False, "error": "Código ya existe"}), 400
+            if SpecialUser.query.filter(db.func.lower(SpecialUser.secondary_code) == new_code.lower()).first():
+                return jsonify({"ok": False, "error": "El código ya está en uso como código adicional"}), 400
             su.code = new_code
+    if "secondary_code" in data:
+        new_secondary = (data.get("secondary_code") or '').strip()
+        if not new_secondary:
+            su.secondary_code = None
+        else:
+            if new_secondary.lower() == (su.code or '').lower():
+                return jsonify({"ok": False, "error": "El código adicional debe ser diferente al principal"}), 400
+            current_secondary = (su.secondary_code or '').lower()
+            if new_secondary.lower() != current_secondary:
+                if SpecialUser.query.filter(db.func.lower(SpecialUser.code) == new_secondary.lower()).first():
+                    return jsonify({"ok": False, "error": "El código adicional ya está en uso"}), 400
+                if SpecialUser.query.filter(db.func.lower(SpecialUser.secondary_code) == new_secondary.lower()).first():
+                    return jsonify({"ok": False, "error": "El código adicional ya existe"}), 400
+            su.secondary_code = new_secondary
     if "email" in data:
         new_email = (data.get("email") or '').strip()
         if new_email and new_email.lower() != ((su.email or '').lower()):
@@ -1312,6 +1372,7 @@ def admin_special_users_delete(uid: int):
 @app.route("/store/special/validate")
 def store_special_validate():
     code = (request.args.get("code") or '').strip()
+    customer_id = (request.args.get("customer_id") or request.args.get("cid") or '').strip()
     gid_raw = request.args.get("gid")
     try:
         gid = int(gid_raw) if gid_raw is not None and f"{gid_raw}" != '' else None
@@ -1319,13 +1380,24 @@ def store_special_validate():
         gid = None
     if not code:
         return jsonify({"ok": False, "error": "Código vacío"}), 400
-    su = SpecialUser.query.filter(db.func.lower(SpecialUser.code) == code.lower(), SpecialUser.active == True).first()
+    su, is_secondary_code = resolve_special_user_for_code(code)
     if not su:
         return jsonify({"ok": False, "error": "Código inválido"}), 404
     # Enforce scope if restricted to a package
     if (su.scope or 'all') == 'package':
         if not gid or (su.scope_package_id and su.scope_package_id != gid):
             return jsonify({"ok": False, "error": "El código no aplica a este juego"}), 400
+    if is_secondary_code:
+        if not customer_id:
+            return jsonify({"ok": False, "error": "Debes ingresar el ID del jugador para usar este código"}), 400
+        used = SpecialCodeUsage.query.filter(
+            SpecialCodeUsage.code == code.lower(),
+            db.func.lower(SpecialCodeUsage.customer_id) == customer_id.lower(),
+        ).first()
+        if used:
+            return jsonify({"ok": False, "error": "Este código adicional ya fue usado por este ID de jugador"}), 400
+        return jsonify({"ok": True, "allowed": True, "discount": 0.10, "one_time": True})
+
     # Determine category-based discount. For mobile, build per-item tiered discounts (low price -> higher %).
     disc = float(su.discount_percent or 0.0)
     item_discounts = []  # [{item_id, discount (fraction)}]
@@ -2070,51 +2142,63 @@ def create_order():
         # If client sent multiple items, store them in items_json
         # Apply influencer discount if special_code provided
         discount_fraction = 0.0
+        used_secondary_code = False
+        normalized_secondary_code = ""
         item_discounts_map = {}  # iid -> discount fraction for tiered discounts (mobile)
         if special_code:
             try:
-                su = SpecialUser.query.filter(
-                    db.func.lower(SpecialUser.code) == special_code.lower(),
-                    SpecialUser.active == True
-                ).first()
+                su, is_secondary_code = resolve_special_user_for_code(special_code)
                 if su:
-                    discount_fraction = float(su.discount_percent or 0.0) / 100.0
-                    # Check category-specific discounts
-                    try:
-                        pkg = StorePackage.query.get(gid)
-                        if pkg:
-                            cat = (pkg.category or '').lower()
-                            if cat == 'gift' and float(su.discount_gift_percent or 0.0) > 0:
-                                discount_fraction = float(su.discount_gift_percent or 0.0) / 100.0
-                            elif cat == 'mobile':
-                                # For mobile, calculate tiered per-item discounts
-                                max_pct = 10.0
-                                min_pct = 4.0
-                                try:
-                                    mset = float(su.discount_mobile_percent or 0.0)
-                                    if mset > 0:
-                                        max_pct = max(min(mset, 100.0), min_pct)
-                                except Exception:
-                                    pass
-                                # Get all items sorted by price
-                                all_pkg_items = GamePackageItem.query.filter_by(
-                                    store_package_id=gid, active=True
-                                ).order_by(GamePackageItem.price.asc()).all()
-                                n = len(all_pkg_items)
-                                if n >= 1:
-                                    if n == 1:
-                                        item_discounts_map[all_pkg_items[0].id] = max_pct / 100.0
-                                    else:
-                                        step = (max_pct - min_pct) / (n - 1)
-                                        for idx, it in enumerate(all_pkg_items):
-                                            pct = max_pct - step * idx
-                                            pct = max(min_pct, min(max_pct, pct))
-                                            item_discounts_map[it.id] = pct / 100.0
-                                # Use first item discount as general if not overridden
-                                if all_pkg_items:
-                                    discount_fraction = item_discounts_map.get(all_pkg_items[0].id, discount_fraction)
-                    except Exception:
-                        pass
+                    if is_secondary_code:
+                        if not customer_id:
+                            return jsonify({"ok": False, "error": "El código adicional requiere ID de jugador"}), 400
+                        already_used = SpecialCodeUsage.query.filter(
+                            SpecialCodeUsage.code == special_code.lower(),
+                            db.func.lower(SpecialCodeUsage.customer_id) == customer_id.lower(),
+                        ).first()
+                        if already_used:
+                            return jsonify({"ok": False, "error": "Este código adicional ya fue usado por este ID de jugador"}), 400
+                        discount_fraction = 0.10
+                        used_secondary_code = True
+                        normalized_secondary_code = special_code.lower()
+                    else:
+                        discount_fraction = float(su.discount_percent or 0.0) / 100.0
+                        # Check category-specific discounts
+                        try:
+                            pkg = StorePackage.query.get(gid)
+                            if pkg:
+                                cat = (pkg.category or '').lower()
+                                if cat == 'gift' and float(su.discount_gift_percent or 0.0) > 0:
+                                    discount_fraction = float(su.discount_gift_percent or 0.0) / 100.0
+                                elif cat == 'mobile':
+                                    # For mobile, calculate tiered per-item discounts
+                                    max_pct = 10.0
+                                    min_pct = 4.0
+                                    try:
+                                        mset = float(su.discount_mobile_percent or 0.0)
+                                        if mset > 0:
+                                            max_pct = max(min(mset, 100.0), min_pct)
+                                    except Exception:
+                                        pass
+                                    # Get all items sorted by price
+                                    all_pkg_items = GamePackageItem.query.filter_by(
+                                        store_package_id=gid, active=True
+                                    ).order_by(GamePackageItem.price.asc()).all()
+                                    n = len(all_pkg_items)
+                                    if n >= 1:
+                                        if n == 1:
+                                            item_discounts_map[all_pkg_items[0].id] = max_pct / 100.0
+                                        else:
+                                            step = (max_pct - min_pct) / (n - 1)
+                                            for idx, it in enumerate(all_pkg_items):
+                                                pct = max_pct - step * idx
+                                                pct = max(min_pct, min(max_pct, pct))
+                                                item_discounts_map[it.id] = pct / 100.0
+                                    # Use first item discount as general if not overridden
+                                    if all_pkg_items:
+                                        discount_fraction = item_discounts_map.get(all_pkg_items[0].id, discount_fraction)
+                        except Exception:
+                            pass
             except Exception:
                 pass
         
@@ -2154,12 +2238,20 @@ def create_order():
         # Try to resolve special user id now for convenience
         try:
             if special_code:
-                su = SpecialUser.query.filter(db.func.lower(SpecialUser.code) == special_code.lower(), SpecialUser.active == True).first()
+                su, _ = resolve_special_user_for_code(special_code)
                 if su:
                     o.special_user_id = su.id
         except Exception:
             pass
         db.session.add(o)
+        db.session.flush()
+        if used_secondary_code and o.special_user_id and customer_id:
+            db.session.add(SpecialCodeUsage(
+                special_user_id=o.special_user_id,
+                code=normalized_secondary_code,
+                customer_id=customer_id,
+                order_id=o.id,
+            ))
         db.session.commit()
         # Notify admin by email about new pending order
         try:
