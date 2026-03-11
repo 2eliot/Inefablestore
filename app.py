@@ -1110,8 +1110,24 @@ def _is_id_game_catalog_entry(ent):
     package_name = str(ent.get("remote_package_name") or "").strip().lower()
     raw_json = str(ent.get("raw_json") or "").strip().lower()
 
-    # Prefer source-table signal from fallback DB: precios_*_id
-    if "source_table" in raw_json and "_id" in raw_json:
+    # Prefer source-table signal from fallback DB: precios_*
+    # Many dynamic ID games may not include literal "id" in their labels.
+    source_table_match = re.search(r'"source_table"\s*:\s*"([a-z0-9_]+)"', raw_json)
+    source_table = source_table_match.group(1) if source_table_match else ""
+    if source_table.startswith("precios_"):
+        non_id_tokens = (
+            "gift", "tarjeta", "card", "steam", "xbox", "nintendo", "apple", "itunes", "google_play", "googleplay", "psn"
+        )
+        if any(tok in source_table for tok in non_id_tokens):
+            return False
+        return True
+
+    # Explicit ID-game signals in payload
+    id_signals = (
+        "player_id", "user_id", "uid", "zone_id", "server_id",
+        "id_jugador", "id_usuario", "game_uid", "open_id", "character_id"
+    )
+    if any(sig in raw_json for sig in id_signals):
         return True
 
     # Generic signal for API payloads where names include "ID"
