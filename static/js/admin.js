@@ -279,6 +279,123 @@ document.addEventListener('DOMContentLoaded', () => {
   const ordersList = document.getElementById('orders-list');
   const btnOrdersWdRefresh = document.getElementById('btn-orders-wd-refresh');
   const ordersWdList = document.getElementById('orders-wd-list');
+  // Revendedores mapping elements
+  const btnRevSync = document.getElementById('btn-rev-sync');
+  const btnRevRefresh = document.getElementById('btn-rev-refresh');
+  const btnRevSave = document.getElementById('btn-rev-save');
+  const revStorePackage = document.getElementById('rev-store-package');
+  const revMapList = document.getElementById('rev-map-list');
+  let revMappingData = null;
+
+  async function fetchRevMappingData(storePackageId) {
+    if (!revMapList) return;
+    revMapList.innerHTML = '<div class="empty-state"><p>Cargando mapeo...</p></div>';
+    try {
+      const qs = storePackageId ? `?store_package_id=${encodeURIComponent(storePackageId)}` : '';
+      const res = await fetch(`/admin/revendedores/mapping-data${qs}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar mapeo');
+      revMappingData = data;
+      renderRevMapping();
+    } catch (e) {
+      revMapList.innerHTML = `<div class="empty-state"><p>${e.message || 'Error'}</p></div>`;
+    }
+  }
+
+  function renderRevMapping() {
+    if (!revMapList || !revStorePackage || !revMappingData) return;
+    const pkgs = Array.isArray(revMappingData.store_packages) ? revMappingData.store_packages : [];
+    const items = Array.isArray(revMappingData.store_items) ? revMappingData.store_items : [];
+    const remoteCatalog = Array.isArray(revMappingData.remote_catalog) ? revMappingData.remote_catalog : [];
+
+    revStorePackage.innerHTML = '<option value="">— Selecciona un juego —</option>';
+    pkgs.forEach((p) => {
+      const opt = document.createElement('option');
+      opt.value = String(p.id);
+      opt.textContent = `${p.name || ('Juego #' + p.id)}`;
+      if (parseInt(p.id, 10) === parseInt(revMappingData.selected_store_package_id || 0, 10)) {
+        opt.selected = true;
+      }
+      revStorePackage.appendChild(opt);
+    });
+
+    if (!items.length) {
+      revMapList.innerHTML = '<div class="empty-state"><h3>Sin ítems</h3><p>Este juego no tiene ítems activos para mapear.</p></div>';
+      return;
+    }
+
+    let html = '';
+    items.forEach((it) => {
+      const mapping = it.mapping || null;
+      const mappedCatalogId = remoteCatalog.find((r) => {
+        if (!mapping) return false;
+        return parseInt(r.remote_package_id, 10) === parseInt(mapping.remote_package_id, 10)
+          && parseInt(r.remote_product_id || 0, 10) === parseInt(mapping.remote_product_id || 0, 10);
+      })?.catalog_id;
+
+      html += `
+        <div class="order-card rev-map-row" data-store-item-id="${it.id}">
+          <div class="order-head">
+            <div>
+              <div class="order-id">${it.title || ('Item #' + it.id)}</div>
+              <div class="order-meta">
+                <span>ID ${it.id}</span>
+                <span>USD ${Number(it.price || 0).toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+          <div class="row-actions" style="display:grid; gap:8px;">
+            <select class="input rev-catalog-select" data-store-item-id="${it.id}">
+              <option value="">Manual (sin mapeo automático)</option>
+              ${remoteCatalog.map((rc) => {
+                const selected = mappedCatalogId && parseInt(mappedCatalogId, 10) === parseInt(rc.catalog_id, 10) ? 'selected' : '';
+                const pname = (rc.remote_product_name || '').trim();
+                const pkgName = (rc.remote_package_name || '').trim();
+                const txt = `${pname ? (pname + ' · ') : ''}${pkgName || ('Paquete ' + rc.remote_package_id)} [pkg:${rc.remote_package_id}]`;
+                return `<option value="${rc.catalog_id}" ${selected}>${txt}</option>`;
+              }).join('')}
+            </select>
+            <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#cbd5e1;">
+              <input type="checkbox" class="rev-auto-enabled" data-store-item-id="${it.id}" ${(mapping && mapping.auto_enabled) ? 'checked' : ''}>
+              Activar recarga automática para este ítem
+            </label>
+          </div>
+        </div>
+      `;
+    });
+    revMapList.innerHTML = html;
+  }
+
+  async function syncRevCatalog() {
+    const res = await fetch('/admin/revendedores/sync', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo sincronizar catálogo');
+    return data;
+  }
+
+  async function saveRevMappings() {
+    if (!revMapList) return;
+    const rows = Array.from(revMapList.querySelectorAll('.rev-map-row'));
+    const entries = rows.map((row) => {
+      const storeItemId = parseInt(row.getAttribute('data-store-item-id') || '0', 10);
+      const sel = row.querySelector('.rev-catalog-select');
+      const chk = row.querySelector('.rev-auto-enabled');
+      return {
+        store_item_id: storeItemId,
+        catalog_id: sel ? (sel.value || '') : '',
+        auto_enabled: !!(chk && chk.checked),
+      };
+    }).filter((x) => x.store_item_id > 0);
+
+    const res = await fetch('/admin/revendedores/mappings/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar mapeo');
+    return data;
+  }
   // Affiliates elements
   const btnAffRefresh = document.getElementById('btn-aff-refresh');
   const affForm = document.getElementById('aff-form');
@@ -795,9 +912,52 @@ window.fetchPayments = fetchPayments;
         if (target === '#tab-config') { fetchSiteName(); fetchLogo(); fetchMidBanner(); fetchThanksImage(); fetchActiveLoginGame(); fetchPayments(); }
         if (target === '#tab-affiliates') { fetchAffiliates(); fetchAffWithdrawals(); populatePackagesForAffiliateScope && populatePackagesForAffiliateScope(); }
         if (target === '#tab-packages') { fetchPackages(); }
+        if (target === '#tab-rev-map') { fetchRevMappingData(revStorePackage ? revStorePackage.value : ''); }
         if (target === '#tab-stats') { fetchStatsPackages(); fetchGlobalStatsSummary(); }
         if (target === '#tab-blocked') { fetchBlocked(); }
       });
+    });
+  }
+
+  if (revStorePackage) {
+    revStorePackage.addEventListener('change', () => {
+      fetchRevMappingData(revStorePackage.value || '');
+    });
+  }
+
+  if (btnRevRefresh) {
+    btnRevRefresh.addEventListener('click', () => {
+      fetchRevMappingData(revStorePackage ? revStorePackage.value : '');
+    });
+  }
+
+  if (btnRevSync) {
+    btnRevSync.addEventListener('click', async () => {
+      try {
+        btnRevSync.disabled = true;
+        const data = await syncRevCatalog();
+        toast(`Catálogo sincronizado (${data.total || 0} items)`);
+        await fetchRevMappingData(revStorePackage ? revStorePackage.value : '');
+      } catch (e) {
+        toast(e.message || 'Error al sincronizar');
+      } finally {
+        btnRevSync.disabled = false;
+      }
+    });
+  }
+
+  if (btnRevSave) {
+    btnRevSave.addEventListener('click', async () => {
+      try {
+        btnRevSave.disabled = true;
+        await saveRevMappings();
+        toast('Mapeo guardado');
+        await fetchRevMappingData(revStorePackage ? revStorePackage.value : '');
+      } catch (e) {
+        toast(e.message || 'Error al guardar mapeo');
+      } finally {
+        btnRevSave.disabled = false;
+      }
     });
   }
 
@@ -1737,6 +1897,8 @@ window.refreshGallery = refreshGallery;
       const tile = document.createElement('div');
       tile.className = 'order-tile';
       tile.setAttribute('data-customer-name', o.customer_name || '');
+      const isAutoMapped = !!o.is_auto_mapped;
+      tile.setAttribute('data-is-auto', isAutoMapped ? '1' : '0');
       const when = new Date(o.created_at).toLocaleString();
       const juego = o.package_name || `#${o.store_package_id}`;
       const itemsArr = Array.isArray(o.items) ? o.items : [];
@@ -1774,7 +1936,7 @@ window.refreshGallery = refreshGallery;
           ${(() => {
             const _ffId = window._WEBB_FF_GAME_ID ? parseInt(window._WEBB_FF_GAME_ID) : null;
             const _isFF = _ffId && o.store_package_id === _ffId;
-            let _isAutomated = false;
+            let _isAutomated = !!o.is_auto_mapped;
             if (_isFF && o.item_id && window._WEBB_FF_ITEM_MAP) {
               for (const pair of window._WEBB_FF_ITEM_MAP.split(',')) {
                 const parts = pair.trim().split(':');
@@ -1933,10 +2095,8 @@ window.refreshGallery = refreshGallery;
       // Confirmation for FF auto-recharge
       if (btnA) {
         const tile = btnA.closest('.order-tile');
-        const ffGameId = window._WEBB_FF_GAME_ID ? parseInt(window._WEBB_FF_GAME_ID) : null;
-        const tileText = tile ? (tile.textContent || '').toLowerCase() : '';
-        const isFFTile = (ffGameId && tileText.includes('free fire')) || tileText.includes('free fire');
-        if (isFFTile) {
+        const isAutoTile = tile && tile.getAttribute('data-is-auto') === '1';
+        if (isAutoTile) {
           const _game = tile ? (tile.querySelector('.game-name')?.textContent || '').trim() : '';
           const _pid = tile ? (tile.querySelector('.hex')?.textContent || '').trim() : '';
           const _ref = tile ? (tile.querySelector('.ref-value')?.textContent || '').trim() : '';

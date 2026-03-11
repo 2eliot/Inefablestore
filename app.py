@@ -743,6 +743,36 @@ class GamePackageItem(db.Model):
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
+class RevendedoresCatalogItem(db.Model):
+    __tablename__ = "rev_catalog_items"
+    id = db.Column(db.Integer, primary_key=True)
+    remote_product_id = db.Column(db.Integer, nullable=True)
+    remote_product_name = db.Column(db.String(200), default="")
+    remote_package_id = db.Column(db.Integer, nullable=False)
+    remote_package_name = db.Column(db.String(250), default="")
+    active = db.Column(db.Boolean, default=True)
+    raw_json = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("remote_product_id", "remote_package_id", name="uq_rev_product_package"),
+    )
+
+
+class RevendedoresItemMapping(db.Model):
+    __tablename__ = "rev_item_mappings"
+    id = db.Column(db.Integer, primary_key=True)
+    store_package_id = db.Column(db.Integer, nullable=False)
+    store_item_id = db.Column(db.Integer, unique=True, nullable=False)
+    remote_product_id = db.Column(db.Integer, nullable=True)
+    remote_package_id = db.Column(db.Integer, nullable=False)
+    remote_label = db.Column(db.String(250), default="")
+    auto_enabled = db.Column(db.Boolean, default=False)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class ImageAsset(db.Model):
     __tablename__ = "images"
     id = db.Column(db.Integer, primary_key=True)
@@ -830,6 +860,101 @@ def resolve_special_user_for_code(raw_code: str):
     if su:
         return su, True
     return None, False
+
+
+def _revendedores_env():
+    base_url = (os.environ.get("REVENDEDORES_BASE_URL") or os.environ.get("WEBB_URL") or "").strip().rstrip("/")
+    api_key = (os.environ.get("REVENDEDORES_API_KEY") or os.environ.get("WEBB_API_KEY") or "").strip()
+    catalog_path = (os.environ.get("REVENDEDORES_CATALOG_PATH") or "/api/catalog/active").strip()
+    recharge_path = (os.environ.get("REVENDEDORES_RECHARGE_PATH") or "/api/recharge/dynamic").strip()
+    if not catalog_path.startswith("/"):
+        catalog_path = "/" + catalog_path
+    if not recharge_path.startswith("/"):
+        recharge_path = "/" + recharge_path
+    return base_url, api_key, catalog_path, recharge_path
+
+
+def _normalize_rev_catalog_payload(payload):
+    if not isinstance(payload, dict):
+        return []
+
+    candidates = []
+    for key in ("items", "packages", "catalog"):
+        val = payload.get(key)
+        if isinstance(val, list):
+            candidates = val
+            break
+    if not candidates and isinstance(payload.get("data"), list):
+        candidates = payload.get("data")
+    if not candidates and isinstance(payload.get("data"), dict):
+        nested = payload.get("data") or {}
+        for key in ("items", "packages", "catalog"):
+            val = nested.get(key)
+            if isinstance(val, list):
+                candidates = val
+                break
+
+    out = []
+    for raw in candidates:
+        if not isinstance(raw, dict):
+            continue
+        package_id_raw = raw.get("package_id", raw.get("id", raw.get("gamepoint_package_id")))
+        try:
+            package_id = int(package_id_raw)
+        except Exception:
+            continue
+
+        product_id = None
+        product_id_raw = raw.get("product_id", raw.get("productid", raw.get("game_id")))
+        try:
+            if product_id_raw is not None and str(product_id_raw).strip() != "":
+                product_id = int(product_id_raw)
+        except Exception:
+            product_id = None
+
+        package_name = (
+            raw.get("package_name")
+            or raw.get("name")
+            or raw.get("title")
+            or raw.get("item")
+            or f"Paquete {package_id}"
+        )
+        product_name = (
+            raw.get("product_name")
+            or raw.get("game_name")
+            or raw.get("product")
+            or ""
+        )
+
+        active_val = raw.get("active", raw.get("activo", True))
+        if isinstance(active_val, str):
+            active = active_val.strip().lower() in ("1", "true", "yes", "si", "sí", "activo", "active")
+        else:
+            active = bool(active_val)
+
+        out.append({
+            "remote_product_id": product_id,
+            "remote_product_name": str(product_name or "").strip(),
+            "remote_package_id": package_id,
+            "remote_package_name": str(package_name or "").strip(),
+            "active": active,
+            "raw_json": json.dumps(raw, ensure_ascii=False),
+        })
+
+    return out
+
+
+def _get_order_auto_mapping(order_obj):
+    try:
+        if not order_obj or not order_obj.item_id:
+            return None
+        return RevendedoresItemMapping.query.filter_by(
+            store_item_id=int(order_obj.item_id),
+            active=True,
+            auto_enabled=True,
+        ).first()
+    except Exception:
+        return None
 
 class User(db.Model):
     __tablename__ = "users"
@@ -2379,6 +2504,19 @@ def admin_orders_list():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     orders = Order.query.order_by(Order.created_at.desc()).all()
+    item_ids = sorted({int(x.item_id) for x in orders if x.item_id})
+    auto_map_ids = set()
+    if item_ids:
+        try:
+            mapped_rows = RevendedoresItemMapping.query.filter(
+                RevendedoresItemMapping.store_item_id.in_(item_ids),
+                RevendedoresItemMapping.active == True,
+                RevendedoresItemMapping.auto_enabled == True,
+            ).all()
+            auto_map_ids = {int(r.store_item_id) for r in mapped_rows}
+        except Exception:
+            auto_map_ids = set()
+
     out = []
     for x in orders:
         pkg = StorePackage.query.get(x.store_package_id)
@@ -2411,6 +2549,7 @@ def admin_orders_list():
             "item_id": x.item_id,
             "item_title": it.title if it else "",
             "item_price_usd": (it.price if it else 0.0),
+            "is_auto_mapped": bool(x.item_id and int(x.item_id) in auto_map_ids),
             "items": items_payload,
             "customer_id": x.customer_id,
             "customer_zone": x.customer_zone or "",
@@ -2690,91 +2829,142 @@ def admin_orders_set_status(oid: int):
     except Exception:
         pass
 
-    # ── Auto-recarga en Web B via API dedicada ──
-    # Variables requeridas: WEBB_URL, WEBB_API_KEY, WEBB_FF_GAME_ID, WEBB_FF_ITEM_MAP
+    # ── Auto-recarga en Revendedores por mapeo DB (nuevo módulo) ──
+    # Variables: REVENDEDORES_BASE_URL / WEBB_URL, REVENDEDORES_API_KEY / WEBB_API_KEY,
+    #            REVENDEDORES_RECHARGE_PATH (default /api/recharge/dynamic)
     webb_result = None
     webb_error = None
+    used_new_mapping = False
     try:
-        webb_url     = os.environ.get("WEBB_URL", "").strip().rstrip("/")
-        webb_api_key = os.environ.get("WEBB_API_KEY", "").strip()
-        webb_ff_game_id_raw = os.environ.get("WEBB_FF_GAME_ID", "").strip()
-        print(f"[WEBB DEBUG] url={webb_url!r} key={bool(webb_api_key)} game_id={webb_ff_game_id_raw!r} order_pkg={o.store_package_id} item_id={o.item_id} status={status}")
+        webb_url, webb_api_key, _, recharge_path = _revendedores_env()
+        mapping = _get_order_auto_mapping(o)
 
-        recarga_index  = data.get("recarga_index")
-        total_recargas = data.get("total_recargas", 1)
-        try:
-            total_recargas = int(total_recargas)
-        except Exception:
-            total_recargas = 1
-
-        # Resolver package_id de Web B desde el item del pedido
-        package_id_webb = None
-        is_ff_order = False
-        if webb_url and webb_api_key and webb_ff_game_id_raw:
-            try:
-                webb_ff_game_id = int(webb_ff_game_id_raw)
-            except ValueError:
-                webb_ff_game_id = None
-
-            if webb_ff_game_id and o.store_package_id == webb_ff_game_id:
-                is_ff_order = True
-                try:
-                    item_map_raw = os.environ.get("WEBB_FF_ITEM_MAP", "").strip()
-                    if item_map_raw and o.item_id:
-                        for pair in item_map_raw.split(","):
-                            pair = pair.strip()
-                            if ":" not in pair:
-                                continue
-                            a_id_str, b_pkg_str = pair.split(":", 1)
-                            if int(a_id_str.strip()) == int(o.item_id):
-                                package_id_webb = int(b_pkg_str.strip())
-                                break
-                except Exception:
-                    pass
-
-        should_recharge = (
-            is_ff_order
-            and package_id_webb and 1 <= package_id_webb <= 9
-            and status == "approved"
-            and o.status in ("approved", "delivered")
-        )
-        print(f"[WEBB DEBUG] is_ff={is_ff_order} pkg_webb={package_id_webb} should={should_recharge} o.status={o.status}")
-
-        if should_recharge:
+        if mapping and status == "approved" and o.status in ("approved", "delivered"):
+            used_new_mapping = True
             player_id = (o.customer_id or "").strip()
-            if player_id:
+            if not webb_url or not webb_api_key:
+                webb_error = "Falta configurar REVENDEDORES_BASE_URL/REVENDEDORES_API_KEY"
+            elif not player_id:
+                webb_error = "No se encontró ID de jugador para recarga automática"
+            else:
+                payload = {
+                    "api_key": webb_api_key,
+                    "player_id": player_id,
+                    "package_id": str(mapping.remote_package_id),
+                }
+                if mapping.remote_product_id:
+                    payload["product_id"] = str(mapping.remote_product_id)
+                if (o.customer_zone or "").strip():
+                    payload["player_id2"] = (o.customer_zone or "").strip()
+
                 try:
-                    # Llamada directa a la API dedicada (sin sesión ni nonce)
                     api_resp = _requests_lib.post(
-                        f"{webb_url}/api/recharge/freefire_id",
-                        data={
-                            "api_key":    webb_api_key,
-                            "player_id":  player_id,
-                            "package_id": str(package_id_webb),
-                        },
+                        f"{webb_url}{recharge_path}",
+                        data=payload,
                         timeout=60,
                     )
                     api_data = api_resp.json()
                     if api_data.get("ok"):
-                        is_last = (recarga_index is None) or (int(recarga_index) + 1 >= total_recargas)
-                        if is_last:
-                            o.status = "delivered"
+                        o.status = "delivered"
                         db.session.commit()
                         webb_result = {
                             "pin": "",
-                            "package": f"Paquete {package_id_webb}",
-                            "player_name": api_data.get("player_name", ""),
+                            "package": mapping.remote_label or f"Paquete {mapping.remote_package_id}",
                             "pins_so_far": [],
-                            "is_last": is_last,
+                            "is_last": True,
                         }
                     else:
-                        webb_error = api_data.get("error") or "Recarga no completada en Web B"
+                        webb_error = api_data.get("error") or "Recarga no completada en Revendedores"
                 except _requests_lib.exceptions.Timeout:
-                    webb_error = "Web B no respondió en 60 segundos"
+                    webb_error = "Revendedores no respondió en 60 segundos"
                 except Exception as exc:
                     webb_error = str(exc)
     except Exception as exc:
         webb_error = str(exc)
+
+    # ── Fallback al flujo legacy de Free Fire via env map ──
+    if not used_new_mapping and not webb_result:
+        try:
+            webb_url     = os.environ.get("WEBB_URL", "").strip().rstrip("/")
+            webb_api_key = os.environ.get("WEBB_API_KEY", "").strip()
+            webb_ff_game_id_raw = os.environ.get("WEBB_FF_GAME_ID", "").strip()
+            print(f"[WEBB DEBUG] url={webb_url!r} key={bool(webb_api_key)} game_id={webb_ff_game_id_raw!r} order_pkg={o.store_package_id} item_id={o.item_id} status={status}")
+
+            recarga_index  = data.get("recarga_index")
+            total_recargas = data.get("total_recargas", 1)
+            try:
+                total_recargas = int(total_recargas)
+            except Exception:
+                total_recargas = 1
+
+            # Resolver package_id de Web B desde el item del pedido
+            package_id_webb = None
+            is_ff_order = False
+            if webb_url and webb_api_key and webb_ff_game_id_raw:
+                try:
+                    webb_ff_game_id = int(webb_ff_game_id_raw)
+                except ValueError:
+                    webb_ff_game_id = None
+
+                if webb_ff_game_id and o.store_package_id == webb_ff_game_id:
+                    is_ff_order = True
+                    try:
+                        item_map_raw = os.environ.get("WEBB_FF_ITEM_MAP", "").strip()
+                        if item_map_raw and o.item_id:
+                            for pair in item_map_raw.split(","):
+                                pair = pair.strip()
+                                if ":" not in pair:
+                                    continue
+                                a_id_str, b_pkg_str = pair.split(":", 1)
+                                if int(a_id_str.strip()) == int(o.item_id):
+                                    package_id_webb = int(b_pkg_str.strip())
+                                    break
+                    except Exception:
+                        pass
+
+            should_recharge = (
+                is_ff_order
+                and package_id_webb and 1 <= package_id_webb <= 9
+                and status == "approved"
+                and o.status in ("approved", "delivered")
+            )
+            print(f"[WEBB DEBUG] is_ff={is_ff_order} pkg_webb={package_id_webb} should={should_recharge} o.status={o.status}")
+
+            if should_recharge:
+                player_id = (o.customer_id or "").strip()
+                if player_id:
+                    try:
+                        # Llamada directa a la API dedicada (sin sesión ni nonce)
+                        api_resp = _requests_lib.post(
+                            f"{webb_url}/api/recharge/freefire_id",
+                            data={
+                                "api_key":    webb_api_key,
+                                "player_id":  player_id,
+                                "package_id": str(package_id_webb),
+                            },
+                            timeout=60,
+                        )
+                        api_data = api_resp.json()
+                        if api_data.get("ok"):
+                            is_last = (recarga_index is None) or (int(recarga_index) + 1 >= total_recargas)
+                            if is_last:
+                                o.status = "delivered"
+                            db.session.commit()
+                            webb_result = {
+                                "pin": "",
+                                "package": f"Paquete {package_id_webb}",
+                                "player_name": api_data.get("player_name", ""),
+                                "pins_so_far": [],
+                                "is_last": is_last,
+                            }
+                        else:
+                            webb_error = api_data.get("error") or "Recarga no completada en Web B"
+                    except _requests_lib.exceptions.Timeout:
+                        webb_error = "Web B no respondió en 60 segundos"
+                    except Exception as exc:
+                        webb_error = str(exc)
+        except Exception as exc:
+            webb_error = str(exc)
 
     response_payload = {"ok": True}
     if webb_result:
@@ -2971,6 +3161,227 @@ function generateMap() {
 </html>"""
 
     return html
+
+
+@app.route("/admin/revendedores/sync", methods=["POST"])
+def admin_revendedores_sync_catalog():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    base_url, api_key, catalog_path, _ = _revendedores_env()
+    if not base_url:
+        return jsonify({"ok": False, "error": "Configura REVENDEDORES_BASE_URL o WEBB_URL"}), 400
+    if not api_key:
+        return jsonify({"ok": False, "error": "Configura REVENDEDORES_API_KEY o WEBB_API_KEY"}), 400
+
+    try:
+        resp = _requests_lib.get(
+            f"{base_url}{catalog_path}",
+            params={"api_key": api_key},
+            headers={"X-API-Key": api_key},
+            timeout=30,
+        )
+        payload = resp.json()
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo consultar catálogo de Revendedores: {str(exc)}"}), 502
+
+    normalized = _normalize_rev_catalog_payload(payload)
+    if not normalized:
+        return jsonify({"ok": False, "error": "El catálogo remoto no devolvió items válidos"}), 400
+
+    created = 0
+    updated = 0
+    seen_keys = set()
+
+    try:
+        for ent in normalized:
+            key = (ent.get("remote_product_id"), ent.get("remote_package_id"))
+            seen_keys.add(key)
+            row = RevendedoresCatalogItem.query.filter_by(
+                remote_product_id=ent.get("remote_product_id"),
+                remote_package_id=ent.get("remote_package_id"),
+            ).first()
+            if not row:
+                row = RevendedoresCatalogItem(**ent)
+                db.session.add(row)
+                created += 1
+            else:
+                row.remote_product_name = ent.get("remote_product_name", "")
+                row.remote_package_name = ent.get("remote_package_name", "")
+                row.active = bool(ent.get("active"))
+                row.raw_json = ent.get("raw_json", "")
+                updated += 1
+
+        for row in RevendedoresCatalogItem.query.all():
+            key = (row.remote_product_id, row.remote_package_id)
+            if key not in seen_keys:
+                row.active = False
+
+        db.session.commit()
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": f"Error guardando catálogo: {str(exc)}"}), 500
+
+    return jsonify({
+        "ok": True,
+        "created": created,
+        "updated": updated,
+        "total": len(normalized),
+    })
+
+
+@app.route("/admin/revendedores/mapping-data", methods=["GET"])
+def admin_revendedores_mapping_data():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    packages = StorePackage.query.filter_by(active=True).order_by(StorePackage.sort_order.asc(), StorePackage.id.asc()).all()
+    selected_package_id = request.args.get("store_package_id", type=int)
+    if not selected_package_id and packages:
+        selected_package_id = packages[0].id
+
+    store_items = []
+    mappings_by_item = {}
+    if selected_package_id:
+        store_items = GamePackageItem.query.filter_by(
+            store_package_id=selected_package_id,
+            active=True,
+        ).order_by(GamePackageItem.id.asc()).all()
+        item_ids = [it.id for it in store_items]
+        if item_ids:
+            rows = RevendedoresItemMapping.query.filter(
+                RevendedoresItemMapping.store_item_id.in_(item_ids),
+                RevendedoresItemMapping.active == True,
+            ).all()
+            mappings_by_item = {int(r.store_item_id): r for r in rows}
+
+    catalog_rows = RevendedoresCatalogItem.query.filter_by(active=True).order_by(
+        RevendedoresCatalogItem.remote_product_name.asc(),
+        RevendedoresCatalogItem.remote_package_name.asc(),
+        RevendedoresCatalogItem.id.asc(),
+    ).all()
+
+    return jsonify({
+        "ok": True,
+        "selected_store_package_id": selected_package_id,
+        "store_packages": [
+            {"id": p.id, "name": p.name, "category": p.category or ""}
+            for p in packages
+        ],
+        "store_items": [
+            {
+                "id": it.id,
+                "title": it.title,
+                "price": float(it.price or 0.0),
+                "mapping": {
+                    "id": mappings_by_item[it.id].id,
+                    "remote_product_id": mappings_by_item[it.id].remote_product_id,
+                    "remote_package_id": mappings_by_item[it.id].remote_package_id,
+                    "remote_label": mappings_by_item[it.id].remote_label or "",
+                    "auto_enabled": bool(mappings_by_item[it.id].auto_enabled),
+                } if it.id in mappings_by_item else None,
+            }
+            for it in store_items
+        ],
+        "remote_catalog": [
+            {
+                "catalog_id": r.id,
+                "remote_product_id": r.remote_product_id,
+                "remote_product_name": r.remote_product_name or "",
+                "remote_package_id": r.remote_package_id,
+                "remote_package_name": r.remote_package_name or "",
+            }
+            for r in catalog_rows
+        ],
+    })
+
+
+@app.route("/admin/revendedores/mappings/bulk", methods=["POST"])
+def admin_revendedores_mappings_bulk_save():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    data = request.get_json(silent=True) or {}
+    entries = data.get("entries") or []
+    if not isinstance(entries, list):
+        return jsonify({"ok": False, "error": "Formato inválido"}), 400
+
+    saved = 0
+    disabled = 0
+
+    try:
+        for ent in entries:
+            if not isinstance(ent, dict):
+                continue
+            try:
+                store_item_id = int(ent.get("store_item_id"))
+            except Exception:
+                continue
+
+            item = GamePackageItem.query.get(store_item_id)
+            if not item:
+                continue
+
+            catalog_id_raw = ent.get("catalog_id")
+            auto_enabled = bool(ent.get("auto_enabled"))
+
+            row = RevendedoresItemMapping.query.filter_by(store_item_id=store_item_id).first()
+
+            if not catalog_id_raw:
+                if row:
+                    row.active = False
+                    row.auto_enabled = False
+                    disabled += 1
+                continue
+
+            try:
+                catalog_id = int(catalog_id_raw)
+            except Exception:
+                continue
+
+            catalog = RevendedoresCatalogItem.query.get(catalog_id)
+            if not catalog:
+                continue
+
+            remote_label = (
+                f"{(catalog.remote_product_name or '').strip()} · {(catalog.remote_package_name or '').strip()}"
+            ).strip(" ·")
+
+            if not row:
+                row = RevendedoresItemMapping(
+                    store_package_id=item.store_package_id,
+                    store_item_id=store_item_id,
+                    remote_product_id=catalog.remote_product_id,
+                    remote_package_id=catalog.remote_package_id,
+                    remote_label=remote_label,
+                    auto_enabled=auto_enabled,
+                    active=True,
+                )
+                db.session.add(row)
+            else:
+                row.store_package_id = item.store_package_id
+                row.remote_product_id = catalog.remote_product_id
+                row.remote_package_id = catalog.remote_package_id
+                row.remote_label = remote_label
+                row.auto_enabled = auto_enabled
+                row.active = True
+            saved += 1
+
+        db.session.commit()
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": f"No se pudo guardar mapeo: {str(exc)}"}), 500
+
+    return jsonify({"ok": True, "saved": saved, "disabled": disabled})
 
 
 @app.route("/admin/package/<int:gid>/items", methods=["GET"])

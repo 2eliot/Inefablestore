@@ -78,6 +78,7 @@ window._WEBB_FF_ITEM_MAP = "{{ webb_ff_item_map|default('') }}";</script>
     <nav class="tabs" id="adminTabs" role="tablist" aria-label="Pestañas de administración">
       <button class="tab active" data-target="#tab-orders" aria-selected="true">Órdenes</button>
       <button class="tab" data-target="#tab-packages" aria-selected="false">Paquetes</button>
+      <button class="tab" data-target="#tab-rev-map" aria-selected="false">Mapeo Revendedores</button>
       <button class="tab" data-target="#tab-stats" aria-selected="false">Estadísticas</button>
       <button class="tab" data-target="#tab-images" aria-selected="false">Imágenes</button>
       <button class="tab" data-target="#tab-config" aria-selected="false">Configuración</button>
@@ -248,6 +249,34 @@ window._WEBB_FF_ITEM_MAP = "{{ webb_ff_item_map|default('') }}";</script>
           <div id="pkg-group-normal" class="pkg-group">
             <h3 class="pkg-group-title">Paquetes normales</h3>
             <div class="pkg-accordion"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mapeo Revendedores -->
+    <div id="tab-rev-map" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Mapeo Revendedores</h2>
+        <div class="actions" style="gap:8px;">
+          <button id="btn-rev-sync" class="btn" type="button">Sincronizar catálogo</button>
+          <button id="btn-rev-refresh" class="btn" type="button">Refrescar</button>
+          <button id="btn-rev-save" class="btn primary" type="button">Guardar mapeo</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <form class="config-form" onsubmit="return false;">
+          <div class="form-row">
+            <label for="rev-store-package">Juego de InefableStore</label>
+            <select id="rev-store-package" class="input">
+              <option value="">— Selecciona un juego —</option>
+            </select>
+          </div>
+        </form>
+        <div id="rev-map-list" class="orders-list">
+          <div class="empty-state">
+            <h3>Sin datos</h3>
+            <p>Sincroniza el catálogo de Revendedores y selecciona un juego para mapear los ítems.</p>
           </div>
         </div>
       </div>
