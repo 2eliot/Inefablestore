@@ -1020,11 +1020,51 @@ def _load_rev_catalog_from_local_db(db_path):
                         return col
                 return None
 
-            id_col = pick_col("id", "package_id", "paquete_id")
+            id_col = pick_col("id", "package_id", "paquete_id", "id_paquete", "id_producto", "codigo", "sku")
+            if not id_col:
+                # Heurística 1: cualquier columna con "id" que no sea identificador de jugador/usuario.
+                id_like = [c for c in cols if "id" in c.lower() and c.lower() not in ("player_id", "user_id", "uid", "zone_id", "server_id")]
+                if id_like:
+                    id_col = id_like[0]
+            if not id_col:
+                # Heurística 2: columna entera probable de paquete.
+                int_like = []
+                for c in info:
+                    try:
+                        col_name = str(c[1])
+                        col_type = str(c[2] or "").upper()
+                    except Exception:
+                        continue
+                    if "INT" not in col_type:
+                        continue
+                    low = col_name.lower()
+                    if any(tok in low for tok in ("activo", "active", "estado", "status", "stock", "cantidad")):
+                        continue
+                    if any(tok in low for tok in ("precio", "price", "costo", "cost", "usd", "bs")):
+                        continue
+                    int_like.append(col_name)
+                if int_like:
+                    id_col = int_like[0]
             if not id_col:
                 continue
 
             name_col = pick_col("nombre", "name", "titulo", "title", "package_name", "paquete")
+            if not name_col:
+                # Heurística de etiqueta: priorizar texto descriptivo.
+                text_like = []
+                for c in info:
+                    try:
+                        col_name = str(c[1])
+                        col_type = str(c[2] or "").upper()
+                    except Exception:
+                        continue
+                    low = col_name.lower()
+                    if any(tok in low for tok in ("juego", "game", "producto", "product", "activo", "estado", "api", "key")):
+                        continue
+                    if any(tok in col_type for tok in ("CHAR", "TEXT", "CLOB")):
+                        text_like.append(col_name)
+                if text_like:
+                    name_col = text_like[0]
             active_col = pick_col("activo", "active", "habilitado", "enabled", "estado", "status")
             product_id_col = pick_col("product_id", "producto_id", "game_id", "juego_id")
             product_name_col = pick_col("product_name", "game_name", "juego", "producto", "categoria")
