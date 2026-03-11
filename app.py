@@ -341,9 +341,26 @@ prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/uploads").rstrip("/")
 if prefix == "":
     prefix = "/uploads"
 
+def _serve_upload_file(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+
+
 @app.route(f"{prefix}/<path:filename>")
 def serve_uploads(filename):
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+    return _serve_upload_file(filename)
+
+
+# Backward-compat: old deployments may have stored paths under either prefix.
+# Keep both routes alive so existing DB image paths continue working.
+if prefix != "/uploads":
+    @app.route("/uploads/<path:filename>")
+    def serve_uploads_legacy_uploads(filename):
+        return _serve_upload_file(filename)
+
+if prefix != "/static/uploads":
+    @app.route("/static/uploads/<path:filename>")
+    def serve_uploads_legacy_static_uploads(filename):
+        return _serve_upload_file(filename)
 
 # Models
 class Order(db.Model):
@@ -866,7 +883,7 @@ def _revendedores_env():
     base_url = (os.environ.get("REVENDEDORES_BASE_URL") or os.environ.get("WEBB_URL") or "").strip().rstrip("/")
     api_key = (os.environ.get("REVENDEDORES_API_KEY") or os.environ.get("WEBB_API_KEY") or "").strip()
     catalog_path = (os.environ.get("REVENDEDORES_CATALOG_PATH") or "/api/catalog/active").strip()
-    recharge_path = (os.environ.get("REVENDEDORES_RECHARGE_PATH") or "/api/recharge/dynamic").strip()
+    recharge_path = (os.environ.get("REVENDEDORES_RECHARGE_PATH") or "/api/recharge/freefire_id").strip()
     if not catalog_path.startswith("/"):
         catalog_path = "/" + catalog_path
     if not recharge_path.startswith("/"):
@@ -2858,12 +2875,27 @@ def admin_orders_set_status(oid: int):
                     payload["player_id2"] = (o.customer_zone or "").strip()
 
                 try:
-                    api_resp = _requests_lib.post(
-                        f"{webb_url}{recharge_path}",
-                        data=payload,
-                        timeout=60,
-                    )
-                    api_data = api_resp.json()
+                    def _call_recharge(path):
+                        resp = _requests_lib.post(
+                            f"{webb_url}{path}",
+                            data=payload,
+                            timeout=60,
+                        )
+                        try:
+                            body = resp.json()
+                        except Exception:
+                            body = {"ok": False, "error": f"Respuesta inválida HTTP {resp.status_code}"}
+                        return resp, body
+
+                    api_resp, api_data = _call_recharge(recharge_path)
+                    # Compatibilidad: si el path configurado no existe, reintentar endpoint legacy.
+                    if (
+                        (not api_data.get("ok"))
+                        and api_resp.status_code in (404, 405)
+                        and recharge_path != "/api/recharge/freefire_id"
+                    ):
+                        api_resp, api_data = _call_recharge("/api/recharge/freefire_id")
+
                     if api_data.get("ok"):
                         o.status = "delivered"
                         db.session.commit()
