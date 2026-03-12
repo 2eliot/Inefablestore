@@ -1266,9 +1266,14 @@ def _load_rev_catalog_from_local_db(db_path):
 def _is_id_game_catalog_entry(ent):
     if not isinstance(ent, dict):
         return False
+
+    # Explicit flag from API catalog (trusted source)
+    raw_json = str(ent.get("raw_json") or "").strip().lower()
+    if '"is_id_game": true' in raw_json or '"is_id_game":true' in raw_json:
+        return True
+
     product_name = str(ent.get("remote_product_name") or "").strip().lower()
     package_name = str(ent.get("remote_package_name") or "").strip().lower()
-    raw_json = str(ent.get("raw_json") or "").strip().lower()
 
     # Prefer source-table signal from fallback DB: precios_*
     # Many dynamic ID games may not include literal "id" in their labels.
