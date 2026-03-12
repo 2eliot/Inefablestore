@@ -401,6 +401,122 @@ class Order(db.Model):
     # Optional: JSON string with multiple items: [{"item_id": int, "qty": int, "title": str, "price": float}]
     items_json = db.Column(db.Text, default="")
 
+
+class OrderSummary(db.Model):
+    __tablename__ = "order_summaries"
+    id = db.Column(db.Integer, primary_key=True)
+    period = db.Column(db.String(10), nullable=False)  # YYYY-MM-DD
+    store_package_id = db.Column(db.Integer, nullable=False)
+    item_id = db.Column(db.Integer, nullable=True)
+    package_name = db.Column(db.String(200), default="")
+    item_title = db.Column(db.String(200), default="")
+    status = db.Column(db.String(20), default="")
+    method = db.Column(db.String(20), default="")
+    currency = db.Column(db.String(10), default="USD")
+    order_count = db.Column(db.Integer, default=0)
+    total_amount = db.Column(db.Float, default=0.0)
+    total_price_usd = db.Column(db.Float, default=0.0)
+    __table_args__ = (
+        db.UniqueConstraint("period", "store_package_id", "item_id", "status", "method", "currency", name="uq_order_summary"),
+    )
+
+
+_ORDER_CLEANUP_DAYS = int(os.environ.get("ORDER_CLEANUP_DAYS", "7"))
+_ORDER_CLEANUP_INTERVAL_HOURS = float(os.environ.get("ORDER_CLEANUP_INTERVAL_HOURS", "6"))
+
+
+def _aggregate_and_cleanup_orders():
+    """Aggregate old terminal-state orders into OrderSummary, then delete them.
+    Keeps ALL pending orders and recent orders (< ORDER_CLEANUP_DAYS days)."""
+    try:
+        cutoff = datetime.utcnow() - timedelta(days=_ORDER_CLEANUP_DAYS)
+        terminal = ("approved", "rejected", "delivered")
+        old_orders = Order.query.filter(
+            Order.status.in_(terminal),
+            Order.created_at < cutoff,
+        ).all()
+
+        if not old_orders:
+            return 0
+
+        # Aggregate into OrderSummary
+        agg = {}
+        for o in old_orders:
+            period = o.created_at.strftime("%Y-%m-%d") if o.created_at else "unknown"
+            pkg = StorePackage.query.get(o.store_package_id)
+            it = GamePackageItem.query.get(o.item_id) if o.item_id else None
+            key = (period, o.store_package_id, o.item_id, o.status, o.method, o.currency or "USD")
+            if key not in agg:
+                agg[key] = {
+                    "period": period,
+                    "store_package_id": o.store_package_id,
+                    "item_id": o.item_id,
+                    "package_name": pkg.name if pkg else "",
+                    "item_title": it.title if it else "",
+                    "status": o.status,
+                    "method": o.method,
+                    "currency": o.currency or "USD",
+                    "order_count": 0,
+                    "total_amount": 0.0,
+                    "total_price_usd": 0.0,
+                }
+            agg[key]["order_count"] += 1
+            agg[key]["total_amount"] += float(o.amount or 0)
+            agg[key]["total_price_usd"] += float(o.price or 0)
+
+        for key, data in agg.items():
+            row = OrderSummary.query.filter_by(
+                period=data["period"],
+                store_package_id=data["store_package_id"],
+                item_id=data["item_id"],
+                status=data["status"],
+                method=data["method"],
+                currency=data["currency"],
+            ).first()
+            if row:
+                row.order_count += data["order_count"]
+                row.total_amount += data["total_amount"]
+                row.total_price_usd += data["total_price_usd"]
+            else:
+                db.session.add(OrderSummary(**data))
+
+        count = len(old_orders)
+        for o in old_orders:
+            db.session.delete(o)
+
+        db.session.commit()
+        return count
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print(f"[OrderCleanup] Error: {exc}")
+        return -1
+
+
+def _order_cleanup_loop():
+    """Background thread: periodically clean up old orders."""
+    import time as _t
+    _t.sleep(60)  # Wait for app startup
+    while True:
+        try:
+            with app.app_context():
+                db.create_all()
+                n = _aggregate_and_cleanup_orders()
+                if n and n > 0:
+                    print(f"[OrderCleanup] Eliminadas {n} órdenes antiguas (>{_ORDER_CLEANUP_DAYS} días)")
+                elif n == 0:
+                    pass  # Nothing to clean
+        except Exception as exc:
+            print(f"[OrderCleanup] Thread error: {exc}")
+        _t.sleep(_ORDER_CLEANUP_INTERVAL_HOURS * 3600)
+
+
+_cleanup_thread = threading.Thread(target=_order_cleanup_loop, daemon=True)
+_cleanup_thread.start()
+
+
 # ==============================
 # Email helper
 # ==============================
