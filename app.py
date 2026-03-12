@@ -44,9 +44,13 @@ os.makedirs(app.instance_path, exist_ok=True)
 # Basic configuration with DATABASE_URL (Postgres) or persistent Disk (SQLite)
 DB_URL = os.environ.get("DATABASE_URL", "").strip()
 if DB_URL:
-    # Normalize scheme for SQLAlchemy/psycopg2
+    # Normalize scheme for SQLAlchemy/psycopg (v3)
     if DB_URL.startswith("postgres://"):
-        DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+        DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg://", 1)
+    elif DB_URL.startswith("postgresql://") and "+" not in DB_URL.split("://", 1)[0]:
+        DB_URL = DB_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+    elif "postgresql+psycopg2://" in DB_URL:
+        DB_URL = DB_URL.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = DB_URL
 else:
     SQLITE_PATH = os.environ.get("SQLITE_PATH", "").strip()
