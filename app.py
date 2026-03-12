@@ -889,7 +889,7 @@ def _revendedores_env():
     base_url = (os.environ.get("REVENDEDORES_BASE_URL") or os.environ.get("WEBB_URL") or "").strip().rstrip("/")
     api_key = (os.environ.get("REVENDEDORES_API_KEY") or os.environ.get("WEBB_API_KEY") or "").strip()
     catalog_path = (os.environ.get("REVENDEDORES_CATALOG_PATH") or "/api/catalog/active").strip()
-    recharge_path = (os.environ.get("REVENDEDORES_RECHARGE_PATH") or "/api/recharge/freefire_id").strip()
+    recharge_path = (os.environ.get("REVENDEDORES_RECHARGE_PATH") or "/api/recharge/dynamic").strip()
     if not catalog_path.startswith("/"):
         catalog_path = "/" + catalog_path
     if not recharge_path.startswith("/"):
