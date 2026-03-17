@@ -352,14 +352,23 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="row-actions" style="display:grid; gap:8px;">
             <select class="input rev-catalog-select" data-store-item-id="${it.id}">
               <option value="">Manual (sin mapeo automático)</option>
-              ${remoteCatalog.map((rc) => {
-                const selected = mappedCatalogId && parseInt(mappedCatalogId, 10) === parseInt(rc.catalog_id, 10) ? 'selected' : '';
-                const gameName = (rc.remote_product_name || '').trim() || 'Juego';
-                const pkgName = (rc.remote_package_name || '').trim() || ('Paquete ' + rc.remote_package_id);
-                const priceTag = rc.price != null ? ` (Precio: $${Number(rc.price).toFixed(2)})` : '';
-                const txt = `${gameName} - ${pkgName}${priceTag}`;
-                return `<option value="${rc.catalog_id}" ${selected}>${txt}</option>`;
-              }).join('')}
+              ${(() => {
+                const groups = {};
+                remoteCatalog.forEach((rc) => {
+                  const gName = (rc.remote_product_name || '').trim() || 'Otro';
+                  if (!groups[gName]) groups[gName] = [];
+                  groups[gName].push(rc);
+                });
+                return Object.keys(groups).sort().map((gName) => {
+                  const opts = groups[gName].map((rc) => {
+                    const selected = mappedCatalogId && parseInt(mappedCatalogId, 10) === parseInt(rc.catalog_id, 10) ? 'selected' : '';
+                    const pkgName = (rc.remote_package_name || '').trim() || ('Paquete ' + rc.remote_package_id);
+                    const priceTag = rc.price != null ? ` ($${Number(rc.price).toFixed(2)})` : '';
+                    return `<option value="${rc.catalog_id}" ${selected}>${pkgName}${priceTag}</option>`;
+                  }).join('');
+                  return `<optgroup label="${gName}">${opts}</optgroup>`;
+                }).join('');
+              })()}
             </select>
             <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#cbd5e1;">
               <input type="checkbox" class="rev-auto-enabled" data-store-item-id="${it.id}" ${(mapping && mapping.auto_enabled) ? 'checked' : ''}>
