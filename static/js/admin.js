@@ -354,9 +354,10 @@ document.addEventListener('DOMContentLoaded', () => {
               <option value="">Manual (sin mapeo automático)</option>
               ${remoteCatalog.map((rc) => {
                 const selected = mappedCatalogId && parseInt(mappedCatalogId, 10) === parseInt(rc.catalog_id, 10) ? 'selected' : '';
-                const pname = (rc.remote_product_name || '').trim();
-                const pkgName = (rc.remote_package_name || '').trim();
-                const txt = `${pname ? (pname + ' · ') : ''}${pkgName || ('Paquete ' + rc.remote_package_id)} [pkg:${rc.remote_package_id}]`;
+                const gameName = (rc.remote_product_name || '').trim() || 'Juego';
+                const pkgName = (rc.remote_package_name || '').trim() || ('Paquete ' + rc.remote_package_id);
+                const priceTag = rc.price != null ? ` (Precio: $${Number(rc.price).toFixed(2)})` : '';
+                const txt = `${gameName} - ${pkgName}${priceTag}`;
                 return `<option value="${rc.catalog_id}" ${selected}>${txt}</option>`;
               }).join('')}
             </select>

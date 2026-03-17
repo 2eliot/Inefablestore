@@ -3176,6 +3176,16 @@ def admin_revendedores_mapping_data():
         RevendedoresCatalogItem.id.asc(),
     ).all()
 
+    def _extract_price(raw_json_str):
+        try:
+            obj = json.loads(raw_json_str or "{}")
+            p = obj.get("price") or obj.get("precio") or obj.get("cost")
+            if p is not None:
+                return round(float(p), 2)
+        except Exception:
+            pass
+        return None
+
     return jsonify({
         "ok": True,
         "selected_store_package_id": selected_package_id,
@@ -3207,6 +3217,7 @@ def admin_revendedores_mapping_data():
                 "remote_product_name": r.remote_product_name or "",
                 "remote_package_id": r.remote_package_id,
                 "remote_package_name": r.remote_package_name or "",
+                "price": _extract_price(r.raw_json),
             }
             for r in catalog_rows
         ],
