@@ -2061,7 +2061,7 @@ window.refreshGallery = refreshGallery;
           if (data.webb_recarga.ok) {
             toast(`✅ Recarga enviada a Revendedores51 exitosamente`, 'success');
           } else {
-            toast(`⚠️ Orden aprobada pero recarga falló: ${data.webb_recarga.error}`, 'error');
+            toast(`⚠️ Recarga falló: ${data.webb_recarga.error}. La orden sigue pendiente, puedes reintentar.`, 'error');
           }
         }
         await fetchOrders();

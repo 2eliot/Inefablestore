@@ -3015,12 +3015,29 @@ def admin_orders_set_status(oid: int):
                         }
                     else:
                         webb_error = api_data.get("error") or "Recarga no completada en Revendedores"
+                        o.status = "pending"
+                        db.session.commit()
                 except _requests_lib.exceptions.Timeout:
                     webb_error = "Revendedores no respondió en 60 segundos"
+                    o.status = "pending"
+                    db.session.commit()
                 except Exception as exc:
                     webb_error = str(exc)
+                    o.status = "pending"
+                    db.session.commit()
+            if webb_error and o.status != "delivered":
+                o.status = "pending"
+                try:
+                    db.session.commit()
+                except Exception:
+                    pass
     except Exception as exc:
         webb_error = str(exc)
+        o.status = "pending"
+        try:
+            db.session.commit()
+        except Exception:
+            pass
 
     response_payload = {"ok": True}
     if webb_result:
