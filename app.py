@@ -3078,7 +3078,8 @@ def admin_revendedores_sync_catalog():
             timeout=30,
         )
         if not resp.ok:
-            remote_error = f"HTTP {resp.status_code} en {catalog_path}"
+            key_preview = (api_key[:12] + "...") if len(api_key) > 12 else "(vacía)"
+            remote_error = f"HTTP {resp.status_code} en {catalog_path} (url={base_url}, key={key_preview}, len={len(api_key)})"
         else:
             try:
                 payload = resp.json()
