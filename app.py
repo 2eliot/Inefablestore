@@ -3096,6 +3096,14 @@ def admin_revendedores_sync_catalog():
     if not normalized:
         return jsonify({"ok": False, "error": f"No se pudo sincronizar catálogo de Revendedores: {remote_error}"}), 502
 
+    # Per-game breakdown for debugging
+    games_summary = {}
+    for ent in normalized:
+        gname = ent.get("remote_product_name") or "?"
+        pid = ent.get("remote_product_id")
+        k = f"{gname} (pid={pid})"
+        games_summary[k] = games_summary.get(k, 0) + 1
+
     created = 0
     updated = 0
     seen_keys = set()
@@ -3119,9 +3127,12 @@ def admin_revendedores_sync_catalog():
                 row.raw_json = ent.get("raw_json", "")
                 updated += 1
 
+        deactivated = 0
         for row in RevendedoresCatalogItem.query.all():
             key = (row.remote_product_id, row.remote_package_id)
             if key not in seen_keys:
+                if row.active:
+                    deactivated += 1
                 row.active = False
 
         db.session.commit()
@@ -3132,12 +3143,17 @@ def admin_revendedores_sync_catalog():
             pass
         return jsonify({"ok": False, "error": f"Error guardando catálogo: {str(exc)}"}), 500
 
+    active_count = RevendedoresCatalogItem.query.filter_by(active=True).count()
+
     return jsonify({
         "ok": True,
         "source": "api",
         "created": created,
         "updated": updated,
-        "total": len(normalized),
+        "deactivated": deactivated,
+        "total_normalized": len(normalized),
+        "active_in_db": active_count,
+        "games": games_summary,
     })
 
 

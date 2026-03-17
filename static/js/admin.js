@@ -942,7 +942,8 @@ window.fetchPayments = fetchPayments;
       try {
         btnRevSync.disabled = true;
         const data = await syncRevCatalog();
-        toast(`Catálogo sincronizado (${data.total || 0} items)`);
+        const gamesInfo = data.games ? Object.entries(data.games).map(([g, c]) => `${g}: ${c}`).join('\n') : '';
+        toast(`Sincronizado: ${data.created || 0} nuevos, ${data.updated || 0} actualizados, ${data.active_in_db || 0} activos en DB\n${gamesInfo}`);
         await fetchRevMappingData(revStorePackage ? revStorePackage.value : '');
       } catch (e) {
         toast(e.message || 'Error al sincronizar');
