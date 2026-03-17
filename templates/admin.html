@@ -1,8 +1,6 @@
 {% extends 'base.html' %}
 {% block scripts %}
-<script>window._WEBB_FF_GAME_ID = "{{ webb_ff_game_id|default('') }}";
-window._WEBB_FF_ITEM_MAP = "{{ webb_ff_item_map|default('') }}";</script>
-<script src="{{ url_for('static', filename='js/admin.js', v='11') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin.js', v='12') }}" defer></script>
 <style>
 /* Logo picker modal specific styles */
 #logo-picker {

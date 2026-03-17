@@ -1939,17 +1939,7 @@ window.refreshGallery = refreshGallery;
             </div>
           </div>
           ${(() => {
-            const _ffId = window._WEBB_FF_GAME_ID ? parseInt(window._WEBB_FF_GAME_ID) : null;
-            const _isFF = _ffId && o.store_package_id === _ffId;
-            let _isAutomated = !!o.is_auto_mapped;
-            if (_isFF && o.item_id && window._WEBB_FF_ITEM_MAP) {
-              for (const pair of window._WEBB_FF_ITEM_MAP.split(',')) {
-                const parts = pair.trim().split(':');
-                if (parts.length === 2 && parseInt(parts[0].trim()) === parseInt(o.item_id)) {
-                  _isAutomated = true; break;
-                }
-              }
-            }
+            const _isAutomated = !!o.is_auto_mapped;
             if (_isAutomated) return `<div class="box-right">
             <div class="id-section">
               <div class="id-label">${o.customer_zone ? 'ID - ZONA ID' : 'ID'} <a href="#" class="btn-show-id" style="color:#22c55e;font-weight:800;text-decoration:underline;font-size:12px;margin-left:6px;">Ver</a></div>
@@ -1978,25 +1968,10 @@ window.refreshGallery = refreshGallery;
             : `<input class=\"input gift-code\" data-id=\"${o.id}\" type=\"text\" placeholder=\"C\u00f3digo para el cliente\" value=\"${o.delivery_code || ''}\" style=\"flex:1; min-width:220px;\" />`
           }
         </div>` : ''}
-        ${(() => {
-          const ffGameId = window._WEBB_FF_GAME_ID ? parseInt(window._WEBB_FF_GAME_ID) : null;
-          const isFF = ffGameId && o.store_package_id === ffGameId;
-          const ffQty = isFF
-            ? (itemsArr.length ? itemsArr.reduce((s, it) => s + parseInt(it.qty||1,10), 0) : 1)
-            : 0;
-          if (isFF && ffQty > 1 && o.status === 'pending') {
-            let btns = `<div class=\"row-actions\" style=\"flex-wrap:wrap;gap:6px;\">`;
-            for (let i = 0; i < ffQty; i++) {
-              btns += `<button class=\"btn btn-approve-ff\" data-id=\"${o.id}\" data-index=\"${i}\" data-total=\"${ffQty}\" ${i > 0 ? 'disabled' : ''} style=\"min-width:130px;\">Recargar ${i+1}/${ffQty}</button>`;
-            }
-            btns += `<button class="btn btn-reject" data-id="${o.id}" style="margin-left:auto;background:#dc2626;">Rechazar</button></div>`;
-            return btns;
-          }
-          return `<div class="row-actions" style="justify-content:space-between;">
+        <div class="row-actions" style="justify-content:space-between;">
             <button class="btn btn-approve" data-id="${o.id}" ${o.status !== 'pending' ? 'disabled' : ''}>Aprobar</button>
             <button class="btn btn-reject" data-id="${o.id}" ${o.status !== 'pending' ? 'disabled' : ''} style="background:#dc2626;">Rechazar</button>
-          </div>`;
-        })()}
+          </div>
       `;
 
       ordersList.appendChild(tile);
@@ -2025,79 +2000,13 @@ window.refreshGallery = refreshGallery;
         try { await navigator.clipboard.writeText(value); toast('Copiado'); } catch(_) { toast('No se pudo copiar'); }
         return;
       }
-      // ── Botón de recarga individual FF (qty > 1) ──
-      const btnFF = e.target.closest('.btn-approve-ff');
-      if (btnFF) {
-        const id = btnFF.getAttribute('data-id');
-        const recarga_index = parseInt(btnFF.getAttribute('data-index'));
-        const total_recargas = parseInt(btnFF.getAttribute('data-total'));
-        const tile = btnFF.closest('.order-tile');
-        const _game = tile ? (tile.querySelector('.game-name')?.textContent || '').trim() : '';
-        const _pid = tile ? (tile.querySelector('.hex')?.textContent || '').trim() : '';
-        const _ref = tile ? (tile.querySelector('.ref-value')?.textContent || '').trim() : '';
-        const _nick = tile ? (tile.getAttribute('data-customer-name') || '') : '';
-        const msg = `⚠️ RECARGA AUTOMÁTICA E IRREVERSIBLE\n\n` +
-          `Juego: ${_game}\n` +
-          `ID: ${_pid}\n` +
-          (_nick ? `Nombre: ${_nick}\n` : '') +
-          `Referencia: ${_ref}\n` +
-          `Recarga: ${recarga_index+1}/${total_recargas}\n\n` +
-          `¿Confirmar envío?`;
-        if (!confirm(msg)) return;
-        btnFF.disabled = true;
-        btnFF.textContent = `Recargando ${recarga_index+1}/${total_recargas}...`;
-        try {
-          const res = await fetch(`/admin/orders/${id}/status`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'approved', recarga_index, total_recargas })
-          });
-          const data = await res.json();
-          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo actualizar');
-          if (data.webb_recarga && data.webb_recarga.ok) {
-            btnFF.textContent = `✅ ${recarga_index+1}/${total_recargas} OK`;
-            btnFF.style.background = '#16a34a';
-            toast(`✅ Recarga ${recarga_index+1}/${total_recargas} enviada a Revendedores51`, 'success');
-            // Activar siguiente botón después de 30s (si no es el último)
-            if (!data.webb_recarga.is_last) {
-              const nextBtn = ordersList.querySelector(`.btn-approve-ff[data-id="${id}"][data-index="${recarga_index+1}"]`);
-              if (nextBtn) {
-                let secs = 30;
-                nextBtn.textContent = `Recargar ${recarga_index+2}/${total_recargas} (${secs}s)`;
-                const interval = setInterval(() => {
-                  secs--;
-                  if (secs <= 0) {
-                    clearInterval(interval);
-                    nextBtn.disabled = false;
-                    nextBtn.textContent = `Recargar ${recarga_index+2}/${total_recargas}`;
-                  } else {
-                    nextBtn.textContent = `Recargar ${recarga_index+2}/${total_recargas} (${secs}s)`;
-                  }
-                }, 1000);
-              }
-            } else {
-              await fetchOrders();
-            }
-          } else if (data.webb_recarga) {
-            btnFF.disabled = false;
-            btnFF.textContent = `Recargar ${recarga_index+1}/${total_recargas}`;
-            toast(`⚠️ Recarga ${recarga_index+1}/${total_recargas} falló: ${data.webb_recarga.error}`, 'error');
-          }
-        } catch (err) {
-          btnFF.disabled = false;
-          btnFF.textContent = `Recargar ${recarga_index+1}/${total_recargas}`;
-          toast(err.message || 'Error');
-        }
-        return;
-      }
-
       const btnA = e.target.closest('.btn-approve');
       const btnR = e.target.closest('.btn-reject');
       const btn = btnA || btnR;
       if (!btn) return;
       const id = btn.getAttribute('data-id');
       const status = btnA ? 'approved' : 'rejected';
-      // Confirmation for FF auto-recharge
+      // Confirmation for auto-recharge via API
       if (btnA) {
         const tile = btnA.closest('.order-tile');
         const isAutoTile = tile && tile.getAttribute('data-is-auto') === '1';

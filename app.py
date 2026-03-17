@@ -1004,12 +1004,8 @@ def resolve_special_user_for_code(raw_code: str):
 def _revendedores_env():
     base_url = (os.environ.get("REVENDEDORES_BASE_URL") or os.environ.get("WEBB_URL") or "").strip().rstrip("/")
     api_key = (os.environ.get("REVENDEDORES_API_KEY") or os.environ.get("WEBB_API_KEY") or "").strip()
-    catalog_path = (os.environ.get("REVENDEDORES_CATALOG_PATH") or "/api/catalog/active").strip()
-    recharge_path = (os.environ.get("REVENDEDORES_RECHARGE_PATH") or "/api/recharge/dynamic").strip()
-    if not catalog_path.startswith("/"):
-        catalog_path = "/" + catalog_path
-    if not recharge_path.startswith("/"):
-        recharge_path = "/" + recharge_path
+    catalog_path = "/api/v1/products"
+    recharge_path = "/api/v1/recharge"
     return base_url, api_key, catalog_path, recharge_path
 
 
@@ -1021,287 +1017,69 @@ def _synthetic_product_id(label):
 
 
 def _normalize_rev_catalog_payload(payload):
+    """Normaliza la respuesta de /api/v1/products (API marca blanca).
+
+    Formato esperado:
+    {
+      "ok": true,
+      "games": [
+        {
+          "game_id": 3, "name": "Mobile Legends", "mode": "id",
+          "packages": [
+            {"package_id": 12, "name": "86 Diamonds", "price": 1.50}
+          ]
+        }
+      ]
+    }
+    """
     if not isinstance(payload, dict):
         return []
 
-    candidates = []
-    for key in ("items", "packages", "catalog"):
-        val = payload.get(key)
-        if isinstance(val, list):
-            candidates = val
-            break
-    if not candidates and isinstance(payload.get("data"), list):
-        candidates = payload.get("data")
-    if not candidates and isinstance(payload.get("data"), dict):
-        nested = payload.get("data") or {}
-        for key in ("items", "packages", "catalog"):
-            val = nested.get(key)
-            if isinstance(val, list):
-                candidates = val
-                break
+    games = payload.get("games")
+    if not isinstance(games, list):
+        return []
 
     out = []
-    for raw in candidates:
-        if not isinstance(raw, dict):
+    for game in games:
+        if not isinstance(game, dict):
             continue
-        package_id_raw = raw.get("package_id", raw.get("id", raw.get("gamepoint_package_id")))
-        try:
-            package_id = int(package_id_raw)
-        except Exception:
+        game_id = game.get("game_id")
+        game_name = game.get("name") or game.get("slug") or ""
+        game_mode = game.get("mode") or "id"
+        packages = game.get("packages")
+        if not isinstance(packages, list):
             continue
 
-        product_id = None
-        product_id_raw = raw.get("product_id", raw.get("productid", raw.get("game_id")))
         try:
-            if product_id_raw is not None and str(product_id_raw).strip() != "":
-                product_id = int(product_id_raw)
-        except Exception:
-            product_id = None
+            product_id = int(game_id) if game_id is not None else _synthetic_product_id(game_name)
+        except (ValueError, TypeError):
+            product_id = _synthetic_product_id(game_name)
 
-        package_name = (
-            raw.get("package_name")
-            or raw.get("name")
-            or raw.get("title")
-            or raw.get("item")
-            or f"Paquete {package_id}"
-        )
-        product_name = (
-            raw.get("product_name")
-            or raw.get("game_name")
-            or raw.get("product")
-            or ""
-        )
-        if product_id is None:
-            product_id = _synthetic_product_id(product_name)
+        for pkg in packages:
+            if not isinstance(pkg, dict):
+                continue
+            pkg_id_raw = pkg.get("package_id") or pkg.get("id")
+            try:
+                package_id = int(pkg_id_raw)
+            except (ValueError, TypeError):
+                continue
 
-        active_val = raw.get("active", raw.get("activo", True))
-        if isinstance(active_val, str):
-            active = active_val.strip().lower() in ("1", "true", "yes", "si", "sí", "activo", "active")
-        else:
-            active = bool(active_val)
+            package_name = pkg.get("name") or pkg.get("title") or f"Paquete {package_id}"
 
-        out.append({
-            "remote_product_id": product_id,
-            "remote_product_name": str(product_name or "").strip(),
-            "remote_package_id": package_id,
-            "remote_package_name": str(package_name or "").strip(),
-            "active": active,
-            "raw_json": json.dumps(raw, ensure_ascii=False),
-        })
+            raw_obj = {**pkg, "game_id": game_id, "game_name": game_name, "mode": game_mode, "is_id_game": game_mode == "id"}
+
+            out.append({
+                "remote_product_id": product_id,
+                "remote_product_name": str(game_name or "").strip(),
+                "remote_package_id": package_id,
+                "remote_package_name": str(package_name or "").strip(),
+                "active": True,
+                "raw_json": json.dumps(raw_obj, ensure_ascii=False),
+            })
 
     return out
 
 
-def _revendedores_local_db_path():
-    return (
-        os.environ.get("REVENDEDORES_LOCAL_DB_PATH")
-        or os.environ.get("WEBB_DB_PATH")
-        or "/home/apps/web-b-revendedores/data/usuarios.db"
-    ).strip()
-
-
-def _normalize_bool_like(val, default=True):
-    if val is None:
-        return bool(default)
-    if isinstance(val, str):
-        return val.strip().lower() in ("1", "true", "yes", "si", "sí", "activo", "active", "on")
-    return bool(val)
-
-
-def _load_rev_catalog_from_local_db(db_path):
-    if not db_path:
-        return [], "REVENDEDORES_LOCAL_DB_PATH vacío"
-    if not os.path.isfile(db_path):
-        return [], f"No existe DB local: {db_path}"
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-
-        rows_tables = cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'precios_%' ORDER BY name ASC"
-        ).fetchall()
-        table_names = [r[0] for r in rows_tables if r and r[0]]
-        out = []
-
-        for table in table_names:
-            if not re.match(r"^[A-Za-z0-9_]+$", table):
-                continue
-
-            info = cur.execute(f'PRAGMA table_info("{table}")').fetchall()
-            cols = [c[1] for c in info if c and len(c) > 1]
-            lower_map = {c.lower(): c for c in cols}
-
-            def pick_col(*candidates):
-                for key in candidates:
-                    col = lower_map.get(str(key).lower())
-                    if col:
-                        return col
-                return None
-
-            id_col = pick_col("id", "package_id", "paquete_id", "id_paquete", "id_producto", "codigo", "sku")
-            if not id_col:
-                # Heurística 1: cualquier columna con "id" que no sea identificador de jugador/usuario.
-                id_like = [c for c in cols if "id" in c.lower() and c.lower() not in ("player_id", "user_id", "uid", "zone_id", "server_id")]
-                if id_like:
-                    id_col = id_like[0]
-            if not id_col:
-                # Heurística 2: columna entera probable de paquete.
-                int_like = []
-                for c in info:
-                    try:
-                        col_name = str(c[1])
-                        col_type = str(c[2] or "").upper()
-                    except Exception:
-                        continue
-                    if "INT" not in col_type:
-                        continue
-                    low = col_name.lower()
-                    if any(tok in low for tok in ("activo", "active", "estado", "status", "stock", "cantidad")):
-                        continue
-                    if any(tok in low for tok in ("precio", "price", "costo", "cost", "usd", "bs")):
-                        continue
-                    int_like.append(col_name)
-                if int_like:
-                    id_col = int_like[0]
-            if not id_col:
-                continue
-
-            name_col = pick_col("nombre", "name", "titulo", "title", "package_name", "paquete")
-            if not name_col:
-                # Heurística de etiqueta: priorizar texto descriptivo.
-                text_like = []
-                for c in info:
-                    try:
-                        col_name = str(c[1])
-                        col_type = str(c[2] or "").upper()
-                    except Exception:
-                        continue
-                    low = col_name.lower()
-                    if any(tok in low for tok in ("juego", "game", "producto", "product", "activo", "estado", "api", "key")):
-                        continue
-                    if any(tok in col_type for tok in ("CHAR", "TEXT", "CLOB")):
-                        text_like.append(col_name)
-                if text_like:
-                    name_col = text_like[0]
-            active_col = pick_col("activo", "active", "habilitado", "enabled", "estado", "status")
-            product_id_col = pick_col("product_id", "producto_id", "game_id", "juego_id")
-            product_name_col = pick_col("product_name", "game_name", "juego", "producto", "categoria")
-
-            wanted_cols = [id_col]
-            for extra_col in (name_col, active_col, product_id_col, product_name_col):
-                if extra_col and extra_col not in wanted_cols:
-                    wanted_cols.append(extra_col)
-
-            select_cols = ", ".join([f'"{c}"' for c in wanted_cols])
-            data_rows = cur.execute(f'SELECT {select_cols} FROM "{table}"').fetchall()
-
-            default_product_name = table.replace("precios_", "").replace("_", " ").strip().title() or "Revendedores"
-            default_product_id = _synthetic_product_id(default_product_name)
-
-            for row in data_rows:
-                try:
-                    package_id = int(row[id_col])
-                except Exception:
-                    continue
-
-                product_id = None
-                if product_id_col:
-                    try:
-                        raw_val = row[product_id_col]
-                        if raw_val is not None and str(raw_val).strip() != "":
-                            product_id = int(raw_val)
-                    except Exception:
-                        product_id = None
-                if product_id is None:
-                    product_id = default_product_id
-
-                package_name = ""
-                if name_col:
-                    package_name = str(row[name_col] or "").strip()
-                if not package_name:
-                    package_name = f"Paquete {package_id}"
-
-                product_name = ""
-                if product_name_col:
-                    product_name = str(row[product_name_col] or "").strip()
-                if not product_name:
-                    product_name = default_product_name
-
-                active = True
-                if active_col:
-                    active = _normalize_bool_like(row[active_col], default=True)
-
-                raw_obj = {"source_table": table}
-                for c in wanted_cols:
-                    try:
-                        raw_obj[c] = row[c]
-                    except Exception:
-                        raw_obj[c] = None
-
-                out.append({
-                    "remote_product_id": product_id,
-                    "remote_product_name": product_name,
-                    "remote_package_id": package_id,
-                    "remote_package_name": package_name,
-                    "active": active,
-                    "raw_json": json.dumps(raw_obj, ensure_ascii=False),
-                })
-
-        conn.close()
-
-        if not out:
-            return [], "DB local sin tablas/filas compatibles de catálogo (precios_*)"
-
-        return out, None
-    except Exception as exc:
-        try:
-            conn.close()
-        except Exception:
-            pass
-        return [], f"Error leyendo DB local de Revendedores: {str(exc)}"
-
-
-def _is_id_game_catalog_entry(ent):
-    if not isinstance(ent, dict):
-        return False
-
-    # Explicit flag from API catalog (trusted source)
-    raw_json = str(ent.get("raw_json") or "").strip().lower()
-    if '"is_id_game": true' in raw_json or '"is_id_game":true' in raw_json:
-        return True
-
-    product_name = str(ent.get("remote_product_name") or "").strip().lower()
-    package_name = str(ent.get("remote_package_name") or "").strip().lower()
-
-    # Prefer source-table signal from fallback DB: precios_*
-    # Many dynamic ID games may not include literal "id" in their labels.
-    source_table_match = re.search(r'"source_table"\s*:\s*"([a-z0-9_]+)"', raw_json)
-    source_table = source_table_match.group(1) if source_table_match else ""
-    if source_table.startswith("precios_"):
-        non_id_tokens = (
-            "gift", "tarjeta", "card", "steam", "xbox", "nintendo", "apple", "itunes", "google_play", "googleplay", "psn"
-        )
-        if any(tok in source_table for tok in non_id_tokens):
-            return False
-        return True
-
-    # Explicit ID-game signals in payload
-    id_signals = (
-        "player_id", "user_id", "uid", "zone_id", "server_id",
-        "id_jugador", "id_usuario", "game_uid", "open_id", "character_id"
-    )
-    if any(sig in raw_json for sig in id_signals):
-        return True
-
-    # Generic signal for API payloads where names include "ID"
-    return (
-        product_name.endswith(" id")
-        or " id " in f" {product_name} "
-        or package_name.endswith(" id")
-        or " id " in f" {package_name} "
-    )
 
 
 def _get_order_auto_mapping(order_obj):
@@ -1966,9 +1744,7 @@ def admin_page():
     if not user or user.get("role") != "admin":
         return redirect("/?next=/admin")
     site_name = get_config_value("site_name", "InefableStore")
-    webb_ff_game_id = os.environ.get("WEBB_FF_GAME_ID", "")
-    webb_ff_item_map = os.environ.get("WEBB_FF_ITEM_MAP", "")
-    return render_template("admin.html", site_name=site_name, body_class="theme-admin-dark", webb_ff_game_id=webb_ff_game_id, webb_ff_item_map=webb_ff_item_map)
+    return render_template("admin.html", site_name=site_name, body_class="theme-admin-dark")
 
 @app.route("/store/hero")
 def store_hero():
@@ -3189,55 +2965,43 @@ def admin_orders_set_status(oid: int):
     except Exception:
         pass
 
-    # ── Auto-recarga en Revendedores por mapeo DB (nuevo módulo) ──
-    # Variables: REVENDEDORES_BASE_URL / WEBB_URL, REVENDEDORES_API_KEY / WEBB_API_KEY,
-    #            REVENDEDORES_RECHARGE_PATH (default /api/recharge/dynamic)
+    # ── Auto-recarga vía API marca blanca de Revendedores ──
     webb_result = None
     webb_error = None
-    used_new_mapping = False
     try:
         webb_url, webb_api_key, _, recharge_path = _revendedores_env()
         mapping = _get_order_auto_mapping(o)
 
         if mapping and status == "approved" and o.status in ("approved", "delivered"):
-            used_new_mapping = True
             player_id = (o.customer_id or "").strip()
             if not webb_url or not webb_api_key:
-                webb_error = "Falta configurar REVENDEDORES_BASE_URL/REVENDEDORES_API_KEY"
+                webb_error = "Falta configurar REVENDEDORES_BASE_URL y REVENDEDORES_API_KEY"
             elif not player_id:
                 webb_error = "No se encontró ID de jugador para recarga automática"
             else:
                 payload = {
-                    "api_key": webb_api_key,
+                    "product_id": mapping.remote_product_id,
+                    "package_id": mapping.remote_package_id,
                     "player_id": player_id,
-                    "package_id": str(mapping.remote_package_id),
+                    "external_order_id": f"INE-{o.id}",
                 }
-                if mapping.remote_product_id:
-                    payload["product_id"] = str(mapping.remote_product_id)
                 if (o.customer_zone or "").strip():
                     payload["player_id2"] = (o.customer_zone or "").strip()
 
                 try:
-                    def _call_recharge(path):
-                        resp = _requests_lib.post(
-                            f"{webb_url}{path}",
-                            data=payload,
-                            timeout=60,
-                        )
-                        try:
-                            body = resp.json()
-                        except Exception:
-                            body = {"ok": False, "error": f"Respuesta inválida HTTP {resp.status_code}"}
-                        return resp, body
-
-                    api_resp, api_data = _call_recharge(recharge_path)
-                    # Compatibilidad: si el path configurado no existe, reintentar endpoint legacy.
-                    if (
-                        (not api_data.get("ok"))
-                        and api_resp.status_code in (404, 405)
-                        and recharge_path != "/api/recharge/freefire_id"
-                    ):
-                        api_resp, api_data = _call_recharge("/api/recharge/freefire_id")
+                    api_resp = _requests_lib.post(
+                        f"{webb_url}{recharge_path}",
+                        json=payload,
+                        headers={
+                            "X-API-Key": webb_api_key,
+                            "Content-Type": "application/json",
+                        },
+                        timeout=60,
+                    )
+                    try:
+                        api_data = api_resp.json()
+                    except Exception:
+                        api_data = {"ok": False, "error": f"Respuesta inválida HTTP {api_resp.status_code}"}
 
                     if api_data.get("ok"):
                         o.status = "delivered"
@@ -3245,7 +3009,8 @@ def admin_orders_set_status(oid: int):
                         webb_result = {
                             "pin": "",
                             "package": mapping.remote_label or f"Paquete {mapping.remote_package_id}",
-                            "pins_so_far": [],
+                            "player_name": api_data.get("player_name", ""),
+                            "remaining_balance": api_data.get("remaining_balance"),
                             "is_last": True,
                         }
                     else:
@@ -3257,97 +3022,13 @@ def admin_orders_set_status(oid: int):
     except Exception as exc:
         webb_error = str(exc)
 
-    # ── Fallback al flujo legacy de Free Fire via env map ──
-    if not used_new_mapping and not webb_result:
-        try:
-            webb_url     = os.environ.get("WEBB_URL", "").strip().rstrip("/")
-            webb_api_key = os.environ.get("WEBB_API_KEY", "").strip()
-            webb_ff_game_id_raw = os.environ.get("WEBB_FF_GAME_ID", "").strip()
-            print(f"[WEBB DEBUG] url={webb_url!r} key={bool(webb_api_key)} game_id={webb_ff_game_id_raw!r} order_pkg={o.store_package_id} item_id={o.item_id} status={status}")
-
-            recarga_index  = data.get("recarga_index")
-            total_recargas = data.get("total_recargas", 1)
-            try:
-                total_recargas = int(total_recargas)
-            except Exception:
-                total_recargas = 1
-
-            # Resolver package_id de Web B desde el item del pedido
-            package_id_webb = None
-            is_ff_order = False
-            if webb_url and webb_api_key and webb_ff_game_id_raw:
-                try:
-                    webb_ff_game_id = int(webb_ff_game_id_raw)
-                except ValueError:
-                    webb_ff_game_id = None
-
-                if webb_ff_game_id and o.store_package_id == webb_ff_game_id:
-                    is_ff_order = True
-                    try:
-                        item_map_raw = os.environ.get("WEBB_FF_ITEM_MAP", "").strip()
-                        if item_map_raw and o.item_id:
-                            for pair in item_map_raw.split(","):
-                                pair = pair.strip()
-                                if ":" not in pair:
-                                    continue
-                                a_id_str, b_pkg_str = pair.split(":", 1)
-                                if int(a_id_str.strip()) == int(o.item_id):
-                                    package_id_webb = int(b_pkg_str.strip())
-                                    break
-                    except Exception:
-                        pass
-
-            should_recharge = (
-                is_ff_order
-                and package_id_webb and 1 <= package_id_webb <= 9
-                and status == "approved"
-                and o.status in ("approved", "delivered")
-            )
-            print(f"[WEBB DEBUG] is_ff={is_ff_order} pkg_webb={package_id_webb} should={should_recharge} o.status={o.status}")
-
-            if should_recharge:
-                player_id = (o.customer_id or "").strip()
-                if player_id:
-                    try:
-                        # Llamada directa a la API dedicada (sin sesión ni nonce)
-                        api_resp = _requests_lib.post(
-                            f"{webb_url}/api/recharge/freefire_id",
-                            data={
-                                "api_key":    webb_api_key,
-                                "player_id":  player_id,
-                                "package_id": str(package_id_webb),
-                            },
-                            timeout=60,
-                        )
-                        api_data = api_resp.json()
-                        if api_data.get("ok"):
-                            is_last = (recarga_index is None) or (int(recarga_index) + 1 >= total_recargas)
-                            if is_last:
-                                o.status = "delivered"
-                            db.session.commit()
-                            webb_result = {
-                                "pin": "",
-                                "package": f"Paquete {package_id_webb}",
-                                "player_name": api_data.get("player_name", ""),
-                                "pins_so_far": [],
-                                "is_last": is_last,
-                            }
-                        else:
-                            webb_error = api_data.get("error") or "Recarga no completada en Web B"
-                    except _requests_lib.exceptions.Timeout:
-                        webb_error = "Web B no respondió en 60 segundos"
-                    except Exception as exc:
-                        webb_error = str(exc)
-        except Exception as exc:
-            webb_error = str(exc)
-
     response_payload = {"ok": True}
     if webb_result:
         response_payload["webb_recarga"] = {
             "ok": True,
-            "pin": webb_result.get("pin", ""),
             "package": webb_result.get("package", ""),
-            "pins_so_far": webb_result.get("pins_so_far", []),
+            "player_name": webb_result.get("player_name", ""),
+            "remaining_balance": webb_result.get("remaining_balance"),
             "is_last": webb_result.get("is_last", True),
         }
     if webb_error:
@@ -3375,169 +3056,6 @@ def store_game_items(gid: int):
         ]
     })
 
-@app.route("/admin/webb-mapeo")
-def admin_webb_mapeo():
-    """Página de ayuda para configurar WEBB_FF_ITEM_MAP.
-    Muestra todos los juegos y sus items con IDs para facilitar el mapeo."""
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-
-    packages = StorePackage.query.filter_by(active=True).order_by(StorePackage.sort_order.asc(), StorePackage.id.asc()).all()
-    data = []
-    for pkg in packages:
-        items = GamePackageItem.query.filter_by(store_package_id=pkg.id, active=True).order_by(GamePackageItem.id.asc()).all()
-        data.append({
-            "id": pkg.id,
-            "name": pkg.name,
-            "category": pkg.category or "",
-            "items": [{"id": it.id, "title": it.title, "price": float(it.price or 0)} for it in items]
-        })
-
-    current_map = os.environ.get("WEBB_FF_ITEM_MAP", "")
-    current_game_id = os.environ.get("WEBB_FF_GAME_ID", "")
-
-    html = """<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Configurar WEBB_FF_ITEM_MAP</title>
-<style>
-  body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:24px}
-  h1{color:#38bdf8;margin-bottom:4px}
-  .sub{color:#94a3b8;margin-bottom:24px;font-size:14px}
-  .card{background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #334155}
-  .game-title{font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:4px}
-  .game-id{font-size:12px;color:#64748b;margin-bottom:12px}
-  table{width:100%;border-collapse:collapse}
-  th{text-align:left;padding:8px 12px;background:#0f172a;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
-  td{padding:8px 12px;border-top:1px solid #334155;font-size:14px}
-  .id-badge{background:#1d4ed8;color:#bfdbfe;padding:2px 8px;border-radius:6px;font-family:monospace;font-weight:700}
-  .price{color:#34d399}
-  .section{margin-top:32px}
-  .section h2{color:#f59e0b;font-size:16px;margin-bottom:8px}
-  .info-box{background:#1e293b;border:1px solid #f59e0b44;border-radius:10px;padding:16px;font-size:13px;color:#fcd34d;line-height:1.7}
-  .webb-table{width:100%;border-collapse:collapse;margin-top:12px}
-  .webb-table th{background:#0f172a;color:#94a3b8;font-size:12px;padding:8px 12px;text-align:left}
-  .webb-table td{padding:8px 12px;border-top:1px solid #334155;font-size:13px}
-  .pkg-id{color:#a78bfa;font-weight:700;font-family:monospace}
-  .env-box{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px 16px;font-family:monospace;font-size:13px;color:#86efac;margin-top:8px;word-break:break-all}
-  .current{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:12px;color:#94a3b8;margin-top:6px}
-  select,input{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 10px;font-size:13px}
-  button{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:8px 18px;cursor:pointer;font-size:13px;margin-top:8px}
-  button:hover{background:#1d4ed8}
-  #result-map{display:none}
-</style>
-</head>
-<body>
-<h1>🗺️ Configurar WEBB_FF_ITEM_MAP</h1>
-<p class="sub">Esta página te ayuda a obtener los IDs de los items de cada juego para configurar el mapeo con Web B (Revendedores).</p>
-""" + f"""
-<div class="section">
-  <h2>⚙️ Configuración actual en Render</h2>
-  <div class="info-box">
-    <b>WEBB_FF_GAME_ID</b> = <code style="color:#fff">{current_game_id or '(no configurado)'}</code><br>
-    <b>WEBB_FF_ITEM_MAP</b> = <code style="color:#fff">{current_map or '(no configurado)'}</code>
-  </div>
-</div>
-
-<div class="section">
-  <h2>📦 Paquetes de Web B (Revendedores)</h2>
-  <table class="webb-table">
-    <tr><th>package_id Web B</th><th>Diamantes</th></tr>
-    <tr><td class="pkg-id">1</td><td>100+10 💎</td></tr>
-    <tr><td class="pkg-id">2</td><td>310+31 💎</td></tr>
-    <tr><td class="pkg-id">3</td><td>520+52 💎</td></tr>
-    <tr><td class="pkg-id">4</td><td>1.060+106 💎</td></tr>
-    <tr><td class="pkg-id">5</td><td>2.180+218 💎</td></tr>
-    <tr><td class="pkg-id">6</td><td>5.600+560 💎</td></tr>
-  </table>
-</div>
-
-<div class="section">
-  <h2>🎮 Items de Web A (Inefable Store)</h2>
-"""
-
-    for pkg in data:
-        html += f"""
-<div class="card">
-  <div class="game-title">{pkg['name']}</div>
-  <div class="game-id">ID del juego (WEBB_FF_GAME_ID): <span style="color:#38bdf8;font-family:monospace;font-weight:700">{pkg['id']}</span> &nbsp;·&nbsp; Categoría: {pkg['category']}</div>
-  <table>
-    <tr><th>item_id (Web A)</th><th>Título</th><th>Precio USD</th></tr>
-"""
-        for it in pkg['items']:
-            html += f"""    <tr>
-      <td><span class="id-badge">{it['id']}</span></td>
-      <td>{it['title']}</td>
-      <td class="price">${it['price']:.2f}</td>
-    </tr>
-"""
-        html += "  </table>\n</div>\n"
-
-    html += """
-<div class="section">
-  <h2>🛠️ Generador de WEBB_FF_ITEM_MAP</h2>
-  <p style="color:#94a3b8;font-size:13px">Selecciona qué item de Web A corresponde a cada paquete de Web B y genera el valor listo para copiar en Render.</p>
-  <table class="webb-table" id="mapper-table">
-    <tr>
-      <th>Package Web B</th>
-      <th>Diamantes</th>
-      <th>Item Web A (selecciona)</th>
-    </tr>
-"""
-
-    webb_packages = [
-        (1, "100+10 💎"), (2, "310+31 💎"), (3, "520+52 💎"), (4, "1.060+106 💎"), (5, "2.180+218 💎"), (6, "5.600+560 💎")
-    ]
-
-    all_items_options = ""
-    for pkg in data:
-        all_items_options += f'<optgroup label="{pkg["name"]} (juego ID={pkg["id"]})">'
-        for it in pkg['items']:
-            all_items_options += f'<option value="{it["id"]}">[ID {it["id"]}] {it["title"]} (${it["price"]:.2f})</option>'
-        all_items_options += '</optgroup>'
-
-    for b_pkg_id, diamonds in webb_packages:
-        html += f"""    <tr>
-      <td class="pkg-id">{b_pkg_id}</td>
-      <td>{diamonds}</td>
-      <td><select id="sel_{b_pkg_id}"><option value="">-- No mapear --</option>{all_items_options}</select></td>
-    </tr>
-"""
-
-    html += """  </table>
-  <button onclick="generateMap()">⚡ Generar WEBB_FF_ITEM_MAP</button>
-  <div id="result-map">
-    <p style="color:#94a3b8;font-size:13px;margin-top:16px">Copia este valor en la variable de entorno <b style="color:#f1f5f9">WEBB_FF_ITEM_MAP</b> en Render (Web A):</p>
-    <div class="env-box" id="map-output"></div>
-  </div>
-</div>
-
-<script>
-function generateMap() {
-  const pairs = [];
-  for (let i = 1; i <= 6; i++) {
-    const sel = document.getElementById('sel_' + i);
-    if (sel && sel.value) {
-      pairs.push(sel.value + ':' + i);
-    }
-  }
-  if (pairs.length === 0) {
-    alert('Selecciona al menos un item para mapear.');
-    return;
-  }
-  const result = pairs.join(',');
-  document.getElementById('map-output').textContent = result;
-  document.getElementById('result-map').style.display = 'block';
-}
-</script>
-</body>
-</html>"""
-
-    return html
-
-
 @app.route("/admin/revendedores/sync", methods=["POST"])
 def admin_revendedores_sync_catalog():
     user = session.get("user")
@@ -3551,13 +3069,11 @@ def admin_revendedores_sync_catalog():
         return jsonify({"ok": False, "error": "Configura REVENDEDORES_API_KEY o WEBB_API_KEY"}), 400
 
     normalized = []
-    source = "api"
     remote_error = ""
 
     try:
         resp = _requests_lib.get(
             f"{base_url}{catalog_path}",
-            params={"api_key": api_key},
             headers={"X-API-Key": api_key},
             timeout=30,
         )
@@ -3568,29 +3084,16 @@ def admin_revendedores_sync_catalog():
                 payload = resp.json()
             except Exception:
                 snippet = (resp.text or "").strip().replace("\n", " ")[:180]
-                remote_error = f"Respuesta no JSON en {catalog_path}: {snippet or 'vacía'}"
+                remote_error = f"Respuesta no JSON: {snippet or 'vacía'}"
             else:
                 normalized = _normalize_rev_catalog_payload(payload)
                 if not normalized:
-                    remote_error = f"Catálogo API sin ítems válidos en {catalog_path}"
+                    remote_error = "Catálogo API sin paquetes válidos"
     except Exception as exc:
         remote_error = f"No se pudo consultar catálogo API: {str(exc)}"
 
-    fallback_error = ""
     if not normalized:
-        local_db_path = _revendedores_local_db_path()
-        normalized, fallback_error = _load_rev_catalog_from_local_db(local_db_path)
-        if normalized:
-            source = "local_db"
-
-    # Requisito operativo: solo catálogo de juegos tipo ID.
-    normalized = [ent for ent in normalized if _is_id_game_catalog_entry(ent)]
-
-    if not normalized:
-        detail = remote_error or "Sin detalle API"
-        if fallback_error:
-            detail += f" | Fallback local: {fallback_error}"
-        return jsonify({"ok": False, "error": f"No se pudo consultar catálogo de Revendedores (solo juegos ID): {detail}"}), 502
+        return jsonify({"ok": False, "error": f"No se pudo sincronizar catálogo de Revendedores: {remote_error}"}), 502
 
     created = 0
     updated = 0
@@ -3630,7 +3133,7 @@ def admin_revendedores_sync_catalog():
 
     return jsonify({
         "ok": True,
-        "source": source,
+        "source": "api",
         "created": created,
         "updated": updated,
         "total": len(normalized),
