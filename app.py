@@ -769,166 +769,206 @@ def send_email_html(to_email: str, subject: str, html_body: str, text_body: str 
     except Exception:
         return False
 
-def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackageItem'):
-    # Brand title instead of logo; support via WhatsApp if configured
-    site_name = get_config_value("site_name", "InefableStore")
-    support_url = get_config_value("support_url", "") or "#"
-    whatsapp_url = get_config_value("whatsapp_url", "https://api.whatsapp.com/send?phone=%2B584125712917&context=Aff7qdKb5GW1QQopWoY5hu5m7aqDlXIwIePiy5n9tHAbOwwr7S_MpuFfFShRCkwT3obW4f_deI_-Pn-lIqpXebAyMVygTiqDvi2nUus8r-8gIUZPXawe5ygyCSYTu_9gnBCaSb_Hpta6aVnEAFw&source=FB_Page&app=facebook&entry_point=page_cta&fbclid=IwY2xjawNIxQhleHRuA2FlbQIxMABicmlkETAzV1c0cGtnNWZ0NDRLeFBLAR7pcNiHoxI3HNYArGiUIh2FTQpQWZSpIC2UBGHmUgayIhB8A4ziqRKz2Ttq1g_aem_vO-bNFKE2SRZSSZHa_Faow") or support_url or "#"
-    privacy_url = get_config_value("privacy_url", "") or "#"
-    unsubscribe_url = get_config_value("unsubscribe_url", "") or "#"
-    juego = (pkg.name if pkg else '').strip()
-    item_t = (it.title if it else 'N/A')
-    monto = f"{o.amount} {o.currency}"
-    is_gift = (pkg.category or '').lower() == 'gift' if pkg else False
-    # Delivery codes (single or multiple)
-    code_row = ''
-    try:
-        codes = []
-        if (o.delivery_codes_json or '').strip():
-            parsed = json.loads(o.delivery_codes_json or '[]')
-            if isinstance(parsed, list):
-                codes = [str(x or '').strip() for x in parsed if str(x or '').strip()]
-        if not codes and (o.delivery_code or '').strip():
-            codes = [o.delivery_code.strip()]
-        if codes:
-            rows = []
-            for idx, c in enumerate(codes, start=1):
-                label = 'Código' if len(codes) == 1 else f'Código #{idx}'
-                rows.append(f"""
-            <tr>
-                <td style=\"color: #bbbbbb; font-size: 14px; padding-left: 0;\"><strong>{label}:</strong></td>
-                <td align=\"right\" style=\"color: #ffffff; font-size: 14px; padding-right: 0;\">{c}</td>
-            </tr>
-                """)
-            code_row = "\n".join(rows)
-    except Exception:
-        code_row = code_row
-    # Build items section for multi-item orders
-    items_section = ""
-    try:
-        if (o.items_json or '').strip():
-            items = json.loads(o.items_json or '[]')
-            if isinstance(items, list) and items:
-                # rows for each item
-                item_rows = []
-                for ent in items:
-                    t = ent.get('title')
-                    q = int(ent.get('qty') or 1)
-                    try:
-                        p = float(ent.get('price') or 0.0)
-                    except Exception:
-                        p = 0.0
-                    item_rows.append(f"""
-              <tr>
-                <td style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>{q} x</strong></td>
-                <td align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{t} · ${p:.2f} c/u</td>
-              </tr>
-                    """)
-                items_section = "\n".join(item_rows)
-    except Exception:
-        items_section = ""
+def _email_style():
+    """Color constants for Inefable Store email templates."""
+    return {
+        'bg': '#0b0f14',
+        'card_bg': '#111827',
+        'accent': '#1d4ed8',
+        'accent_light': '#3b82f6',
+        'text': '#e0e0e0',
+        'muted': '#94a3b8',
+        'border': '#1e293b',
+        'success': '#10b981',
+        'warning': '#f59e0b',
+        'danger': '#ef4444',
+        'white': '#ffffff',
+        'font': "'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+    }
 
-    # Compute total quantity and label
+
+def _email_brand():
+    return get_config_value("site_name", "InefableStore")
+
+
+def _email_support_links():
+    whatsapp = get_config_value("whatsapp_url", "")
+    support = get_config_value("support_url", "")
+    privacy = get_config_value("privacy_url", "")
+    return {'whatsapp': whatsapp or '', 'support': support or '', 'privacy': privacy or ''}
+
+
+def _email_wrap(title, body_content):
+    """Wrap body content in a full HTML email structure."""
+    s = _email_style()
+    brand = _email_brand()
+    sup = _email_support_links()
+
+    links_html = ''
+    if sup['whatsapp']:
+        links_html += f'<a href="{sup["whatsapp"]}" style="color:{s["accent_light"]}; text-decoration:none; margin-right:16px;">WhatsApp</a>'
+    if sup['support']:
+        links_html += f'<a href="{sup["support"]}" style="color:{s["accent_light"]}; text-decoration:none; margin-right:16px;">Soporte</a>'
+    if sup['privacy']:
+        links_html += f'<a href="{sup["privacy"]}" style="color:{s["accent_light"]}; text-decoration:none;">Privacidad</a>'
+
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+</head>
+<body style="margin:0; padding:0; background-color:{s['bg']}; font-family:{s['font']}; color:{s['text']}; -webkit-text-size-adjust:100%;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:{s['bg']};">
+<tr><td align="center" style="padding:24px 16px;">
+
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:{s['card_bg']}; border-radius:12px; overflow:hidden; border:1px solid {s['border']};">
+
+<!-- Header -->
+<tr>
+<td style="background: linear-gradient(135deg, {s['accent']} 0%, #1e40af 100%); padding:28px 32px; text-align:center;">
+    <h1 style="margin:0; font-size:24px; font-weight:700; color:{s['white']}; letter-spacing:0.5px;">{brand}</h1>
+</td>
+</tr>
+
+<!-- Body -->
+<tr>
+<td style="padding:32px 32px 24px 32px;">
+    {body_content}
+</td>
+</tr>
+
+<!-- Footer -->
+<tr>
+<td style="padding:20px 32px 28px 32px; border-top:1px solid {s['border']}; text-align:center;">
+    {f'<p style="margin:0 0 8px 0; font-size:13px; color:{s["muted"]};">¿Necesitas ayuda?</p><p style="margin:0 0 12px 0; font-size:13px;">{links_html}</p>' if links_html else ''}
+    <p style="margin:0; font-size:12px; color:{s['muted']};">&copy; {now_ve().year} {brand} &mdash; Todos los derechos reservados</p>
+</td>
+</tr>
+
+</table>
+</td></tr></table>
+</body>
+</html>"""
+
+
+def _email_detail_row(label, value, value_color=None):
+    """Single detail row for order info tables."""
+    s = _email_style()
+    vc = value_color or s['white']
+    return f"""<tr>
+<td style="padding:8px 0; color:{s['muted']}; font-size:14px; border-bottom:1px solid {s['border']}; width:40%;">{label}</td>
+<td style="padding:8px 0; color:{vc}; font-size:14px; font-weight:600; border-bottom:1px solid {s['border']}; text-align:right;">{value}</td>
+</tr>"""
+
+
+def _email_status_badge(label, color):
+    """Inline status badge."""
+    return f'<span style="display:inline-block; padding:4px 14px; background-color:{color}; color:#fff; border-radius:20px; font-size:13px; font-weight:600; letter-spacing:0.3px;">{label}</span>'
+
+
+def _email_code_block(codes):
+    """Render delivery code(s) as a highlighted block."""
+    s = _email_style()
+    if not codes:
+        return ''
+    rows = []
+    for idx, c in enumerate(codes, start=1):
+        label = 'Tu codigo' if len(codes) == 1 else f'Codigo #{idx}'
+        rows.append(f"""
+<div style="margin:{('16' if idx > 1 else '24')}px 0 0 0; padding:20px; background-color:#0b0f14; border:2px dashed {s['accent']}; border-radius:10px; text-align:center;">
+    <p style="margin:0 0 8px 0; font-size:13px; color:{s['muted']}; text-transform:uppercase; letter-spacing:1px;">{label}</p>
+    <p style="margin:0; font-size:28px; font-weight:700; color:{s['accent_light']}; letter-spacing:2px; font-family:monospace;">{c}</p>
+    <p style="margin:8px 0 0 0; font-size:12px; color:{s['muted']};">Copia este codigo y canjealo en la plataforma correspondiente</p>
+</div>""")
+    return "\n".join(rows)
+
+
+def _email_items_rows(o):
+    """Build detail rows and compute metadata for multi-item or single-item orders."""
+    items_html = ''
     qty_total = 1
     try:
         if (o.items_json or '').strip():
             items = json.loads(o.items_json or '[]')
             if isinstance(items, list) and items:
                 qty_total = sum(int(ent.get('qty') or 1) for ent in items)
+                for ent in items:
+                    t = ent.get('title', 'N/A')
+                    q = int(ent.get('qty') or 1)
+                    try:
+                        p = float(ent.get('price') or 0.0)
+                    except Exception:
+                        p = 0.0
+                    items_html += _email_detail_row(f'{q} x', f'{t} - ${p:.2f} c/u')
     except Exception:
-        qty_total = 1
-    qty_label = 'Cantidad de tarjetas' if is_gift else 'Recargas totales'
-    qty_row = f"""
-              <tr>
-                <td style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>{qty_label}:</strong></td>
-                <td align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{qty_total}</td>
-              </tr>
-    """
+        pass
+    return items_html, qty_total
 
-    html = f"""
-<!DOCTYPE html>
-<html lang=\"es\">
-<head>
-  <meta charset=\"UTF-8\">
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-  <title>Orden Aprobada - {site_name}</title>
-  <style type=\"text/css\">body, table, td, a {{ font-family: Arial, sans-serif; }}</style>
-</head>
-<body style=\"margin:0; padding:0; background-color:#1a1a1a;\">
-  <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"table-layout:fixed; background-color:#1a1a1a;\">
-    <tr><td align=\"center\" style=\"padding:20px 0;\">
-      <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"max-width:600px; background-color:#2c2c2c; border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,0.4);\">
-        <tr>
-          <td align=\"center\" style=\"padding:26px 20px 16px;\">
-            <div style=\"display:inline-block; font-weight:900; font-size:22px; letter-spacing:1px; color:#ffffff;\">{site_name.upper()}</div>
-          </td>
-        </tr>
-        <tr>
-          <td align=\"center\" style=\"padding:10px 20px;\">
-            <h1 style=\"color:#4CAF50; font-size:24px; margin:0; padding:0;\">¡{'Gift enviado' if is_gift else 'Recarga Exitosa'}!</h1>
-          </td>
-        </tr>
-        <tr>
-          <td style=\"padding:20px 40px;\">
-            <p style=\"color:#f4f4f4; font-size:16px; line-height:24px; margin-top:0;\"><strong>Estimado cliente,</strong></p>
-            <p style=\"color:#cccccc; font-size:16px; line-height:24px;\">Nos complace informarle que su orden ha sido procesada con éxito. A continuación, el detalle de su transacción:</p>
-          </td>
-        </tr>
-        <tr>
-          <td style=\"padding:10px 40px;\">
-            <table border=\"0\" cellpadding=\"10\" cellspacing=\"0\" width=\"100%\" style=\"background-color:#383838; border:1px solid #444444; border-radius:4px;\">
-              <tr>
-                <td width=\"50%\" style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>Orden #:</strong></td>
-                <td width=\"50%\" align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{o.id}</td>
-              </tr>
-              <tr>
-                <td style=\"color:#bbbbbb; font-size:14px; padding-left:0;\"><strong>Producto:</strong></td>
-                <td align=\"right\" style=\"color:#ffffff; font-size:14px; padding-right:0;\">{juego}</td>
-              </tr>
-              {items_section if items_section else f'<tr>\n                <td style=\\"color:#bbbbbb; font-size:14px; padding-left:0;\\"><strong>Paquete:</strong></td>\n                <td align=\\"right\\" style=\\"color:#ffffff; font-size:14px; padding-right:0;\\">{item_t}</td>\n              </tr>'}
-              {code_row}
-              {qty_row}
-              <tr style=\"border-top:1px solid #555555;\">
-                <td style=\"color:#ffffff; font-size:16px; font-weight:bold; padding-left:0;\"><strong>Monto Total:</strong></td>
-                <td align=\"right\" style=\"color:#4CAF50; font-size:16px; font-weight:bold; padding-right:0;\">{monto}</td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        <tr>
-          <td style=\"padding:30px 40px 20px;\">
-            <p style=\"color:#cccccc; font-size:16px; line-height:24px;\">Agradecemos su preferencia y confianza en {site_name}. Si necesita asistencia adicional o tiene alguna consulta, no dude en contactarnos. ¡Estamos para servirle!</p>
-            <p style=\"color:#f4f4f4; font-size:16px; line-height:24px; margin-bottom:0;\">Atentamente,<br>El equipo de {site_name}</p>
-          </td>
-        </tr>
-        <tr>
-          <td align=\"center\" style=\"padding: 20px 40px 30px;\">
-            <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr>
-              <td align=\"center\" style=\"border-radius:5px;\" bgcolor=\"#009688\">
-                <a href=\"{whatsapp_url}\" target=\"_blank\" style=\"font-size:16px; font-family:Arial, sans-serif; color:#ffffff; text-decoration:none; padding:12px 25px; border-radius:5px; border:1px solid #009688; display:inline-block;\">Contactar a Soporte</a>
-              </td>
-            </tr></table>
-          </td>
-        </tr>
-        <tr>
-          <td align=\"center\" style=\"padding:20px 40px; background-color:#383838; border-radius:0 0 8px 8px;\">
-            <p style=\"color:#999999; font-size:12px; line-height:18px; margin:0;\">&copy; {now_ve().year} {site_name}. Todos los derechos reservados.</p>
-            <p style=\"color:#999999; font-size:12px; line-height:18px; margin-top:5px;\"><a href=\"{unsubscribe_url}\" target=\"_blank\" style=\"color:#009688; text-decoration:underline;\">Darse de baja</a> | <a href=\"{privacy_url}\" target=\"_blank\" style=\"color:#009688; text-decoration:underline;\">Política de Privacidad</a></p>
-          </td>
-        </tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>
-"""
-    # Plain text summary
+
+def _email_delivery_codes(o):
+    """Extract delivery codes from an order."""
+    codes = []
     try:
-        lines = [
-            "Estimado cliente,\n",
-            "Su orden ha sido procesada con éxito.",
-            f"Orden #{o.id} – {juego}",
-        ]
+        if (o.delivery_codes_json or '').strip():
+            parsed = json.loads(o.delivery_codes_json or '[]')
+            if isinstance(parsed, list):
+                codes = [str(x or '').strip() for x in parsed if str(x or '').strip()]
+        if not codes and (o.delivery_code or '').strip():
+            codes = [o.delivery_code.strip()]
+    except Exception:
+        pass
+    return codes
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ORDEN APROBADA - se envia al cliente
+# ──────────────────────────────────────────────────────────────────────
+
+def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackageItem'):
+    s = _email_style()
+    brand = _email_brand()
+    juego = (pkg.name if pkg else '').strip()
+    item_t = (it.title if it else 'N/A')
+    monto = f"{o.amount} {o.currency}"
+    is_gift = (pkg.category or '').lower() == 'gift' if pkg else False
+
+    codes = _email_delivery_codes(o)
+    code_html = _email_code_block(codes)
+    items_html, qty_total = _email_items_rows(o)
+    qty_label = 'Cantidad de tarjetas' if is_gift else 'Recargas totales'
+
+    body = f"""
+<h2 style="margin:0 0 8px 0; font-size:20px; color:{s['white']};">{'Gift enviado' if is_gift else 'Recarga Exitosa'}</h2>
+<p style="margin:0 0 20px 0; font-size:15px; color:{s['text']}; line-height:1.6;">
+    Tu orden <strong style="color:{s['accent_light']};">#{o.id}</strong> ha sido procesada exitosamente.
+    {('Aqui tienes tu codigo:' if codes else 'Tu recarga ha sido aplicada.')}
+</p>
+
+{_email_status_badge('Completada', s['success'])}
+
+{code_html}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
+{_email_detail_row('Orden', f'#{o.id}')}
+{_email_detail_row('Juego', juego or 'N/A')}
+{items_html if items_html else _email_detail_row('Paquete', item_t)}
+{_email_detail_row(qty_label, str(qty_total))}
+{_email_detail_row('Monto', monto, s['accent_light'])}
+{_email_detail_row('Jugador', o.customer_name or o.customer_id or 'N/A') if o.customer_id else ''}
+</table>
+
+<p style="margin:24px 0 0 0; font-size:14px; color:{s['text']}; line-height:1.5;">
+    Gracias por tu compra! Esperamos verte pronto de nuevo.
+</p>
+"""
+
+    html = _email_wrap(f'Orden #{o.id} aprobada - {brand}', body)
+
+    # Plain text fallback
+    try:
+        lines = [f"Orden #{o.id} aprobada\n", f"Juego: {juego}", f"Paquete: {item_t}"]
         if (o.items_json or '').strip():
             items = json.loads(o.items_json or '[]')
             if isinstance(items, list) and items:
@@ -941,42 +981,176 @@ def build_order_approved_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackage
                     except Exception:
                         p = 0.0
                     lines.append(f" - {q} x {t} (${p:.2f} c/u)")
-        else:
-            lines.append(f"Paquete: {item_t}")
         lines.append(f"{qty_label}: {qty_total}")
         lines.append(f"Monto: {monto}")
-        # Include gift codes in text email
-        try:
-            codes_txt = []
-            if (o.delivery_codes_json or '').strip():
-                parsed = json.loads(o.delivery_codes_json or '[]')
-                if isinstance(parsed, list):
-                    codes_txt = [str(x or '').strip() for x in parsed if str(x or '').strip()]
-            if not codes_txt and (o.delivery_code or '').strip():
-                codes_txt = [o.delivery_code.strip()]
-            if codes_txt:
-                if len(codes_txt) == 1:
-                    lines.append(f"Código: {codes_txt[0]}")
-                else:
-                    lines.append("Códigos:")
-                    for i, c in enumerate(codes_txt, start=1):
-                        lines.append(f" - #{i}: {c}")
-        except Exception:
-            pass
-        if (o.delivery_code or '').strip():
-            lines.append(f"Código: {o.delivery_code}")
-        lines.append("\nGracias por su preferencia.")
+        if codes:
+            for i, c in enumerate(codes, start=1):
+                label = 'Codigo' if len(codes) == 1 else f'Codigo #{i}'
+                lines.append(f"{label}: {c}")
+        lines.append(f"\nGracias por tu compra!\n- {brand}")
         text = "\n".join(lines)
     except Exception:
-        text = (
-            "Estimado cliente,\n\n"
-            "Su orden ha sido procesada con éxito.\n"
-            f"Orden #{o.id} – {juego}\n"
-            f"Paquete: {item_t}\n"
-            f"Monto: {monto}\n"
-            + (f"Código: {o.delivery_code}\n" if (o.delivery_code or '').strip() else "")
-            + "\nGracias por su preferencia."
-        )
+        text = f"Orden #{o.id} aprobada - {juego} - {monto}\nGracias por tu compra!\n- {brand}"
+    return html, text
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ORDEN CREADA - se envia al cliente
+# ──────────────────────────────────────────────────────────────────────
+
+def build_order_created_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackageItem'):
+    s = _email_style()
+    brand = _email_brand()
+    juego = (pkg.name if pkg else '').strip()
+    item_t = (it.title if it else 'N/A')
+    monto = f"{o.amount} {o.currency}"
+
+    body = f"""
+<h2 style="margin:0 0 8px 0; font-size:20px; color:{s['white']};">Orden recibida!</h2>
+<p style="margin:0 0 20px 0; font-size:15px; color:{s['text']}; line-height:1.6;">
+    Hemos recibido tu orden <strong style="color:{s['accent_light']};">#{o.id}</strong>.
+    Estamos verificando tu pago. Te notificaremos cuando sea procesada.
+</p>
+
+{_email_status_badge('Pendiente de verificacion', s['warning'])}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+{_email_detail_row('Orden', f'#{o.id}')}
+{_email_detail_row('Juego', juego or 'N/A')}
+{_email_detail_row('Paquete', item_t)}
+{_email_detail_row('Monto', monto, s['accent_light'])}
+{_email_detail_row('Metodo de pago', (o.method or '').upper())}
+{_email_detail_row('Referencia', o.reference or 'N/A')}
+{_email_detail_row('Jugador', o.customer_name or o.customer_id or 'N/A') if o.customer_id else ''}
+</table>
+
+<p style="margin:24px 0 0 0; font-size:13px; color:{s['muted']}; line-height:1.5;">
+    El tiempo de procesamiento habitual es de <strong>5 a 30 minutos</strong> en horario de atencion.
+    Recibiras un correo cuando tu orden sea aprobada.
+</p>
+"""
+
+    html = _email_wrap(f'Orden #{o.id} recibida - {brand}', body)
+
+    text = (
+        f"Orden recibida!\n\n"
+        f"Tu orden #{o.id} ha sido registrada.\n"
+        f"Juego: {juego}\nPaquete: {item_t}\nMonto: {monto}\n"
+        f"Metodo: {(o.method or '').upper()}\nReferencia: {o.reference or 'N/A'}\n\n"
+        f"Estamos verificando tu pago. Te notificaremos cuando sea procesada.\n\n- {brand}"
+    )
+    return html, text
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ORDEN RECHAZADA - se envia al cliente
+# ──────────────────────────────────────────────────────────────────────
+
+def build_order_rejected_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackageItem', reason=''):
+    s = _email_style()
+    brand = _email_brand()
+    juego = (pkg.name if pkg else '').strip()
+    item_t = (it.title if it else 'N/A')
+    monto = f"{o.amount} {o.currency}"
+    reason_text = reason or ''
+
+    reason_html = ''
+    if reason_text:
+        reason_html = f"""
+<div style="margin:20px 0; padding:16px; background-color:rgba(239,68,68,0.1); border-left:4px solid {s['danger']}; border-radius:6px;">
+    <p style="margin:0 0 4px 0; font-size:12px; color:{s['danger']}; text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">Motivo</p>
+    <p style="margin:0; font-size:14px; color:{s['text']}; line-height:1.5;">{reason_text}</p>
+</div>
+"""
+
+    body = f"""
+<h2 style="margin:0 0 8px 0; font-size:20px; color:{s['white']};">Orden rechazada</h2>
+<p style="margin:0 0 20px 0; font-size:15px; color:{s['text']}; line-height:1.6;">
+    Lamentamos informarte que tu orden <strong style="color:{s['accent_light']};">#{o.id}</strong>
+    no pudo ser procesada.
+</p>
+
+{_email_status_badge('Rechazada', s['danger'])}
+
+{reason_html}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
+{_email_detail_row('Orden', f'#{o.id}')}
+{_email_detail_row('Juego', juego or 'N/A')}
+{_email_detail_row('Paquete', item_t)}
+{_email_detail_row('Monto', monto, s['accent_light'])}
+{_email_detail_row('Referencia', o.reference or 'N/A')}
+</table>
+
+<p style="margin:24px 0 0 0; font-size:14px; color:{s['text']}; line-height:1.5;">
+    Si crees que esto es un error, por favor contactanos con tu numero de orden para que podamos revisar tu caso.
+</p>
+"""
+
+    html = _email_wrap(f'Orden #{o.id} rechazada - {brand}', body)
+
+    text = (
+        f"Orden rechazada\n\n"
+        f"Tu orden #{o.id} no pudo ser procesada.\n"
+        + (f"Motivo: {reason_text}\n" if reason_text else "")
+        + f"Juego: {juego}\nPaquete: {item_t}\nMonto: {monto}\n"
+        f"Referencia: {o.reference or 'N/A'}\n\n"
+        f"Si crees que es un error, contactanos con tu numero de orden.\n\n- {brand}"
+    )
+    return html, text
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ADMIN - notificacion de nueva orden
+# ──────────────────────────────────────────────────────────────────────
+
+def build_admin_new_order_email(o: 'Order', pkg: 'StorePackage', it: 'GamePackageItem'):
+    s = _email_style()
+    brand = _email_brand()
+    monto = f"{o.amount} {o.currency}"
+    juego = (pkg.name if pkg else '').strip()
+    item_t = (it.title if it else 'N/A')
+
+    items_html, qty_total = _email_items_rows(o)
+
+    body = f"""
+<h2 style="margin:0 0 8px 0; font-size:20px; color:{s['white']};">Nueva orden recibida</h2>
+<p style="margin:0 0 20px 0; font-size:15px; color:{s['text']}; line-height:1.6;">
+    Se ha registrado una nueva orden <strong style="color:{s['accent_light']};">#{o.id}</strong>
+    que requiere tu atencion.
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;">
+{_email_detail_row('Orden', f'#{o.id}')}
+{_email_detail_row('Juego', juego or 'N/A')}
+{items_html if items_html else _email_detail_row('Paquete', item_t)}
+{_email_detail_row('Monto', monto, s['accent_light'])}
+{_email_detail_row('Metodo', (o.method or '').upper())}
+{_email_detail_row('Referencia', o.reference or 'N/A')}
+{_email_detail_row('Email cliente', o.email or 'N/A')}
+{_email_detail_row('Telefono', o.phone or 'N/A')}
+{_email_detail_row('ID Jugador', o.customer_id or 'N/A') if o.customer_id else ''}
+{_email_detail_row('Nickname', o.customer_name or 'N/A') if o.customer_name else ''}
+{_email_detail_row('Zona ID', o.customer_zone) if o.customer_zone else ''}
+{_email_detail_row('Codigo afiliado', o.special_code) if o.special_code else ''}
+</table>
+
+<div style="margin-top:24px; text-align:center;">
+    <p style="margin:0; font-size:14px; color:{s['muted']};">Ingresa al panel de administracion para procesar esta orden.</p>
+</div>
+"""
+
+    html = _email_wrap(f'Nueva orden #{o.id} - {brand}', body)
+
+    text = (
+        f"Nueva orden recibida\n\n"
+        f"Orden: #{o.id}\nJuego: {juego}\nPaquete: {item_t}\n"
+        f"Monto: {monto}\nMetodo: {(o.method or '').upper()}\n"
+        f"Referencia: {o.reference or 'N/A'}\nEmail: {o.email or 'N/A'}\n"
+        + (f"Jugador: {o.customer_name or o.customer_id}\n" if o.customer_id else "")
+        + (f"Codigo afiliado: {o.special_code}\n" if o.special_code else "")
+        + f"\nIngresa al panel de administracion para procesar esta orden.\n\n- {brand}"
+    )
     return html, text
 
 
@@ -2736,100 +2910,30 @@ def create_order():
                 order_id=o.id,
             ))
         db.session.commit()
-        # Notify admin by email about new pending order
+        # Notify admin by email about new pending order (HTML)
         try:
-            # Destination: AppConfig override > ENV > ADMIN_EMAIL
             to_addr = get_config_value("admin_notify_email", ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL)
             pkg = StorePackage.query.get(o.store_package_id)
             it = GamePackageItem.query.get(o.item_id) if o.item_id else None
-            lines = [
-                f"Nueva orden #{o.id} creada",
-                f"Estado: {o.status}",
-                f"Juego: {(pkg.name if pkg else o.store_package_id)}",
-                f"Método: {o.method}  Moneda: {o.currency}",
-                f"Monto: {o.amount}",
-                f"Referencia: {o.reference}",
-                f"Cliente: {o.name or o.email or o.customer_id}",
-                f"Código especial: {o.special_code or '-'}",
-                f"Fecha: {o.created_at.isoformat()}",
-            ]
-            # Breakdown for multiple items, if present
+            admin_html, admin_text = build_admin_new_order_email(o, pkg, it)
+            brand = _email_brand()
             try:
-                if (o.items_json or '').strip():
-                    items = json.loads(o.items_json or '[]')
-                    if isinstance(items, list) and items:
-                        lines.append("Paquetes:")
-                        for ent in items:
-                            t = ent.get("title")
-                            q = ent.get("qty")
-                            p = ent.get("price")
-                            try:
-                                p = float(p or 0.0)
-                            except Exception:
-                                p = 0.0
-                            lines.append(f" - {q} x {t} (${p:.2f} c/u)")
-                        try:
-                            subtotal = sum(float((x.get('price') or 0.0)) * int(x.get('qty') or 1) for x in items)
-                            lines.append(f"Subtotal USD: ${subtotal:.2f}")
-                        except Exception:
-                            pass
-                else:
-                    # Single item fallback
-                    lines.insert(3, f"Paquete: {(it.title if it else 'N/A')}")
-                # Quantity line (gift: cards, others: recharges)
+                send_email_html(to_addr, f"[{brand}] Nueva orden #{o.id}", admin_html, admin_text)
+            except Exception:
+                send_email(to_addr, f"Nueva orden #{o.id} pendiente", admin_text)
+        except Exception:
+            pass
+        # Notify customer that order was received (HTML)
+        try:
+            if o.email:
+                pkg = pkg if 'pkg' in dir() else StorePackage.query.get(o.store_package_id)
+                it = it if 'it' in dir() else (GamePackageItem.query.get(o.item_id) if o.item_id else None)
+                cust_html, cust_text = build_order_created_email(o, pkg, it)
+                brand = _email_brand()
                 try:
-                    qty_total = 1
-                    if (o.items_json or '').strip():
-                        items = json.loads(o.items_json or '[]')
-                        if isinstance(items, list) and items:
-                            qty_total = sum(int(x.get('qty') or 1) for x in items)
-                    is_gift = (pkg.category or '').lower() == 'gift' if pkg else False
-                    qty_label = 'Cantidad de tarjetas' if is_gift else 'Recargas totales'
-                    lines.append(f"{qty_label}: {qty_total}")
+                    send_email_html(o.email, f"Orden #{o.id} recibida - {brand}", cust_html, cust_text)
                 except Exception:
-                    pass
-            except Exception:
-                pass
-            # If affiliate code is present, include before/after discount prices
-            try:
-                disc_pct = 0.0
-                su = None
-                if o.special_user_id:
-                    su = SpecialUser.query.get(o.special_user_id)
-                if (not su) and (o.special_code or ''):
-                    su = SpecialUser.query.filter(db.func.lower(SpecialUser.code) == (o.special_code or '').lower(), SpecialUser.active == True).first()
-                # Category-based discount
-                if su and su.active:
-                    try:
-                        disc_pct = float(su.discount_percent or 0.0)
-                        if pkg and (pkg.category or '').lower() == 'gift' and float(su.discount_gift_percent or 0.0) > 0:
-                            disc_pct = float(su.discount_gift_percent or 0.0)
-                        elif pkg and (pkg.category or '').lower() == 'mobile' and float(su.discount_mobile_percent or 0.0) > 0:
-                            disc_pct = float(su.discount_mobile_percent or 0.0)
-                    except Exception:
-                        disc_pct = 0.0
-                base_usd = float((it.price if it else 0.0) or 0.0)
-                if disc_pct > 0 and base_usd > 0:
-                    after_usd = round(base_usd * (1.0 - disc_pct / 100.0), 2)
-                    if (o.currency or 'USD').upper() == 'USD':
-                        before_disp = f"${base_usd:.2f}"
-                        after_disp = f"${after_usd:.2f}"
-                    else:
-                        # Convert to local currency using configured rate
-                        try:
-                            rate = float(get_config_value("exchange_rate_bsd_per_usd", "0") or 0)
-                        except Exception:
-                            rate = 0.0
-                        before_loc = round(base_usd * (rate if rate > 0 else 0.0), 2)
-                        after_loc = round(after_usd * (rate if rate > 0 else 0.0), 2)
-                        before_disp = f"{before_loc} {o.currency}"
-                        after_disp = f"{after_loc} {o.currency}"
-                    lines.append(f"Precio antes del descuento: {before_disp}")
-                    lines.append(f"Precio con descuento: {after_disp}")
-                    lines.append(f"Descuento aplicado: {disc_pct:.0f}%")
-            except Exception:
-                pass
-            send_email(to_addr, f"Nueva orden #{o.id} pendiente", "\n".join(lines))
+                    send_email_async(o.email, f"Orden #{o.id} recibida - {brand}", cust_text)
         except Exception:
             pass
         # Purge per-user beyond latest 30 (by email or customer_id)
@@ -3177,13 +3281,27 @@ def admin_orders_set_status(oid: int):
             pkg = StorePackage.query.get(o.store_package_id)
             it = GamePackageItem.query.get(o.item_id) if o.item_id else None
             to_addr = o.email or None
+            brand = _email_brand()
             if to_addr:
                 html, text = build_order_approved_email(o, pkg, it)
-                # use HTML email; if async fails, ignore
                 try:
-                    send_email_html(to_addr, f"Orden #{o.id} aprobada – Inefable Store", html, text)
+                    send_email_html(to_addr, f"Orden #{o.id} aprobada - {brand}", html, text)
                 except Exception:
-                    send_email_async(to_addr, f"Orden #{o.id} aprobada – Inefable Store", text)
+                    send_email_async(to_addr, f"Orden #{o.id} aprobada - {brand}", text)
+    except Exception:
+        pass
+    # Notify buyer on rejection (HTML email)
+    try:
+        if status == "rejected" and o.email:
+            pkg = StorePackage.query.get(o.store_package_id)
+            it = GamePackageItem.query.get(o.item_id) if o.item_id else None
+            reason = (data.get("reason") or "").strip()
+            brand = _email_brand()
+            html, text = build_order_rejected_email(o, pkg, it, reason=reason)
+            try:
+                send_email_html(o.email, f"Orden #{o.id} rechazada - {brand}", html, text)
+            except Exception:
+                send_email_async(o.email, f"Orden #{o.id} rechazada - {brand}", text)
     except Exception:
         pass
 

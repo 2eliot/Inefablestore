@@ -552,9 +552,16 @@ document.addEventListener('DOMContentLoaded', () => {
         customer_zone,
         special_code: qRefCode || '',
         nn: (function() {
+          if (qNick) return qNick;
           const uid = customer_id;
           if (!uid) return '';
           try {
+            const zid = customer_zone || '';
+            if (zid) {
+              const mlKey = `mlnick:${uid}:${zid}`;
+              const mlVal = (localStorage.getItem(mlKey) || '').toString().trim();
+              if (mlVal) return mlVal;
+            }
             return (localStorage.getItem(`ffnick:${uid}`) || '').toString().trim();
           } catch (_) { return ''; }
         })()
