@@ -400,6 +400,8 @@ class Order(db.Model):
     special_user_id = db.Column(db.Integer, nullable=True)
     # Optional: JSON string with multiple items: [{"item_id": int, "qty": int, "title": str, "price": float}]
     items_json = db.Column(db.Text, default="")
+    # Revendedores API automation state (pending_verification, success, etc.)
+    automation_json = db.Column(db.Text, default="")
 
 
 class OrderSummary(db.Model):
@@ -515,6 +517,22 @@ def _order_cleanup_loop():
 
 _cleanup_thread = threading.Thread(target=_order_cleanup_loop, daemon=True)
 _cleanup_thread.start()
+
+
+def _ensure_automation_json_column():
+    """Add automation_json column to orders table if missing (for existing DBs)."""
+    try:
+        with app.app_context():
+            inspector = db.inspect(db.engine)
+            cols = [c['name'] for c in inspector.get_columns('orders')]
+            if 'automation_json' not in cols:
+                db.session.execute(db.text("ALTER TABLE orders ADD COLUMN automation_json TEXT DEFAULT ''"))
+                db.session.commit()
+                print("[Migration] Added automation_json column to orders table")
+    except Exception as e:
+        print(f"[Migration] automation_json check: {e}")
+
+_ensure_automation_json_column()
 
 
 # ==============================
@@ -3005,6 +3023,12 @@ def admin_orders_set_status(oid: int):
 
                     if api_data.get("ok"):
                         o.status = "delivered"
+                        o.automation_json = json.dumps({
+                            "source": "revendedores_api",
+                            "success": True,
+                            "player_name": api_data.get("player_name", ""),
+                            "reference_no": api_data.get("reference_no", ""),
+                        })
                         db.session.commit()
                         webb_result = {
                             "pin": "",
@@ -3016,17 +3040,42 @@ def admin_orders_set_status(oid: int):
                     else:
                         webb_error = api_data.get("error") or "Recarga no completada en Revendedores"
                         o.status = "pending"
+                        o.automation_json = json.dumps({
+                            "source": "revendedores_api",
+                            "pending_verification": True,
+                            "external_order_id": f"INE-{o.id}",
+                            "error": webb_error,
+                        })
                         db.session.commit()
                 except _requests_lib.exceptions.Timeout:
                     webb_error = "Revendedores no respondió en 60 segundos"
                     o.status = "pending"
+                    o.automation_json = json.dumps({
+                        "source": "revendedores_api",
+                        "pending_verification": True,
+                        "external_order_id": f"INE-{o.id}",
+                        "error": webb_error,
+                    })
                     db.session.commit()
                 except Exception as exc:
                     webb_error = str(exc)
                     o.status = "pending"
+                    o.automation_json = json.dumps({
+                        "source": "revendedores_api",
+                        "pending_verification": True,
+                        "external_order_id": f"INE-{o.id}",
+                        "error": webb_error,
+                    })
                     db.session.commit()
             if webb_error and o.status != "delivered":
                 o.status = "pending"
+                if not (o.automation_json or "").strip():
+                    o.automation_json = json.dumps({
+                        "source": "revendedores_api",
+                        "pending_verification": True,
+                        "external_order_id": f"INE-{o.id}",
+                        "error": webb_error,
+                    })
                 try:
                     db.session.commit()
                 except Exception:
@@ -3034,6 +3083,12 @@ def admin_orders_set_status(oid: int):
     except Exception as exc:
         webb_error = str(exc)
         o.status = "pending"
+        o.automation_json = json.dumps({
+            "source": "revendedores_api",
+            "pending_verification": True,
+            "external_order_id": f"INE-{o.id}",
+            "error": str(exc),
+        })
         try:
             db.session.commit()
         except Exception:
@@ -3049,9 +3104,117 @@ def admin_orders_set_status(oid: int):
             "is_last": webb_result.get("is_last", True),
         }
     if webb_error:
-        response_payload["webb_recarga"] = {"ok": False, "error": webb_error}
+        response_payload["webb_recarga"] = {
+            "ok": False,
+            "error": webb_error,
+            "pending_verification": True,
+            "order_id": o.id,
+        }
 
     return jsonify(response_payload)
+
+
+@app.route("/admin/orders/<int:oid>/verify-recharge", methods=["POST"])
+def admin_orders_verify_recharge(oid: int):
+    """Verifica en Revendedores51 si la recarga realmente se completó."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    o = Order.query.get(oid)
+    if not o:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    if o.status not in ("pending",):
+        return jsonify({"ok": True, "result": "already_processed", "order_status": o.status})
+
+    auto_resp = {}
+    try:
+        auto_resp = json.loads(o.automation_json or '{}')
+    except Exception:
+        pass
+
+    if not auto_resp.get("pending_verification"):
+        return jsonify({"ok": True, "result": "no_verification_needed", "can_approve": True})
+
+    ext_order_id = auto_resp.get("external_order_id") or f"INE-{o.id}"
+    webb_url, webb_api_key, _, _ = _revendedores_env()
+
+    if not webb_url or not webb_api_key:
+        return jsonify({"ok": False, "error": "Revendedores API no configurada"})
+
+    try:
+        resp = _requests_lib.get(
+            f"{webb_url}/api/v1/order-status",
+            params={"external_order_id": ext_order_id},
+            headers={"X-API-Key": webb_api_key},
+            timeout=15,
+        )
+        data = resp.json() if resp.ok else {}
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"No se pudo verificar: {e}", "can_approve": False})
+
+    if not data.get("ok"):
+        return jsonify({"ok": False, "error": data.get("error", "Error consultando Revendedores"), "can_approve": False})
+
+    found = data.get("found", False)
+    rev_status = data.get("status", "")
+    rev_order = data.get("order", {})
+
+    if found and rev_status == "completada":
+        player_name = rev_order.get("player_name", "")
+        ref_no = rev_order.get("reference_no", "")
+        o.status = "delivered"
+        o.automation_json = json.dumps({
+            "source": "revendedores_api",
+            "success": True,
+            "verified": True,
+            "player_name": player_name,
+            "reference_no": ref_no,
+        })
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "result": "completed",
+            "order_status": "delivered",
+            "player_name": player_name,
+            "reference_no": ref_no,
+        })
+    elif found and rev_status == "fallida":
+        o.automation_json = json.dumps({
+            "source": "revendedores_api",
+            "pending_verification": False,
+            "verified_failed": True,
+            "error": rev_order.get("error", ""),
+        })
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "result": "failed",
+            "order_status": "pending",
+            "can_approve": True,
+            "message": "Recarga falló en Revendedores. Puedes reintentar.",
+        })
+    elif found and rev_status == "procesando":
+        return jsonify({
+            "ok": True,
+            "result": "processing",
+            "order_status": "pending",
+            "can_approve": False,
+            "message": "La recarga aún se está procesando en Revendedores...",
+        })
+    else:
+        o.automation_json = json.dumps({
+            "source": "revendedores_api",
+            "pending_verification": False,
+        })
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "result": "not_found",
+            "order_status": "pending",
+            "can_approve": True,
+            "message": "No se encontró la recarga en Revendedores. Puedes reintentar.",
+        })
 
 
 @app.route("/store/package/<int:gid>/items")

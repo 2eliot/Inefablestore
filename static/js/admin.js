@@ -2011,6 +2011,43 @@ window.refreshGallery = refreshGallery;
         try { await navigator.clipboard.writeText(value); toast('Copiado'); } catch(_) { toast('No se pudo copiar'); }
         return;
       }
+      // --- Poll verify-recharge ---
+      function _pollVerifyRecharge(orderId, btnEl) {
+        let attempts = 0;
+        const maxAttempts = 12;
+        function _doPoll() {
+          attempts++;
+          fetch(`/admin/orders/${orderId}/verify-recharge`, { method: 'POST' })
+            .then(r => r.json())
+            .then(d => {
+              if (d.result === 'completed') {
+                toast(`✅ Verificado: recarga completada. Jugador: ${d.player_name || ''}`, 'success');
+                if (btnEl) { btnEl.textContent = 'Completada'; btnEl.style.background = '#22c55e'; }
+                setTimeout(() => fetchOrders(), 1500);
+              } else if (d.result === 'processing') {
+                if (btnEl) btnEl.textContent = `Procesando... (${attempts})`;
+                if (attempts < maxAttempts) setTimeout(_doPoll, 5000);
+                else {
+                  if (btnEl) { btnEl.textContent = 'Reintentar verificar'; btnEl.disabled = false; }
+                  btnEl.onclick = function(ev) { ev.preventDefault(); ev.stopPropagation(); attempts = 0; btnEl.disabled = true; btnEl.textContent = 'Verificando...'; _doPoll(); };
+                }
+              } else if (d.can_approve) {
+                toast(d.message || 'Recarga no completada. Puedes reintentar.', 'warning');
+                if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✓'; btnEl.onclick = null; }
+                fetchOrders();
+              } else {
+                if (btnEl) btnEl.textContent = 'Error verificando';
+                if (attempts < maxAttempts) setTimeout(_doPoll, 5000);
+              }
+            })
+            .catch(() => {
+              if (attempts < maxAttempts) setTimeout(_doPoll, 5000);
+              else if (btnEl) { btnEl.textContent = '✓'; btnEl.disabled = false; btnEl.onclick = null; }
+            });
+        }
+        setTimeout(_doPoll, 2000);
+      }
+
       const btnA = e.target.closest('.btn-approve');
       const btnR = e.target.closest('.btn-reject');
       const btn = btnA || btnR;
@@ -2060,6 +2097,12 @@ window.refreshGallery = refreshGallery;
         if (data.webb_recarga) {
           if (data.webb_recarga.ok) {
             toast(`✅ Recarga enviada a Revendedores51 exitosamente`, 'success');
+          } else if (data.webb_recarga.pending_verification) {
+            toast(`⚠️ Recarga reportó error: ${data.webb_recarga.error}. Verificando si se procesó...`, 'error');
+            btn.disabled = true;
+            btn.textContent = btn.textContent ? 'Verificando...' : btn.textContent;
+            _pollVerifyRecharge(data.webb_recarga.order_id, btn);
+            return;
           } else {
             toast(`⚠️ Recarga falló: ${data.webb_recarga.error}. La orden sigue pendiente, puedes reintentar.`, 'error');
           }
