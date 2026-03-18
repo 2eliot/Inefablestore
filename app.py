@@ -268,6 +268,130 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
         return ""
 
 
+def _scrape_smileone_mobilelegends_nick(role_id: str, zone_id: str) -> str:
+    """Consulta la API interna de Smile.One para obtener el nickname de Mobile Legends."""
+    try:
+        sess = _requests_lib.Session()
+        sess.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+        })
+        page_url = "https://www.smile.one/merchant/mobilelegends?source=other"
+        page = sess.get(page_url, timeout=8)
+        print(f"[ML] page status={page.status_code} cookies={dict(sess.cookies)}")
+
+        csrf = ""
+        raw_csrf_cookie = sess.cookies.get("_csrf", "")
+        try:
+            import urllib.parse as _urlparse
+            decoded = _urlparse.unquote(raw_csrf_cookie)
+            m = re.search(r'i:1;s:\d+:"([^"]+)"', decoded)
+            if m:
+                csrf = m.group(1)
+        except Exception:
+            pass
+        if not csrf:
+            for pat in [r'name="_csrf"\s+value="([^"]+)"', r'"csrf"\s*:\s*"([^"]+)"']:
+                m = re.search(pat, page.text)
+                if m:
+                    csrf = m.group(1)
+                    break
+        print(f"[ML] csrf={csrf!r}")
+
+        post_headers = {
+            "Referer": page_url,
+            "Origin": "https://www.smile.one",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        if csrf:
+            post_headers["X-CSRF-Token"] = csrf
+
+        ml_pid = (
+            get_config_value("ml_smile_pid", "")
+            or get_config_value("ml_package_id", "")
+            or ""
+        )
+
+        payload_variants = [
+            {"user_id": role_id, "zone_id": zone_id},
+            {"uid": role_id, "sid": zone_id},
+            {"uid": role_id, "zoneid": zone_id},
+        ]
+
+        endpoints = [
+            "https://www.smile.one/merchant/mobilelegends/checkrole",
+            "https://www.smile.one/merchant/checkrole",
+        ]
+
+        def _extract_username(resp_json: dict) -> str:
+            username = (
+                (resp_json.get("data") or {}).get("username")
+                or (resp_json.get("data") or {}).get("nickname")
+                or (resp_json.get("data") or {}).get("name")
+                or resp_json.get("username")
+                or resp_json.get("nickname")
+                or resp_json.get("name")
+                or resp_json.get("info")
+                or ""
+            )
+            return username.strip() if username else ""
+
+        for endpoint in endpoints:
+            for payload in payload_variants:
+                # Exact payload matching Smile.One's real checkrole form
+                post_data = {
+                    "checkrole": "1",
+                    "pid": ml_pid,
+                    **payload,
+                }
+                if csrf:
+                    post_data["_csrf"] = csrf
+
+                resp = sess.post(endpoint, data=post_data, headers=post_headers, timeout=8)
+                print(f"[ML] {endpoint} {payload} -> {resp.status_code} {resp.text[:200]}")
+                if resp.status_code != 200:
+                    continue
+
+                # Smile.One may return HTML instead of JSON on some responses
+                ct = (resp.headers.get("content-type") or "").lower()
+                body = resp.text.strip()
+
+                # Try JSON parse
+                data_json = None
+                try:
+                    data_json = resp.json()
+                except Exception:
+                    if body.startswith("{"):
+                        try:
+                            data_json = json.loads(body)
+                        except Exception:
+                            pass
+
+                if data_json is not None:
+                    code = int(data_json.get("code") or 0)
+                    if code == 200:
+                        username = _extract_username(data_json)
+                        if username:
+                            return username
+                    print(f"[ML] JSON code={code} info={data_json.get('info','')}")
+                    # code 200 with username found → already returned above
+                    # code != 200 with this payload → try next variant
+                    continue
+
+                # Some endpoints return the nickname as plain text or in HTML
+                if body and len(body) < 200 and "<" not in body:
+                    return body.strip('" \t\r\n')
+
+                print(f"[ML] non-JSON body len={len(body)}")
+
+        return ""
+    except Exception as e:
+        print(f"[ML] Error: {e}")
+        return ""
+
+
 @app.route("/store/player/verify/bloodstrike")
 def store_player_verify_bloodstrike():
     scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
@@ -296,6 +420,39 @@ def store_player_verify_bloodstrike():
     if not nick:
         return jsonify({"ok": False, "error": "ID no encontrado"}), 404
     return jsonify({"ok": True, "uid": uid, "nick": nick, "cached": False})
+
+
+@app.route("/store/player/verify/mobilelegends")
+def store_player_verify_mobilelegends():
+    scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
+    if not scrape_enabled:
+        return jsonify({"ok": False, "error": "Verificación deshabilitada"}), 403
+
+    uid = (request.args.get("uid") or "").strip()
+    zid = (request.args.get("zid") or request.args.get("zone") or "").strip()
+    gid_raw = (request.args.get("gid") or "").strip()
+    if not uid or not uid.isdigit():
+        return jsonify({"ok": False, "error": "ID inválido"}), 400
+    if not zid or not zid.isdigit():
+        return jsonify({"ok": False, "error": "Zona ID inválida"}), 400
+
+    ml_package_id = (get_config_value("ml_package_id", "") or "").strip()
+    if not ml_package_id or ml_package_id != gid_raw:
+        return jsonify({"ok": False, "error": "Verificación no disponible para este juego"}), 403
+
+    cache_key = f"ml_smileone:{uid}:{zid}"
+    cached = _player_cache_get(cache_key)
+    if cached is not None:
+        if not cached:
+            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+        return jsonify({"ok": True, "uid": uid, "zid": zid, "nick": cached, "cached": True})
+
+    nick = _scrape_smileone_mobilelegends_nick(uid, zid)
+
+    _player_cache_set(cache_key, nick, ttl_seconds=600)
+    if not nick:
+        return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+    return jsonify({"ok": True, "uid": uid, "zid": zid, "nick": nick, "cached": False})
 
 
 @app.route("/store/player/verify")
@@ -2065,6 +2222,44 @@ def admin_config_bs_server_id_set():
     return jsonify({"ok": True, "bs_server_id": val})
 
 
+@app.route("/admin/config/ml_package_id", methods=["GET"])
+def admin_config_ml_package_id_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "ml_package_id": get_config_value("ml_package_id", "")})
+
+
+@app.route("/admin/config/ml_package_id", methods=["POST"])
+def admin_config_ml_package_id_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    val = (data.get("ml_package_id") or "").strip()
+    set_config_value("ml_package_id", val)
+    return jsonify({"ok": True, "ml_package_id": val})
+
+
+@app.route("/admin/config/ml_smile_pid", methods=["GET"])
+def admin_config_ml_smile_pid_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "ml_smile_pid": get_config_value("ml_smile_pid", "")})
+
+
+@app.route("/admin/config/ml_smile_pid", methods=["POST"])
+def admin_config_ml_smile_pid_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    val = (data.get("ml_smile_pid") or "").strip()
+    set_config_value("ml_smile_pid", val)
+    return jsonify({"ok": True, "ml_smile_pid": val})
+
+
 def _allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -2246,6 +2441,7 @@ def store_game_detail(gid: int):
     logo_url = get_config_value("logo_path", "")
     active_login_game_id = get_config_value("active_login_game_id", "")
     bs_package_id = get_config_value("bs_package_id", "")
+    ml_package_id = get_config_value("ml_package_id", "")
     player_lookup_region = get_config_value("player_lookup_default_region", "US")
     player_lookup_regions = get_config_value("player_lookup_regions_default", "US,BR,ME,PK,CIS,ID,LATAM,MX")
     scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
@@ -2271,6 +2467,7 @@ def store_game_detail(gid: int):
         site_name=site_name,
         active_login_game_id=active_login_game_id,
         bs_package_id=bs_package_id,
+        ml_package_id=ml_package_id,
         player_lookup_region=player_lookup_region,
         player_lookup_regions=player_lookup_regions,
         scrape_enabled=scrape_enabled,
@@ -2370,6 +2567,13 @@ def create_order():
 
         if customer_id and not customer_id.isdigit():
             return jsonify({"ok": False, "error": "El ID de jugador debe ser numérico"}), 400
+
+        if customer_zone and not customer_zone.isdigit():
+            return jsonify({"ok": False, "error": "La Zona ID debe ser numérica"}), 400
+
+        ml_package_id = (get_config_value("ml_package_id", "") or "").strip()
+        if ml_package_id and str(gid) == ml_package_id and not customer_zone:
+            return jsonify({"ok": False, "error": "La Zona ID es requerida para este juego"}), 400
 
         # Blocklist check for player IDs
         try:

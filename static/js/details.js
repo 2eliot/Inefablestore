@@ -38,7 +38,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const activeLogin = (root.getAttribute('data-active-login') === '1');
   const scrapeEnabled = (root.getAttribute('data-scrape-enabled') === '1');
   const bsPackageId = (root.getAttribute('data-bs-package-id') || '').trim();
+  const mlPackageId = (root.getAttribute('data-ml-package-id') || '').trim();
   const isBsPackage = bsPackageId && String(gid) === String(bsPackageId);
+  const isMlPackage = mlPackageId && String(gid) === String(mlPackageId);
+  const zoneRequiredForCheckout = requiresZone || isMlPackage;
   let verifiedNick = '';
   // Hide Step 1 (player ID) for gift category and renumber badges/texts
   if (isGift && inputCustomerId) {
@@ -356,24 +359,38 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (inputCustomerId && playerNickname && scrapeEnabled && (activeLogin || isBsPackage)) {
+  if (inputCustomerZone) {
+    inputCustomerZone.addEventListener('input', () => {
+      const raw = inputCustomerZone.value || '';
+      const clean = raw.replace(/\D+/g, '');
+      if (raw !== clean) inputCustomerZone.value = clean;
+    });
+  }
+
+  if (inputCustomerId && playerNickname && scrapeEnabled && (activeLogin || isBsPackage || isMlPackage)) {
     let verifying = false;
     let verifyTimer = null;
-    let lastUidRequested = '';
-    let lastUidVerified = '';
+    let lastVerifyRequested = '';
+    let lastVerifySuccess = '';
     let inflightController = null;
     const verifyBtnDefaultText = btnVerifyPlayer ? (btnVerifyPlayer.textContent || 'Verificar') : 'Verificar';
 
-    function cacheKey(uid) {
-      return `ffnick:${String(uid || '').trim()}`;
+    function verificationKey(uid, zid) {
+      if (isMlPackage) return `${String(uid || '').trim()}:${String(zid || '').trim()}`;
+      return String(uid || '').trim();
     }
 
-    function getCachedNick(uid) {
-      try { return (localStorage.getItem(cacheKey(uid)) || '').toString().trim(); } catch (_) { return ''; }
+    function cacheKey(uid, zid) {
+      if (isMlPackage) return `mlnick:${verificationKey(uid, zid)}`;
+      return `ffnick:${verificationKey(uid, zid)}`;
     }
 
-    function setCachedNick(uid, nick) {
-      try { localStorage.setItem(cacheKey(uid), (nick || '').toString()); } catch (_) {}
+    function getCachedNick(uid, zid) {
+      try { return (localStorage.getItem(cacheKey(uid, zid)) || '').toString().trim(); } catch (_) { return ''; }
+    }
+
+    function setCachedNick(uid, nick, zid) {
+      try { localStorage.setItem(cacheKey(uid, zid), (nick || '').toString()); } catch (_) {}
     }
 
     function setNickUIOk(nick) {
@@ -412,6 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const silent = !!(opts && opts.silent);
       if (verifying) return;
       const uid = (inputCustomerId.value || '').trim();
+      const zid = (inputCustomerZone ? inputCustomerZone.value : '').trim();
       if (!uid) {
         if (!silent) setNickUIErr('Ingresa tu ID');
         return;
@@ -420,14 +438,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!silent) setNickUIErr('El ID debe ser numérico');
         return;
       }
-      if (uid === lastUidVerified) {
-        const n0 = getCachedNick(uid);
+      if (isMlPackage && !zid) {
+        if (!silent) setNickUIErr('Ingresa tu Zona ID');
+        return;
+      }
+      if (isMlPackage && !/^\d+$/.test(zid)) {
+        if (!silent) setNickUIErr('La Zona ID debe ser numérica');
+        return;
+      }
+      const verifyKey = verificationKey(uid, zid);
+      if (verifyKey === lastVerifySuccess) {
+        const n0 = getCachedNick(uid, zid);
         if (n0) setNickUIOk(n0);
         return;
       }
-      const cached = getCachedNick(uid);
+      const cached = getCachedNick(uid, zid);
       if (cached) {
-        lastUidVerified = uid;
+        lastVerifySuccess = verifyKey;
         setNickUIOk(cached);
         return;
       }
@@ -436,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
         inflightController = null;
       }
       inflightController = new AbortController();
-      lastUidRequested = uid;
+      lastVerifyRequested = verifyKey;
       verifying = true;
       if (!silent) {
         setNickUILoading();
@@ -444,21 +471,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnVerifyPlayer) btnVerifyPlayer.disabled = true;
       }
       try {
-        const verifyPath = isBsPackage ? '/store/player/verify/bloodstrike' : '/store/player/verify';
-        const url = `${verifyPath}?gid=${encodeURIComponent(gid || '')}&uid=${encodeURIComponent(uid)}`;
+        const verifyPath = isMlPackage
+          ? '/store/player/verify/mobilelegends'
+          : (isBsPackage ? '/store/player/verify/bloodstrike' : '/store/player/verify');
+        const qp = new URLSearchParams({ gid: String(gid || ''), uid: String(uid || '') });
+        if (isMlPackage) qp.set('zid', String(zid || ''));
+        const url = `${verifyPath}?${qp.toString()}`;
         const res = await fetch(url, { signal: inflightController.signal });
         const data = await res.json();
-        if (uid !== lastUidRequested) return;
+        if (verifyKey !== lastVerifyRequested) return;
         if (!res.ok || !data || !data.ok) throw new Error((data && data.error) || 'No se pudo verificar');
         const nick = (data.nick || '').toString().trim();
         if (!nick) throw new Error('ID no encontrado');
-        setCachedNick(uid, nick);
-        lastUidVerified = uid;
+        setCachedNick(uid, nick, zid);
+        lastVerifySuccess = verifyKey;
         setNickUIOk(nick);
       } catch (e) {
         if (e && e.name === 'AbortError') return;
         if (!silent) setNickUIErr((e && e.message) ? e.message : 'No se pudo verificar');
-        setCachedNick(uid, '');
+        setCachedNick(uid, '', zid);
       } finally {
         verifying = false;
         if (btnVerifyPlayer) {
@@ -481,6 +512,14 @@ document.addEventListener('DOMContentLoaded', () => {
         doVerify({ silent: false });
       }
     });
+
+    function scheduleSilentVerify() {
+      if (verifyTimer) clearTimeout(verifyTimer);
+      verifyTimer = setTimeout(() => {
+        doVerify({ silent: true });
+      }, 500);
+    }
+
     inputCustomerId.addEventListener('input', () => {
       const uid = (inputCustomerId.value || '').trim();
       if (!uid) {
@@ -493,17 +532,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return;
       }
-      if (verifyTimer) clearTimeout(verifyTimer);
-      verifyTimer = setTimeout(() => {
-        doVerify({ silent: true });
-      }, 500);
+      scheduleSilentVerify();
     });
+
+    if (inputCustomerZone) {
+      inputCustomerZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          doVerify({ silent: false });
+        }
+      });
+      inputCustomerZone.addEventListener('input', () => {
+        verifiedNick = '';
+        try { root.dataset.verifiedNick = ''; } catch (_) {}
+        if (playerNickname) playerNickname.textContent = '';
+        if (!isMlPackage) return;
+        const uid = (inputCustomerId.value || '').trim();
+        if (!uid) return;
+        scheduleSilentVerify();
+      });
+    }
 
     try {
       const uid0 = (inputCustomerId.value || '').trim();
-      const nick0 = uid0 ? getCachedNick(uid0) : '';
+      const zid0 = (inputCustomerZone ? inputCustomerZone.value : '').trim();
+      const nick0 = uid0 ? getCachedNick(uid0, zid0) : '';
       if (uid0 && nick0) {
-        lastUidVerified = uid0;
+        lastVerifySuccess = verificationKey(uid0, zid0);
         setNickUIOk(nick0);
       }
     } catch (_) {}
@@ -895,7 +950,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!chkSave || !chkSave.checked) return; // only persist if user opted in
     const data = {
       customer_id: isGift ? '' : (inputCustomerId ? inputCustomerId.value.trim() : ''),
-      customer_zone: (requiresZone && !isGift && inputCustomerZone) ? (inputCustomerZone.value.trim()) : '',
+      customer_zone: (zoneRequiredForCheckout && !isGift && inputCustomerZone) ? (inputCustomerZone.value.trim()) : '',
       email: inputEmail ? inputEmail.value.trim() : '',
       phone: inputPhone ? inputPhone.value.trim() : '',
       currency,
@@ -922,7 +977,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!state || !state.save) return; // only apply if user opted in previously
     if (chkSave) chkSave.checked = true;
     if (!isGift && inputCustomerId && state.customer_id && !inputCustomerId.value) inputCustomerId.value = state.customer_id;
-    if (!isGift && requiresZone && inputCustomerZone && state.customer_zone && !inputCustomerZone.value) inputCustomerZone.value = state.customer_zone;
+    if (!isGift && zoneRequiredForCheckout && inputCustomerZone && state.customer_zone && !inputCustomerZone.value) inputCustomerZone.value = state.customer_zone;
     if (inputEmail && state.email) inputEmail.value = state.email;
     if (inputPhone && state.phone) {
       // Try to split +CC local
@@ -1083,7 +1138,7 @@ document.addEventListener('DOMContentLoaded', () => {
           inputCustomerId.focus();
           return;
         }
-        if (requiresZone && inputCustomerZone && !inputCustomerZone.value.trim()) {
+        if (zoneRequiredForCheckout && inputCustomerZone && !inputCustomerZone.value.trim()) {
           alert('Ingresa tu Zona ID');
           inputCustomerZone.focus();
           return;
@@ -1092,7 +1147,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // If user clicks fast, try to verify quietly for a short time so checkout can show nick.
       try {
-        if (!isGift && inputCustomerId && scrapeEnabled && (activeLogin || isBsPackage)) {
+        if (!isGift && inputCustomerId && scrapeEnabled && (activeLogin || isBsPackage || isMlPackage)) {
           const uid = (inputCustomerId.value || '').trim();
           const nn = (root && root.dataset) ? String(root.dataset.verifiedNick || '').trim() : '';
           if (uid && !nn && root.__doVerifyPlayer) {
@@ -1138,7 +1193,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const nn = (root && root.dataset && root.dataset.verifiedNick) ? String(root.dataset.verifiedNick || '').trim() : '';
         if (nn) paramsObj.nn = nn;
       } catch (_) {}
-      if (!isGift && requiresZone && inputCustomerZone) {
+      if (!isGift && zoneRequiredForCheckout && inputCustomerZone) {
         paramsObj.zid = inputCustomerZone.value.trim();
       }
       const rcode = inputRefCode ? inputRefCode.value.trim() : '';

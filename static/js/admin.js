@@ -2502,6 +2502,59 @@ window.fetchHero = fetchHero;
 
   fetchBsPackageId();
 
+  // =====================
+  // Config: Mobile Legends package ID (Smile.One verification)
+  // =====================
+  const inputMlPackageId = document.getElementById('ml-package-id');
+  const inputMlSmilePid = document.getElementById('ml-smile-pid');
+  const btnSaveMlPackageId = document.getElementById('btn-save-ml-package-id');
+
+  async function fetchMlPackageId() {
+    try {
+      const [res1, res2] = await Promise.all([
+        fetch('/admin/config/ml_package_id'),
+        fetch('/admin/config/ml_smile_pid')
+      ]);
+      const data1 = await res1.json();
+      const data2 = await res2.json();
+      if (res1.ok && data1 && data1.ok && inputMlPackageId) {
+        inputMlPackageId.value = data1.ml_package_id || '';
+      }
+      if (res2.ok && data2 && data2.ok && inputMlSmilePid) {
+        inputMlSmilePid.value = data2.ml_smile_pid || '';
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  async function saveMlPackageId() {
+    const pkgVal = inputMlPackageId ? String(inputMlPackageId.value || '').trim() : '';
+    const pidVal = inputMlSmilePid ? String(inputMlSmilePid.value || '').trim() : '';
+    await Promise.all([
+      fetch('/admin/config/ml_package_id', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ml_package_id: pkgVal })
+      }),
+      fetch('/admin/config/ml_smile_pid', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ml_smile_pid: pidVal })
+      })
+    ]);
+  }
+
+  if (btnSaveMlPackageId) {
+    btnSaveMlPackageId.addEventListener('click', async () => {
+      try {
+        btnSaveMlPackageId.disabled = true;
+        await saveMlPackageId();
+        toast('Configuración de Mobile Legends guardada');
+      } catch (e) {
+        toast(e.message || 'Error');
+      } finally {
+        btnSaveMlPackageId.disabled = false;
+      }
+    });
+  }
+
+  fetchMlPackageId();
+
     let specCount = 0;
     items.forEach(p => {
       const isGift = (p.category || 'mobile') === 'gift';
