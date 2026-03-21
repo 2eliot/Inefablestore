@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ site_name|default('InefableStore') }}</title>
+    <link rel="icon" href="{{ url_for('static', filename='Diseño sin título (18).ico') }}" type="image/x-icon">
     {% block styles %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css', v='4') }}">
     {% endblock %}
