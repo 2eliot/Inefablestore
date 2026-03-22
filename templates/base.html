@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     {% block styles %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css', v='4') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css', v='5') }}">
     {% endblock %}
   </head>
   <body class="{{ body_class|default('') }}">
@@ -34,7 +34,7 @@
     </aside>
 
     {% block scripts %}
-    <script src="{{ url_for('static', filename='js/admin.js', v='10') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/admin.js', v='14') }}" defer></script>
     {% endblock %}
   </body>
 </html>
