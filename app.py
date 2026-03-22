@@ -1292,11 +1292,6 @@ class SpecialUser(db.Model):
     commission_percent = db.Column(db.Float, default=10.0)  # percent the affiliate earns
     scope = db.Column(db.String(20), default="all")  # 'all' | 'package'
     scope_package_id = db.Column(db.Integer, nullable=True)
-    # Legacy columns kept for DB compat (unused)
-    discount_mobile_percent = db.Column(db.Float, default=0.0)
-    discount_gift_percent = db.Column(db.Float, default=0.0)
-    commission_mobile_percent = db.Column(db.Float, default=0.0)
-    commission_gift_percent = db.Column(db.Float, default=0.0)
 
 
 class AffiliateWithdrawal(db.Model):
@@ -1544,16 +1539,8 @@ with app.app_context():
                 db.session.execute(text("ALTER TABLE special_users ADD COLUMN scope TEXT DEFAULT 'all'"))
             if "scope_package_id" not in aff_cols:
                 db.session.execute(text("ALTER TABLE special_users ADD COLUMN scope_package_id INTEGER"))
-            if "discount_mobile_percent" not in aff_cols:
-                db.session.execute(text("ALTER TABLE special_users ADD COLUMN discount_mobile_percent REAL DEFAULT 0.0"))
-            if "discount_gift_percent" not in aff_cols:
-                db.session.execute(text("ALTER TABLE special_users ADD COLUMN discount_gift_percent REAL DEFAULT 0.0"))
             if "commission_percent" not in aff_cols:
                 db.session.execute(text("ALTER TABLE special_users ADD COLUMN commission_percent REAL DEFAULT 10.0"))
-            if "commission_mobile_percent" not in aff_cols:
-                db.session.execute(text("ALTER TABLE special_users ADD COLUMN commission_mobile_percent REAL DEFAULT 0.0"))
-            if "commission_gift_percent" not in aff_cols:
-                db.session.execute(text("ALTER TABLE special_users ADD COLUMN commission_gift_percent REAL DEFAULT 0.0"))
             db.session.commit()
         except Exception:
             pass

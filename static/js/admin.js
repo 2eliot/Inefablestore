@@ -993,6 +993,7 @@ window.fetchPayments = fetchPayments;
 
   async function fetchGlobalStatsSummary() {
     if (!statsSummary || !statsTotalAfter) return;
+    const statsCommEl = document.getElementById('stats-total-commission');
     try {
       const res = await fetch('/admin/stats/summary?period=weekly');
       const data = await res.json();
@@ -1000,10 +1001,11 @@ window.fetchPayments = fetchPayments;
       const s = data.summary || {};
       statsSummary.style.display = 'block';
       statsTotalAfter.textContent = fmtUSD(s.total_profit_after_affiliates_usd || 0);
+      if (statsCommEl) statsCommEl.textContent = fmtUSD(s.total_affiliate_commission_usd || 0);
     } catch (e) {
-      // Si falla, mantenemos el bloque visible pero con ceros
       statsSummary.style.display = 'block';
       statsTotalAfter.textContent = fmtUSD(0);
+      if (statsCommEl) statsCommEl.textContent = fmtUSD(0);
     }
   }
 
