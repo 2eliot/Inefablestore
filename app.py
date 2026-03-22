@@ -1488,8 +1488,21 @@ with app.app_context():
     # Ensure legacy DB gets the new 'category' column (SQLite runtime migration)
     try:
         from sqlalchemy import text
-        info = db.session.execute(text("PRAGMA table_info(store_packages)")).fetchall()
-        cols = {row[1] for row in info}
+        _is_pg = db.engine.dialect.name == "postgresql"
+
+        def _get_table_cols(table):
+            """Return set of column names for *table*, works on both SQLite and PostgreSQL."""
+            if _is_pg:
+                rows = db.session.execute(
+                    text("SELECT column_name FROM information_schema.columns WHERE table_name = :t"),
+                    {"t": table},
+                ).fetchall()
+                return {row[0] for row in rows}
+            else:
+                rows = db.session.execute(text(f"PRAGMA table_info({table})")).fetchall()
+                return {row[1] for row in rows}
+
+        cols = _get_table_cols("store_packages")
         if "category" not in cols:
             db.session.execute(text("ALTER TABLE store_packages ADD COLUMN category TEXT DEFAULT 'mobile'"))
             db.session.commit()
@@ -1507,12 +1520,11 @@ with app.app_context():
             db.session.execute(text("ALTER TABLE store_packages ADD COLUMN sort_order INTEGER DEFAULT 0"))
             db.session.commit()
         # Orders table migration: add missing columns if an older schema exists
-        info_orders = db.session.execute(text("PRAGMA table_info(orders)")).fetchall()
-        order_cols = {row[1] for row in info_orders}
+        order_cols = _get_table_cols("orders")
         def add_order_col(name, ddl):
             if name not in order_cols:
                 db.session.execute(text(f"ALTER TABLE orders ADD COLUMN {ddl}"))
-        if info_orders:  # table exists
+        if order_cols:  # table exists
             add_order_col('customer_name', "customer_name TEXT DEFAULT ''")
             add_order_col('created_at', "created_at TEXT")
             add_order_col('status', "status TEXT DEFAULT 'pending'")
@@ -1540,8 +1552,7 @@ with app.app_context():
             db.session.commit()
         # Special users table migration: ensure new columns
         try:
-            info_aff = db.session.execute(text("PRAGMA table_info(special_users)")).fetchall()
-            aff_cols = {row[1] for row in info_aff}
+            aff_cols = _get_table_cols("special_users")
             if "email" not in aff_cols:
                 db.session.execute(text("ALTER TABLE special_users ADD COLUMN email TEXT"))
             if "secondary_code" not in aff_cols:
@@ -1569,8 +1580,7 @@ with app.app_context():
                 pass
         # Add zinli columns if missing
         try:
-            info_wd = db.session.execute(text("PRAGMA table_info(affiliate_withdrawals)")).fetchall()
-            wd_cols = {row[1] for row in info_wd}
+            wd_cols = _get_table_cols("affiliate_withdrawals")
             if "zinli_email" not in wd_cols:
                 db.session.execute(text("ALTER TABLE affiliate_withdrawals ADD COLUMN zinli_email TEXT"))
             if "zinli_tag" not in wd_cols:
@@ -1585,8 +1595,12 @@ with app.app_context():
     # Ensure new columns in game_packages (sticker)
     try:
         from sqlalchemy import text
-        gp_info = db.session.execute(text("PRAGMA table_info(game_packages)")).fetchall()
-        gp_cols = {row[1] for row in gp_info}
+        _is_pg2 = db.engine.dialect.name == "postgresql"
+        if _is_pg2:
+            _gp_rows = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'game_packages'")).fetchall()
+            gp_cols = {row[0] for row in _gp_rows}
+        else:
+            gp_cols = {row[1] for row in db.session.execute(text("PRAGMA table_info(game_packages)")).fetchall()}
         if "sticker" not in gp_cols:
             db.session.execute(text("ALTER TABLE game_packages ADD COLUMN sticker TEXT DEFAULT ''"))
             db.session.commit()
