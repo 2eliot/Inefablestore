@@ -3090,6 +3090,10 @@ function openCaptureModal(url) {
   var modal = document.getElementById('captureModal');
   var img = document.getElementById('capturePreviewImg');
   if (!modal || !img) return;
+  // Mover el modal al body para que position:fixed no sea afectado por transform en padres
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
   img.src = url;
   modal.style.display = 'flex';
 }
