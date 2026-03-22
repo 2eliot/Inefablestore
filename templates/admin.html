@@ -205,40 +205,44 @@
         </div>
       </div>
       <div class="panel-body">
-        <form id="pkg-form" class="config-form" onsubmit="return false;">
-          <div class="form-row">
-            <label for="pkg-name">Nombre del paquete</label>
-            <input id="pkg-name" type="text" placeholder="Ej: Arena Breakout">
-          </div>
-          <div class="form-row">
-            <label for="pkg-category">Categoría</label>
-            <select id="pkg-category">
-              <option value="mobile">Juegos Mobile</option>
-              <option value="gift">Gift Cards</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label for="pkg-desc">Descripción del juego</label>
-            <textarea id="pkg-desc" placeholder="Descripción visible en la página de detalles" rows="3"></textarea>
-          </div>
-          <div class="form-row">
-            <label>Zona ID requerida</label>
-            <label style="display:flex; align-items:center; gap:8px;">
-              <input id="pkg-requires-zone" type="checkbox"> Mostrar campo "Zona ID" en este juego
-            </label>
-          </div>
-          <div class="form-row">
-            <label for="pkg-image">Imagen</label>
-            <input id="pkg-image" type="text" placeholder="Selecciona desde galería" readonly>
-          </div>
-          <div class="form-row">
-            <label>&nbsp;</label>
-            <div>
-              <button id="btn-pick-pkg-image" class="btn" type="button">Elegir desde galería</button>
+        <div class="pkg-create-card">
+          <div class="pkg-create-title">Nuevo paquete</div>
+          <form id="pkg-form" class="pkg-create-form" onsubmit="return false;">
+            <div class="pkg-form-grid">
+              <div class="pkg-field">
+                <label for="pkg-name">Nombre</label>
+                <input id="pkg-name" type="text" placeholder="Ej: Arena Breakout">
+              </div>
+              <div class="pkg-field">
+                <label for="pkg-category">Categoría</label>
+                <select id="pkg-category">
+                  <option value="mobile">Juegos Mobile</option>
+                  <option value="gift">Gift Cards</option>
+                </select>
+              </div>
+              <div class="pkg-field" style="grid-column: 1 / -1;">
+                <label for="pkg-desc">Descripción</label>
+                <textarea id="pkg-desc" placeholder="Descripción visible en la página de detalles" rows="2"></textarea>
+              </div>
+              <div class="pkg-field">
+                <label for="pkg-image">Imagen</label>
+                <div style="display:flex; gap:6px;">
+                  <input id="pkg-image" type="text" placeholder="Selecciona desde galería" readonly style="flex:1;">
+                  <button id="btn-pick-pkg-image" class="btn" type="button">Elegir</button>
+                </div>
+              </div>
+              <div class="pkg-field pkg-field--check">
+                <label>Zona ID</label>
+                <label class="pkg-toggle"><input id="pkg-requires-zone" type="checkbox"><span class="pkg-toggle-label">Requerir Zona ID</span></label>
+              </div>
+            </div>
+            <div class="pkg-form-actions">
               <button id="btn-create-pkg" class="btn primary" type="button">Crear paquete</button>
             </div>
-          </div>
-        </form>
+          </form>
+        </div>
+
+        <!-- Lista de paquetes -->
         <div id="pkg-list">
           <div id="pkg-group-special" class="pkg-group" hidden>
             <h3 class="pkg-group-title">Paquetes especiales</h3>
@@ -598,75 +602,86 @@
         </div>
       </div>
       <div class="panel-body">
-        <form id="aff-form" class="config-form" onsubmit="return false;">
-          <div class="form-row">
-            <label for="aff-name">Nombre</label>
-            <input id="aff-name" type="text" placeholder="Nombre del afiliado">
-          </div>
-          <div class="form-row">
-            <label for="aff-email">Email</label>
-            <input id="aff-email" type="email" placeholder="correo@ejemplo.com">
-          </div>
-          <div class="form-row">
-            <label for="aff-code">Código</label>
-            <input id="aff-code" type="text" placeholder="Código único (referencia)">
-          </div>
-          <div class="form-row">
-            <label for="aff-secondary-code">Código adicional</label>
-            <input id="aff-secondary-code" type="text" placeholder="Código adicional (1 uso por ID)">
-          </div>
-          <div class="form-row">
-            <label>Descuento por categoría (%)</label>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-              <input id="aff-disc-mobile" type="number" step="0.1" min="0" max="100" placeholder="Juegos Mobile">
-              <input id="aff-disc-gift" type="number" step="0.1" min="0" max="100" placeholder="Gift Cards">
+        <!-- Formulario crear afiliado -->
+        <div class="aff-create-card">
+          <div class="aff-create-title">Nuevo afiliado</div>
+          <form id="aff-form" class="aff-create-form" onsubmit="return false;">
+            <div class="aff-form-grid">
+              <div class="aff-field">
+                <label for="aff-name">Nombre</label>
+                <input id="aff-name" type="text" placeholder="Nombre del afiliado">
+              </div>
+              <div class="aff-field">
+                <label for="aff-email">Email</label>
+                <input id="aff-email" type="email" placeholder="correo@ejemplo.com">
+              </div>
+              <div class="aff-field">
+                <label for="aff-code">Código principal</label>
+                <input id="aff-code" type="text" placeholder="Código único">
+              </div>
+              <div class="aff-field">
+                <label for="aff-secondary-code">Código adicional</label>
+                <input id="aff-secondary-code" type="text" placeholder="1 uso por ID cliente">
+              </div>
+              <div class="aff-field">
+                <label for="aff-pass">Contraseña</label>
+                <input id="aff-pass" type="password" placeholder="Asignar contraseña">
+              </div>
+              <div class="aff-field">
+                <label for="aff-balance">Saldo (USD)</label>
+                <input id="aff-balance" type="number" step="0.01" min="0" value="0">
+              </div>
             </div>
-          </div>
-          <div class="form-row">
-            <label for="aff-scope">Alcance</label>
-            <select id="aff-scope" class="input">
-              <option value="all" selected>Todos los juegos</option>
-              <option value="package">Solo un juego</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label for="aff-pkg-select">Juego (si aplica)</label>
-            <select id="aff-pkg-select" class="input">
-              <option value="">— Selecciona un juego —</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label for="aff-pass">Contraseña</label>
-            <input id="aff-pass" type="password" placeholder="Asignar contraseña">
-          </div>
-          <div class="form-row">
-            <label for="aff-balance">Saldo (USD)</label>
-            <input id="aff-balance" type="number" step="0.01" min="0" value="0">
-          </div>
-          <div class="form-row">
-            <label>Activo</label>
-            <input id="aff-active" type="checkbox" checked>
-          </div>
-          <div class="form-row">
-            <label>&nbsp;</label>
-            <div>
+            <div class="aff-section-label">Descuento y comisión (%)</div>
+            <div class="aff-form-grid aff-form-grid--2">
+              <div class="aff-field">
+                <label for="aff-discount">Descuento al usuario</label>
+                <input id="aff-discount" type="number" step="0.1" min="0" max="100" placeholder="0">
+              </div>
+              <div class="aff-field">
+                <label for="aff-commission">Ganancia del afiliado</label>
+                <input id="aff-commission" type="number" step="0.1" min="0" max="100" placeholder="0">
+              </div>
+            </div>
+            <div class="aff-section-label">Alcance y estado</div>
+            <div class="aff-form-grid aff-form-grid--3">
+              <div class="aff-field">
+                <label for="aff-scope">Alcance</label>
+                <select id="aff-scope" class="input">
+                  <option value="all" selected>Todos los juegos</option>
+                  <option value="package">Solo un juego</option>
+                </select>
+              </div>
+              <div class="aff-field">
+                <label for="aff-pkg-select">Juego</label>
+                <select id="aff-pkg-select" class="input">
+                  <option value="">— Selecciona —</option>
+                </select>
+              </div>
+              <div class="aff-field aff-field--check">
+                <label>Activo</label>
+                <label class="aff-toggle"><input id="aff-active" type="checkbox" checked><span class="aff-toggle-label">Sí</span></label>
+              </div>
+            </div>
+            <div class="aff-form-actions">
               <button id="btn-aff-create" class="btn primary" type="button">Crear afiliado</button>
             </div>
-          </div>
-        </form>
-        <div id="aff-list" class="image-grid"></div>
+          </form>
+        </div>
 
-        <hr style="margin:16px 0; opacity:.35;">
-        <div class="panel-header" style="padding:0; margin-bottom:8px;">
-          <h3 style="margin:0;">Retiros de Afiliados</h3>
-          <div class="actions">
+        <!-- Lista de afiliados -->
+        <div id="aff-list" class="aff-grid"></div>
+
+        <!-- Retiros -->
+        <div class="aff-withdrawals-section">
+          <div class="aff-withdrawals-header">
+            <h3>Retiros de Afiliados</h3>
             <button id="btn-aff-wd-refresh" class="btn" type="button">Refrescar</button>
           </div>
-        </div>
-        <div id="aff-wd-list" class="orders-list">
-          <div class="empty-state">
-            <h3>Sin solicitudes</h3>
-            <p>Cuando los afiliados pidan retiro aparecerán aquí.</p>
+          <div id="aff-wd-list" class="aff-wd-grid">
+            <div class="empty-state">
+              <h3>Sin solicitudes</h3>
+              <p>Cuando los afiliados pidan retiro aparecerán aquí.</p>
           </div>
         </div>
       </div>

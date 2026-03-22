@@ -1286,14 +1286,15 @@ class SpecialUser(db.Model):
     balance = db.Column(db.Float, default=0.0)  # earned commissions in USD
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    # Discount settings
-    discount_percent = db.Column(db.Float, default=10.0)  # percent, e.g. 10 means 10%
+    # Discount for the customer (applied to all products)
+    discount_percent = db.Column(db.Float, default=0.0)  # percent discount the buyer gets
+    # Commission for the affiliate (earned on each approved sale)
+    commission_percent = db.Column(db.Float, default=10.0)  # percent the affiliate earns
     scope = db.Column(db.String(20), default="all")  # 'all' | 'package'
     scope_package_id = db.Column(db.Integer, nullable=True)
-    # Category-specific discounts and commissions
+    # Legacy columns kept for DB compat (unused)
     discount_mobile_percent = db.Column(db.Float, default=0.0)
     discount_gift_percent = db.Column(db.Float, default=0.0)
-    commission_percent = db.Column(db.Float, default=10.0)
     commission_mobile_percent = db.Column(db.Float, default=0.0)
     commission_gift_percent = db.Column(db.Float, default=0.0)
 
@@ -1611,8 +1612,7 @@ def admin_special_users_list():
         "users": [
             {"id": u.id, "name": u.name, "code": u.code, "secondary_code": u.secondary_code or "", "email": u.email or "", "balance": float(u.balance or 0.0), "active": bool(u.active),
              "discount_percent": float(u.discount_percent or 0.0),
-             "discount_mobile_percent": float(u.discount_mobile_percent or 0.0),
-             "discount_gift_percent": float(u.discount_gift_percent or 0.0),
+             "commission_percent": float(u.commission_percent or 0.0),
              "scope": u.scope or 'all', "scope_package_id": u.scope_package_id}
             for u in rows
         ]
@@ -1661,11 +1661,7 @@ def admin_special_users_create():
             return default
     su = SpecialUser(name=name, code=code, secondary_code=secondary_code or None, email=email or None, active=bool(data.get("active", True)), balance=float(data.get("balance") or 0.0),
                      discount_percent=discount_percent,
-                     discount_mobile_percent=fget("discount_mobile_percent", 0.0),
-                     discount_gift_percent=fget("discount_gift_percent", 0.0),
                      commission_percent=fget("commission_percent", 10.0),
-                     commission_mobile_percent=fget("commission_mobile_percent", 0.0),
-                     commission_gift_percent=fget("commission_gift_percent", 0.0),
                      scope=scope if scope in ("all","package") else "all", scope_package_id=scope_package_id)
     if password:
         su.password_hash = generate_password_hash(password)
@@ -1673,8 +1669,7 @@ def admin_special_users_create():
     db.session.commit()
     return jsonify({"ok": True, "user": {"id": su.id, "name": su.name, "code": su.code, "secondary_code": su.secondary_code or "", "email": su.email or "", "balance": su.balance, "active": su.active,
             "discount_percent": su.discount_percent,
-            "discount_mobile_percent": su.discount_mobile_percent,
-            "discount_gift_percent": su.discount_gift_percent,
+            "commission_percent": su.commission_percent,
             "scope": su.scope, "scope_package_id": su.scope_package_id }})
 
 @app.route("/admin/special/users/<int:uid>", methods=["PATCH", "PUT"])
@@ -1732,13 +1727,12 @@ def admin_special_users_update(uid: int):
             su.discount_percent = float(data.get("discount_percent") or 0.0)
         except Exception:
             pass
-    # Optional extended fields
-    for k in ("discount_mobile_percent", "discount_gift_percent", "commission_percent", "commission_mobile_percent", "commission_gift_percent"):
-        if k in data:
-            try:
-                setattr(su, k, float(data.get(k) or 0.0))
-            except Exception:
-                pass
+    # Commission percent
+    if "commission_percent" in data:
+        try:
+            su.commission_percent = float(data.get("commission_percent") or 0.0)
+        except Exception:
+            pass
     if "scope" in data:
         sc = (data.get("scope") or "all").strip().lower()
         if sc in ("all","package"):
@@ -2010,57 +2004,9 @@ def store_special_validate():
             return jsonify({"ok": False, "error": "Este código adicional ya fue usado por este ID de jugador"}), 400
         return jsonify({"ok": True, "allowed": True, "discount": 0.10, "one_time": True})
 
-    # Determine category-based discount. For mobile, build per-item tiered discounts (low price -> higher %).
+    # Simple flat discount for all products
     disc = float(su.discount_percent or 0.0)
-    item_discounts = []  # [{item_id, discount (fraction)}]
-    try:
-        if gid:
-            pkg = StorePackage.query.get(gid)
-            cat = (pkg.category or '').lower() if pkg else ''
-            if cat == 'gift':
-                # gift uses gift category percent if provided; no tiering
-                if float(su.discount_gift_percent or 0.0) > 0:
-                    disc = float(su.discount_gift_percent or 0.0)
-            elif cat == 'mobile':
-                # Tiered per-item discount for mobile
-                # Define top/bottom percent (can be made configurable later)
-                max_pct = 10.0  # cheapest items
-                min_pct = 4.0   # most expensive items
-                try:
-                    # If affiliate set a mobile discount explicitly, use it as max, but clamp within [min_pct, 100]
-                    mset = float(su.discount_mobile_percent or 0.0)
-                    if mset > 0:
-                        max_pct = max(min(mset, 100.0), min_pct)
-                except Exception:
-                    pass
-                # Fetch items and sort by price asc
-                items = (
-                    GamePackageItem.query
-                    .filter_by(store_package_id=gid, active=True)
-                    .order_by(GamePackageItem.price.asc())
-                    .all()
-                )
-                n = len(items)
-                if n >= 1:
-                    if n == 1:
-                        # Single item: apply max_pct
-                        item_discounts = [{"item_id": items[0].id, "discount": round(max_pct/100.0, 4)}]
-                        disc = max_pct
-                    else:
-                        # Linear interpolation from max_pct (idx 0) down to min_pct (idx n-1)
-                        step = (max_pct - min_pct) / (n - 1)
-                        item_discounts = []
-                        for idx, it in enumerate(items):
-                            pct = max_pct - step * idx
-                            pct = max(min_pct, min(max_pct, pct))
-                            item_discounts.append({"item_id": it.id, "discount": round(pct/100.0, 4)})
-                        # Fallback/general display percent: use the first item percent
-                        disc = max_pct
-    except Exception:
-        pass
     resp = {"ok": True, "allowed": True, "discount": round(disc/100.0, 4)}
-    if item_discounts:
-        resp["item_discounts"] = item_discounts
     return jsonify(resp)
 
 # Routes
@@ -2801,7 +2747,6 @@ def create_order():
         discount_fraction = 0.0
         used_secondary_code = False
         normalized_secondary_code = ""
-        item_discounts_map = {}  # iid -> discount fraction for tiered discounts (mobile)
         if special_code:
             try:
                 su, is_secondary_code = resolve_special_user_for_code(special_code)
@@ -2820,42 +2765,6 @@ def create_order():
                         normalized_secondary_code = special_code.lower()
                     else:
                         discount_fraction = float(su.discount_percent or 0.0) / 100.0
-                        # Check category-specific discounts
-                        try:
-                            pkg = StorePackage.query.get(gid)
-                            if pkg:
-                                cat = (pkg.category or '').lower()
-                                if cat == 'gift' and float(su.discount_gift_percent or 0.0) > 0:
-                                    discount_fraction = float(su.discount_gift_percent or 0.0) / 100.0
-                                elif cat == 'mobile':
-                                    # For mobile, calculate tiered per-item discounts
-                                    max_pct = 10.0
-                                    min_pct = 4.0
-                                    try:
-                                        mset = float(su.discount_mobile_percent or 0.0)
-                                        if mset > 0:
-                                            max_pct = max(min(mset, 100.0), min_pct)
-                                    except Exception:
-                                        pass
-                                    # Get all items sorted by price
-                                    all_pkg_items = GamePackageItem.query.filter_by(
-                                        store_package_id=gid, active=True
-                                    ).order_by(GamePackageItem.price.asc()).all()
-                                    n = len(all_pkg_items)
-                                    if n >= 1:
-                                        if n == 1:
-                                            item_discounts_map[all_pkg_items[0].id] = max_pct / 100.0
-                                        else:
-                                            step = (max_pct - min_pct) / (n - 1)
-                                            for idx, it in enumerate(all_pkg_items):
-                                                pct = max_pct - step * idx
-                                                pct = max(min_pct, min(max_pct, pct))
-                                                item_discounts_map[it.id] = pct / 100.0
-                                    # Use first item discount as general if not overridden
-                                    if all_pkg_items:
-                                        discount_fraction = item_discounts_map.get(all_pkg_items[0].id, discount_fraction)
-                        except Exception:
-                            pass
             except Exception:
                 pass
         
@@ -2877,9 +2786,7 @@ def create_order():
                     
                     # Calculate actual price with discount if applicable
                     base_price = float(gi.price or 0.0)
-                    # Check if this item has specific discount (mobile tiered)
-                    item_discount = item_discounts_map.get(iid, discount_fraction)
-                    actual_price = base_price * (1.0 - item_discount)
+                    actual_price = base_price * (1.0 - discount_fraction)
                     
                     items_list.append({
                         "item_id": gi.id,
@@ -3255,17 +3162,7 @@ def admin_orders_set_status(oid: int):
                             subtotal = amt_usd
                         except Exception:
                             subtotal = 0.0
-                    # Commission percent by category
-                    comm_pct = 0.0
-                    try:
-                        pkg = StorePackage.query.get(o.store_package_id)
-                        comm_pct = float(su.commission_percent or 0.0)
-                        if pkg and (pkg.category or '').lower() == 'gift' and float(su.commission_gift_percent or 0.0) > 0:
-                            comm_pct = float(su.commission_gift_percent or 0.0)
-                        elif pkg and (pkg.category or '').lower() == 'mobile' and float(su.commission_mobile_percent or 0.0) > 0:
-                            comm_pct = float(su.commission_mobile_percent or 0.0)
-                    except Exception:
-                        pass
+                    comm_pct = float(su.commission_percent or 0.0)
                     if comm_pct > 0 and subtotal > 0:
                         try:
                             inc = round(subtotal * (comm_pct / 100.0), 2)
@@ -3930,6 +3827,52 @@ def admin_game_items_delete(item_id: int):
     return jsonify({"ok": True})
 
 
+@app.route("/admin/package/<int:gid>/items/bulk", methods=["PUT"])
+def admin_game_items_bulk_update(gid: int):
+    """Update multiple items of a package in one request."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    game = StorePackage.query.get(gid)
+    if not game:
+        return jsonify({"ok": False, "error": "Juego no existe"}), 404
+    data = request.get_json(silent=True) or {}
+    items_data = data.get("items")
+    if not isinstance(items_data, list):
+        return jsonify({"ok": False, "error": "Se requiere una lista de items"}), 400
+    updated = 0
+    for entry in items_data:
+        if not isinstance(entry, dict):
+            continue
+        item_id = entry.get("id")
+        if not item_id:
+            continue
+        item = GamePackageItem.query.get(int(item_id))
+        if not item or item.store_package_id != gid:
+            continue
+        if "title" in entry:
+            item.title = (entry.get("title") or "").strip()
+        if "sticker" in entry:
+            item.sticker = (entry.get("sticker") or "").strip()
+        if "icon_path" in entry:
+            item.icon_path = (entry.get("icon_path") or "").strip()
+        if "price" in entry:
+            try:
+                item.price = float(entry.get("price") or 0)
+            except Exception:
+                pass
+        if "cost_unit_usd" in entry:
+            try:
+                item.profit_net_usd = float(entry.get("cost_unit_usd") or 0.0)
+            except Exception:
+                pass
+        if "active" in entry:
+            item.active = bool(entry.get("active"))
+        updated += 1
+    db.session.commit()
+    return jsonify({"ok": True, "updated": updated})
+
+
 @app.route("/admin/packages/reorder", methods=["POST"])
 def admin_packages_reorder():
     user = session.get("user")
@@ -4197,18 +4140,7 @@ def admin_stats_summary():
             # Determinar comisión del influencer una vez por orden (solo para registro)
             comm_pct = 0.0
             if use_affiliate and su:
-                try:
-                    comm_pct = float(su.commission_percent or 0.0)
-                    try:
-                        pkg = StorePackage.query.get(o.store_package_id)
-                    except Exception:
-                        pkg = None
-                    if pkg and (pkg.category or "").lower() == "gift" and float(su.commission_gift_percent or 0.0) > 0:
-                        comm_pct = float(su.commission_gift_percent or 0.0)
-                    elif pkg and (pkg.category or "").lower() == "mobile" and float(su.commission_mobile_percent or 0.0) > 0:
-                        comm_pct = float(su.commission_mobile_percent or 0.0)
-                except Exception:
-                    comm_pct = 0.0
+                comm_pct = float(su.commission_percent or 0.0)
 
             # Calcular ganancia por cada ítem
             for iid, agg in items_map.items():
@@ -4356,14 +4288,7 @@ def admin_stats_package(pkg_id: int):
             # Determinar comisión del influencer una vez por orden (solo para registro)
             comm_pct = 0.0
             if use_affiliate and su:
-                try:
-                    comm_pct = float(su.commission_percent or 0.0)
-                    if (pkg.category or "").lower() == "gift" and float(su.commission_gift_percent or 0.0) > 0:
-                        comm_pct = float(su.commission_gift_percent or 0.0)
-                    elif (pkg.category or "").lower() == "mobile" and float(su.commission_mobile_percent or 0.0) > 0:
-                        comm_pct = float(su.commission_mobile_percent or 0.0)
-                except Exception:
-                    comm_pct = 0.0
+                comm_pct = float(su.commission_percent or 0.0)
 
             # Calcular ganancia por cada ítem
             for iid, agg in items_map.items():

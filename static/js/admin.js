@@ -419,8 +419,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const affCode = document.getElementById('aff-code');
   const affSecondaryCode = document.getElementById('aff-secondary-code');
   const affPass = document.getElementById('aff-pass');
-  const affDiscMobile = document.getElementById('aff-disc-mobile');
-  const affDiscGift = document.getElementById('aff-disc-gift');
+  const affDiscount = document.getElementById('aff-discount');
+  const affCommission = document.getElementById('aff-commission');
   const affScope = document.getElementById('aff-scope');
   const affPkgSelect = document.getElementById('aff-pkg-select');
   const affBalance = document.getElementById('aff-balance');
@@ -483,7 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Determine position to insert while dragging
   function getDragAfterElement(container, mouseY) {
-    const els = [...container.querySelectorAll('.pkg-item:not(.dragging)')];
+    const els = [...container.querySelectorAll('.pkg-card:not(.dragging)')];
     let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
     for (const el of els) {
       const box = el.getBoundingClientRect();
@@ -497,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Persist current order to backend
   async function savePkgOrder() {
-    const ids = Array.from(document.querySelectorAll('#pkg-list .pkg-item'))
+    const ids = Array.from(document.querySelectorAll('#pkg-list .pkg-card'))
       .map(el => el && el.dataset && el.dataset.id)
       .filter(Boolean);
     if (!ids.length) return;
@@ -737,11 +737,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function renderAffWithdrawals(items) {
+    function renderAffWithdrawals(items) {
     if (!affWdList) return;
     affWdList.innerHTML = '';
     if (!items || items.length === 0) {
-      affWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecerÃ¡n aquÃ­.</p></div>';
+      affWdList.innerHTML = '<div class="empty-state"><h3>Sin solicitudes</h3><p>Cuando los afiliados pidan retiro aparecer\u00e1n aqu\u00ed.</p></div>';
       return;
     }
     const fmtUSD = (n) => {
@@ -749,39 +749,45 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     items.forEach(r => {
       const tile = document.createElement('div');
-      tile.className = 'order-tile';
+      tile.className = 'aff-wd-card';
       const when = new Date(r.created_at).toLocaleString();
-      const statusIcon = r.status === 'approved' ? 'OK' : r.status === 'rejected' ? 'X' : '...';
-      const statusClass = r.status === 'approved' ? 'ok' : r.status === 'rejected' ? 'rej' : 'pend';
-      const payoutLine = (r.method === 'pm')
-        ? `Pago MÃ³vil: ${r.pm_bank || ''} Â· ${r.pm_name || ''} Â· ${r.pm_phone || ''} Â· ${r.pm_id || ''}`
-        : `Binance: ${r.binance_email || ''} Â· ${r.binance_phone || ''}`;
+      const statusCls = r.status === 'approved' ? 'aff-status--active' : r.status === 'rejected' ? 'aff-status--inactive' : 'aff-status--pending';
+      const statusTxt = r.status === 'approved' ? 'Aprobado' : r.status === 'rejected' ? 'Rechazado' : 'Pendiente';
+      let payDetails = '';
+      if (r.method === 'pm') {
+        payDetails = `<div class="aff-meta-item"><span class="aff-meta-label">Banco</span><span class="aff-meta-value">${r.pm_bank || '-'}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Titular</span><span class="aff-meta-value">${r.pm_name || '-'}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Tel\u00e9fono</span><span class="aff-meta-value">${r.pm_phone || '-'}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">C\u00e9dula</span><span class="aff-meta-value">${r.pm_id || '-'}</span></div>`;
+      } else if (r.method === 'binance') {
+        payDetails = `<div class="aff-meta-item"><span class="aff-meta-label">Email</span><span class="aff-meta-value">${r.binance_email || '-'}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Tel\u00e9fono</span><span class="aff-meta-value">${r.binance_phone || '-'}</span></div>`;
+      } else if (r.method === 'zinli') {
+        payDetails = `<div class="aff-meta-item"><span class="aff-meta-label">Email</span><span class="aff-meta-value">${r.zinli_email || '-'}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Tag</span><span class="aff-meta-value">${r.zinli_tag || '-'}</span></div>`;
+      }
       tile.innerHTML = `
-        <div class="row-head">
-          <div>
-            <div class="ref">RETIRO <span class="state ${statusClass}">${statusIcon}</span></div>
-            <div class="sub">${r.affiliate_name || '#'}</div>
+        <div class="aff-wd-head">
+          <div class="aff-wd-info">
+            <div class="aff-wd-name">${r.affiliate_name || 'Afiliado'}</div>
+            <span class="aff-status ${statusCls}">${statusTxt}</span>
           </div>
-          <div class="box-right">
-            <div class="metric usd"><span>${fmtUSD(r.amount_usd)}</span></div>
-          </div>
+          <div class="aff-wd-amount">${fmtUSD(r.amount_usd)}</div>
         </div>
-        <div class="row-metrics">
-          <div class="metric diam"><span>${r.method.toUpperCase()}</span></div>
-          <div class="metric usd"><span>${fmtUSD(r.amount_usd)}</span></div>
+        <div class="aff-card-meta">
+          <div class="aff-meta-item"><span class="aff-meta-label">M\u00e9todo</span><span class="aff-meta-value">${(r.method || '').toUpperCase()}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Fecha</span><span class="aff-meta-value">${when}</span></div>
+          ${payDetails}
         </div>
-        <div class="row-foot">
-          <div>${when}</div>
-          <div class="customer">${payoutLine}</div>
-        </div>
-        <div class="row-actions">
-          ${r.status === 'pending' ? `<button class="btn btn-wd-approve" data-id="${r.id}">Aprobar</button>
-          <button class="btn btn-wd-reject" data-id="${r.id}">Rechazar</button>` : ''}
-        </div>
+        ${r.status === 'pending' ? `<div class="aff-wd-actions">
+          <button class="btn primary btn-wd-approve" data-id="${r.id}">Aprobar</button>
+          <button class="btn btn-wd-reject" data-id="${r.id}">Rechazar</button>
+        </div>` : ''}
       `;
       affWdList.appendChild(tile);
     });
   }
+
 
   if (affWdList) {
     affWdList.addEventListener('click', async (e) => {
@@ -925,7 +931,7 @@ window.fetchPayments = fetchPayments;
         if (target === '#tab-orders') { fetchOrders(); fetchAffWithdrawalsForOrders(); }
         if (target === '#tab-images') { if (gallery) await fetchImages(); }
         if (target === '#tab-config') { fetchSiteName(); fetchLogo(); fetchMidBanner(); fetchThanksImage(); fetchActiveLoginGame(); fetchPayments(); }
-        if (target === '#tab-affiliates') { fetchAffiliates(); fetchAffWithdrawals(); populatePackagesForAffiliateScope && populatePackagesForAffiliateScope(); }
+        if (target === '#tab-affiliates') { fetchAffiliates(); fetchAffWithdrawals(); populatePackagesSelect(); }
         if (target === '#tab-packages') { fetchPackages(); }
         if (target === '#tab-rev-map') { fetchRevMappingData(revStorePackage ? revStorePackage.value : ''); }
         if (target === '#tab-stats') { fetchStatsPackages(); fetchGlobalStatsSummary(); }
@@ -1730,10 +1736,9 @@ window.refreshGallery = refreshGallery;
     }
   }
 
-  function renderAffiliates(items) {
+    function renderAffiliates(items) {
     if (!affList) return;
     affList.innerHTML = '';
-    affList.classList.add('pkg-accordion');
     if (!items || items.length === 0) {
       affList.innerHTML = '<div class="empty-state"><h3>Sin afiliados</h3><p>Crea uno nuevo para comenzar.</p></div>';
       return;
@@ -1742,41 +1747,60 @@ window.refreshGallery = refreshGallery;
       try { return Number(n||0).toLocaleString('en-US', { style:'currency', currency:'USD', maximumFractionDigits: 2 }); } catch(_) { return `$${n}`; }
     };
     items.forEach(u => {
-      const row = document.createElement('div');
-      row.className = 'pkg-item open';
-      row.innerHTML = `
-        <div class="pkg-header">
-          <div>
-            <div class="name">${u.name || '-'} <span class="badge">${u.active ? 'ACTIVO' : 'INACTIVO'}</span></div>
-            <div class="sub">Código: <strong>${u.code}</strong>${u.secondary_code ? ` · Adicional: <strong>${u.secondary_code}</strong>` : ''} · Email: <strong>${u.email || '-'}</strong> · Saldo: <strong>${fmtUSD(u.balance)}</strong> · Alcance: <strong>${u.scope || 'all'}${u.scope === 'package' && u.scope_package_id ? ' #'+u.scope_package_id : ''}</strong></div>
+      const card = document.createElement('div');
+      card.className = 'aff-card';
+      const statusCls = u.active ? 'aff-status--active' : 'aff-status--inactive';
+      const statusTxt = u.active ? 'Activo' : 'Inactivo';
+      const scopeTxt = u.scope === 'package' ? `Juego #${u.scope_package_id || '?'}` : 'Todos';
+      card.innerHTML = `
+        <div class="aff-card-head">
+          <div class="aff-card-info">
+            <div class="aff-card-name">${u.name || 'Sin nombre'}</div>
+            <span class="aff-status ${statusCls}">${statusTxt}</span>
           </div>
-          <div class="head-actions">
-            <button class="btn btn-aff-save" data-id="${u.id}" type="button">Guardar</button>
-            <button class="btn btn-aff-del" data-id="${u.id}" type="button">Eliminar</button>
-          </div>
+          <div class="aff-card-balance">${fmtUSD(u.balance)}</div>
         </div>
-        <div class="pkg-content" style="display:grid; gap:6px;">
-          <input class="aff-edit-name" type="text" value="${u.name || ''}" placeholder="Nombre" />
-          <input class="aff-edit-code" type="text" value="${u.code || ''}" placeholder="Código" />
-          <input class="aff-edit-secondary-code" type="text" value="${u.secondary_code || ''}" placeholder="Código adicional (1 uso por ID)" />
-          <input class="aff-edit-email" type="email" value="${u.email || ''}" placeholder="Email" />
-          <input class="aff-edit-pass" type="password" value="" placeholder="Nueva contraseÃƒÆ’Ã‚Â±a (opcional)" />
-          <div style="display:grid; gap:6px; grid-template-columns: 1fr 1fr;">
-            <select class="aff-edit-scope">
-              <option value="all" ${u.scope !== 'package' ? 'selected' : ''}>Todos</option>
-              <option value="package" ${u.scope === 'package' ? 'selected' : ''}>Solo juego</option>
-            </select>
-          </div>
-          <div style="display:grid; gap:6px; grid-template-columns: 1fr 1fr;">
-            <input class="aff-edit-disc-mobile" type="number" step="0.1" min="0" max="100" value="${u.discount_mobile_percent || 0}" placeholder="Desc Mobile %" />
-            <input class="aff-edit-disc-gift" type="number" step="0.1" min="0" max="100" value="${u.discount_gift_percent || 0}" placeholder="Desc Gift %" />
-          </div>
-          <input class="aff-edit-pkgid" type="number" min="1" value="${u.scope_package_id || ''}" placeholder="ID de juego (si aplica)" />
-          <input class="aff-edit-balance" type="number" step="0.01" min="0" value="${u.balance || 0}" placeholder="Saldo USD" />
-          <label style="display:flex; align-items:center; gap:8px;"><input class="aff-edit-active" type="checkbox" ${u.active ? 'checked' : ''}/> Activo</label>
+        <div class="aff-card-meta">
+          <div class="aff-meta-item"><span class="aff-meta-label">C\u00f3digo</span><span class="aff-meta-value">${u.code}</span></div>
+          ${u.secondary_code ? `<div class="aff-meta-item"><span class="aff-meta-label">Adicional</span><span class="aff-meta-value">${u.secondary_code}</span></div>` : ''}
+          <div class="aff-meta-item"><span class="aff-meta-label">Email</span><span class="aff-meta-value">${u.email || '-'}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Alcance</span><span class="aff-meta-value">${scopeTxt}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Descuento</span><span class="aff-meta-value">${u.discount_percent || 0}%</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Comisi\u00f3n</span><span class="aff-meta-value">${u.commission_percent || 0}%</span></div>
         </div>
+        <details class="aff-card-edit">
+          <summary class="aff-edit-toggle">Editar</summary>
+          <div class="aff-edit-body">
+            <div class="aff-edit-grid">
+              <div class="aff-edit-field"><label>Nombre</label><input class="aff-edit-name" type="text" value="${u.name || ''}" /></div>
+              <div class="aff-edit-field"><label>Email</label><input class="aff-edit-email" type="email" value="${u.email || ''}" /></div>
+              <div class="aff-edit-field"><label>C\u00f3digo</label><input class="aff-edit-code" type="text" value="${u.code || ''}" /></div>
+              <div class="aff-edit-field"><label>C\u00f3digo adicional</label><input class="aff-edit-secondary-code" type="text" value="${u.secondary_code || ''}" /></div>
+              <div class="aff-edit-field"><label>Nueva contrase\u00f1a</label><input class="aff-edit-pass" type="password" value="" placeholder="Dejar vac\u00edo para no cambiar" /></div>
+              <div class="aff-edit-field"><label>Saldo (USD)</label><input class="aff-edit-balance" type="number" step="0.01" min="0" value="${u.balance || 0}" /></div>
+            </div>
+            <div class="aff-edit-grid aff-edit-grid--2">
+              <div class="aff-edit-field"><label>Descuento al usuario %</label><input class="aff-edit-discount" type="number" step="0.1" min="0" max="100" value="${u.discount_percent || 0}" /></div>
+              <div class="aff-edit-field"><label>Ganancia afiliado %</label><input class="aff-edit-commission" type="number" step="0.1" min="0" max="100" value="${u.commission_percent || 0}" /></div>
+            </div>
+            <div class="aff-edit-grid aff-edit-grid--3">
+              <div class="aff-edit-field"><label>Alcance</label>
+                <select class="aff-edit-scope">
+                  <option value="all" ${u.scope !== 'package' ? 'selected' : ''}>Todos</option>
+                  <option value="package" ${u.scope === 'package' ? 'selected' : ''}>Solo juego</option>
+                </select>
+              </div>
+              <div class="aff-edit-field"><label>ID Juego</label><input class="aff-edit-pkgid" type="number" min="1" value="${u.scope_package_id || ''}" placeholder="Si aplica" /></div>
+              <div class="aff-edit-field aff-edit-field--check"><label>Activo</label><label class="aff-toggle"><input class="aff-edit-active" type="checkbox" ${u.active ? 'checked' : ''} /><span class="aff-toggle-label">${u.active ? 'S\u00ed' : 'No'}</span></label></div>
+            </div>
+            <div class="aff-edit-actions">
+              <button class="btn primary btn-aff-save" data-id="${u.id}" type="button">Guardar</button>
+              <button class="btn btn-aff-del" data-id="${u.id}" type="button">Eliminar</button>
+            </div>
+          </div>
+        </details>
       `;
-      affList.appendChild(row);
+      affList.appendChild(card);
     });
   }
 
@@ -1787,8 +1811,8 @@ window.refreshGallery = refreshGallery;
       code: (affCode && affCode.value.trim()) || '',
       secondary_code: (affSecondaryCode && affSecondaryCode.value.trim()) || '',
       password: (affPass && affPass.value) || '',
-      discount_mobile_percent: (affDiscMobile && parseFloat(affDiscMobile.value || '0')) || 0,
-      discount_gift_percent: (affDiscGift && parseFloat(affDiscGift.value || '0')) || 0,
+      discount_percent: (affDiscount && parseFloat(affDiscount.value || '0')) || 0,
+      commission_percent: (affCommission && parseFloat(affCommission.value || '0')) || 0,
       scope: (affScope && affScope.value) || 'all',
       scope_package_id: (affPkgSelect && affPkgSelect.value ? parseInt(affPkgSelect.value, 10) : null),
       balance: (affBalance && parseFloat(affBalance.value || '0')) || 0,
@@ -1815,8 +1839,8 @@ window.refreshGallery = refreshGallery;
         if (affCode) affCode.value = '';
         if (affSecondaryCode) affSecondaryCode.value = '';
         if (affPass) affPass.value = '';
-        if (affDiscMobile) affDiscMobile.value = '';
-        if (affDiscGift) affDiscGift.value = '';
+        if (affDiscount) affDiscount.value = '';
+        if (affCommission) affCommission.value = '';
         if (affScope) affScope.value = 'all';
         if (affPkgSelect) affPkgSelect.value = '';
         if (affBalance) affBalance.value = '0';
@@ -1838,14 +1862,14 @@ window.refreshGallery = refreshGallery;
       const btnDel = e.target.closest('.btn-aff-del');
       if (btnSave) {
         const id = btnSave.getAttribute('data-id');
-        const container = btnSave.closest('.pkg-item');
+        const container = btnSave.closest('.aff-card');
         const name = container.querySelector('.aff-edit-name')?.value.trim() || '';
         const code = container.querySelector('.aff-edit-code')?.value.trim() || '';
         const secondary_code = container.querySelector('.aff-edit-secondary-code')?.value.trim() || '';
         const email = container.querySelector('.aff-edit-email')?.value.trim() || '';
         const password = container.querySelector('.aff-edit-pass')?.value || '';
-        const discount_mobile_percent = parseFloat(container.querySelector('.aff-edit-disc-mobile')?.value || '0') || 0;
-        const discount_gift_percent = parseFloat(container.querySelector('.aff-edit-disc-gift')?.value || '0') || 0;
+        const discount_percent = parseFloat(container.querySelector('.aff-edit-discount')?.value || '0') || 0;
+        const commission_percent = parseFloat(container.querySelector('.aff-edit-commission')?.value || '0') || 0;
         const scope = container.querySelector('.aff-edit-scope')?.value || 'all';
         const scope_package_id = container.querySelector('.aff-edit-pkgid')?.value ? parseInt(container.querySelector('.aff-edit-pkgid').value, 10) : null;
         const balance = parseFloat(container.querySelector('.aff-edit-balance')?.value || '0') || 0;
@@ -1853,7 +1877,7 @@ window.refreshGallery = refreshGallery;
         try {
           btnSave.disabled = true;
           const res = await fetch(`/admin/special/users/${id}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, code, secondary_code, email, password, discount_mobile_percent, discount_gift_percent, scope, scope_package_id, balance, active })
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, code, secondary_code, email, password, discount_percent, commission_percent, scope, scope_package_id, balance, active })
           });
           if (!res.ok) throw new Error('No se pudo guardar');
           await fetchAffiliates();
@@ -2505,98 +2529,125 @@ window.fetchHero = fetchHero;
     let specCount = 0;
     items.forEach(p => {
       const isGift = (p.category || 'mobile') === 'gift';
-      const item = document.createElement('div');
-      item.className = 'pkg-item';
-      item.dataset.id = String(p.id || '');
-      item.innerHTML = `
-        <div class="pkg-header">
-          <img class="mini-thumb" src="${p.image_path}" alt="${p.name}">
-          <div>
-            <div class="name">${p.name}
-              <span class="badge ${isGift ? 'gift' : ''}">${isGift ? 'GIFT CARD' : 'MOBILE'}</span>
+      const card = document.createElement('div');
+      card.className = 'pkg-card';
+      card.dataset.id = String(p.id || '');
+      const catClass = isGift ? 'pkg-badge--gift' : 'pkg-badge--mobile';
+      const catLabel = isGift ? 'GIFT CARD' : 'MOBILE';
+      const activeClass = p.active ? 'pkg-badge--active' : 'pkg-badge--inactive';
+      const activeTxt = p.active ? 'Activo' : 'Inactivo';
+      card.innerHTML = `
+        <div class="pkg-card-head">
+          <img class="pkg-card-thumb" src="${p.image_path}" alt="${p.name}">
+          <div class="pkg-card-info">
+            <div class="pkg-card-name">${p.name}</div>
+            <div class="pkg-card-badges">
+              <span class="pkg-badge ${catClass}">${catLabel}</span>
+              <span class="pkg-badge ${activeClass}">${activeTxt}</span>
             </div>
           </div>
-          <div class="head-actions">
-            <button class="btn btn-drag" data-id="${p.id}" type="button" title="Arrastrar">↕</button>
-            <button class="btn btn-toggle" data-id="${p.id}" type="button">Editar</button>
+          <div class="pkg-card-actions">
+            <button class="btn btn-drag" data-id="${p.id}" type="button" title="Arrastrar">\u2195</button>
             <button class="btn btn-delete" data-id="${p.id}" type="button">Eliminar</button>
           </div>
         </div>
-        <div class="pkg-content">
-          <input class="edit-name" type="text" value="${p.name}" placeholder="Nombre"/>
-          <select class="edit-category">
-            <option value="mobile" ${p.category === 'mobile' ? 'selected' : ''}>Juegos Mobile</option>
-            <option value="gift" ${p.category === 'gift' ? 'selected' : ''}>Gift Cards</option>
-          </select>
-          <textarea class="edit-desc" placeholder="Descripción del juego" style="min-height:60px;">${p.description || ''}</textarea>
-          <input class="edit-special-desc" type="hidden" value="${(p.special_description || '').replace(/"/g, '&quot;')}">
-          <label style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-            <input class="edit-active" type="checkbox" ${p.active ? 'checked' : ''}/> Activo
-          </label>
-          <label style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-            <input class="edit-requires-zone" type="checkbox" ${p.requires_zone_id ? 'checked' : ''}/> Zona ID requerida
-          </label>
-          <div style="display:flex; gap:6px;">
-            <input class="edit-image" type="text" value="${p.image_path}" readonly />
-            <button class="btn btn-pick-img" type="button">Elegir</button>
-          </div>
-          <code class="path">${p.image_path}</code>
-          <div style="display:flex; gap:6px;">
-            <button class="btn btn-save" data-id="${p.id}" type="button">Guardar</button>
-            <button class="btn btn-cancel" type="button">Cancelar</button>
-          </div>
-          <hr style="margin:12px 0; opacity:.4;">
-          <h4 style="margin:0 0 8px;">Paquetes de este juego</h4>
-          <div class="game-items" data-gid="${p.id}">
-            <div class="items-actions" style="display:flex; gap:6px; margin-bottom:8px;">
-              <button class="btn btn-items-refresh" type="button">Refrescar</button>
+        <details class="pkg-card-edit">
+          <summary class="pkg-edit-toggle">Editar</summary>
+          <div class="pkg-edit-body">
+            <input class="edit-special-desc" type="hidden" value="${(p.special_description || '').replace(/"/g, '&quot;')}">
+            <div class="pkg-edit-section-label">Datos del paquete</div>
+            <div class="pkg-edit-grid">
+              <div class="pkg-edit-field"><label>Nombre</label><input class="edit-name" type="text" value="${p.name}" /></div>
+              <div class="pkg-edit-field"><label>Categor\u00eda</label>
+                <select class="edit-category">
+                  <option value="mobile" ${p.category === 'mobile' ? 'selected' : ''}>Juegos Mobile</option>
+                  <option value="gift" ${p.category === 'gift' ? 'selected' : ''}>Gift Cards</option>
+                </select>
+              </div>
             </div>
-            <div class="items-list"></div>
-            <div class="items-form" style="margin-top:10px; display:grid; gap:6px; grid-template-columns: 1fr 140px;">
-              <input class="new-item-title" type="text" placeholder="Título del paquete" />
-              <input class="new-item-price" type="number" step="0.01" min="0" placeholder="Precio" />
-              <div style="grid-column:1 / -1; display:flex; align-items:center; gap:6px; flex-wrap: wrap;">
-                <input class="new-item-icon" type="text" placeholder="Icono (opcional)" readonly />
-                <button class="btn btn-item-pick-icon" type="button">Elegir imagen</button>
-                <div style="margin-left:auto; display:flex; gap:6px;">
-                  <button class="btn btn-item-create" type="button">Agregar paquete</button>
+            <div class="pkg-edit-grid pkg-edit-grid--1">
+              <div class="pkg-edit-field"><label>Descripci\u00f3n</label><textarea class="edit-desc" rows="2">${p.description || ''}</textarea></div>
+            </div>
+            <div class="pkg-edit-grid pkg-edit-grid--3">
+              <div class="pkg-edit-field"><label>Imagen</label>
+                <div style="display:flex;gap:6px;">
+                  <input class="edit-image" type="text" value="${p.image_path}" readonly style="flex:1;" />
+                  <button class="btn btn-pick-img" type="button">Elegir</button>
+                </div>
+              </div>
+              <div class="pkg-edit-field" style="display:flex;flex-direction:column;justify-content:center;">
+                <label>Activo</label>
+                <label class="pkg-toggle"><input class="edit-active" type="checkbox" ${p.active ? 'checked' : ''} /><span class="pkg-toggle-label">${p.active ? 'S\u00ed' : 'No'}</span></label>
+              </div>
+              <div class="pkg-edit-field" style="display:flex;flex-direction:column;justify-content:center;">
+                <label>Zona ID</label>
+                <label class="pkg-toggle"><input class="edit-requires-zone" type="checkbox" ${p.requires_zone_id ? 'checked' : ''} /><span class="pkg-toggle-label">Requerida</span></label>
+              </div>
+            </div>
+
+            <div class="pkg-edit-section-label">Items de este paquete</div>
+            <div class="game-items" data-gid="${p.id}">
+              <div class="items-list"></div>
+              <div class="pkg-new-item">
+                <div class="pkg-edit-field"><label>T\u00edtulo</label><input class="new-item-title" type="text" placeholder="Nuevo item" /></div>
+                <div class="pkg-edit-field"><label>Precio</label><input class="new-item-price" type="number" step="0.01" min="0" placeholder="0.00" /></div>
+                <div class="pkg-edit-field" style="display:flex;align-items:end;"><button class="btn btn-item-create" type="button">+ Agregar</button></div>
+                <div class="pkg-new-item-extras">
+                  <div class="pkg-edit-field" style="flex:1;min-width:180px;"><label>Icono (opc.)</label>
+                    <div style="display:flex;gap:6px;"><input class="new-item-icon" type="text" placeholder="ruta icono" readonly style="flex:1;" /><button class="btn btn-item-pick-icon" type="button">Elegir</button></div>
+                  </div>
                 </div>
               </div>
             </div>
+
+            <div class="pkg-edit-actions">
+              <button class="btn primary btn-save-all" data-id="${p.id}" type="button">Guardar todo</button>
+              <button class="btn btn-delete" data-id="${p.id}" type="button">Eliminar paquete</button>
+            </div>
           </div>
-        </div>
+        </details>
       `;
-      // Bind image picker for this item
-      const imgInput = item.querySelector('.edit-image');
-      const pickBtn = item.querySelector('.btn-pick-img');
+      // Bind image picker for package image
+      const imgInput = card.querySelector('.edit-image');
+      const pickBtn = card.querySelector('.btn-pick-img');
       if (pickBtn && imgInput) {
         pickBtn.addEventListener('click', (ev) => { ev.preventDefault(); openLogoPicker(imgInput); });
       }
       // Enable drag via handle and persist on drop
-      const dragHandle = item.querySelector('.btn-drag');
+      const dragHandle = card.querySelector('.btn-drag');
       if (dragHandle) {
-        dragHandle.addEventListener('mousedown', () => { try { item.setAttribute('draggable', 'true'); } catch(_) {} });
-        ['mouseup','mouseleave','blur'].forEach(ev => dragHandle.addEventListener(ev, () => { try { item.removeAttribute('draggable'); } catch(_) {} }));
+        dragHandle.addEventListener('mousedown', () => { try { card.setAttribute('draggable', 'true'); } catch(_) {} });
+        ['mouseup','mouseleave','blur'].forEach(ev => dragHandle.addEventListener(ev, () => { try { card.removeAttribute('draggable'); } catch(_) {} }));
       }
-      item.addEventListener('dragstart', (ev) => {
-        item.classList.add('dragging');
-        try { ev.dataTransfer.setData('text/plain', item.dataset.id || ''); } catch(_) {}
+      card.addEventListener('dragstart', (ev) => {
+        card.classList.add('dragging');
+        try { ev.dataTransfer.setData('text/plain', card.dataset.id || ''); } catch(_) {}
       });
-      item.addEventListener('dragend', async () => {
-        item.classList.remove('dragging');
-        try { item.removeAttribute('draggable'); } catch(_) {}
+      card.addEventListener('dragend', async () => {
+        card.classList.remove('dragging');
+        try { card.removeAttribute('draggable'); } catch(_) {}
         try { await savePkgOrder(); toast('Orden guardado'); } catch(e) { toast('No se pudo guardar el orden', 'error'); }
       });
-      if (isGift && accSpec) { accSpec.appendChild(item); specCount++; }
-      else if (accNorm) { accNorm.appendChild(item); }
-      else { pkgList.appendChild(item); }
+      // Auto-load items when <details> opens
+      const detailsEl = card.querySelector('details.pkg-card-edit');
+      if (detailsEl) {
+        detailsEl.addEventListener('toggle', () => {
+          if (detailsEl.open) {
+            const game = card.querySelector('.game-items');
+            if (game) loadGameItems(game, game.getAttribute('data-gid'));
+          }
+        });
+      }
+      if (isGift && accSpec) { accSpec.appendChild(card); specCount++; }
+      else if (accNorm) { accNorm.appendChild(card); }
+      else { pkgList.appendChild(card); }
     });
     if (grpSpec) grpSpec.hidden = specCount === 0;
     const containers = [accSpec, accNorm, pkgList].filter(Boolean);
     containers.forEach(container => {
       container.addEventListener('dragover', (e) => {
         e.preventDefault();
-        const dragging = document.querySelector('.pkg-item.dragging');
+        const dragging = document.querySelector('.pkg-card.dragging');
         if (!dragging) return;
         const afterEl = getDragAfterElement(container, e.clientY);
         if (afterEl == null) container.appendChild(dragging);
@@ -2692,7 +2743,7 @@ if (btnSaveHero) {
 
   function filterPackagesBySelect() {
     const sel = pkgSelect ? String(pkgSelect.value || '') : '';
-    const items = pkgList ? pkgList.querySelectorAll('.pkg-item') : [];
+    const items = pkgList ? pkgList.querySelectorAll('.pkg-card') : [];
     if (!items || items.length === 0) return;
     if (!sel) {
       // Hide all until user selects
@@ -2764,23 +2815,18 @@ if (btnSaveHero) {
   if (pkgList) {
     pkgList.addEventListener('click', async (e) => {
       const btnDel = e.target.closest('.btn-delete');
-      const btnPick = e.target.closest('.btn-pick-img');
-      const btnSave = e.target.closest('.btn-save');
-      const btnToggle = e.target.closest('.btn-toggle');
-      const btnCancel = e.target.closest('.btn-cancel');
-      const btnItemsRefresh = e.target.closest('.btn-items-refresh');
+      const btnSaveAll = e.target.closest('.btn-save-all');
       const btnItemCreate = e.target.closest('.btn-item-create');
       const btnItemDelete = e.target.closest('.btn-item-delete');
-      const btnItemSave = e.target.closest('.btn-item-save');
       const btnItemPickIcon = e.target.closest('.btn-item-pick-icon');
       const btnSpecialDescSave = e.target.closest('.btn-special-desc-save');
 
       // Save single special description for the package
       if (btnSpecialDescSave) {
-        const pkg = btnSpecialDescSave.closest('.pkg-item');
+        const pkg = btnSpecialDescSave.closest('.pkg-card');
         const game = btnSpecialDescSave.closest('.game-items');
         const gid = (pkg && pkg.getAttribute('data-id')) || (game && game.getAttribute('data-gid'));
-        if (!gid) { toast('No se encontró el ID del juego'); return; }
+        if (!gid) { toast('No se encontr\u00f3 el ID del juego'); return; }
         const textEl = (pkg || game).querySelector('.special-desc');
         const editSpecDesc = pkg ? pkg.querySelector('.edit-special-desc') : null;
         const special_description = textEl ? textEl.value.trim() : '';
@@ -2793,9 +2839,9 @@ if (btnSaveHero) {
           });
           if (!res.ok) throw new Error('No se pudo guardar');
           if (editSpecDesc) editSpecDesc.value = special_description;
-          toast('Descripción guardada');
+          toast('Descripci\u00f3n guardada');
         } catch (err) {
-          toast(err.message || 'Error al guardar descripción');
+          toast(err.message || 'Error al guardar descripci\u00f3n');
         } finally {
           btnSpecialDescSave.disabled = false;
         }
@@ -2816,49 +2862,22 @@ if (btnSaveHero) {
         }
         return;
       }
-      if (btnPick) {
-        // open image picker for this item
-        const meta = btnPick.closest('.meta');
-        const input = meta && meta.querySelector('.edit-image');
-        if (input) {
-          openLogoPicker(input); // reuse picker
-        }
-        return;
-      }
-      if (btnToggle) {
-        const container = btnToggle.closest('#pkg-list');
-        const item = btnToggle.closest('.pkg-item');
-        if (container && item) {
-          // Close others
-          container.querySelectorAll('.pkg-item.open').forEach(el => { if (el !== item) el.classList.remove('open'); });
-          item.classList.toggle('open');
-          // When opening, refresh game items
-          if (item.classList.contains('open')) {
-            const game = item.querySelector('.game-items');
-            if (game) {
-              const gid = game.getAttribute('data-gid');
-              await loadGameItems(game, gid);
-            }
-          }
-        }
-        return;
-      }
-      if (btnCancel) {
-        const item = btnCancel.closest('.pkg-item');
-        if (item) item.classList.remove('open');
-        return;
-      }
-      if (btnSave) {
-        const id = btnSave.getAttribute('data-id');
+
+      // === SAVE ALL: package info + all items in one go ===
+      if (btnSaveAll) {
+        const id = btnSaveAll.getAttribute('data-id');
         if (!id) return;
-        const item = btnSave.closest('.pkg-item');
-        const nameEl = item && item.querySelector('.edit-name');
-        const catEl = item && item.querySelector('.edit-category');
-        const imgEl = item && item.querySelector('.edit-image');
-        const descEl = item && item.querySelector('.edit-desc');
-        const activeEl = item && item.querySelector('.edit-active');
-        const rzEl = item && item.querySelector('.edit-requires-zone');
-        const payload = {
+        const card = btnSaveAll.closest('.pkg-card');
+        if (!card) return;
+        const nameEl = card.querySelector('.edit-name');
+        const catEl = card.querySelector('.edit-category');
+        const imgEl = card.querySelector('.edit-image');
+        const descEl = card.querySelector('.edit-desc');
+        const activeEl = card.querySelector('.edit-active');
+        const rzEl = card.querySelector('.edit-requires-zone');
+        const specDescEl = card.querySelector('.edit-special-desc');
+        const specialDescTextarea = card.querySelector('.special-desc');
+        const pkgPayload = {
           name: nameEl ? nameEl.value.trim() : '',
           category: catEl ? catEl.value : 'mobile',
           image_path: imgEl ? imgEl.value.trim() : '',
@@ -2866,29 +2885,58 @@ if (btnSaveHero) {
           requires_zone_id: rzEl ? !!rzEl.checked : false,
           active: activeEl ? !!activeEl.checked : true
         };
+        if (specialDescTextarea) {
+          pkgPayload.special_description = specialDescTextarea.value.trim();
+        } else if (specDescEl) {
+          pkgPayload.special_description = specDescEl.value;
+        }
+        // Collect all item rows
+        const itemRows = card.querySelectorAll('.pkg-item-row');
+        const itemsPayload = [];
+        itemRows.forEach(row => {
+          const itemId = row.getAttribute('data-id');
+          if (!itemId) return;
+          const titleEl = row.querySelector('.it-title');
+          const priceEl = row.querySelector('.it-price');
+          const specialEl = row.querySelector('.it-special');
+          const iconEl = row.querySelector('.it-icon');
+          itemsPayload.push({
+            id: parseInt(itemId, 10),
+            title: titleEl ? titleEl.value.trim() : '',
+            price: priceEl ? parseFloat(priceEl.value || '0') : 0,
+            sticker: specialEl && specialEl.checked ? 'special' : '',
+            icon_path: iconEl ? iconEl.value.trim() : ''
+          });
+        });
         try {
-          btnSave.disabled = true;
-          const res = await fetch(`/admin/packages/${id}`, {
+          btnSaveAll.disabled = true;
+          // Save package info
+          const resPkg = await fetch(`/admin/packages/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(pkgPayload)
           });
-          if (!res.ok) throw new Error('No se pudo guardar');
+          if (!resPkg.ok) throw new Error('No se pudo guardar el paquete');
+          // Bulk save items
+          if (itemsPayload.length > 0) {
+            const resItems = await fetch(`/admin/package/${id}/items/bulk`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ items: itemsPayload })
+            });
+            if (!resItems.ok) throw new Error('No se pudieron guardar los items');
+          }
+          toast('Todo guardado', 'success');
           await fetchPackages();
         } catch (err) {
           toast(err.message || 'Error al guardar');
         } finally {
-          btnSave.disabled = false;
+          btnSaveAll.disabled = false;
         }
-      }
-
-      // Items section handlers
-      if (btnItemsRefresh) {
-        const game = btnItemsRefresh.closest('.game-items');
-        const gid = game && game.getAttribute('data-gid');
-        if (gid) await loadGameItems(game, gid);
         return;
       }
+
+      // Create new item
       if (btnItemCreate) {
         const game = btnItemCreate.closest('.game-items');
         const gid = game && game.getAttribute('data-gid');
@@ -2898,7 +2946,7 @@ if (btnSaveHero) {
         const title = titleEl ? titleEl.value.trim() : '';
         const price = priceEl ? parseFloat(priceEl.value || '0') : 0;
         const icon_path = iconEl ? iconEl.value.trim() : '';
-        if (!gid || !title) { toast('Título requerido'); return; }
+        if (!gid || !title) { toast('T\u00edtulo requerido'); return; }
         try {
           btnItemCreate.disabled = true;
           const res = await fetch(`/admin/package/${gid}/items`, {
@@ -2918,8 +2966,9 @@ if (btnSaveHero) {
         }
         return;
       }
+      // Delete item
       if (btnItemDelete) {
-        const row = btnItemDelete.closest('.item-row');
+        const row = btnItemDelete.closest('.pkg-item-row');
         const id = row && row.getAttribute('data-id');
         if (!id) return;
         try {
@@ -2936,40 +2985,17 @@ if (btnSaveHero) {
         }
         return;
       }
-      if (btnItemSave) {
-        const row = btnItemSave.closest('.item-row');
-        const id = row && row.getAttribute('data-id');
-        if (!id) return;
-        const titleEl = row.querySelector('.it-title');
-        const priceEl = row.querySelector('.it-price');
-        const specialEl = row.querySelector('.it-special');
-        const iconEl = row.querySelector('.it-icon');
-        const payload = {
-          title: titleEl ? titleEl.value.trim() : '',
-          price: priceEl ? parseFloat(priceEl.value || '0') : 0,
-          sticker: specialEl && specialEl.checked ? 'special' : '',
-          icon_path: iconEl ? iconEl.value.trim() : ''
-        };
-        try {
-          btnItemSave.disabled = true;
-          const res = await fetch(`/admin/package/item/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (!res.ok) throw new Error('No se pudo guardar');
-          toast('Guardado');
-        } catch (err) {
-          toast(err.message || 'Error al guardar');
-        } finally {
-          btnItemSave.disabled = false;
-        }
-        return;
-      }
+      // Pick icon for item
       if (btnItemPickIcon) {
-        const row = btnItemPickIcon.closest('.item-row') || btnItemPickIcon.closest('.items-form');
+        const row = btnItemPickIcon.closest('.pkg-item-row') || btnItemPickIcon.closest('.pkg-new-item');
         const input = row && row.querySelector('.it-icon');
-        if (input) { openLogoPicker(input); }
+        if (!input) {
+          const newIcon = btnItemPickIcon.closest('.pkg-new-item-extras') || btnItemPickIcon.closest('.pkg-new-item');
+          const inp2 = newIcon && newIcon.querySelector('.new-item-icon');
+          if (inp2) { openLogoPicker(inp2); }
+        } else {
+          openLogoPicker(input);
+        }
         return;
       }
     });
@@ -3004,55 +3030,52 @@ if (btnSaveHero) {
     const normals = items.filter(it => (it.sticker || '').toLowerCase() !== 'special');
     const addRow = (it) => {
       const row = document.createElement('div');
-      row.className = 'item-row';
+      row.className = 'pkg-item-row';
       row.setAttribute('data-id', it.id);
-      row.style.display = 'grid';
-      row.style.gridTemplateColumns = '1fr 140px';
-      row.style.gap = '6px';
-      row.style.marginBottom = '8px';
       row.innerHTML = `
-        <input class="it-title" type="text" value="${it.title || ''}" placeholder="Título" />
-        <input class="it-price" type="number" step="0.01" min="0" value="${Number(it.price || 0)}" placeholder="Precio" />
-        <div style="grid-column:1 / -1; display:flex; align-items:center; gap:12px; flex-wrap: wrap;">
-          <label style="display:flex; align-items:center; gap:6px;">
-            <input class="it-special" type="checkbox" ${(it.sticker||'').toLowerCase()==='special' ? 'checked' : ''}/> Especial
+        <label class="pkg-edit-field"><span>T\u00edtulo</span>
+          <input class="it-title" type="text" value="${it.title || ''}" placeholder="T\u00edtulo" />
+        </label>
+        <label class="pkg-edit-field"><span>Precio</span>
+          <input class="it-price" type="number" step="0.01" min="0" value="${Number(it.price || 0)}" placeholder="Precio" />
+        </label>
+        <div class="pkg-item-extras">
+          <label class="pkg-edit-field" style="flex:0 auto;"><span>Especial</span>
+            <input class="it-special" type="checkbox" ${(it.sticker||'').toLowerCase()==='special' ? 'checked' : ''}/>
           </label>
-          <div class="it-icon-wrap" style="display:flex; align-items:center; gap:6px;">
-            <input class="it-icon" type="text" value="${it.icon_path || ''}" placeholder="Icono (opcional)" readonly />
-            <button class="btn btn-item-pick-icon" type="button">Elegir imagen</button>
-          </div>
-          <div style="display:flex; gap:6px; margin-left:auto;">
-            <button class="btn btn-item-save" type="button">Guardar</button>
-            <button class="btn btn-item-delete" type="button">Eliminar</button>
-          </div>
+          <label class="pkg-edit-field" style="flex:1;"><span>Icono</span>
+            <div class="it-icon-wrap" style="display:flex;gap:6px;">
+              <input class="it-icon" type="text" value="${it.icon_path || ''}" placeholder="Icono (opcional)" readonly style="flex:1;" />
+              <button class="btn btn-item-pick-icon" type="button">Elegir</button>
+            </div>
+          </label>
+          <button class="btn btn-item-delete" type="button" style="align-self:flex-end;">Eliminar</button>
         </div>
       `;
       return row;
     };
     if (specials.length > 0) specials.forEach(it => list.appendChild(addRow(it)));
-    // If there are specials, add a single description textarea for ALL specials in this package
     if (specials.length > 0) {
-      const pkgContainer = list.closest('.pkg-content');
-      const pkgRoot = list.closest('.pkg-item');
+      const pkgRoot = list.closest('.pkg-card');
       const pkgDescInput = pkgRoot ? pkgRoot.querySelector('.edit-special-desc') : null;
       const wrap = document.createElement('div');
-      wrap.style.gridColumn = '1 / -1';
-      wrap.style.margin = '10px 0 0';
+      wrap.className = 'pkg-item-row';
       wrap.innerHTML = `
-        <div style="border-top:1px solid rgba(148,163,184,0.35); margin:10px 0;"></div>
-        <h4 style="margin:0 0 6px;">Descripción para paquetes especiales</h4>
+        <div class="pkg-edit-section-label">Descripci\u00f3n para paquetes especiales</div>
         <textarea class="special-desc" style="width:100%; min-height:90px;">${pkgDescInput ? (pkgDescInput.value || '') : ''}</textarea>
-        <div style="margin-top:6px; display:flex; gap:6px;">
-          <button class="btn btn-special-desc-save" type="button">Guardar descripción</button>
+        <div style="margin-top:6px;">
+          <button class="btn btn-special-desc-save" type="button">Guardar descripci\u00f3n</button>
         </div>
       `;
       list.appendChild(wrap);
     }
     if (normals.length > 0) {
-      const sep = document.createElement('div');
-      sep.style.borderTop = '1px solid rgba(148,163,184,0.35)';
-      sep.style.margin = '10px 0';
-      list.appendChild(sep);
+      if (specials.length > 0) {
+        const sep = document.createElement('div');
+        sep.className = 'pkg-edit-section-label';
+        sep.textContent = 'Items normales';
+        list.appendChild(sep);
+      }
       normals.forEach(it => list.appendChild(addRow(it)));
     }
   }
