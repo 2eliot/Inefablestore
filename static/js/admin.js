@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('admin.js loaded v5');
+  console.log('admin.js loaded v6');
   const tabs = document.querySelectorAll('#adminTabs .tab');
   const panels = document.querySelectorAll('.tab-panel');
   // Elements used across handlers (declare early)
@@ -22,25 +22,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSaveSiteName = document.getElementById('btn-save-site-name');
   const inputLogo = document.getElementById('logo-path');
   const btnSaveLogo = document.getElementById('btn-save-logo');
-  const btnPasteLogo = document.getElementById('btn-paste-logo');
-  const logoPreview = document.getElementById('logo-preview');
   // Mid banner config
   const inputMidBanner = document.getElementById('mid-banner-path');
   const btnSaveMidBanner = document.getElementById('btn-save-mid-banner');
-  const btnPickMidBanner = document.getElementById('btn-pick-mid-banner');
-  const midBannerPreview = document.getElementById('mid-banner-preview');
   // Thanks image config
   const inputThanksImage = document.getElementById('thanks-image-path');
   const btnSaveThanksImage = document.getElementById('btn-save-thanks-image');
-  const btnPickThanksImage = document.getElementById('btn-pick-thanks-image');
-  const thanksImagePreview = document.getElementById('thanks-image-preview');
   // Hero config
   const hero1 = document.getElementById('hero-1');
   const hero2 = document.getElementById('hero-2');
   const hero3 = document.getElementById('hero-3');
-  const btnPickHero1 = document.getElementById('btn-pick-hero-1');
-  const btnPickHero2 = document.getElementById('btn-pick-hero-2');
-  const btnPickHero3 = document.getElementById('btn-pick-hero-3');
   const btnSaveHero = document.getElementById('btn-save-hero');
   // Rate config
   const inputRate = document.getElementById('rate-bsd');
@@ -80,9 +71,6 @@ document.addEventListener('DOMContentLoaded', () => {
         btnSaveThanksImage.disabled = false;
       }
     });
-  }
-  if (inputThanksImage) {
-    inputThanksImage.addEventListener('input', showThanksImagePreview);
   }
 
   // =====================
@@ -226,8 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSavePayments = document.getElementById('btn-save-payments');
   const pmImage = document.getElementById('pm-image');
   const binImage = document.getElementById('binance-image');
-  const btnPickPmImage = document.getElementById('btn-pick-pm-image');
-  const btnPickBinImage = document.getElementById('btn-pick-binance-image');
   const payMethodSelect = document.getElementById('pay-method-select');
   const pmSection = document.getElementById('pm-section');
   const binSection = document.getElementById('binance-section');
@@ -263,7 +249,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const pkgDesc = document.getElementById('pkg-desc');
   const pkgRequires = document.getElementById('pkg-requires-zone');
   const pkgRequiresZoneId = document.getElementById('pkg-requires-zone-id');
-  const btnPickPkgImage = document.getElementById('btn-pick-pkg-image');
   const btnCreatePkg = document.getElementById('btn-create-pkg');
   const btnPackagesRefresh = document.getElementById('btn-packages-refresh');
   const pkgList = document.getElementById('pkg-list');
@@ -429,12 +414,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const affList = document.getElementById('aff-list');
   const btnAffWdRefresh = document.getElementById('btn-aff-wd-refresh');
   const affWdList = document.getElementById('aff-wd-list');
-  // Logo picker modal elements
-  const logoPicker = document.getElementById('logo-picker');
-  const logoPickerGrid = document.getElementById('logo-picker-grid');
-  const logoPickerTpl = document.getElementById('logo-picker-card-tpl');
-  const btnPickLogo = document.getElementById('btn-pick-logo');
-  const btnCloseModal = document.querySelector('#logo-picker .modal-close');
   // Mobile drawer elements
   const adminHamburger = document.getElementById('admin-hamburger');
   const adminDrawer = document.getElementById('admin-drawer');
@@ -522,21 +501,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       if (inputMidBanner) {
         inputMidBanner.value = (data && data.mid_banner_path) || '';
-        showMidBannerPreview();
+        syncDropdown(inputMidBanner);
       }
       window.fetchMidBanner = fetchMidBanner;
     } catch (_) { /* ignore */ }
-  }
-
-  function showMidBannerPreview() {
-    if (!inputMidBanner || !midBannerPreview) return;
-    const url = (inputMidBanner.value || '').trim();
-    if (url) {
-      midBannerPreview.src = url;
-      midBannerPreview.style.display = 'inline-block';
-    } else {
-      midBannerPreview.style.display = 'none';
-    }
   }
 
   async function saveMidBanner() {
@@ -554,21 +522,13 @@ document.addEventListener('DOMContentLoaded', () => {
     return res.json();
   }
 
-  // Thanks image helpers
-  function showThanksImagePreview() {
-    if (!inputThanksImage || !thanksImagePreview) return;
-    const url = (inputThanksImage.value || '').trim();
-    if (url) { thanksImagePreview.src = url; thanksImagePreview.style.display = 'inline-block'; }
-    else { thanksImagePreview.style.display = 'none'; }
-  }
-
   async function fetchThanksImage() {
     try {
       const res = await fetch('/admin/config/thanks_image');
       const data = await res.json();
       if (inputThanksImage) {
         inputThanksImage.value = (data && data.thanks_image_path) || '';
-        showThanksImagePreview();
+        syncDropdown(inputThanksImage);
       }
       window.fetchThanksImage = fetchThanksImage;
     } catch (_) { /* ignore */ }
@@ -826,8 +786,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (pmId) pmId.value = data.pm_id || '';
         if (binEmail) binEmail.value = data.binance_email || '';
         if (binPhone) binPhone.value = data.binance_phone || '';
-        if (pmImage) pmImage.value = data.pm_image_path || '';
-        if (binImage) binImage.value = data.binance_image_path || '';
+        if (pmImage) { pmImage.value = data.pm_image_path || ''; syncDropdown(pmImage); }
+        if (binImage) { binImage.value = data.binance_image_path || ''; syncDropdown(binImage); }
         // Do not auto-select any method; keep placeholder until user chooses
         showPaySection();
       }
@@ -1242,21 +1202,10 @@ window.fetchPayments = fetchPayments;
       const data = await res.json();
       if (inputLogo) {
         inputLogo.value = data.logo_path || '';
-        showLogoPreview();
+        syncDropdown(inputLogo);
       }
 window.fetchLogo = fetchLogo;
     } catch (_) { /* ignore */ }
-  }
-
-  function showLogoPreview() {
-    if (!inputLogo || !logoPreview) return;
-    const url = inputLogo.value.trim();
-    if (url) {
-      logoPreview.src = url;
-      logoPreview.style.display = 'inline-block';
-    } else {
-      logoPreview.style.display = 'none';
-    }
   }
 
   async function saveLogo() {
@@ -1300,21 +1249,6 @@ window.fetchLogo = fetchLogo;
         btnSaveLogo.disabled = false;
       }
     });
-  }
-
-  if (btnPasteLogo && inputLogo) {
-    btnPasteLogo.addEventListener('click', async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (text) {
-          inputLogo.value = text.trim();
-          showLogoPreview();
-        }
-      } catch (_) {
-        toast('No se pudo leer desde el portapapeles');
-      }
-    });
-    inputLogo.addEventListener('input', showLogoPreview);
   }
 
   tabs.forEach(tab => {
@@ -2048,6 +1982,7 @@ window.refreshGallery = refreshGallery;
           <div class=\"amount\">${amountDisp}${affiliateTag}</div>
           <div>${when}</div>
           <div class=\"customer\">${o.name || o.email || 'Cliente'}${o.phone ? ' - ' + o.phone : ''}</div>
+          ${o.payment_capture_url ? `<button type="button" class="btn btn-sm" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7;font-size:11px;padding:3px 10px;border-radius:8px;cursor:pointer;" onclick="openCaptureModal('${o.payment_capture_url.replace(/'/g, "\\'")}')">📷 Ver comprobante</button>` : ''}
         </div>
         ${isGift ? `
         <div class=\"row-actions\"> 
@@ -2229,9 +2164,9 @@ window.fetchRate = fetchRate;window.fetchRate = fetchRate;
       const res = await fetch('/admin/config/hero');
       const data = await res.json();
       if (data && data.ok) {
-        if (hero1) hero1.value = data.hero_1 || '';
-        if (hero2) hero2.value = data.hero_2 || '';
-        if (hero3) hero3.value = data.hero_3 || '';
+        if (hero1) { hero1.value = data.hero_1 || ''; syncDropdown(hero1); }
+        if (hero2) { hero2.value = data.hero_2 || ''; syncDropdown(hero2); }
+        if (hero3) { hero3.value = data.hero_3 || ''; syncDropdown(hero3); }
       }
 window.fetchHero = fetchHero;
     } catch (_) { /* ignore */ }
@@ -2311,127 +2246,144 @@ window.fetchHero = fetchHero;
   window.fetchPayments && window.fetchPayments();
 
   // =====================
-  // Logo picker modal
+  // Image thumbnail dropdown (used everywhere)
   // =====================
-  let currentPickTarget = null;
-  async function openLogoPicker(targetInput) {
-    if (!logoPicker) return;
-    currentPickTarget = targetInput || null;
-    await loadLogoPickerGrid();
-    logoPicker.removeAttribute('hidden');
-    // Lock background scroll (mobile friendly)
-    try { document.documentElement.style.overflow = 'hidden'; document.body.style.overflow = 'hidden'; } catch(_) {}
-    // Ensure modal is visible at top on mobile
-    try {
-      const body = logoPicker.querySelector('.modal-body') || logoPicker;
-      body.scrollTop = 0;
-      logoPicker.scrollIntoView({ behavior: 'auto', block: 'start' });
-      // For some mobile browsers, also force window scroll to top
-      window.scrollTo({ top: 0, behavior: 'auto' });
-    } catch(_) {}
-  }
-
-  function closeLogoPicker() {
-    if (!logoPicker) return;
-    logoPicker.setAttribute('hidden', '');
-    // Restore background scroll
-    try { document.documentElement.style.overflow = ''; document.body.style.overflow = ''; } catch(_) {}
-  }
-
-  async function loadLogoPickerGrid() {
-    if (!logoPickerGrid) return;
-    logoPickerGrid.innerHTML = '';
+  let _imgDropdownCache = null;
+  async function getImageList() {
+    if (_imgDropdownCache) return _imgDropdownCache;
     try {
       const res = await fetch('/admin/images/list');
-      const data = await res.json();
-      if (!data || data.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'empty-state';
-        empty.innerHTML = '<h3>Sin imÃ¡genes</h3><p>Sube una imagen en la pestaÃ±a ImÃ¡genes.</p>';
-        logoPickerGrid.appendChild(empty);
-        return;
-      }
-      for (const it of data) {
-        const node = logoPickerTpl.content.firstElementChild.cloneNode(true);
-        node.querySelector('.thumb').src = it.path;
-        node.querySelector('.title').textContent = it.title || '';
-        node.querySelector('.path').textContent = it.path || '';
-        logoPickerGrid.appendChild(node);
-      }
-    } catch (_) {
-      const err = document.createElement('div');
-      err.textContent = 'Error cargando imÃ¡genes';
-      logoPickerGrid.appendChild(err);
+      _imgDropdownCache = await res.json();
+    } catch (_) { _imgDropdownCache = []; }
+    return _imgDropdownCache || [];
+  }
+  function invalidateImageCache() { _imgDropdownCache = null; }
+
+  function createImageDropdown(currentPath, onSelect) {
+    const wrap = document.createElement('div');
+    wrap.className = 'img-dropdown-wrap';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'img-dropdown-btn';
+    const preview = document.createElement('img');
+    preview.className = 'img-dropdown-preview';
+    preview.src = currentPath || '';
+    preview.alt = '';
+    if (!currentPath) preview.style.display = 'none';
+    const label = document.createElement('span');
+    label.className = 'img-dropdown-label';
+    label.textContent = currentPath ? 'Cambiar imagen' : 'Elegir imagen';
+    const arrow = document.createElement('span');
+    arrow.className = 'img-dropdown-arrow';
+    arrow.textContent = '\u25BC';
+    btn.append(preview, label, arrow);
+
+    const panel = document.createElement('div');
+    panel.className = 'img-dropdown-panel';
+
+    wrap.append(btn, panel);
+    wrap._hiddenInput = null;
+    wrap._currentPath = currentPath || '';
+
+    function closePanel() { panel.classList.remove('open'); }
+
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (panel.classList.contains('open')) { closePanel(); return; }
+      // Close any other open dropdowns
+      document.querySelectorAll('.img-dropdown-panel.open').forEach(p => p.classList.remove('open'));
+      panel.innerHTML = '';
+      const imgs = await getImageList();
+      if (!imgs.length) { panel.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:12px;grid-column:1/-1;">Sin im\u00e1genes</div>'; }
+      imgs.forEach(it => {
+        const opt = document.createElement('div');
+        opt.className = 'img-dropdown-option';
+        if (it.path === wrap._currentPath) opt.classList.add('selected');
+        const img = document.createElement('img');
+        img.src = it.path;
+        img.alt = it.title || '';
+        img.loading = 'lazy';
+        opt.appendChild(img);
+        opt.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          wrap._currentPath = it.path;
+          preview.src = it.path;
+          preview.style.display = '';
+          label.textContent = 'Cambiar imagen';
+          if (wrap._hiddenInput) wrap._hiddenInput.value = it.path;
+          if (onSelect) onSelect(it.path);
+          closePanel();
+        });
+        panel.appendChild(opt);
+      });
+      panel.classList.add('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!wrap.contains(e.target)) closePanel();
+    });
+
+    return wrap;
+  }
+
+  // Helper: mount a config image dropdown into a slot, wiring it to a hidden input
+  function mountConfigDropdown(slotId, hiddenInput, onSelect) {
+    const slot = document.getElementById(slotId);
+    if (!slot || !hiddenInput) return;
+    const dd = createImageDropdown(hiddenInput.value || '', (path) => {
+      hiddenInput.value = path;
+      if (onSelect) onSelect(path);
+    });
+    dd._hiddenInput = hiddenInput;
+    slot.appendChild(dd);
+    // Keep dropdown in sync when value loaded async
+    hiddenInput._imgDropdown = dd;
+  }
+  function syncDropdown(input) {
+    if (input && input._imgDropdown) {
+      const dd = input._imgDropdown;
+      dd._currentPath = input.value || '';
+      const prev = dd.querySelector('.img-dropdown-preview');
+      const lbl = dd.querySelector('.img-dropdown-label');
+      if (prev) { prev.src = input.value || ''; prev.style.display = input.value ? '' : 'none'; }
+      if (lbl) lbl.textContent = input.value ? 'Cambiar imagen' : 'Elegir imagen';
     }
   }
 
-  if (btnPickLogo) {
-    btnPickLogo.addEventListener('click', () => openLogoPicker(inputLogo));
-  }
-  if (btnPickMidBanner) {
-    btnPickMidBanner.addEventListener('click', () => openLogoPicker(inputMidBanner));
-  }
-  if (btnPickThanksImage) {
-    btnPickThanksImage.addEventListener('click', () => openLogoPicker(inputThanksImage));
-  }
-  if (btnPickHero1) btnPickHero1.addEventListener('click', () => openLogoPicker(hero1));
-  if (btnPickHero2) btnPickHero2.addEventListener('click', () => openLogoPicker(hero2));
-  if (btnPickHero3) btnPickHero3.addEventListener('click', () => openLogoPicker(hero3));
-  if (btnPickPkgImage) btnPickPkgImage.addEventListener('click', () => openLogoPicker(pkgImage));
-  if (btnPickPmImage && pmImage) btnPickPmImage.addEventListener('click', () => openLogoPicker(pmImage));
-  if (btnPickBinImage && binImage) btnPickBinImage.addEventListener('click', () => openLogoPicker(binImage));
-  if (btnCloseModal) {
-    btnCloseModal.addEventListener('click', closeLogoPicker);
-  }
-  if (logoPicker) {
-    logoPicker.addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-backdrop')) {
-        closeLogoPicker();
+  // Mount config image dropdowns (Logo auto-saves on pick)
+  mountConfigDropdown('slot-logo', inputLogo, async (path) => {
+    try {
+      const res = await fetch('/admin/config/logo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ logo_path: path }) });
+      if (!res.ok) throw new Error();
+      toast('Logo actualizado');
+    } catch (_) { toast('No se pudo guardar el logo', 'error'); }
+  });
+  // Mid-Banner auto-saves on pick
+  mountConfigDropdown('slot-mid-banner', inputMidBanner, async (path) => {
+    try {
+      const res = await fetch('/admin/config/mid_banner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mid_banner_path: path }) });
+      if (!res.ok) throw new Error();
+      toast('Banner actualizado');
+    } catch (_) { toast('No se pudo guardar el banner', 'error'); }
+  });
+  mountConfigDropdown('slot-thanks-image', inputThanksImage);
+  mountConfigDropdown('slot-hero-1', hero1);
+  mountConfigDropdown('slot-hero-2', hero2);
+  mountConfigDropdown('slot-hero-3', hero3);
+  mountConfigDropdown('slot-pm-image', pmImage);
+  mountConfigDropdown('slot-binance-image', binImage);
 
-      }
-    });
+  // Package creation form dropdown
+  {
+    const slot = document.getElementById('pkg-image-dropdown-slot');
+    if (slot && pkgImage) {
+      const dd = createImageDropdown('', (path) => { pkgImage.value = path; });
+      dd._hiddenInput = pkgImage;
+      slot.appendChild(dd);
+    }
   }
 
-  // Picker grid click handling: use selected image
-  if (logoPickerGrid) {
-    logoPickerGrid.addEventListener('click', async (e) => {
-      const btn = e.target && e.target.closest && e.target.closest('.btn-use-logo');
-      if (!btn) return;
-      const meta = btn.closest && btn.closest('.meta');
-      const pathEl = meta && meta.querySelector && meta.querySelector('.path');
-      const path = pathEl && (pathEl.textContent || '').trim();
-      if (!path) return;
-      const target = currentPickTarget || inputLogo;
-      if (!target) return;
-      target.value = path;
-      if (target === inputLogo) {
-        try {
-          showLogoPreview && showLogoPreview();
-          if (btnSaveLogo) btnSaveLogo.disabled = true;
-          const res = await fetch('/admin/config/logo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ logo_path: path }) });
-          if (!res.ok) throw new Error('No se pudo guardar el logo');
-          toast && toast('Logo actualizado');
-        } catch (_) {
-          toast && toast('No se pudo guardar el logo');
-        } finally {
-          if (btnSaveLogo) btnSaveLogo.disabled = false;
-        }
-      } else if (target === inputMidBanner) {
-        try {
-          showMidBannerPreview && showMidBannerPreview();
-          if (btnSaveMidBanner) btnSaveMidBanner.disabled = true;
-          const res = await fetch('/admin/config/mid_banner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mid_banner_path: path }) });
-          if (!res.ok) throw new Error('No se pudo guardar el banner');
-          toast && toast('Banner actualizado');
-        } catch (_) {
-          toast && toast('No se pudo guardar el banner');
-        } finally {
-          if (btnSaveMidBanner) btnSaveMidBanner.disabled = false;
-        }
-      }
-      closeLogoPicker && closeLogoPicker();
-    });
-  }
   // Save payments
   if (btnSavePayments) {
     btnSavePayments.addEventListener('click', async () => {
@@ -2623,10 +2575,8 @@ window.fetchHero = fetchHero;
             </div>
             <div class="pkg-edit-grid pkg-edit-grid--3">
               <div class="pkg-edit-field"><label>Imagen</label>
-                <div style="display:flex;gap:6px;">
-                  <input class="edit-image" type="text" value="${p.image_path}" readonly style="flex:1;" />
-                  <button class="btn btn-pick-img" type="button">Elegir</button>
-                </div>
+                <div class="pkg-img-dropdown-slot"></div>
+                <input class="edit-image" type="hidden" value="${p.image_path}" />
               </div>
               <div class="pkg-edit-field" style="display:flex;flex-direction:column;justify-content:center;">
                 <label>Activo</label>
@@ -2647,7 +2597,7 @@ window.fetchHero = fetchHero;
                 <div class="pkg-edit-field" style="display:flex;align-items:end;"><button class="btn btn-item-create" type="button">+ Agregar</button></div>
                 <div class="pkg-new-item-extras">
                   <div class="pkg-edit-field" style="flex:1;min-width:180px;"><label>Icono (opc.)</label>
-                    <div style="display:flex;gap:6px;"><input class="new-item-icon" type="text" placeholder="ruta icono" readonly style="flex:1;" /><button class="btn btn-item-pick-icon" type="button">Elegir</button></div>
+                    <div class="item-icon-dropdown-slot"></div><input class="new-item-icon" type="hidden">
                   </div>
                 </div>
               </div>
@@ -2660,11 +2610,21 @@ window.fetchHero = fetchHero;
           </div>
         </details>
       `;
-      // Bind image picker for package image
+      // Bind image dropdown for package image
       const imgInput = card.querySelector('.edit-image');
-      const pickBtn = card.querySelector('.btn-pick-img');
-      if (pickBtn && imgInput) {
-        pickBtn.addEventListener('click', (ev) => { ev.preventDefault(); openLogoPicker(imgInput); });
+      const imgSlot = card.querySelector('.pkg-img-dropdown-slot');
+      if (imgSlot && imgInput) {
+        const dd = createImageDropdown(p.image_path, (path) => { imgInput.value = path; });
+        dd._hiddenInput = imgInput;
+        imgSlot.appendChild(dd);
+      }
+      // Bind icon dropdown for new item form
+      const newIconSlot = card.querySelector('.pkg-new-item-extras .item-icon-dropdown-slot');
+      const newIconInput = card.querySelector('.new-item-icon');
+      if (newIconSlot && newIconInput) {
+        const dd2 = createImageDropdown('', (path) => { newIconInput.value = path; });
+        dd2._hiddenInput = newIconInput;
+        newIconSlot.appendChild(dd2);
       }
       // Enable drag via handle and persist on drop
       const dragHandle = card.querySelector('.btn-drag');
@@ -2844,9 +2804,6 @@ if (btnSaveHero) {
   if (btnPackagesRefresh) {
     btnPackagesRefresh.addEventListener('click', fetchPackages);
   }
-  if (btnPickPkgImage && pkgImage) {
-    btnPickPkgImage.addEventListener('click', (e) => { e.preventDefault(); openLogoPicker(pkgImage); });
-  }
   if (btnCreatePkg) {
     btnCreatePkg.addEventListener('click', async () => {
       try {
@@ -2854,7 +2811,7 @@ if (btnSaveHero) {
         await createPackage();
         toast('Paquete creado', 'success');
         if (pkgName) pkgName.value = '';
-        if (pkgImage) pkgImage.value = '';
+        if (pkgImage) { pkgImage.value = ''; syncDropdown(pkgImage); }
         if (pkgDesc) pkgDesc.value = '';
         if (pkgRequires) pkgRequires.checked = false;
         await fetchPackages();
@@ -2871,7 +2828,6 @@ if (btnSaveHero) {
       const btnSaveAll = e.target.closest('.btn-save-all');
       const btnItemCreate = e.target.closest('.btn-item-create');
       const btnItemDelete = e.target.closest('.btn-item-delete');
-      const btnItemPickIcon = e.target.closest('.btn-item-pick-icon');
       const btnSpecialDescSave = e.target.closest('.btn-special-desc-save');
 
       // Save single special description for the package
@@ -3038,19 +2994,6 @@ if (btnSaveHero) {
         }
         return;
       }
-      // Pick icon for item
-      if (btnItemPickIcon) {
-        const row = btnItemPickIcon.closest('.pkg-item-row') || btnItemPickIcon.closest('.pkg-new-item');
-        const input = row && row.querySelector('.it-icon');
-        if (!input) {
-          const newIcon = btnItemPickIcon.closest('.pkg-new-item-extras') || btnItemPickIcon.closest('.pkg-new-item');
-          const inp2 = newIcon && newIcon.querySelector('.new-item-icon');
-          if (inp2) { openLogoPicker(inp2); }
-        } else {
-          openLogoPicker(input);
-        }
-        return;
-      }
     });
   }
 
@@ -3097,9 +3040,9 @@ if (btnSaveHero) {
             <input class="it-special" type="checkbox" ${(it.sticker||'').toLowerCase()==='special' ? 'checked' : ''}/>
           </label>
           <label class="pkg-edit-field" style="flex:1;"><span>Icono</span>
-            <div class="it-icon-wrap" style="display:flex;gap:6px;">
-              <input class="it-icon" type="text" value="${it.icon_path || ''}" placeholder="Icono (opcional)" readonly style="flex:1;" />
-              <button class="btn btn-item-pick-icon" type="button">Elegir</button>
+            <div class="it-icon-wrap">
+              <div class="item-icon-dropdown-slot"></div>
+              <input class="it-icon" type="hidden" value="${it.icon_path || ''}">
             </div>
           </label>
           <button class="btn btn-item-delete" type="button" style="align-self:flex-end;">Eliminar</button>
@@ -3131,5 +3074,32 @@ if (btnSaveHero) {
       }
       normals.forEach(it => list.appendChild(addRow(it)));
     }
+    // Initialize icon dropdowns for all item rows
+    list.querySelectorAll('.item-icon-dropdown-slot').forEach(slot => {
+      const hiddenInput = slot.parentElement && slot.parentElement.querySelector('.it-icon');
+      if (!hiddenInput) return;
+      const dd = createImageDropdown(hiddenInput.value || '', (path) => { hiddenInput.value = path; });
+      dd._hiddenInput = hiddenInput;
+      slot.appendChild(dd);
+    });
   }
+});
+
+// ── Capture modal (comprobante viewer) ──────────────────────────────────────
+function openCaptureModal(url) {
+  var modal = document.getElementById('captureModal');
+  var img = document.getElementById('capturePreviewImg');
+  if (!modal || !img) return;
+  img.src = url;
+  modal.style.display = 'flex';
+}
+function closeCaptureModal() {
+  var modal = document.getElementById('captureModal');
+  var img = document.getElementById('capturePreviewImg');
+  if (img) img.src = '';
+  if (modal) modal.style.display = 'none';
+}
+document.addEventListener('click', function(e) {
+  var modal = document.getElementById('captureModal');
+  if (modal && e.target === modal) closeCaptureModal();
 });

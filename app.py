@@ -559,6 +559,8 @@ class Order(db.Model):
     items_json = db.Column(db.Text, default="")
     # Revendedores API automation state (pending_verification, success, etc.)
     automation_json = db.Column(db.Text, default="")
+    # Payment capture (voucher/comprobante image path relative to UPLOAD_FOLDER)
+    payment_capture = db.Column(db.String(500), default="")
 
 
 class OrderSummary(db.Model):
@@ -641,6 +643,7 @@ def _aggregate_and_cleanup_orders():
 
         count = len(old_orders)
         for o in old_orders:
+            _delete_capture(o.payment_capture)
             db.session.delete(o)
 
         db.session.commit()
@@ -1532,6 +1535,8 @@ with app.app_context():
             add_order_col('special_code', "special_code TEXT DEFAULT ''")
             add_order_col('special_user_id', "special_user_id INTEGER")
             add_order_col('items_json', "items_json TEXT DEFAULT ''")
+            add_order_col('automation_json', "automation_json TEXT DEFAULT ''")
+            add_order_col('payment_capture', "payment_capture TEXT DEFAULT ''")
             db.session.commit()
         # Special users table migration: ensure new columns
         try:
@@ -2381,6 +2386,36 @@ def _allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def _save_capture(file) -> str:
+    """Save a payment capture image to captures/ subfolder. Returns relative path."""
+    if not file or not file.filename:
+        return ""
+    if not _allowed_file(file.filename):
+        return ""
+    fname = secure_filename(file.filename)
+    ts = now_ve().strftime("%Y%m%d%H%M%S%f")
+    fname = f"{ts}_{fname}"
+    folder = os.path.join(app.config["UPLOAD_FOLDER"], "captures")
+    try:
+        os.makedirs(folder, exist_ok=True)
+    except Exception:
+        pass
+    file.save(os.path.join(folder, fname))
+    return "captures/" + fname
+
+
+def _delete_capture(relative_path: str):
+    """Delete a payment capture file from disk if it exists."""
+    if not relative_path:
+        return
+    try:
+        fpath = os.path.join(app.config["UPLOAD_FOLDER"], relative_path)
+        if os.path.exists(fpath):
+            os.remove(fpath)
+    except Exception:
+        pass
+
+
 @app.route("/admin/images/list", methods=["GET"])
 def admin_images_list():
     user = session.get("user")
@@ -2653,31 +2688,41 @@ def check_reference():
 @app.route("/orders", methods=["POST"])
 def create_order():
     try:
-        data = request.get_json(silent=True) or {}
-        gid_raw = data.get("store_package_id")
-        if gid_raw is None:
+        # Support both JSON (legacy) and multipart/form-data (with file upload)
+        content_type = request.content_type or ""
+        if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+            data = request.form
+            def _get(key, default=""):
+                return (data.get(key) or default)
+        else:
+            data = request.get_json(silent=True) or {}
+            def _get(key, default=""):
+                return (data.get(key) or default)
+
+        gid_raw = _get("store_package_id")
+        if not gid_raw:
             return jsonify({"ok": False, "error": "store_package_id requerido"}), 400
         gid = int(gid_raw)
-        item_id = data.get("item_id")
+        item_id = _get("item_id") or None
         if item_id is not None:
             try:
                 item_id = int(item_id)
             except Exception:
                 item_id = None
-        method = (data.get("method") or "").strip()
-        currency = (data.get("currency") or "USD").strip()
+        method = _get("method").strip()
+        currency = (_get("currency") or "USD").strip()
         try:
-            amount = float(data.get("amount") or 0)
+            amount = float(_get("amount") or 0)
         except Exception:
             amount = 0.0
-        reference = (data.get("reference") or "").strip()
-        name = (data.get("name") or "").strip()
-        email = (data.get("email") or "").strip()
-        phone = (data.get("phone") or "").strip()
-        customer_id = (data.get("customer_id") or "").strip()
-        customer_zone = (data.get("customer_zone") or "").strip()
-        special_code = (data.get("special_code") or "").strip()
-        verified_nick = (data.get("nn") or "").strip()
+        reference = _get("reference").strip()
+        name = _get("name").strip()
+        email = _get("email").strip()
+        phone = _get("phone").strip()
+        customer_id = _get("customer_id").strip()
+        customer_zone = _get("customer_zone").strip()
+        special_code = _get("special_code").strip()
+        verified_nick = _get("nn").strip()
 
         if not email:
             return jsonify({"ok": False, "error": "Correo requerido"}), 400
@@ -2767,6 +2812,12 @@ def create_order():
         
         try:
             raw_items = data.get("items")
+            # When sent as form data, items is a JSON-encoded string
+            if isinstance(raw_items, str):
+                try:
+                    raw_items = json.loads(raw_items)
+                except Exception:
+                    raw_items = []
             items_list = []
             if isinstance(raw_items, list) and raw_items:
                 for it_entry in raw_items:
@@ -2813,6 +2864,15 @@ def create_order():
                 customer_id=customer_id,
                 order_id=o.id,
             ))
+        # Save payment capture image if provided
+        try:
+            capture_file = request.files.get("payment_capture")
+            if capture_file and capture_file.filename:
+                capture_path = _save_capture(capture_file)
+                if capture_path:
+                    o.payment_capture = capture_path
+        except Exception:
+            pass
         db.session.commit()
         # Notify admin by email about new pending order (HTML)
         try:
@@ -2850,7 +2910,10 @@ def create_order():
             ids = [r.id for r in uq.order_by(Order.created_at.desc()).limit(30).all()]
             if ids:
                 del_q = uq.filter(~Order.id.in_(ids))
-                del_q.delete(synchronize_session=False)
+                to_purge = del_q.all()
+                for op in to_purge:
+                    _delete_capture(op.payment_capture)
+                    db.session.delete(op)
                 db.session.commit()
         except Exception:
             db.session.rollback()
@@ -2929,6 +2992,11 @@ def admin_orders_list():
             "reference": x.reference,
             "delivery_code": x.delivery_code or "",
             "delivery_codes": delivery_codes,
+            "payment_capture": x.payment_capture or "",
+            "payment_capture_url": (
+                f"{app.config.get('UPLOAD_URL_PREFIX', '/static/uploads').rstrip('/')}/{x.payment_capture}"
+                if x.payment_capture else ""
+            ),
         })
     return jsonify({"ok": True, "orders": out})
 

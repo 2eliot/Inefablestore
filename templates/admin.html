@@ -1,55 +1,7 @@
 {% extends 'base.html' %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/admin.js', v='15') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin.js', v='17') }}" defer></script>
 <style>
-/* Logo picker modal specific styles */
-#logo-picker {
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 50 !important;
-  background: rgba(15, 23, 42, 0.5) !important;
-}
-#logo-picker .modal-backdrop {
-  position: absolute !important;
-  inset: 0 !important;
-  background: rgba(15, 23, 42, 0.5) !important;
-}
-#logo-picker .modal-dialog {
-  position: relative !important;
-  background: #fff !important;
-  border-radius: 10px !important;
-  width: min(900px, 92vw) !important;
-  margin: 8vh auto !important;
-  border: 1px solid #e2e8f0 !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
-  max-height: 84vh !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-#logo-picker .modal-header {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  padding: 12px 16px !important;
-  border-bottom: 1px solid #e2e8f0 !important;
-}
-#logo-picker .modal-body {
-  padding: 16px !important;
-  overflow: auto !important;
-  max-height: calc(84vh - 64px) !important;
-}
-#logo-picker .btn-use-logo {
-  background: #10b981 !important;
-  color: #fff !important;
-  border: none !important;
-  padding: 6px 12px !important;
-  border-radius: 6px !important;
-  cursor: pointer !important;
-  font-size: 13px !important;
-}
-#logo-picker .btn-use-logo:hover {
-  background: #059669 !important;
-}
 </style>
 {% endblock %}
 {% block content %}
@@ -234,10 +186,8 @@
               </div>
               <div class="pkg-field">
                 <label for="pkg-image">Imagen</label>
-                <div style="display:flex; gap:6px;">
-                  <input id="pkg-image" type="text" placeholder="Selecciona desde galería" readonly style="flex:1;">
-                  <button id="btn-pick-pkg-image" class="btn" type="button">Elegir</button>
-                </div>
+                <div id="pkg-image-dropdown-slot"></div>
+                <input id="pkg-image" type="hidden" placeholder="Selecciona desde galería">
               </div>
               <div class="pkg-field pkg-field--check">
                 <label>Zona ID</label>
@@ -357,58 +307,49 @@
             <input id="items-per-page" type="number" min="1" value="10" disabled>
           </div>
           <div class="form-row">
-            <label for="logo-path">Logo (URL o ruta estática)</label>
-            <input id="logo-path" type="text" placeholder="Selecciona desde galería" readonly>
+            <label>Logo</label>
+            <div>
+              <div id="slot-logo"></div>
+              <input id="logo-path" type="hidden">
+            </div>
           </div>
           <div class="form-row">
             <label>&nbsp;</label>
             <div>
               <button id="btn-save-logo" class="btn primary" type="button">Guardar Logo</button>
-              <button id="btn-pick-logo" class="btn" type="button">Elegir desde galería</button>
             </div>
-          </div>
-          <div style="margin-left:200px; color:#64748b;">
-            Sube una imagen en la pestaña <strong>Imágenes</strong>. Luego aquí pulsa "Elegir desde galería" y finalmente "Guardar Logo".
-          </div>
-          <div style="margin-left:200px; margin-top:12px;">
-            <img id="logo-preview" src="" alt="Vista previa del logo" style="max-height:80px; display:none; border:1px solid #e2e8f0; padding:6px; border-radius:6px; background:#fff;" />
           </div>
 
           <hr style="margin:24px 0; opacity:0.5;">
           <h3 style="margin:0 0 12px;">Banner intermedio (entre Mobile y Gift)</h3>
           <div class="form-row">
-            <label for="mid-banner-path">Banner (URL o ruta estática)</label>
-            <input id="mid-banner-path" type="text" placeholder="Selecciona desde galería" readonly>
+            <label>Banner intermedio</label>
+            <div>
+              <div id="slot-mid-banner"></div>
+              <input id="mid-banner-path" type="hidden">
+            </div>
           </div>
           <div class="form-row">
             <label>&nbsp;</label>
             <div>
               <button id="btn-save-mid-banner" class="btn primary" type="button">Guardar Banner</button>
-              <button id="btn-pick-mid-banner" class="btn" type="button">Elegir desde galería</button>
             </div>
-          </div>
-          <div style="margin-left:200px; color:#64748b;">
-            Selecciona una imagen ancha. Se mostrará entre "Juegos Mobile" y "Gift Cards" en la página principal.
-          </div>
-          <div style="margin-left:200px; margin-top:12px;">
-            <img id="mid-banner-preview" src="" alt="Vista previa del banner" style="max-height:140px; display:none; border:1px solid #e2e8f0; padding:6px; border-radius:6px; background:#fff;" />
           </div>
 
           <hr style="margin:24px 0; opacity:0.5;">
           <h3 style="margin:0 0 12px;">Imagen de "Gracias por tu compra"</h3>
           <div class="form-row">
-            <label for="thanks-image-path">Imagen (URL o ruta estática)</label>
-            <input id="thanks-image-path" type="text" placeholder="Selecciona desde galería" readonly>
+            <label>Imagen</label>
+            <div>
+              <div id="slot-thanks-image"></div>
+              <input id="thanks-image-path" type="hidden">
+            </div>
           </div>
           <div class="form-row">
             <label>&nbsp;</label>
             <div>
               <button id="btn-save-thanks-image" class="btn primary" type="button">Guardar Imagen</button>
-              <button id="btn-pick-thanks-image" class="btn" type="button">Elegir desde galería</button>
             </div>
-          </div>
-          <div style="margin-left:200px; margin-top:12px;">
-            <img id="thanks-image-preview" src="" alt="Vista previa" style="max-height:180px; display:none; border:1px solid #e2e8f0; padding:6px; border-radius:6px; background:#fff;" />
           </div>
 
           <hr style="margin:24px 0; opacity:0.5;">
@@ -467,23 +408,20 @@
           <hr style="margin:24px 0; opacity:0.5;">
           <h3 style="margin:0 0 12px;">Carrusel principal (3 imágenes)</h3>
           <div class="form-row">
-            <label for="hero-1">Hero 1</label>
-            <input id="hero-1" type="text" placeholder="Selecciona desde galería" readonly>
+            <label>Hero 1</label>
+            <div><div id="slot-hero-1"></div><input id="hero-1" type="hidden"></div>
           </div>
           <div class="form-row">
-            <label for="hero-2">Hero 2</label>
-            <input id="hero-2" type="text" placeholder="Selecciona desde galería" readonly>
+            <label>Hero 2</label>
+            <div><div id="slot-hero-2"></div><input id="hero-2" type="hidden"></div>
           </div>
           <div class="form-row">
-            <label for="hero-3">Hero 3</label>
-            <input id="hero-3" type="text" placeholder="Selecciona desde galería" readonly>
+            <label>Hero 3</label>
+            <div><div id="slot-hero-3"></div><input id="hero-3" type="hidden"></div>
           </div>
           <div class="form-row">
             <label>&nbsp;</label>
             <div>
-              <button id="btn-pick-hero-1" class="btn" type="button">Elegir 1</button>
-              <button id="btn-pick-hero-2" class="btn" type="button">Elegir 2</button>
-              <button id="btn-pick-hero-3" class="btn" type="button">Elegir 3</button>
               <button id="btn-save-hero" class="btn primary" type="button">Guardar Carrusel</button>
             </div>
           </div>
@@ -530,9 +468,9 @@
             </div>
             <div class="form-row">
               <label>Pago Móvil - Imagen (PNG)</label>
-              <div style="display:flex; gap:8px; align-items:center;">
-                <input id="pm-image" type="text" placeholder="Selecciona desde galería" readonly>
-                <button id="btn-pick-pm-image" class="btn" type="button">Elegir</button>
+              <div>
+                <div id="slot-pm-image"></div>
+                <input id="pm-image" type="hidden">
               </div>
             </div>
           </div>
@@ -547,9 +485,9 @@
             </div>
             <div class="form-row">
               <label>Binance - Imagen (PNG)</label>
-              <div style="display:flex; gap:8px; align-items:center;">
-                <input id="binance-image" type="text" placeholder="Selecciona desde galería" readonly>
-                <button id="btn-pick-binance-image" class="btn" type="button">Elegir</button>
+              <div>
+                <div id="slot-binance-image"></div>
+                <input id="binance-image" type="hidden">
               </div>
             </div>
           </div>
@@ -698,29 +636,17 @@
   </section>
 </div>
 
-<!-- Logo Picker Modal -->
-<div id="logo-picker" class="modal" hidden>
-  <div class="modal-backdrop"></div>
-  <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="logoPickerTitle">
-    <div class="modal-header">
-      <h3 id="logoPickerTitle">Elegir logo desde galería</h3>
-      <button type="button" class="btn modal-close" aria-label="Cerrar">✕</button>
+<!-- Capture Preview Modal -->
+<div id="captureModal" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.75);z-index:9999;align-items:center;justify-content:center;">
+  <div style="max-width:520px;width:92%;background:#111827;border:1px solid rgba(255,255,255,.1);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.08);">
+      <h3 style="margin:0;font-size:15px;color:#e2e8f0;">Comprobante de pago</h3>
+      <button type="button" onclick="closeCaptureModal()" style="background:transparent;border:none;color:#94a3b8;font-size:20px;cursor:pointer;line-height:1;">✕</button>
     </div>
-    <div class="modal-body">
-      <div id="logo-picker-grid" class="image-grid"></div>
-      <template id="logo-picker-card-tpl">
-        <div class="image-card">
-          <img class="thumb" alt="" />
-          <div class="meta">
-            <div class="title"></div>
-            <code class="path"></code>
-            <div style="margin-top:8px;">
-              <button class="btn btn-use-logo" type="button">Usar este</button>
-            </div>
-          </div>
-        </div>
-      </template>
+    <div style="max-height:80vh;overflow:auto;background:#0b0f14;text-align:center;">
+      <img id="capturePreviewImg" src="" alt="Comprobante" style="display:block;width:100%;height:auto;">
     </div>
   </div>
-  </div>
+</div>
+
 {% endblock %}

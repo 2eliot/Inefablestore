@@ -1178,3 +1178,54 @@ html { overflow-x: hidden; width: 100%; }
     margin-right: -16px !important;
   }
 }
+
+/* ── Proof / Comprobante card (checkout) ── */
+.proof-card h3 { margin-bottom: 10px; }
+
+.proof-dropzone {
+  border: 2px dashed rgba(148,163,184,0.3);
+  border-radius: 12px;
+  background: rgba(43,47,54,0.25);
+  padding: 20px 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease;
+  user-select: none;
+}
+.proof-dropzone:hover,
+.proof-dropzone--over {
+  border-color: #10b981;
+  background: rgba(16,185,129,0.07);
+}
+.proof-dropzone--error {
+  border-color: #ef4444;
+  background: rgba(239,68,68,0.07);
+}
+
+.proof-dropzone-inner { display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.proof-dropzone-inner--selected svg { color: #10b981 !important; }
+
+.proof-dropzone-title {
+  color: #e2e8f0;
+  font-weight: 800;
+  font-size: 14px;
+}
+.proof-dropzone-sub {
+  color: #94a3b8;
+  font-size: 12px;
+}
+.proof-file-name {
+  color: #10b981;
+  font-size: 12px;
+  font-weight: 700;
+  word-break: break-all;
+  margin-top: 4px;
+}
+
+.proof-warning {
+  color: #f59e0b;
+  font-size: 12px;
+  margin-top: 10px;
+  text-align: center;
+  line-height: 1.4;
+}

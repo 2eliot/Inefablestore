@@ -17,7 +17,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const waLink = (root.getAttribute('data-whatsapp') || '').trim();
   const gname = (root.getAttribute('data-gname') || '').trim();
   const gimg = (root.getAttribute('data-gimg') || '').trim();
+  // Proof / comprobante elements
+  const proofInput = document.getElementById('payment_capture');
+  const proofDropzone = document.getElementById('proofDropzone');
+  const proofInner = document.getElementById('proofDropzoneInner');
+  const proofFileName = document.getElementById('proofFileName');
   let isReferenceValid = false;
+  let hasCapture = false;
 
   // Render basic game block immediately to avoid waiting for fetches
   (function initialHeader(){
@@ -343,6 +349,53 @@ document.addEventListener('DOMContentLoaded', () => {
     btnConfirm.disabled = true;
   }
 
+  // Proof dropzone / file input handling
+  function updateSubmitState() {
+    if (btnConfirm) {
+      btnConfirm.disabled = !(hasCapture && isReferenceValid);
+    }
+  }
+
+  if (proofDropzone && proofInput) {
+    proofDropzone.addEventListener('click', () => proofInput.click());
+    proofDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      proofDropzone.classList.add('proof-dropzone--over');
+    });
+    proofDropzone.addEventListener('dragleave', () => proofDropzone.classList.remove('proof-dropzone--over'));
+    proofDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      proofDropzone.classList.remove('proof-dropzone--over');
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) {
+        // Assign to the hidden input via DataTransfer
+        try {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          proofInput.files = dt.files;
+        } catch(_) {}
+        onCaptureSelected(file);
+      }
+    });
+    proofInput.addEventListener('change', () => {
+      if (proofInput.files && proofInput.files.length > 0) {
+        onCaptureSelected(proofInput.files[0]);
+      }
+    });
+  }
+
+  function onCaptureSelected(file) {
+    hasCapture = true;
+    if (proofFileName) {
+      proofFileName.textContent = file.name;
+      proofFileName.style.display = 'block';
+    }
+    if (proofInner) {
+      proofInner.classList.add('proof-dropzone-inner--selected');
+    }
+    updateSubmitState();
+  }
+
   if (blockedClose && blockedOverlay) {
     blockedClose.addEventListener('click', () => { blockedOverlay.style.display = 'none'; blockedOverlay.setAttribute('aria-hidden', 'true'); });
     blockedOverlay.addEventListener('click', (e) => { if (e.target === blockedOverlay) { blockedOverlay.style.display = 'none'; blockedOverlay.setAttribute('aria-hidden', 'true'); } });
@@ -387,7 +440,8 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Enable/disable button based on length
       if (btnConfirm) {
-        btnConfirm.disabled = !(value.length >= 1 && value.length <= 21);
+        isReferenceValid = (value.length >= 1 && value.length <= 21);
+        updateSubmitState();
       }
       
       // Check for duplicate reference when at least 1 digit
@@ -411,7 +465,8 @@ document.addEventListener('DOMContentLoaded', () => {
         isReferenceValid = false;
         if (refError) { refError.style.display = 'none'; refError.textContent = ''; }
         // Enable/disable confirm and trigger availability check
-        if (btnConfirm) btnConfirm.disabled = !(only.length >= 1 && only.length <= 21);
+        isReferenceValid = (only.length >= 1 && only.length <= 21);
+        updateSubmitState();
         if (only.length >= 1) {
           checkReferenceAvailability(only);
         }
@@ -433,7 +488,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateDigitIndicators(only.length);
         isReferenceValid = false;
         if (refError) { refError.style.display = 'none'; refError.textContent = ''; }
-        if (btnConfirm) btnConfirm.disabled = !(only.length >= 1 && only.length <= 21);
+        isReferenceValid = (only.length >= 1 && only.length <= 21);
+        updateSubmitState();
         if (only.length >= 1) {
           checkReferenceAvailability(only);
         }
@@ -459,9 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
             refError.textContent = data.message || 'Su referencia ya fue subida y su recarga está siendo procesada';
             refError.style.display = 'block';
           }
-          if (btnConfirm) {
-            btnConfirm.disabled = true;
-          }
+          updateSubmitState();
           // Make counter text red to indicate error
           if (refCounter) {
             refCounter.style.color = '#ef4444';
@@ -473,9 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
             refError.style.display = 'none';
             refError.textContent = '';
           }
-          if (btnConfirm) {
-            btnConfirm.disabled = false;
-          }
+          updateSubmitState();
           // Make counter text green to indicate success
           if (refCounter) {
             refCounter.style.color = '#10b981';
@@ -486,9 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Error checking reference:', err);
       // On error, allow submission (backend will validate again)
       isReferenceValid = true;
-      if (btnConfirm && coRef && coRef.value.length === 6) {
-        btnConfirm.disabled = false;
-      }
+      updateSubmitState();
     }
   }
 
@@ -517,10 +567,11 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('La referencia debe ser numérica y tener máximo 21 dígitos');
         return;
       }
-      // Check if reference validation passed (allow submission on network errors)
-      if (!isReferenceValid) {
-        // Still allow, backend validates again; just warn
-        // alert('Por favor, ingrese una referencia válida');
+      // Require capture file
+      if (!proofInput || !proofInput.files || proofInput.files.length === 0) {
+        alert('Por favor adjunta el comprobante de pago');
+        if (proofDropzone) proofDropzone.classList.add('proof-dropzone--error');
+        return;
       }
       // Prepare order payload
       const item = (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) ? allItems[selectedIndex] : null;
@@ -536,48 +587,48 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!phone) { alert('Ingresa tu número de teléfono'); return; }
       const customer_id = qs.get('cid') || '';
       const customer_zone = qs.get('zid') || '';
-      const payload = {
-        store_package_id: gid,
-        item_id: item ? item.id : null,
-        // Multi-package support: send items with quantity of selected package
-        items: (item ? [{ item_id: item.id, qty: Math.max(1, quantity || 1) }] : []),
-        amount,
-        currency: totals.usedCurrency,
-        method,
-        reference: ref,
-        name,
-        email,
-        phone,
-        customer_id,
-        customer_zone,
-        special_code: qRefCode || '',
-        nn: (function() {
-          if (qNick) return qNick;
-          const uid = customer_id;
-          if (!uid) return '';
-          try {
-            const zid = customer_zone || '';
-            if (zid) {
-              const mlKey = `mlnick:${uid}:${zid}`;
-              const mlVal = (localStorage.getItem(mlKey) || '').toString().trim();
-              if (mlVal) return mlVal;
-            }
-            return (localStorage.getItem(`ffnick:${uid}`) || '').toString().trim();
-          } catch (_) { return ''; }
-        })()
-      };
+      const nn = (function() {
+        if (qNick) return qNick;
+        const uid = customer_id;
+        if (!uid) return '';
+        try {
+          const zid = customer_zone || '';
+          if (zid) {
+            const mlKey = `mlnick:${uid}:${zid}`;
+            const mlVal = (localStorage.getItem(mlKey) || '').toString().trim();
+            if (mlVal) return mlVal;
+          }
+          return (localStorage.getItem(`ffnick:${uid}`) || '').toString().trim();
+        } catch (_) { return ''; }
+      })();
+      // Build FormData to include the capture file
+      const fd = new FormData();
+      fd.append('store_package_id', gid);
+      if (item) fd.append('item_id', item.id);
+      fd.append('items', JSON.stringify(item ? [{ item_id: item.id, qty: Math.max(1, quantity || 1) }] : []));
+      fd.append('amount', amount);
+      fd.append('currency', totals.usedCurrency);
+      fd.append('method', method);
+      fd.append('reference', ref);
+      fd.append('name', name);
+      fd.append('email', email);
+      fd.append('phone', phone);
+      fd.append('customer_id', customer_id);
+      fd.append('customer_zone', customer_zone);
+      fd.append('special_code', qRefCode || '');
+      fd.append('nn', nn);
+      fd.append('payment_capture', proofInput.files[0]);
       // UI loading state
       const originalText = btnConfirm.textContent;
       btnConfirm.textContent = 'Procesando...';
       btnConfirm.disabled = true;
       // Abort fetch if it takes too long
       const controller = new AbortController();
-      const tid = setTimeout(() => controller.abort(), 15000);
+      const tid = setTimeout(() => controller.abort(), 30000);
       try {
         const res = await fetch('/orders', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: fd,
           signal: controller.signal
         });
         const data = await res.json().catch(() => ({}));
@@ -600,7 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } finally {
         clearTimeout(tid);
         btnConfirm.textContent = originalText;
-        btnConfirm.disabled = false;
+        updateSubmitState();
       }
     });
   }
