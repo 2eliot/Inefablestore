@@ -1326,6 +1326,16 @@ class SpecialCodeUsage(db.Model):
     )
 
 
+class ProfitSnapshot(db.Model):
+    __tablename__ = "profit_snapshots"
+    id = db.Column(db.Integer, primary_key=True)
+    period_start = db.Column(db.DateTime, nullable=False)
+    period_end = db.Column(db.DateTime, nullable=False)
+    profit_usd = db.Column(db.Float, default=0.0)
+    commission_usd = db.Column(db.Float, default=0.0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 def resolve_special_user_for_code(raw_code: str):
     code = (raw_code or "").strip()
     if not code:
@@ -4161,10 +4171,124 @@ def admin_stats_summary():
         "summary": {
             "total_profit_net_usd": round(total_profit_net, 2),
             "total_affiliate_commission_usd": round(total_commission_affiliates, 2),
-            # total_profit_net ya tiene las comisiones descontadas por ítem
             "total_profit_after_affiliates_usd": round(total_profit_net, 2),
         },
     })
+
+
+# ---------- Profit History (snapshots) ----------
+
+def _maybe_snapshot_previous_period():
+    """If the previous weekly period has no snapshot yet, compute and save one."""
+    try:
+        current_cutoff = get_stats_reset_cutoff()
+        prev_cutoff = current_cutoff - timedelta(days=7)
+        existing = ProfitSnapshot.query.filter_by(period_start=prev_cutoff, period_end=current_cutoff).first()
+        if existing:
+            return
+        prev_orders = Order.query.filter(
+            Order.status.in_(["approved", "delivered"]),
+            Order.created_at >= prev_cutoff,
+            Order.created_at < current_cutoff,
+        ).all()
+        if not prev_orders:
+            return
+        all_items = GamePackageItem.query.all()
+        items_by_id = {it.id: it for it in all_items}
+        profit = 0.0
+        commission = 0.0
+        for o in prev_orders:
+            try:
+                su = None
+                use_affiliate = False
+                if o.special_user_id:
+                    su = SpecialUser.query.get(o.special_user_id)
+                if (not su) and (o.special_code or ""):
+                    su = SpecialUser.query.filter(
+                        db.func.lower(SpecialUser.code) == (o.special_code or "").lower(),
+                        SpecialUser.active == True,
+                    ).first()
+                if su and su.active:
+                    sc = (su.scope or "all")
+                    scope_ok = True
+                    if sc == "package":
+                        try:
+                            scope_ok = (su.scope_package_id == o.store_package_id)
+                        except Exception:
+                            scope_ok = False
+                    use_affiliate = scope_ok
+                items_map = {}
+                if (o.items_json or "").strip():
+                    payload = json.loads(o.items_json or "[]")
+                    if isinstance(payload, list):
+                        for ent in payload:
+                            iid = int(ent.get("item_id") or 0)
+                            if iid <= 0:
+                                continue
+                            q = max(int(ent.get("qty") or 1), 1)
+                            p = float(ent.get("price") or 0.0)
+                            it = items_by_id.get(iid)
+                            cu = float(ent.get("cost_unit_usd") or (it.profit_net_usd if it else 0.0) or 0.0)
+                            cur = items_map.get(iid, {"rev": 0.0, "cost": 0.0})
+                            cur["rev"] += p * q
+                            cur["cost"] += cu * q
+                            items_map[iid] = cur
+                comm_pct = float(su.commission_percent or 0.0) if use_affiliate and su else 0.0
+                for agg in items_map.values():
+                    rev = agg["rev"]
+                    cost = agg["cost"]
+                    if comm_pct > 0:
+                        ci = round(rev * (comm_pct / 100.0), 2)
+                        commission += ci
+                        pv = rev - cost - ci
+                    else:
+                        pv = rev - cost
+                    if pv > 0:
+                        profit += pv
+            except Exception:
+                continue
+        snap = ProfitSnapshot(
+            period_start=prev_cutoff,
+            period_end=current_cutoff,
+            profit_usd=round(profit, 2),
+            commission_usd=round(commission, 2),
+        )
+        db.session.add(snap)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+@app.route("/admin/stats/history", methods=["GET"])
+def admin_stats_history():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    _maybe_snapshot_previous_period()
+    snaps = ProfitSnapshot.query.order_by(ProfitSnapshot.period_end.desc()).all()
+    return jsonify({
+        "ok": True,
+        "history": [{
+            "id": s.id,
+            "period_start": s.period_start.strftime("%d/%m/%Y %H:%M") if s.period_start else "",
+            "period_end": s.period_end.strftime("%d/%m/%Y %H:%M") if s.period_end else "",
+            "profit_usd": round(s.profit_usd or 0, 2),
+            "commission_usd": round(s.commission_usd or 0, 2),
+        } for s in snaps],
+    })
+
+
+@app.route("/admin/stats/history/<int:snap_id>", methods=["DELETE"])
+def admin_stats_history_delete(snap_id):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    snap = ProfitSnapshot.query.get(snap_id)
+    if not snap:
+        return jsonify({"ok": False, "error": "No encontrado"}), 404
+    db.session.delete(snap)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/admin/stats/package/<int:pkg_id>", methods=["GET"])
@@ -4315,6 +4439,7 @@ def admin_stats_package(pkg_id: int):
                         "cost_unit_usd": cost_unit,
                         "profit_unit_std_usd": profit_unit_std,
                         "revenue_total_usd": 0.0,
+                        "revenue_affiliate_usd": 0.0,
                         "qty_total": 0,
                         "qty_normal": 0,
                         "qty_with_affiliate": 0,
@@ -4324,6 +4449,7 @@ def admin_stats_package(pkg_id: int):
                 rec["qty_total"] += qty
                 if use_affiliate:
                     rec["qty_with_affiliate"] += qty
+                    rec["revenue_affiliate_usd"] = rec.get("revenue_affiliate_usd", 0.0) + revenue
                 else:
                     rec["qty_normal"] += qty
                 # acumular revenue para poder calcular promedio real
@@ -4336,31 +4462,6 @@ def admin_stats_package(pkg_id: int):
             continue
 
     items_out = []
-    # Preparar mapa de descuentos estándar para mostrar "Con descuento"
-    discount_display_map = {}
-    try:
-        if (pkg.category or '').lower() == 'mobile':
-            # Ordenar ítems por precio ascendente y asignar porcentajes del 10% al 4%
-            sorted_items = sorted(items, key=lambda x: float(x.price or 0.0))
-            n = len(sorted_items)
-            if n == 1:
-                discount_display_map[sorted_items[0].id] = 0.10
-            elif n > 1:
-                max_pct = 0.10
-                min_pct = 0.04
-                step = (max_pct - min_pct) / (n - 1)
-                for idx, itx in enumerate(sorted_items):
-                    pct = max_pct - step * idx
-                    if pct < min_pct:
-                        pct = min_pct
-                    if pct > max_pct:
-                        pct = max_pct
-                    discount_display_map[itx.id] = pct
-    except Exception:
-        discount_display_map = {}
-    # Ensure all items of the package are present in the response, even if
-    # they have no recorded orders yet. Stats (qty/total) will be zero in
-    # that case so the admin can still define profit_net_usd from the UI.
     for it in items:
         price_std = float(it.price or 0.0)
         cost_unit = float(it.profit_net_usd or 0.0)
@@ -4377,6 +4478,7 @@ def admin_stats_package(pkg_id: int):
                 "cost_unit_usd": cost_unit,
                 "profit_unit_std_usd": profit_unit_std,
                 "revenue_total_usd": 0.0,
+                "revenue_affiliate_usd": 0.0,
                 "qty_total": 0,
                 "qty_normal": 0,
                 "qty_with_affiliate": 0,
@@ -4384,13 +4486,24 @@ def admin_stats_package(pkg_id: int):
             },
         )
         rec_out = dict(base)
-        # calcular ganancia estándar/unidad "Con descuento" según esquema 10%..4% (mobile)
-        disc = float(discount_display_map.get(it.id, 0.0) or 0.0)
-        price_with_disc = price_std * (1.0 - disc)
-        profit_with_disc = price_with_disc - cost_unit
+        # Calcular ganancia "Con descuento" usando datos reales de órdenes con afiliado
+        qty_aff = int(rec_out.get("qty_with_affiliate") or 0)
+        rev_aff = float(rec_out.get("revenue_affiliate_usd") or 0.0)
+        if qty_aff > 0 and rev_aff > 0:
+            avg_price_disc = rev_aff / qty_aff
+            profit_with_disc = avg_price_disc - cost_unit
+        else:
+            # Sin datos reales: estimar con descuento promedio de afiliados activos
+            avg_disc = 0.0
+            try:
+                active_affs = SpecialUser.query.filter_by(active=True).all()
+                if active_affs:
+                    avg_disc = sum(float(a.discount_percent or 0) for a in active_affs) / len(active_affs) / 100.0
+            except Exception:
+                pass
+            profit_with_disc = (price_std * (1.0 - avg_disc)) - cost_unit
         if profit_with_disc < 0.0:
             profit_with_disc = 0.0
-        # expone este valor en el campo usado por el frontend para "Con descuento"
         rec_out["profit_unit_real_avg_usd"] = round(profit_with_disc, 2)
         rec_out["total_profit_net_usd"] = round(float(base.get("profit_total_usd") or 0.0), 2)
         items_out.append(rec_out)

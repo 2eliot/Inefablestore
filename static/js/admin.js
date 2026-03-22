@@ -1007,6 +1007,57 @@ window.fetchPayments = fetchPayments;
       statsTotalAfter.textContent = fmtUSD(0);
       if (statsCommEl) statsCommEl.textContent = fmtUSD(0);
     }
+    fetchProfitHistory();
+  }
+
+  // ---------- Profit History ----------
+  async function fetchProfitHistory() {
+    const container = document.getElementById('stats-history-list');
+    if (!container) return;
+    try {
+      const res = await fetch('/admin/stats/history');
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Error');
+      const hist = data.history || [];
+      if (!hist.length) {
+        container.innerHTML = '<div class="empty-state"><p>Sin historial aún.</p></div>';
+        return;
+      }
+      container.innerHTML = '';
+      hist.forEach(h => {
+        const card = document.createElement('div');
+        card.className = 'order-card';
+        card.style.marginBottom = '8px';
+        card.innerHTML = `
+          <div class="order-head" style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div class="order-id" style="font-size:13px;">${h.period_start} → ${h.period_end}</div>
+              <div class="order-meta">
+                <span>Ganancia: <strong style="color:#10b981;">${fmtUSD(h.profit_usd)}</strong></span>
+                <span style="margin-left:12px;">Comisiones: <strong style="color:#f59e0b;">${fmtUSD(h.commission_usd)}</strong></span>
+              </div>
+            </div>
+            <button class="btn btn-delete" data-snap-id="${h.id}" title="Eliminar" style="padding:4px 10px; font-size:16px; cursor:pointer;">✕</button>
+          </div>
+        `;
+        card.querySelector('.btn-delete').addEventListener('click', () => deleteProfitSnapshot(h.id));
+        container.appendChild(card);
+      });
+    } catch (e) {
+      container.innerHTML = '<div class="empty-state"><p>Error cargando historial.</p></div>';
+    }
+  }
+
+  async function deleteProfitSnapshot(id) {
+    if (!confirm('¿Eliminar este registro del historial?')) return;
+    try {
+      const res = await fetch(`/admin/stats/history/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Error');
+      fetchProfitHistory();
+    } catch (e) {
+      alert(e.message || 'Error al eliminar');
+    }
   }
 
   async function fetchStatsPackages() {

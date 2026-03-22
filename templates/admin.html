@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/admin.js', v='14') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin.js', v='15') }}" defer></script>
 <style>
 /* Logo picker modal specific styles */
 #logo-picker {
@@ -153,6 +153,13 @@
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+        <!-- Historial de ganancias -->
+        <div id="stats-history" style="margin-top:24px;">
+          <h3>Historial de ganancias</h3>
+          <div id="stats-history-list" class="orders-list">
+            <div class="empty-state"><p>Cargando historial...</p></div>
           </div>
         </div>
       </div>
