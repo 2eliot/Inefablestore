@@ -1982,8 +1982,8 @@ window.refreshGallery = refreshGallery;
           <div class=\"amount\">${amountDisp}${affiliateTag}</div>
           <div>${when}</div>
           <div class=\"customer\">${o.name || o.email || 'Cliente'}${o.phone ? ' - ' + o.phone : ''}</div>
-          ${o.payment_capture_url ? `<button type="button" class="btn btn-sm" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7;font-size:11px;padding:3px 10px;border-radius:8px;cursor:pointer;" onclick="openCaptureModal('${o.payment_capture_url.replace(/'/g, "\\'")}')">📷 Ver comprobante</button>` : ''}
         </div>
+        ${o.payment_capture_url ? `<div style="padding:6px 12px 2px;"><button type="button" class="btn btn-sm" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7;font-size:11px;padding:4px 12px;border-radius:8px;cursor:pointer;width:100%;" onclick="openCaptureModal('${o.payment_capture_url.replace(/'/g, "\\'")}')">📷 Ver comprobante</button></div>` : ''}
         ${isGift ? `
         <div class=\"row-actions\"> 
           ${ (itemsArr.length && qtyTotal > 1)
