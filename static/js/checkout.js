@@ -311,8 +311,8 @@ document.addEventListener('DOMContentLoaded', () => {
       addItem('bank', 'Binance');
       addItem('email', (paymentsCfg && paymentsCfg.binance_email) || '');
       addItem('user', (paymentsCfg && paymentsCfg.binance_phone) || '');
-      // If Binance auto-verification is enabled, show instructions about the beneficiary note
-      if (paymentsCfg && paymentsCfg.binance_auto_enabled === '1') {
+      // If Binance auto-verification is enabled for THIS item, show instructions about the beneficiary note
+      if (isBinanceAuto) {
         const note = document.createElement('div');
         note.style.cssText = 'margin-top:12px; padding:10px 14px; background:rgba(245,158,11,0.1); border:1.5px solid rgba(245,158,11,0.35); border-radius:10px; text-align:center;';
         const refVal = coRef ? coRef.value.trim() : '';
@@ -351,13 +351,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selectedIndex < 0 && allItems.length > 0) selectedIndex = 0;
     rate = Number((rateRes && rateRes.rate_bsd_per_usd) || 0);
     paymentsCfg = (payRes && payRes.ok && payRes.payments) ? payRes.payments : null;
-    // Detect Binance auto-verification mode
-    isBinanceAuto = (qMethod === 'binance' && paymentsCfg && paymentsCfg.binance_auto_enabled === '1');
+    // Detect Binance auto-verification mode PER ITEM
+    const globalBinanceAuto = (qMethod === 'binance' && paymentsCfg && paymentsCfg.binance_auto_enabled === '1');
+    isBinanceAuto = false; // will be set after item auto-check
     renderHeader();
     renderInfo();
     startTimer(30*60);
-    if (isBinanceAuto) {
-      setupBinanceAutoMode();
+    if (globalBinanceAuto && allItems.length > 0 && selectedIndex >= 0 && selectedIndex < allItems.length) {
+      const selItem = allItems[selectedIndex];
+      fetch(`/store/item/${selItem.id}/auto-check`).then(r => r.json()).then(data => {
+        if (data && data.ok && data.auto) {
+          isBinanceAuto = true;
+          setupBinanceAutoMode();
+        }
+      }).catch(() => { /* item not auto — use normal flow */ });
     }
   });
 

@@ -3025,6 +3025,18 @@ def _generate_binance_auto_code():
     return secrets.token_hex(3).upper()[:6]
 
 
+@app.route("/store/item/<int:item_id>/auto-check", methods=["GET"])
+def store_item_auto_check(item_id):
+    """Public: check if a specific item has auto_enabled in RevendedoresItemMapping."""
+    enabled = get_config_value("binance_auto_enabled", "0")
+    if enabled != "1":
+        return jsonify({"ok": True, "auto": False})
+    mapping = RevendedoresItemMapping.query.filter_by(
+        store_item_id=item_id, active=True, auto_enabled=True
+    ).first()
+    return jsonify({"ok": True, "auto": mapping is not None})
+
+
 @app.route("/orders/generate-binance-code", methods=["GET"])
 def generate_binance_code():
     """Public: generate a unique 6-char code for Binance auto-verification checkout."""
