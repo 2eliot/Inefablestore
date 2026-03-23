@@ -804,6 +804,10 @@ def _binance_auto_approve(order):
     the background thread after Binance API payment confirmation.
     ONLY triggers for orders where the item has auto_enabled=True in the mapping.
     """
+    # Final safety check: order must still be pending
+    if (order.status or "").lower() != "pending":
+        print(f"[BinanceAuto] Order #{order.id} is '{order.status}', not pending. Aborting auto-approve.")
+        return
     try:
         order.status = "approved"
         db.session.commit()
@@ -980,6 +984,11 @@ def _binance_order_verification_loop():
                             since_ms=since_ms,
                         )
                         if result is True:
+                            # Re-read from DB to avoid race with manual admin approval
+                            db.session.refresh(order)
+                            if (order.status or "").lower() != "pending":
+                                print(f"[BinanceAuto] Order #{order.id} no longer pending (status={order.status}). Skipping.")
+                                continue
                             print(f"[BinanceAuto] Payment verified for order #{order.id}. Auto-approving.")
                             _binance_auto_approve(order)
                         # None = API error, False = not found yet — both silently retry
