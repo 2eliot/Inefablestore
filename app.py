@@ -8,6 +8,7 @@ import urllib.request
 import urllib.error
 import html as _html
 import hashlib
+import hmac as _hmac_module
 from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
@@ -94,6 +95,13 @@ MAIL_APP_PASSWORD = os.environ.get("MAIL_APP_PASSWORD", "")
 MAIL_SMTP_HOST = os.environ.get("MAIL_SMTP_HOST", "smtp.gmail.com")
 MAIL_SMTP_PORT = int(os.environ.get("MAIL_SMTP_PORT", "587"))
 ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "")  # default destination for new order alerts
+
+# ── Binance Pay Auto-Verification ──
+BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY", "").strip()
+BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET", "").strip()
+BINANCE_PROXY = os.environ.get("BINANCE_PROXY", "").strip()
+BINANCE_REQUEST_TIMEOUT = float(os.environ.get("BINANCE_REQUEST_TIMEOUT_SECONDS", "4"))
+BINANCE_TOTAL_TIMEOUT = float(os.environ.get("BINANCE_TOTAL_TIMEOUT_SECONDS", "8"))
 
 db = SQLAlchemy(app)
 
@@ -679,8 +687,315 @@ _cleanup_thread = threading.Thread(target=_order_cleanup_loop, daemon=True)
 _cleanup_thread.start()
 
 
+# ==============================
+# Binance Pay Auto-Verification
+# ==============================
+
+_BINANCE_API_ENDPOINTS = [
+    "https://api1.binance.com",
+    "https://api2.binance.com",
+    "https://api3.binance.com",
+    "https://api4.binance.com",
+    "https://api.binance.com",
+]
+
+
+def _binance_create_signature(query_string: str) -> str:
+    return _hmac_module.new(
+        BINANCE_API_SECRET.encode("utf-8"),
+        query_string.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _binance_get_pay_transactions(start_time_ms: int, limit: int = 100):
+    """Fetch Binance Pay transactions starting from start_time_ms (epoch ms).
+
+    Returns a list of transaction dicts, or None on error.
+    Uses BINANCE_PROXY env var and tries multiple Binance API endpoints.
+    """
+    if not BINANCE_API_KEY or not BINANCE_API_SECRET:
+        return None
+    proxies = {"https": BINANCE_PROXY, "http": BINANCE_PROXY} if BINANCE_PROXY else None
+    timestamp_ms = int(time.time() * 1000)
+    params = {
+        "startTime": start_time_ms,
+        "limit": limit,
+        "timestamp": timestamp_ms,
+    }
+    query_string = "&".join(f"{k}={v}" for k, v in params.items())
+    signature = _binance_create_signature(query_string)
+    full_query = f"{query_string}&signature={signature}"
+    headers = {"X-MBX-APIKEY": BINANCE_API_KEY}
+    path = "/sapi/v1/pay/transactions"
+    for base_url in _BINANCE_API_ENDPOINTS:
+        try:
+            resp = _requests_lib.get(
+                f"{base_url}{path}?{full_query}",
+                headers=headers,
+                proxies=proxies,
+                timeout=BINANCE_REQUEST_TIMEOUT,
+            )
+            if resp.ok:
+                data = resp.json()
+                # API may return {data: [...]} or {rows: [...]} depending on version
+                return data.get("data") or data.get("rows") or []
+        except Exception:
+            continue
+    return None
+
+
+def _binance_verify_payment(order_reference: str, expected_usdt: float, since_ms: int):
+    """Return True if a Binance Pay transaction matches the reference and amount.
+
+    Looks for order_reference string inside the transaction's beneficiary note
+    (orderMemo / remark / note fields) AND verifies exact USDT amount (±0.01).
+    """
+    txs = _binance_get_pay_transactions(start_time_ms=since_ms)
+    if txs is None:
+        return None  # API error — caller decides whether to retry
+    if not txs:
+        return False
+    ref_upper = str(order_reference).upper().strip()
+    for tx in txs:
+        # Extract note written by payer
+        tx_note = (
+            tx.get("orderMemo")
+            or tx.get("remark")
+            or tx.get("note")
+            or ""
+        )
+        tx_note_upper = str(tx_note).upper().strip()
+        if not tx_note_upper:
+            continue
+        if ref_upper not in tx_note_upper:
+            continue
+        # Verify currency is USDT
+        tx_currency = ""
+        funds = tx.get("fundsDetail") or []
+        if isinstance(funds, list) and funds:
+            tx_currency = str(funds[0].get("currency") or "").upper()
+        if not tx_currency:
+            tx_currency = str(tx.get("transactedCurrency") or tx.get("currency") or "").upper()
+        if tx_currency and tx_currency != "USDT":
+            continue
+        # Verify amount
+        tx_amount = 0.0
+        if isinstance(funds, list) and funds:
+            try:
+                tx_amount = float(funds[0].get("amount") or 0)
+            except Exception:
+                pass
+        if tx_amount == 0.0:
+            try:
+                tx_amount = float(tx.get("transactedAmount") or tx.get("amount") or 0)
+            except Exception:
+                pass
+        if abs(tx_amount - expected_usdt) <= 0.01:
+            return True
+    return False
+
+
+
+def _binance_auto_approve(order):
+    """Approve a Binance-paid order and trigger Revendedores automation.
+
+    Mirrors the approval logic of admin_orders_set_status but is called from
+    the background thread after Binance API payment confirmation.
+    ONLY triggers for orders where the item has auto_enabled=True in the mapping.
+    """
+    try:
+        order.status = "approved"
+        db.session.commit()
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print(f"[BinanceAuto] DB error approving order #{order.id}: {exc}")
+        return
+
+    # Affiliate commission crediting (mirrors admin_orders_set_status)
+    try:
+        su = None
+        if order.special_user_id:
+            su = SpecialUser.query.get(order.special_user_id)
+        if (not su) and (order.special_code or ""):
+            su = SpecialUser.query.filter(
+                db.func.lower(SpecialUser.code) == (order.special_code or "").lower(),
+                SpecialUser.active == True,
+            ).first()
+        if su and su.active:
+            sc = (su.scope or "all")
+            scope_ok = True
+            if sc == "package":
+                try:
+                    scope_ok = (su.scope_package_id == order.store_package_id)
+                except Exception:
+                    scope_ok = False
+            if scope_ok:
+                subtotal = 0.0
+                try:
+                    if (order.items_json or "").strip():
+                        items = json.loads(order.items_json or "[]")
+                        if isinstance(items, list):
+                            for ent in items:
+                                q = int(ent.get("qty") or 1)
+                                subtotal += float(ent.get("price") or 0.0) * q
+                except Exception:
+                    pass
+                if subtotal <= 0 and order.item_id:
+                    gi = GamePackageItem.query.get(order.item_id)
+                    if gi:
+                        subtotal = float(gi.price or 0.0)
+                comm_pct = float(su.commission_percent or 0.0)
+                if comm_pct > 0 and subtotal > 0:
+                    try:
+                        inc = round(subtotal * (comm_pct / 100.0), 2)
+                        su.balance = round(float(su.balance or 0.0) + inc, 2)
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+    except Exception:
+        pass
+
+    # Notify buyer (HTML email)
+    try:
+        if order.email:
+            pkg = StorePackage.query.get(order.store_package_id)
+            it = GamePackageItem.query.get(order.item_id) if order.item_id else None
+            brand = _email_brand()
+            html, text = build_order_approved_email(order, pkg, it)
+            try:
+                send_email_html(order.email, f"Orden #{order.id} aprobada - {brand}", html, text)
+            except Exception:
+                send_email_async(order.email, f"Orden #{order.id} aprobada - {brand}", text)
+    except Exception:
+        pass
+
+    # Revendedores automation (only for auto_enabled items)
+    try:
+        mapping = _get_order_auto_mapping(order)
+        if not mapping:
+            return  # Item not auto-enabled — order stays "approved" for manual dispatch
+        webb_url, webb_api_key, _, recharge_path = _revendedores_env()
+        player_id = (order.customer_id or "").strip()
+        if not webb_url or not webb_api_key or not player_id:
+            return
+        payload = {
+            "product_id": mapping.remote_product_id,
+            "package_id": mapping.remote_package_id,
+            "player_id": player_id,
+            "external_order_id": f"INE-{order.id}",
+        }
+        if (order.customer_zone or "").strip():
+            payload["player_id2"] = (order.customer_zone or "").strip()
+        try:
+            api_resp = _requests_lib.post(
+                f"{webb_url}{recharge_path}",
+                json=payload,
+                headers={"X-API-Key": webb_api_key, "Content-Type": "application/json"},
+                timeout=60,
+            )
+            api_data = api_resp.json() if api_resp.ok else {}
+        except Exception as exc:
+            order.automation_json = json.dumps({
+                "source": "revendedores_api",
+                "pending_verification": True,
+                "external_order_id": f"INE-{order.id}",
+                "error": str(exc),
+                "binance_auto": True,
+            })
+            try:
+                db.session.commit()
+            except Exception:
+                pass
+            return
+        if api_data.get("ok"):
+            order.status = "delivered"
+            order.automation_json = json.dumps({
+                "source": "revendedores_api",
+                "success": True,
+                "player_name": api_data.get("player_name", ""),
+                "reference_no": api_data.get("reference_no", ""),
+                "binance_auto": True,
+            })
+        else:
+            order.automation_json = json.dumps({
+                "source": "revendedores_api",
+                "pending_verification": True,
+                "external_order_id": f"INE-{order.id}",
+                "error": api_data.get("error") or "Recarga no completada",
+                "binance_auto": True,
+            })
+        try:
+            db.session.commit()
+        except Exception:
+            pass
+    except Exception as exc:
+        print(f"[BinanceAuto] Revendedores error for order #{order.id}: {exc}")
+
+
+def _binance_order_verification_loop():
+    """Background thread: poll Binance Pay API every 30 s for pending Binance orders.
+
+    For each pending Binance order whose item has auto_enabled=True in
+    RevendedoresItemMapping, verify payment via Binance API. On confirmation,
+    auto-approve and dispatch via Revendedores.
+    """
+    import time as _t
+    _t.sleep(45)  # extra startup delay
+    while True:
+        try:
+            with app.app_context():
+                enabled = get_config_value("binance_auto_enabled", "0")
+                if enabled != "1":
+                    _t.sleep(30)
+                    continue
+                if not BINANCE_API_KEY or not BINANCE_API_SECRET:
+                    _t.sleep(60)
+                    continue
+                pending_orders = Order.query.filter_by(
+                    method="binance", status="pending"
+                ).all()
+                for order in pending_orders:
+                    try:
+                        if not order.item_id:
+                            continue
+                        mapping = _get_order_auto_mapping(order)
+                        if not mapping:
+                            continue
+                        if not order.reference:
+                            continue
+                        # Search from 5 minutes before order creation
+                        since_ms = int(
+                            (order.created_at - timedelta(minutes=5)).timestamp() * 1000
+                        )
+                        expected_usdt = float(order.amount or 0.0)
+                        if expected_usdt <= 0:
+                            continue
+                        result = _binance_verify_payment(
+                            order_reference=order.reference,
+                            expected_usdt=expected_usdt,
+                            since_ms=since_ms,
+                        )
+                        if result is True:
+                            print(f"[BinanceAuto] Payment verified for order #{order.id}. Auto-approving.")
+                            _binance_auto_approve(order)
+                        # None = API error, False = not found yet — both silently retry
+                    except Exception as exc:
+                        print(f"[BinanceAuto] Error processing order #{order.id}: {exc}")
+                    _t.sleep(2)  # rate-limit between orders
+        except Exception as exc:
+            print(f"[BinanceAuto] Thread error: {exc}")
+        _t.sleep(30)
+
+
+_binance_thread = threading.Thread(target=_binance_order_verification_loop, daemon=True)
+_binance_thread.start()
+
+
 def _ensure_automation_json_column():
-    """Add automation_json column to orders table if missing (for existing DBs)."""
     try:
         with app.app_context():
             inspector = db.inspect(db.engine)
@@ -2095,6 +2410,7 @@ def store_payments():
         "binance_phone": get_config_value("binance_phone", ""),
         "pm_image_path": get_config_value("pm_image_path", ""),
         "binance_image_path": get_config_value("binance_image_path", ""),
+        "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
     }
     return jsonify({"ok": True, "payments": data})
 
@@ -2212,6 +2528,7 @@ def admin_config_payments_get():
         "binance_phone": get_config_value("binance_phone", ""),
         "pm_image_path": get_config_value("pm_image_path", ""),
         "binance_image_path": get_config_value("binance_image_path", ""),
+        "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
     })
 
 
@@ -2229,6 +2546,7 @@ def admin_config_payments_set():
     set_config_value("binance_phone", (data.get("binance_phone") or "").strip())
     set_config_value("pm_image_path", (data.get("pm_image_path") or "").strip())
     set_config_value("binance_image_path", (data.get("binance_image_path") or "").strip())
+    set_config_value("binance_auto_enabled", "1" if data.get("binance_auto_enabled") else "0")
     return jsonify({"ok": True})
 
 
@@ -2677,6 +2995,37 @@ def thanks_order(oid: int):
 # Orders API
 # ===============
 
+def _generate_binance_auto_code():
+    """Generate a unique 6-character alphanumeric code for Binance auto-verification.
+
+    The code is uppercase letters + digits, e.g. 'A3K7B2'. Retries until unique
+    among pending orders.
+    """
+    import random
+    import string
+    chars = string.ascii_uppercase + string.digits
+    for _ in range(50):
+        code = ''.join(random.choices(chars, k=6))
+        existing = Order.query.filter(
+            Order.reference == code,
+            Order.status == "pending",
+        ).first()
+        if not existing:
+            return code
+    # Fallback: use secrets for extra entropy
+    return secrets.token_hex(3).upper()[:6]
+
+
+@app.route("/orders/generate-binance-code", methods=["GET"])
+def generate_binance_code():
+    """Public: generate a unique 6-char code for Binance auto-verification checkout."""
+    enabled = get_config_value("binance_auto_enabled", "0")
+    if enabled != "1":
+        return jsonify({"ok": False, "error": "Verificación automática no activa"}), 400
+    code = _generate_binance_auto_code()
+    return jsonify({"ok": True, "code": code})
+
+
 @app.route("/orders/check-reference", methods=["GET"])
 def check_reference():
     """Check if a reference is already in use by a pending order"""
@@ -2765,9 +3114,21 @@ def create_order():
 
         if not reference:
             return jsonify({"ok": False, "error": "Referencia requerida"}), 400
-        # Validate reference is numeric with maximum 21 digits (1..21)
-        if not (reference.isdigit() and 1 <= len(reference) <= 21):
-            return jsonify({"ok": False, "error": "La referencia debe ser numérica (máximo 21 dígitos)"}), 400
+        # Determine if this is a Binance auto-verification order (6-char alphanumeric code)
+        _is_binance_auto = (
+            method == "binance"
+            and get_config_value("binance_auto_enabled", "0") == "1"
+            and len(reference) == 6
+            and reference.isalnum()
+        )
+        if _is_binance_auto:
+            # Validate alphanumeric code format
+            if not reference.isalnum() or len(reference) != 6:
+                return jsonify({"ok": False, "error": "Código de verificación inválido"}), 400
+        else:
+            # Normal flow: validate reference is numeric with maximum 21 digits (1..21)
+            if not (reference.isdigit() and 1 <= len(reference) <= 21):
+                return jsonify({"ok": False, "error": "La referencia debe ser numérica (máximo 21 dígitos)"}), 400
         # Check if reference already exists in pending orders
         existing_pending = Order.query.filter(
             Order.reference == reference,

@@ -214,6 +214,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSavePayments = document.getElementById('btn-save-payments');
   const pmImage = document.getElementById('pm-image');
   const binImage = document.getElementById('binance-image');
+  const binAutoEnabled = document.getElementById('binance-auto-enabled');
+  const binAutoNote = document.getElementById('binance-auto-note');
   const payMethodSelect = document.getElementById('pay-method-select');
   const pmSection = document.getElementById('pm-section');
   const binSection = document.getElementById('binance-section');
@@ -231,6 +233,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (payMethodSelect) {
     payMethodSelect.addEventListener('change', () => showPaySection(payMethodSelect.value));
+  }
+  if (binAutoEnabled) {
+    binAutoEnabled.addEventListener('change', () => {
+      if (binAutoNote) binAutoNote.style.display = binAutoEnabled.checked ? '' : 'none';
+    });
   }
   const inputActiveLoginGame = document.getElementById('active-login-game');
   const btnSaveActiveLoginGame = document.getElementById('btn-save-active-login-game');
@@ -788,6 +795,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (binPhone) binPhone.value = data.binance_phone || '';
         if (pmImage) { pmImage.value = data.pm_image_path || ''; syncDropdown(pmImage); }
         if (binImage) { binImage.value = data.binance_image_path || ''; syncDropdown(binImage); }
+        if (binAutoEnabled) {
+          binAutoEnabled.checked = (data.binance_auto_enabled === '1' || data.binance_auto_enabled === 1);
+          if (binAutoNote) binAutoNote.style.display = binAutoEnabled.checked ? '' : 'none';
+        }
         // Do not auto-select any method; keep placeholder until user chooses
         showPaySection();
       }
@@ -804,7 +815,8 @@ window.fetchPayments = fetchPayments;
       binance_email: binEmail ? binEmail.value.trim() : '',
       binance_phone: binPhone ? binPhone.value.trim() : '',
       pm_image_path: pmImage ? pmImage.value.trim() : '',
-      binance_image_path: binImage ? binImage.value.trim() : ''
+      binance_image_path: binImage ? binImage.value.trim() : '',
+      binance_auto_enabled: binAutoEnabled ? binAutoEnabled.checked : false
     };
     const res = await fetch('/admin/config/payments', {
       method: 'POST',

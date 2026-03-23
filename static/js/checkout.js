@@ -24,6 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const proofFileName = document.getElementById('proofFileName');
   let isReferenceValid = false;
   let hasCapture = false;
+  let isBinanceAuto = false;
+  let binanceAutoCode = '';
 
   // Render basic game block immediately to avoid waiting for fetches
   (function initialHeader(){
@@ -309,6 +311,16 @@ document.addEventListener('DOMContentLoaded', () => {
       addItem('bank', 'Binance');
       addItem('email', (paymentsCfg && paymentsCfg.binance_email) || '');
       addItem('user', (paymentsCfg && paymentsCfg.binance_phone) || '');
+      // If Binance auto-verification is enabled, show instructions about the beneficiary note
+      if (paymentsCfg && paymentsCfg.binance_auto_enabled === '1') {
+        const note = document.createElement('div');
+        note.style.cssText = 'margin-top:12px; padding:10px 14px; background:rgba(245,158,11,0.1); border:1.5px solid rgba(245,158,11,0.35); border-radius:10px; text-align:center;';
+        const refVal = coRef ? coRef.value.trim() : '';
+        note.innerHTML = '<div style="font-weight:900; color:#fbbf24; margin-bottom:6px;">⚠️ IMPORTANTE — Verificación automática</div>'
+          + '<div style="color:#e2e8f0; font-size:13px; line-height:1.4;">Al realizar el pago en Binance, <b>escribe tu número de referencia</b> en el campo <b>"Nota del beneficiario"</b> (memo/note).</div>'
+          + '<div style="color:#94a3b8; font-size:12px; margin-top:6px;">Sin este código en la nota, tu pago <b>NO</b> podrá ser verificado automáticamente y deberá ser aprobado manualmente.</div>';
+        coInfo.appendChild(note);
+      }
     }
   }
 
@@ -339,9 +351,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selectedIndex < 0 && allItems.length > 0) selectedIndex = 0;
     rate = Number((rateRes && rateRes.rate_bsd_per_usd) || 0);
     paymentsCfg = (payRes && payRes.ok && payRes.payments) ? payRes.payments : null;
+    // Detect Binance auto-verification mode
+    isBinanceAuto = (qMethod === 'binance' && paymentsCfg && paymentsCfg.binance_auto_enabled === '1');
     renderHeader();
     renderInfo();
     startTimer(30*60);
+    if (isBinanceAuto) {
+      setupBinanceAutoMode();
+    }
   });
 
   // Initialize button as disabled
@@ -352,7 +369,59 @@ document.addEventListener('DOMContentLoaded', () => {
   // Proof dropzone / file input handling
   function updateSubmitState() {
     if (btnConfirm) {
-      btnConfirm.disabled = !(hasCapture && isReferenceValid);
+      if (isBinanceAuto) {
+        // In auto mode only need the generated code (always present once fetched)
+        btnConfirm.disabled = !binanceAutoCode;
+      } else {
+        btnConfirm.disabled = !(hasCapture && isReferenceValid);
+      }
+    }
+  }
+
+  // ── Binance Auto Mode Setup ──
+  function setupBinanceAutoMode() {
+    // Hide proof card
+    const proofCard = proofDropzone ? proofDropzone.closest('.proof-card') : null;
+    if (proofCard) proofCard.style.display = 'none';
+    // Hide reference section (label, input, digits, paste button, error, counter)
+    const refGroup = coRef ? coRef.closest('.ref-group') : null;
+    if (refGroup) refGroup.style.display = 'none';
+    // Fetch unique code from server
+    fetch('/orders/generate-binance-code').then(r => r.json()).then(data => {
+      if (data && data.ok && data.code) {
+        binanceAutoCode = data.code;
+        renderBinanceAutoCard();
+        updateSubmitState();
+      } else {
+        alert('No se pudo generar el código de verificación');
+      }
+    }).catch(() => alert('Error de red al generar código'));
+  }
+
+  function renderBinanceAutoCard() {
+    // Insert a card with the code and instructions BEFORE the timer card
+    const timerCard = coTimer ? coTimer.closest('.co-card') : null;
+    if (!timerCard) return;
+    const card = document.createElement('div');
+    card.className = 'co-card';
+    card.id = 'binance-auto-card';
+    card.innerHTML = `
+      <h3>Verificación Automática Binance</h3>
+      <div style="text-align:center; padding:12px 0;">
+        <div style="color:#fbbf24; font-weight:900; font-size:14px; margin-bottom:10px;">⚠️ IMPORTANTE</div>
+        <div style="color:#e2e8f0; font-size:13px; line-height:1.5; margin-bottom:14px;">Al realizar el pago en Binance, escribe este código en el campo <b>"Nota del beneficiario"</b> (memo/note)</div>
+        <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin:16px 0;">
+          <div style="background:rgba(16,185,129,0.12); border:2px solid #10b981; border-radius:12px; padding:16px 28px; font-size:28px; font-weight:900; letter-spacing:8px; color:#10b981; font-family:monospace;">${binanceAutoCode}</div>
+          <button type="button" class="copy-btn" data-copy="${binanceAutoCode}" style="padding:10px 14px; font-size:13px;">Copiar</button>
+        </div>
+        <div style="color:#94a3b8; font-size:12px; margin-top:8px;">Sin este código en la nota, tu pago <b>NO</b> podrá ser verificado automáticamente.</div>
+        <div style="color:#94a3b8; font-size:12px; margin-top:6px;">Una vez realizado el pago, presiona <b>"Confirmar Pago"</b> y tu recarga será procesada automáticamente al verificar el pago.</div>
+      </div>
+    `;
+    timerCard.parentNode.insertBefore(card, timerCard);
+    // Change confirm button text
+    if (btnConfirm) {
+      btnConfirm.textContent = 'Confirmar Pago';
     }
   }
 
@@ -560,6 +629,87 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (btnConfirm) {
     btnConfirm.addEventListener('click', async () => {
+      // ── Binance Auto Mode: simplified flow ──
+      if (isBinanceAuto) {
+        if (!binanceAutoCode) { alert('Código de verificación no disponible'); return; }
+        const item = (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) ? allItems[selectedIndex] : null;
+        const totals = computeTotals();
+        let st = null;
+        try { st = JSON.parse(localStorage.getItem('inefablestore_checkout') || 'null'); } catch (_) { st = null; }
+        const name = qName || (st && st.name) || '';
+        const email = qEmail || (st && st.email) || '';
+        const phone = qPhone || (st && st.phone) || '';
+        if (!phone) { alert('Ingresa tu número de teléfono'); return; }
+        const customer_id = qs.get('cid') || '';
+        const customer_zone = qs.get('zid') || '';
+        const nn = (function() {
+          if (qNick) return qNick;
+          const uid = customer_id;
+          if (!uid) return '';
+          try {
+            const zid = customer_zone || '';
+            if (zid) {
+              const mlKey = `mlnick:${uid}:${zid}`;
+              const mlVal = (localStorage.getItem(mlKey) || '').toString().trim();
+              if (mlVal) return mlVal;
+            }
+            return (localStorage.getItem(`ffnick:${uid}`) || '').toString().trim();
+          } catch (_) { return ''; }
+        })();
+        // JSON body (no file needed)
+        const payload = {
+          store_package_id: gid,
+          item_id: item ? item.id : null,
+          items: item ? [{ item_id: item.id, qty: Math.max(1, quantity || 1) }] : [],
+          amount: totals.amount,
+          currency: totals.usedCurrency,
+          method: 'binance',
+          reference: binanceAutoCode,
+          name: name,
+          email: email,
+          phone: phone,
+          customer_id: customer_id,
+          customer_zone: customer_zone,
+          special_code: qRefCode || '',
+          nn: nn
+        };
+        const originalText = btnConfirm.textContent;
+        btnConfirm.textContent = 'Procesando...';
+        btnConfirm.disabled = true;
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 30000);
+        try {
+          const res = await fetch('/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 403) {
+            if (blockedOverlay) {
+              if (blockedWhats) blockedWhats.href = waLink || '#';
+              blockedOverlay.style.display = 'flex';
+              blockedOverlay.removeAttribute('aria-hidden');
+            } else {
+              throw new Error((data && data.error) || 'Este ID está bloqueado.');
+            }
+            return;
+          }
+          if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo crear la orden');
+          window.location.href = `/gracias/${encodeURIComponent(data.order_id)}`;
+        } catch (err) {
+          const msg = (err && err.name === 'AbortError') ? 'La solicitud tardó demasiado. Intenta de nuevo.' : (err.message || 'No se pudo crear la orden');
+          alert(msg);
+        } finally {
+          clearTimeout(tid);
+          btnConfirm.textContent = originalText;
+          updateSubmitState();
+        }
+        return;
+      }
+
+      // ── Normal flow (Pago Móvil / Binance manual) ──
       const ref = coRef ? coRef.value.trim() : '';
       if (!ref) { alert('Ingrese la referencia'); return; }
       // Validate numeric with máximo 21 (1..21)

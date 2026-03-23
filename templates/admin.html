@@ -490,6 +490,19 @@
                 <input id="binance-image" type="hidden">
               </div>
             </div>
+            <div class="form-row" style="margin-top:12px;">
+              <label>Verificación automática Binance</label>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <label class="toggle-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                  <input id="binance-auto-enabled" type="checkbox">
+                  <span>Activar auto-aprobación por API de Binance</span>
+                </label>
+              </div>
+            </div>
+            <div id="binance-auto-note" style="margin-top:6px; padding:10px 12px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); border-radius:8px; font-size:12px; color:#94a3b8; display:none;">
+              ⚠️ Requiere variables de entorno: <b>BINANCE_API_KEY</b>, <b>BINANCE_API_SECRET</b>. Opcional: <b>BINANCE_PROXY</b>.<br>
+              Las órdenes con pago Binance cuyo artículo tenga <b>auto habilitado</b> en el mapeo de Revendedores serán verificadas y aprobadas automáticamente cuando la API de Binance confirme el pago exacto con el código de referencia en la nota del beneficiario.
+            </div>
           </div>
           <div class="form-row">
             <label>&nbsp;</label>
