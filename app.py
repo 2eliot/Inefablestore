@@ -4698,9 +4698,11 @@ def _maybe_snapshot_previous_period():
                             cur["cost"] += cu * q
                             items_map[iid] = cur
                 comm_pct = float(su.commission_percent or 0.0) if use_affiliate and su else 0.0
-                for agg in items_map.values():
+                for iid, agg in items_map.items():
                     rev = agg["rev"]
                     cost = agg["cost"]
+                    if cost <= 0.0:
+                        continue
                     if comm_pct > 0:
                         ci = round(rev * (comm_pct / 100.0), 2)
                         commission += ci

@@ -1340,6 +1340,59 @@ window.fetchLogo = fetchLogo;
   }
 
   // =====================
+  // Config: Blood Strike package ID (Smile.One verification)
+  // =====================
+  const inputBsPackageId = document.getElementById('bs-package-id');
+  const inputBsServerId = document.getElementById('bs-server-id');
+  const btnSaveBsPackageId = document.getElementById('btn-save-bs-package-id');
+
+  async function fetchBsPackageId() {
+    try {
+      const [res1, res2] = await Promise.all([
+        fetch('/admin/config/bs_package_id'),
+        fetch('/admin/config/bs_server_id')
+      ]);
+      const data1 = await res1.json();
+      const data2 = await res2.json();
+      if (res1.ok && data1 && data1.ok && inputBsPackageId) {
+        inputBsPackageId.value = data1.bs_package_id || '';
+      }
+      if (res2.ok && data2 && data2.ok && inputBsServerId) {
+        inputBsServerId.value = data2.bs_server_id || '';
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  async function saveBsPackageId() {
+    const pkgVal = inputBsPackageId ? String(inputBsPackageId.value || '').trim() : '';
+    const srvVal = inputBsServerId ? String(inputBsServerId.value || '').trim() : '';
+    await Promise.all([
+      fetch('/admin/config/bs_package_id', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bs_package_id: pkgVal })
+      }),
+      fetch('/admin/config/bs_server_id', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bs_server_id: srvVal })
+      })
+    ]);
+  }
+
+  if (btnSaveBsPackageId) {
+    btnSaveBsPackageId.addEventListener('click', async () => {
+      try {
+        btnSaveBsPackageId.disabled = true;
+        await saveBsPackageId();
+        toast('ID de paquete Blood Strike guardado');
+      } catch (e) {
+        toast(e.message || 'Error');
+      } finally {
+        btnSaveBsPackageId.disabled = false;
+      }
+    });
+  }
+
+  fetchBsPackageId();
+
+  // =====================
   // Images: upload + list
   // =====================
   // Lightweight toast notifications
@@ -2393,6 +2446,7 @@ window.fetchHero = fetchHero;
       const dd = createImageDropdown('', (path) => { pkgImage.value = path; });
       dd._hiddenInput = pkgImage;
       slot.appendChild(dd);
+      pkgImage._imgDropdown = dd;
     }
   }
 
@@ -2454,94 +2508,6 @@ window.fetchHero = fetchHero;
       if (grpSpec) grpSpec.hidden = true;
       return;
     }
-
-  async function fetchActiveLoginGame() {
-    try {
-      const res = await fetch('/admin/config/active_login_game');
-      const data = await res.json();
-      if (res.ok && data && data.ok && inputActiveLoginGame) {
-        inputActiveLoginGame.value = data.active_login_game_id || '';
-      }
-    } catch (_) { /* ignore */ }
-  }
-
-  async function saveActiveLoginGame() {
-    const val = inputActiveLoginGame ? String(inputActiveLoginGame.value || '').trim() : '';
-    const res = await fetch('/admin/config/active_login_game', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active_login_game_id: val })
-    });
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(t || 'No se pudo guardar');
-    }
-  }
-
-  if (btnSaveActiveLoginGame) {
-    btnSaveActiveLoginGame.addEventListener('click', async () => {
-      try {
-        btnSaveActiveLoginGame.disabled = true;
-        await saveActiveLoginGame();
-        toast('Juego activo guardado');
-      } catch (e) {
-        toast(e.message || 'Error');
-      } finally {
-        btnSaveActiveLoginGame.disabled = false;
-      }
-    });
-  }
-
-  // =====================
-  // Config: Blood Strike package ID (Smile.One verification)
-  // =====================
-  const inputBsPackageId = document.getElementById('bs-package-id');
-  const inputBsServerId = document.getElementById('bs-server-id');
-  const btnSaveBsPackageId = document.getElementById('btn-save-bs-package-id');
-
-  async function fetchBsPackageId() {
-    try {
-      const [res1, res2] = await Promise.all([
-        fetch('/admin/config/bs_package_id'),
-        fetch('/admin/config/bs_server_id')
-      ]);
-      const data1 = await res1.json();
-      const data2 = await res2.json();
-      if (res1.ok && data1 && data1.ok && inputBsPackageId) {
-        inputBsPackageId.value = data1.bs_package_id || '';
-      }
-      if (res2.ok && data2 && data2.ok && inputBsServerId) {
-        inputBsServerId.value = data2.bs_server_id || '';
-      }
-    } catch (_) { /* ignore */ }
-  }
-
-  async function saveBsPackageId() {
-    const pkgVal = inputBsPackageId ? String(inputBsPackageId.value || '').trim() : '';
-    const srvVal = inputBsServerId ? String(inputBsServerId.value || '').trim() : '';
-    await Promise.all([
-      fetch('/admin/config/bs_package_id', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bs_package_id: pkgVal })
-      }),
-      fetch('/admin/config/bs_server_id', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bs_server_id: srvVal })
-      })
-    ]);
-  }
-
-  if (btnSaveBsPackageId) {
-    btnSaveBsPackageId.addEventListener('click', async () => {
-      try {
-        btnSaveBsPackageId.disabled = true;
-        await saveBsPackageId();
-        toast('ID de paquete Blood Strike guardado');
-      } catch (e) {
-        toast(e.message || 'Error');
-      } finally {
-        btnSaveBsPackageId.disabled = false;
-      }
-    });
-  }
-
-  fetchBsPackageId();
 
     let specCount = 0;
     items.forEach(p => {
