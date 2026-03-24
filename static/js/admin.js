@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('admin.js loaded v6');
+  console.log('admin.js loaded v7');
   const tabs = document.querySelectorAll('#adminTabs .tab');
   const panels = document.querySelectorAll('.tab-panel');
   // Elements used across handlers (declare early)
@@ -2772,9 +2772,11 @@ if (btnSaveHero) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, image_path, category, description, requires_zone_id })
     });
-    const data = await res.json().catch(() => ({}));
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch (_) { throw new Error('Respuesta inválida: ' + text.substring(0, 100)); }
     if (!res.ok || !data.ok) {
-      throw new Error(data.error || 'No se pudo crear');
+      throw new Error(data.error || ('Error ' + res.status));
     }
     return data;
   }

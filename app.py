@@ -4449,8 +4449,13 @@ def admin_packages_create():
     if not name or not image_path:
         return jsonify({"ok": False, "error": "Nombre e imagen requeridos"}), 400
     item = StorePackage(name=name, image_path=image_path, active=True, category=category, description=description, special_description=special_description, requires_zone_id=requires_zone_id)
-    db.session.add(item)
-    db.session.commit()
+    try:
+        db.session.add(item)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[ERROR] admin_packages_create: {e}")
+        return jsonify({"ok": False, "error": f"Error DB: {str(e)[:200]}"}), 500
     return jsonify({"ok": True, "package": {"id": item.id, "name": item.name, "image_path": item.image_path, "active": item.active}})
 
 
