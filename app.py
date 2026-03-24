@@ -1539,8 +1539,8 @@ class StorePackage(db.Model):
     description = db.Column(db.Text, default="")
     # independent description for special items (shown in 'Leer')
     special_description = db.Column(db.Text, default="")
-    # whether this game requires an extra Zone ID
-    requires_zone_id = db.Column(db.Boolean, default=False)
+    # whether this game requires an extra Zone ID (INTEGER on PG via ALTER TABLE)
+    requires_zone_id = db.Column(db.Integer, default=0)
     sort_order = db.Column(db.Integer, default=0)
 
 class GamePackageItem(db.Model):
@@ -4396,7 +4396,7 @@ def admin_packages_update(pid: int):
     if special_description is not None:
         item.special_description = (special_description or '').strip()
     if requires_zone_id is not None:
-        item.requires_zone_id = bool(requires_zone_id)
+        item.requires_zone_id = int(bool(requires_zone_id))
     if active is not None:
         item.active = bool(active)
     db.session.commit()
@@ -4443,7 +4443,7 @@ def admin_packages_create():
     category = (data.get("category") or "mobile").strip().lower()
     description = (data.get("description") or "").strip()
     special_description = (data.get("special_description") or "").strip()
-    requires_zone_id = bool(data.get("requires_zone_id", False))
+    requires_zone_id = int(bool(data.get("requires_zone_id", False)))
     if category not in ("mobile", "gift"):
         category = "mobile"
     if not name or not image_path:
