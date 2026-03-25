@@ -967,7 +967,7 @@ window.fetchPayments = fetchPayments;
     if (!statsSummary || !statsTotalAfter) return;
     const statsCommEl = document.getElementById('stats-total-commission');
     try {
-      const res = await fetch('/admin/stats/summary?period=weekly');
+      const res = await fetch('/admin/stats/summary');
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar resumen global');
       const s = data.summary || {};
@@ -1063,7 +1063,7 @@ window.fetchPayments = fetchPayments;
     if (!statsItems || !pkgId) return;
     statsItems.innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
     try {
-      const res = await fetch(`/admin/stats/package/${pkgId}?period=weekly`);
+      const res = await fetch(`/admin/stats/package/${pkgId}`);
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar estadísticas');
       const items = data.items || [];
@@ -1089,8 +1089,8 @@ window.fetchPayments = fetchPayments;
               <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; min-width:190px;">
                 <label style="font-size:12px; color:#475569;">Costo por unidad (USD)</label>
                 <input type="number" step="0.01" min="0" class="stats-profit-input" value="${Number(it.cost_unit_usd || 0).toFixed(2)}" style="width:120px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:4px;" />
-                <div style="font-size:11px; color:#ffffff;">Ganancia estándar/unidad: <strong>Con descuento: ${fmtUSD(it.profit_unit_real_avg_usd || 0)}</strong> · <strong>Sin descuento: ${fmtUSD(it.profit_unit_std_usd || 0)}</strong></div>
-                <div style="font-size:12px; color:#ffffff;">Ganancia total (todas las ventas): <strong>${fmtUSD(it.total_profit_net_usd || 0)}</strong></div>
+                <div style="font-size:11px; color:#ffffff;">Ganancia por unidad: <strong>Con descuento: ${fmtUSD(it.profit_unit_real_avg_usd || 0)}</strong> · <strong>Sin descuento: ${fmtUSD(it.profit_unit_std_usd || 0)}</strong></div>
+                <div style="font-size:12px; color:#ffffff;">Ganancia total acumulada: <strong>${fmtUSD(it.total_profit_net_usd || 0)}</strong></div>
               </div>
             </div>
           `;
