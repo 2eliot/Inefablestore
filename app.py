@@ -586,7 +586,6 @@ class OrderSummary(db.Model):
     total_units = db.Column(db.Integer, default=0)
     total_amount = db.Column(db.Float, default=0.0)
     total_price_usd = db.Column(db.Float, default=0.0)
-    total_profit_base_usd = db.Column(db.Float, default=0.0)
     total_cost_usd = db.Column(db.Float, default=0.0)
     total_affiliate_commission_usd = db.Column(db.Float, default=0.0)
     __table_args__ = (
@@ -627,7 +626,7 @@ def _aggregate_and_cleanup_orders():
                 it = items_by_id.get(iid)
                 revenue = float(item_agg.get("revenue") or 0.0)
                 qty = int(item_agg.get("qty") or 0)
-                profit_base_total = float(item_agg.get("profit_base_total") or 0.0)
+                cost_total = float(item_agg.get("cost_total") or 0.0)
                 commission_item = round(revenue * (comm_pct / 100.0), 2) if comm_pct > 0.0 else 0.0
                 key = (period, o.store_package_id, iid, o.status, o.method, o.currency or "USD")
                 if key not in agg:
@@ -644,7 +643,6 @@ def _aggregate_and_cleanup_orders():
                         "total_units": 0,
                         "total_amount": 0.0,
                         "total_price_usd": 0.0,
-                        "total_profit_base_usd": 0.0,
                         "total_cost_usd": 0.0,
                         "total_affiliate_commission_usd": 0.0,
                     }
@@ -652,7 +650,7 @@ def _aggregate_and_cleanup_orders():
                 agg[key]["total_units"] += qty
                 agg[key]["total_amount"] += revenue
                 agg[key]["total_price_usd"] += revenue
-                agg[key]["total_profit_base_usd"] += profit_base_total
+                agg[key]["total_cost_usd"] += cost_total
                 agg[key]["total_affiliate_commission_usd"] += commission_item
 
         for key, data in agg.items():
@@ -669,7 +667,6 @@ def _aggregate_and_cleanup_orders():
                 row.total_units += data.get("total_units", 0)
                 row.total_amount += data["total_amount"]
                 row.total_price_usd += data["total_price_usd"]
-                row.total_profit_base_usd += data.get("total_profit_base_usd", 0.0)
                 row.total_cost_usd += data.get("total_cost_usd", 0.0)
                 row.total_affiliate_commission_usd += data.get("total_affiliate_commission_usd", 0.0)
             else:
@@ -1752,39 +1749,6 @@ def _order_fallback_revenue_usd(order, item):
         return 0.0
 
 
-def _resolve_profit_unit_usd(entry, item):
-    if isinstance(entry, dict):
-        for key in ("profit_unit_usd", "cost_unit_usd", "profit_net_usd"):
-            raw_val = entry.get(key)
-            if raw_val is None or raw_val == "":
-                continue
-            try:
-                return float(raw_val)
-            except Exception:
-                continue
-    try:
-        return float(item.profit_net_usd or 0.0) if item else 0.0
-    except Exception:
-        return 0.0
-
-
-def _compute_item_profit_value(item, qty, revenue, profit_base_total, commission_total=0.0):
-    qty = max(int(qty or 0), 0)
-    if qty <= 0:
-        return 0.0
-    base_profit = float(profit_base_total or 0.0)
-    if base_profit <= 0.0 and item is not None:
-        base_profit = float(item.profit_net_usd or 0.0) * qty
-    standard_revenue = float(item.price or 0.0) * qty if item is not None else 0.0
-    discount_loss = 0.0
-    if revenue and standard_revenue > 0.0:
-        discount_loss = max(standard_revenue - float(revenue or 0.0), 0.0)
-    profit_val = base_profit - discount_loss - float(commission_total or 0.0)
-    if profit_val < 0.0:
-        profit_val = 0.0
-    return profit_val
-
-
 def _build_order_items_map(order, items_by_id):
     items_map = {}
     try:
@@ -1809,11 +1773,14 @@ def _build_order_items_map(order, items_by_id):
                     except Exception:
                         unit_price = 0.0
                     item = items_by_id.get(iid)
-                    profit_unit = _resolve_profit_unit_usd(ent, item)
-                    cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "profit_base_total": 0.0}
+                    try:
+                        cost_unit = float(ent.get("cost_unit_usd") or (item.profit_net_usd if item else 0.0) or 0.0)
+                    except Exception:
+                        cost_unit = float(item.profit_net_usd or 0.0) if item else 0.0
+                    cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
                     cur["qty"] += qty
                     cur["revenue"] += (unit_price * qty)
-                    cur["profit_base_total"] += (profit_unit * qty)
+                    cur["cost_total"] += (cost_unit * qty)
                     items_map[iid] = cur
     except Exception:
         items_map = {}
@@ -1826,10 +1793,10 @@ def _build_order_items_map(order, items_by_id):
         if iid > 0:
             item = items_by_id.get(iid)
             if item:
-                cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "profit_base_total": 0.0}
+                cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
                 cur["qty"] += 1
                 cur["revenue"] += _order_fallback_revenue_usd(order, item)
-                cur["profit_base_total"] += float(item.profit_net_usd or 0.0)
+                cur["cost_total"] += float(item.profit_net_usd or 0.0)
                 items_map[iid] = cur
     return items_map
 
@@ -2068,8 +2035,6 @@ with app.app_context():
             if summary_cols:
                 if "total_units" not in summary_cols:
                     db.session.execute(text("ALTER TABLE order_summaries ADD COLUMN total_units INTEGER DEFAULT 0"))
-                if "total_profit_base_usd" not in summary_cols:
-                    db.session.execute(text("ALTER TABLE order_summaries ADD COLUMN total_profit_base_usd REAL DEFAULT 0.0"))
                 if "total_cost_usd" not in summary_cols:
                     db.session.execute(text("ALTER TABLE order_summaries ADD COLUMN total_cost_usd REAL DEFAULT 0.0"))
                 if "total_affiliate_commission_usd" not in summary_cols:
@@ -3402,7 +3367,6 @@ def create_order():
                         "qty": qty,
                         "title": gi.title,
                         "price": round(actual_price, 2),  # Guardar precio con descuento aplicado
-                        "profit_unit_usd": float(gi.profit_net_usd or 0.0),
                         "cost_unit_usd": float(gi.profit_net_usd or 0.0),
                     })
             if items_list:
@@ -4367,7 +4331,6 @@ def admin_game_items_list(gid: int):
                 "id": it.id,
                 "title": it.title,
                 "price": it.price,
-                "profit_unit_usd": float(it.profit_net_usd or 0.0),
                 "cost_unit_usd": float(it.profit_net_usd or 0.0),
                 "description": it.description,
                 "sticker": (it.sticker or ""),
@@ -4426,13 +4389,8 @@ def admin_game_items_update(item_id: int):
             item.price = float(data.get("price") or 0)
         except Exception:
             item.price = 0.0
-    # profit_net_usd stores the configured net profit per unit (USD)
-    if "profit_unit_usd" in data:
-        try:
-            item.profit_net_usd = float(data.get("profit_unit_usd") or 0.0)
-        except Exception:
-            item.profit_net_usd = 0.0
-    elif "cost_unit_usd" in data:
+    # Treat profit_net_usd column as cost per unit (USD) in admin APIs
+    if "cost_unit_usd" in data:
         try:
             item.profit_net_usd = float(data.get("cost_unit_usd") or 0.0)
         except Exception:
@@ -4495,12 +4453,7 @@ def admin_game_items_bulk_update(gid: int):
                 item.price = float(entry.get("price") or 0)
             except Exception:
                 pass
-        if "profit_unit_usd" in entry:
-            try:
-                item.profit_net_usd = float(entry.get("profit_unit_usd") or 0.0)
-            except Exception:
-                pass
-        elif "cost_unit_usd" in entry:
+        if "cost_unit_usd" in entry:
             try:
                 item.profit_net_usd = float(entry.get("cost_unit_usd") or 0.0)
             except Exception:
@@ -4727,18 +4680,22 @@ def admin_stats_summary():
                     continue
                 qty = int(agg.get("qty") or 0)
                 revenue = float(agg.get("revenue") or 0.0)
-                profit_base_total = float(agg.get("profit_base_total") or 0.0)
-
-                if qty <= 0:
+                cost_total = float(agg.get("cost_total") or 0.0)
+                
+                if qty <= 0 or cost_total <= 0.0:
                     continue
                 
                 # Registrar comisión del influencer (solo informativo)
                 if comm_pct > 0:
                     commission_item = round(revenue * (comm_pct / 100.0), 2)
                     total_commission_affiliates += commission_item
+                    # Restar comisión del influencer de la ganancia
+                    profit_val = revenue - cost_total - commission_item
                 else:
-                    commission_item = 0.0
-                profit_val = _compute_item_profit_value(it, qty, revenue, profit_base_total, commission_item)
+                    # Ganancia = precio pagado por cliente - costo guardado en la orden
+                    profit_val = revenue - cost_total
+                if profit_val < 0.0:
+                    profit_val = 0.0
                 total_profit_net += profit_val
         except Exception:
             continue
@@ -4751,14 +4708,13 @@ def admin_stats_summary():
         if not it:
             continue
         revenue = float(row.total_price_usd or 0.0)
-        qty = int(row.total_units or 0)
-        profit_base_total = float(row.total_profit_base_usd or 0.0)
-        if profit_base_total <= 0.0 and qty > 0:
-            profit_base_total = float(it.profit_net_usd or 0.0) * qty
+        cost_total = float(row.total_cost_usd or 0.0)
         commission_item = float(row.total_affiliate_commission_usd or 0.0)
-        if qty <= 0:
+        if revenue <= 0.0:
             continue
-        profit_val = _compute_item_profit_value(it, qty or 1, revenue, profit_base_total, commission_item)
+        profit_val = revenue - cost_total - commission_item
+        if profit_val < 0.0:
+            profit_val = 0.0
         total_profit_net += profit_val
         total_commission_affiliates += commission_item
 
@@ -4824,26 +4780,23 @@ def _maybe_snapshot_previous_period():
                             q = max(int(ent.get("qty") or 1), 1)
                             p = float(ent.get("price") or 0.0)
                             it = items_by_id.get(iid)
-                            pu = _resolve_profit_unit_usd(ent, it)
-                            cur = items_map.get(iid, {"rev": 0.0, "profit": 0.0, "qty": 0})
+                            cu = float(ent.get("cost_unit_usd") or (it.profit_net_usd if it else 0.0) or 0.0)
+                            cur = items_map.get(iid, {"rev": 0.0, "cost": 0.0})
                             cur["rev"] += p * q
-                            cur["profit"] += pu * q
-                            cur["qty"] += q
+                            cur["cost"] += cu * q
                             items_map[iid] = cur
                 comm_pct = float(su.commission_percent or 0.0) if use_affiliate and su else 0.0
                 for iid, agg in items_map.items():
-                    it = items_by_id.get(iid)
                     rev = agg["rev"]
-                    qty = agg.get("qty") or 0
-                    profit_base_total = agg.get("profit") or 0.0
-                    if qty <= 0:
+                    cost = agg["cost"]
+                    if cost <= 0.0:
                         continue
                     if comm_pct > 0:
                         ci = round(rev * (comm_pct / 100.0), 2)
                         commission += ci
+                        pv = rev - cost - ci
                     else:
-                        ci = 0.0
-                    pv = _compute_item_profit_value(it, qty, rev, profit_base_total, ci)
+                        pv = rev - cost
                     if pv > 0:
                         profit += pv
             except Exception:
@@ -4944,38 +4897,41 @@ def admin_stats_package(pkg_id: int):
                 
                 qty = int(agg.get("qty") or 0)
                 revenue = float(agg.get("revenue") or 0.0)
-                profit_base_total = float(agg.get("profit_base_total") or 0.0)
+                cost_total = float(agg.get("cost_total") or 0.0)
                 
-                if qty <= 0:
+                if qty <= 0 or cost_total <= 0.0:
                     continue
                 
-                profit_unit = float(it.profit_net_usd or 0.0)
+                # Costo actual del ítem (para mostrar en UI)
+                cost_unit = float(it.profit_net_usd or 0.0)
+                # Precio estándar y ganancia estándar por unidad (informativa)
                 price_std = float(it.price or 0.0)
+                profit_unit_std = price_std - cost_unit
+                if profit_unit_std < 0.0:
+                    profit_unit_std = 0.0
                 
                 # Registrar comisión del influencer (solo informativo)
                 if use_affiliate and comm_pct > 0:
                     commission_item = round(revenue * (comm_pct / 100.0), 2)
                     total_commission_affiliates += commission_item
+                    # Restar comisión del influencer de la ganancia
+                    profit_val = revenue - cost_total - commission_item
                 else:
-                    commission_item = 0.0
-                profit_val = _compute_item_profit_value(it, qty, revenue, profit_base_total, commission_item)
+                    profit_val = revenue - cost_total
                 rec = stats.setdefault(
                     iid,
                     {
                         "id": it.id,
                         "title": it.title,
                         "price": price_std,
-                        "profit_unit_usd": profit_unit,
-                        "cost_unit_usd": profit_unit,
-                        "profit_unit_std_usd": profit_unit,
+                        "cost_unit_usd": cost_unit,
+                        "profit_unit_std_usd": profit_unit_std,
                         "revenue_total_usd": 0.0,
                         "revenue_normal_usd": 0.0,
                         "revenue_affiliate_usd": 0.0,
                         "qty_total": 0,
                         "qty_normal": 0,
                         "qty_with_affiliate": 0,
-                        "profit_total_normal_usd": 0.0,
-                        "profit_total_affiliate_usd": 0.0,
                         "profit_total_usd": 0.0,
                     },
                 )
@@ -4983,13 +4939,13 @@ def admin_stats_package(pkg_id: int):
                 if use_affiliate:
                     rec["qty_with_affiliate"] += qty
                     rec["revenue_affiliate_usd"] = rec.get("revenue_affiliate_usd", 0.0) + revenue
-                    rec["profit_total_affiliate_usd"] = rec.get("profit_total_affiliate_usd", 0.0) + profit_val
                 else:
                     rec["qty_normal"] += qty
                     rec["revenue_normal_usd"] = rec.get("revenue_normal_usd", 0.0) + revenue
-                    rec["profit_total_normal_usd"] = rec.get("profit_total_normal_usd", 0.0) + profit_val
                 # acumular revenue para poder calcular promedio real
                 rec["revenue_total_usd"] = rec.get("revenue_total_usd", 0.0) + revenue
+                if profit_val < 0.0:
+                    profit_val = 0.0
                 rec["profit_total_usd"] = rec.get("profit_total_usd", 0.0) + profit_val
                 total_profit_net += profit_val
         except Exception:
@@ -5007,31 +4963,29 @@ def admin_stats_package(pkg_id: int):
             continue
         qty = int(row.total_units or 0)
         revenue = float(row.total_price_usd or 0.0)
-        profit_base_total = float(row.total_profit_base_usd or 0.0)
-        if profit_base_total <= 0.0 and qty > 0:
-            profit_base_total = float(it.profit_net_usd or 0.0) * qty
+        cost_total = float(row.total_cost_usd or 0.0)
         commission_item = float(row.total_affiliate_commission_usd or 0.0)
-        if qty <= 0:
+        if qty <= 0 or revenue <= 0.0:
             continue
-        profit_unit = float(it.profit_net_usd or 0.0)
+        cost_unit = float(it.profit_net_usd or 0.0)
         price_std = float(it.price or 0.0)
+        profit_unit_std = price_std - cost_unit
+        if profit_unit_std < 0.0:
+            profit_unit_std = 0.0
         rec = stats.setdefault(
             it.id,
             {
                 "id": it.id,
                 "title": it.title,
                 "price": price_std,
-                "profit_unit_usd": profit_unit,
-                "cost_unit_usd": profit_unit,
-                "profit_unit_std_usd": profit_unit,
+                "cost_unit_usd": cost_unit,
+                "profit_unit_std_usd": profit_unit_std,
                 "revenue_total_usd": 0.0,
                 "revenue_normal_usd": 0.0,
                 "revenue_affiliate_usd": 0.0,
                 "qty_total": 0,
                 "qty_normal": 0,
                 "qty_with_affiliate": 0,
-                "profit_total_normal_usd": 0.0,
-                "profit_total_affiliate_usd": 0.0,
                 "profit_total_usd": 0.0,
             },
         )
@@ -5040,13 +4994,12 @@ def admin_stats_package(pkg_id: int):
         if commission_item > 0.0:
             rec["qty_with_affiliate"] += qty
             rec["revenue_affiliate_usd"] = rec.get("revenue_affiliate_usd", 0.0) + revenue
-            profit_val = _compute_item_profit_value(it, qty, revenue, profit_base_total, commission_item)
-            rec["profit_total_affiliate_usd"] = rec.get("profit_total_affiliate_usd", 0.0) + profit_val
         else:
             rec["qty_normal"] += qty
             rec["revenue_normal_usd"] = rec.get("revenue_normal_usd", 0.0) + revenue
-            profit_val = _compute_item_profit_value(it, qty, revenue, profit_base_total, commission_item)
-            rec["profit_total_normal_usd"] = rec.get("profit_total_normal_usd", 0.0) + profit_val
+        profit_val = revenue - cost_total - commission_item
+        if profit_val < 0.0:
+            profit_val = 0.0
         rec["profit_total_usd"] = rec.get("profit_total_usd", 0.0) + profit_val
         total_profit_net += profit_val
         total_commission_affiliates += commission_item
@@ -5054,44 +5007,50 @@ def admin_stats_package(pkg_id: int):
     items_out = []
     for it in items:
         price_std = float(it.price or 0.0)
-        profit_unit = float(it.profit_net_usd or 0.0)
+        cost_unit = float(it.profit_net_usd or 0.0)
         base = stats.get(
             it.id,
             {
                 "id": it.id,
                 "title": it.title,
                 "price": price_std,
-                "profit_unit_usd": profit_unit,
-                "cost_unit_usd": profit_unit,
-                "profit_unit_std_usd": profit_unit,
+                "cost_unit_usd": cost_unit,
+                "profit_unit_std_usd": 0.0,
                 "revenue_total_usd": 0.0,
                 "revenue_normal_usd": 0.0,
                 "revenue_affiliate_usd": 0.0,
                 "qty_total": 0,
                 "qty_normal": 0,
                 "qty_with_affiliate": 0,
-                "profit_total_normal_usd": 0.0,
-                "profit_total_affiliate_usd": 0.0,
                 "profit_total_usd": 0.0,
             },
         )
         rec_out = dict(base)
         qty_normal = int(rec_out.get("qty_normal") or 0)
-        profit_normal_total = float(rec_out.get("profit_total_normal_usd") or 0.0)
-        if qty_normal > 0 and profit_normal_total > 0.0:
-            profit_without_disc = profit_normal_total / qty_normal
+        rev_normal = float(rec_out.get("revenue_normal_usd") or 0.0)
+        if qty_normal > 0 and rev_normal > 0.0:
+            profit_without_disc = (rev_normal / qty_normal) - cost_unit
         else:
-            profit_without_disc = profit_unit
+            profit_without_disc = price_std - cost_unit
         if profit_without_disc < 0.0:
             profit_without_disc = 0.0
         rec_out["profit_unit_std_usd"] = round(profit_without_disc, 2)
         # Calcular ganancia "Con descuento" usando datos reales de órdenes con afiliado
         qty_aff = int(rec_out.get("qty_with_affiliate") or 0)
-        profit_aff_total = float(rec_out.get("profit_total_affiliate_usd") or 0.0)
-        if qty_aff > 0 and profit_aff_total > 0.0:
-            profit_with_disc = profit_aff_total / qty_aff
+        rev_aff = float(rec_out.get("revenue_affiliate_usd") or 0.0)
+        if qty_aff > 0 and rev_aff > 0:
+            avg_price_disc = rev_aff / qty_aff
+            profit_with_disc = avg_price_disc - cost_unit
         else:
-            profit_with_disc = profit_unit
+            # Sin datos reales: estimar con descuento promedio de afiliados activos
+            avg_disc = 0.0
+            try:
+                active_affs = SpecialUser.query.filter_by(active=True).all()
+                if active_affs:
+                    avg_disc = sum(float(a.discount_percent or 0) for a in active_affs) / len(active_affs) / 100.0
+            except Exception:
+                pass
+            profit_with_disc = (price_std * (1.0 - avg_disc)) - cost_unit
         if profit_with_disc < 0.0:
             profit_with_disc = 0.0
         rec_out["profit_unit_real_avg_usd"] = round(profit_with_disc, 2)
