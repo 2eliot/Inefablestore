@@ -1088,7 +1088,7 @@ window.fetchPayments = fetchPayments;
               </div>
               <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; min-width:190px;">
                 <label style="font-size:12px; color:#475569;">Ganancia por unidad (USD)</label>
-                <input type="number" step="0.01" min="0" class="stats-profit-input" value="${Number(it.profit_unit_usd ?? it.cost_unit_usd || 0).toFixed(2)}" style="width:120px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:4px;" />
+                <input type="number" step="0.01" min="0" class="stats-profit-input" value="${Number((it.profit_unit_usd ?? it.cost_unit_usd) || 0).toFixed(2)}" style="width:120px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:4px;" />
                 <div style="font-size:11px; color:#ffffff;">Ganancia por unidad: <strong>Con descuento: ${fmtUSD(it.profit_unit_real_avg_usd || 0)}</strong> · <strong>Sin descuento: ${fmtUSD(it.profit_unit_std_usd || 0)}</strong></div>
                 <div style="font-size:12px; color:#ffffff;">Ganancia total acumulada: <strong>${fmtUSD(it.total_profit_net_usd || 0)}</strong></div>
               </div>
