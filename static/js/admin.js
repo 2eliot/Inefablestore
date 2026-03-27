@@ -265,6 +265,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const statsItems = document.getElementById('stats-items');
   const statsSummary = document.getElementById('stats-summary');
   const statsTotalAfter = document.getElementById('stats-total-after');
+  const statsSummaryTitle = document.getElementById('stats-summary-title');
+  const statsSummaryScope = document.getElementById('stats-summary-scope');
   const btnStatsSaveAll = document.getElementById('btn-stats-save-all');
   // Orders elements
   const btnOrdersRefresh = document.getElementById('btn-orders-refresh');
@@ -963,21 +965,26 @@ window.fetchPayments = fetchPayments;
     catch (_) { return `$${n}`; }
   }
 
-  async function fetchGlobalStatsSummary() {
+  function renderStatsSummary(summary, scopeLabel, titleLabel) {
     if (!statsSummary || !statsTotalAfter) return;
     const statsCommEl = document.getElementById('stats-total-commission');
+    const s = summary || {};
+    statsSummary.style.display = 'block';
+    if (statsSummaryTitle) statsSummaryTitle.textContent = titleLabel || 'Ganancias semanales';
+    if (statsSummaryScope) statsSummaryScope.textContent = scopeLabel || 'Resumen global de la semana actual';
+    statsTotalAfter.textContent = fmtUSD(s.total_profit_after_affiliates_usd || 0);
+    if (statsCommEl) statsCommEl.textContent = fmtUSD(s.total_affiliate_commission_usd || 0);
+  }
+
+  async function fetchGlobalStatsSummary() {
+    if (!statsSummary || !statsTotalAfter) return;
     try {
       const res = await fetch('/admin/stats/summary?period=weekly');
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar resumen global');
-      const s = data.summary || {};
-      statsSummary.style.display = 'block';
-      statsTotalAfter.textContent = fmtUSD(s.total_profit_after_affiliates_usd || 0);
-      if (statsCommEl) statsCommEl.textContent = fmtUSD(s.total_affiliate_commission_usd || 0);
+      renderStatsSummary(data.summary || {}, 'Resumen global de la semana actual', 'Ganancias semanales');
     } catch (e) {
-      statsSummary.style.display = 'block';
-      statsTotalAfter.textContent = fmtUSD(0);
-      if (statsCommEl) statsCommEl.textContent = fmtUSD(0);
+      renderStatsSummary({}, 'Resumen global de la semana actual', 'Ganancias semanales');
     }
     fetchProfitHistory();
   }
@@ -1090,18 +1097,19 @@ window.fetchPayments = fetchPayments;
                 <label style="font-size:12px; color:#475569;">Costo por unidad (USD)</label>
                 <input type="number" step="0.01" min="0" class="stats-profit-input" value="${Number(it.cost_unit_usd || 0).toFixed(2)}" style="width:120px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:4px;" />
                 <div style="font-size:11px; color:#ffffff;">Ganancia estándar/unidad: <strong>Con descuento: ${fmtUSD(it.profit_unit_real_avg_usd || 0)}</strong> · <strong>Sin descuento: ${fmtUSD(it.profit_unit_std_usd || 0)}</strong></div>
-                <div style="font-size:12px; color:#ffffff;">Ganancia total (todas las ventas): <strong>${fmtUSD(it.total_profit_net_usd || 0)}</strong></div>
+                <div style="font-size:12px; color:#ffffff;">Ganancia total (semana actual): <strong>${fmtUSD(it.total_profit_net_usd || 0)}</strong></div>
               </div>
             </div>
           `;
           statsItems.appendChild(row);
         });
       }
-
-      // Resumen global se maneja por separado
+      const pkgName = ((data.package || {}).name || '').trim();
+      const scope = pkgName ? `Resumen semanal de ${pkgName}` : 'Resumen del paquete en la semana actual';
+      renderStatsSummary(data.summary || {}, scope, 'Ganancias del paquete');
     } catch (e) {
       statsItems.innerHTML = `<div class="empty-state"><p>${e.message || 'Error'}</p></div>`;
-      if (statsSummary) statsSummary.style.display = 'none';
+      renderStatsSummary({}, 'Resumen del paquete en la semana actual', 'Ganancias del paquete');
     }
   }
 

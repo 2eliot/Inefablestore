@@ -594,6 +594,126 @@ _ORDER_CLEANUP_DAYS = int(os.environ.get("ORDER_CLEANUP_DAYS", "7"))
 _ORDER_CLEANUP_INTERVAL_HOURS = float(os.environ.get("ORDER_CLEANUP_INTERVAL_HOURS", "6"))
 
 
+def _calculate_profit_components_for_order(order: 'Order', items_by_id: dict[int, 'GamePackageItem']) -> tuple[float, float]:
+    use_affiliate = False
+    su = None
+    if order.special_user_id:
+        su = SpecialUser.query.get(order.special_user_id)
+    if (not su) and (order.special_code or ""):
+        su = SpecialUser.query.filter(
+            db.func.lower(SpecialUser.code) == (order.special_code or "").lower(),
+            SpecialUser.active == True,
+        ).first()
+    if su and su.active:
+        scope_ok = True
+        sc = (su.scope or "all")
+        if sc == "package":
+            try:
+                scope_ok = (su.scope_package_id == order.store_package_id)
+            except Exception:
+                scope_ok = False
+        use_affiliate = scope_ok
+
+    items_map = {}
+    try:
+        if (order.items_json or "").strip():
+            payload = json.loads(order.items_json or "[]")
+            if isinstance(payload, list):
+                for ent in payload:
+                    try:
+                        iid = int(ent.get("item_id") or 0)
+                    except Exception:
+                        iid = 0
+                    if iid <= 0:
+                        continue
+                    q = max(int(ent.get("qty") or 1), 1)
+                    p = float(ent.get("price") or 0.0)
+                    it = items_by_id.get(iid)
+                    cost_unit = float(ent.get("cost_unit_usd") or (it.profit_net_usd if it else 0.0) or 0.0)
+                    cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
+                    cur["qty"] += q
+                    cur["revenue"] += (p * q)
+                    cur["cost_total"] += (cost_unit * q)
+                    items_map[iid] = cur
+    except Exception:
+        items_map = {}
+
+    if not items_map and order.item_id:
+        try:
+            iid = int(order.item_id)
+            if iid > 0:
+                it = items_by_id.get(iid)
+                if it:
+                    cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
+                    cur["qty"] += 1
+                    cur["revenue"] += float(order.price or it.price or 0.0)
+                    cur["cost_total"] += float(it.profit_net_usd or 0.0)
+                    items_map[iid] = cur
+        except Exception:
+            pass
+
+    comm_pct = float(su.commission_percent or 0.0) if use_affiliate and su else 0.0
+    profit_total = 0.0
+    commission_total = 0.0
+    for iid, agg in items_map.items():
+        it = items_by_id.get(iid)
+        if not it:
+            continue
+        qty = int(agg.get("qty") or 0)
+        revenue = float(agg.get("revenue") or 0.0)
+        cost_total = float(agg.get("cost_total") or 0.0)
+        if qty <= 0 or cost_total <= 0.0:
+            continue
+        if use_affiliate and comm_pct > 0:
+            commission_item = round(revenue * (comm_pct / 100.0), 2)
+            commission_total += commission_item
+            profit_val = revenue - cost_total - commission_item
+        else:
+            profit_val = revenue - cost_total
+        if profit_val < 0.0:
+            profit_val = 0.0
+        profit_total += profit_val
+    return profit_total, commission_total
+
+
+def _snapshot_closed_periods_from_orders(orders: list['Order']) -> None:
+    successful_orders = [o for o in orders if o.status in ("approved", "delivered") and o.created_at]
+    if not successful_orders:
+        return
+
+    current_cutoff = get_stats_reset_cutoff()
+    periods = {}
+    for order in successful_orders:
+        period_start, period_end = get_stats_period_bounds(order.created_at)
+        if period_end >= current_cutoff:
+            continue
+        periods.setdefault((period_start, period_end), []).append(order)
+
+    if not periods:
+        return
+
+    items_by_id = {it.id: it for it in GamePackageItem.query.all()}
+    for (period_start, period_end), period_orders in periods.items():
+        existing = ProfitSnapshot.query.filter_by(period_start=period_start, period_end=period_end).first()
+        if existing:
+            continue
+        profit = 0.0
+        commission = 0.0
+        for order in period_orders:
+            try:
+                order_profit, order_commission = _calculate_profit_components_for_order(order, items_by_id)
+                profit += order_profit
+                commission += order_commission
+            except Exception:
+                continue
+        db.session.add(ProfitSnapshot(
+            period_start=period_start,
+            period_end=period_end,
+            profit_usd=round(profit, 2),
+            commission_usd=round(commission, 2),
+        ))
+
+
 def _aggregate_and_cleanup_orders():
     """Aggregate old terminal-state orders into OrderSummary, then delete them.
     Keeps ALL pending orders and recent orders (< ORDER_CLEANUP_DAYS days)."""
@@ -607,6 +727,8 @@ def _aggregate_and_cleanup_orders():
 
         if not old_orders:
             return 0
+
+        _snapshot_closed_periods_from_orders(old_orders)
 
         # Aggregate into OrderSummary
         agg = {}
@@ -1506,6 +1628,26 @@ def amount_to_usd(amount: float, currency: str) -> float:
     return round(amt / rate, 2)
 
 
+def get_stats_period_bounds(for_dt: datetime | None = None) -> tuple[datetime, datetime]:
+    """Return the weekly stats window [start, end) in naive UTC."""
+    if for_dt is None:
+        ve_now = now_ve()
+    else:
+        base_dt = for_dt
+        if base_dt.tzinfo is None:
+            base_dt = base_dt.replace(tzinfo=timezone.utc)
+        ve_now = base_dt.astimezone(VE_TIMEZONE)
+
+    days_since_sunday = (ve_now.weekday() - 6) % 7
+    ve_candidate = ve_now.replace(hour=17, minute=0, second=0, microsecond=0) - timedelta(days=days_since_sunday)
+    if ve_now < ve_candidate:
+        ve_candidate = ve_candidate - timedelta(days=7)
+
+    utc_start = ve_candidate.astimezone(timezone.utc).replace(tzinfo=None)
+    utc_end = (ve_candidate + timedelta(days=7)).astimezone(timezone.utc).replace(tzinfo=None)
+    return utc_start, utc_end
+
+
 def get_stats_reset_cutoff() -> datetime:
     """Return the datetime (naive, UTC) of the last weekly reset at 17:00 VET (GMT-4).
 
@@ -1513,18 +1655,7 @@ def get_stats_reset_cutoff() -> datetime:
     Para comparar con columnas almacenadas como naive UTC (datetime.utcnow()),
     se convierte el corte a UTC y se retorna naive.
     """
-    # Hora actual en Venezuela (GMT-4)
-    ve_now = now_ve()
-    # Python weekday: Monday=0 .. Sunday=6; Sunday=6
-    days_since_sunday = (ve_now.weekday() - 6) % 7
-    # Candidato: este domingo 17:00 VET
-    ve_candidate = ve_now.replace(hour=17, minute=0, second=0, microsecond=0) - timedelta(days=days_since_sunday)
-    # Si todavía no hemos llegado al domingo 17:00 VET de esta semana, usar el domingo anterior
-    if ve_now < ve_candidate:
-        ve_candidate = ve_candidate - timedelta(days=7)
-    # Convertir a UTC y retornar naive (para comparar con timestamps guardados en UTC naive)
-    utc_dt = ve_candidate.astimezone(timezone.utc)
-    return utc_dt.replace(tzinfo=None)
+    return get_stats_period_bounds()[0]
 
 
 class StorePackage(db.Model):
@@ -3228,6 +3359,8 @@ def create_order():
             except Exception:
                 pass
         
+        order_total_usd = amount_to_usd(amount, currency)
+
         try:
             raw_items = data.get("items")
             # When sent as form data, items is a JSON-encoded string
@@ -3261,10 +3394,25 @@ def create_order():
                         "price": round(actual_price, 2),  # Guardar precio con descuento aplicado
                         "cost_unit_usd": float(gi.profit_net_usd or 0.0),
                     })
+            if (not items_list) and item_id:
+                gi = GamePackageItem.query.get(item_id)
+                if gi:
+                    qty = 1
+                    base_price = float(gi.price or 0.0)
+                    actual_price = base_price * (1.0 - discount_fraction)
+                    items_list.append({
+                        "item_id": gi.id,
+                        "qty": qty,
+                        "title": gi.title,
+                        "price": round(actual_price, 2),
+                        "cost_unit_usd": float(gi.profit_net_usd or 0.0),
+                    })
             if items_list:
                 o.items_json = json.dumps(items_list)
+                order_total_usd = round(sum(float(ent.get("price") or 0.0) * max(int(ent.get("qty") or 1), 1) for ent in items_list), 2)
         except Exception:
             pass
+        o.price = round(float(order_total_usd or 0.0), 2)
         # Try to resolve special user id now for convenience
         try:
             if special_code:
