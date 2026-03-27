@@ -2876,19 +2876,41 @@ def store_packages():
 
 @app.route("/store/best_sellers")
 def store_best_sellers():
-    """Public: Top packages por ventas (pedidos aprobados).
-    Retorna hasta 12 paquetes ordenados por cantidad de órdenes aprobadas desc.
+    """Public: Top packages por ventas exitosas.
+
+    Suma órdenes activas y órdenes históricas agregadas en OrderSummary para que
+    la sección siga mostrando acumulado aunque la limpieza automática archive
+    pedidos viejos fuera de la tabla orders.
     """
-    # Aggregate count of approved orders by package id
-    agg = (
+    successful_statuses = ["approved", "delivered"]
+    sales_by_package = {}
+
+    live_counts = (
         db.session.query(Order.store_package_id, db.func.count(Order.id).label("cnt"))
-        .filter(Order.status == "approved")
+        .filter(Order.status.in_(successful_statuses))
         .group_by(Order.store_package_id)
-        .order_by(db.text("cnt DESC"))
-        .limit(12)
         .all()
     )
-    ids = [row[0] for row in agg if row[0] is not None]
+    for package_id, count in live_counts:
+        if package_id is None:
+            continue
+        sales_by_package[int(package_id)] = sales_by_package.get(int(package_id), 0) + int(count or 0)
+
+    archived_counts = (
+        db.session.query(
+            OrderSummary.store_package_id,
+            db.func.coalesce(db.func.sum(OrderSummary.order_count), 0).label("cnt"),
+        )
+        .filter(OrderSummary.status.in_(successful_statuses))
+        .group_by(OrderSummary.store_package_id)
+        .all()
+    )
+    for package_id, count in archived_counts:
+        if package_id is None:
+            continue
+        sales_by_package[int(package_id)] = sales_by_package.get(int(package_id), 0) + int(count or 0)
+
+    ids = [package_id for package_id, _ in sorted(sales_by_package.items(), key=lambda entry: entry[1], reverse=True)[:12]]
     if not ids:
         # No approved sales yet -> return a stable fallback list so the homepage
         # section doesn't appear to "disappear".
@@ -2914,7 +2936,7 @@ def store_best_sellers():
                 for p in items
             ]
         })
-    # fetch package rows keeping order by counts
+    # Fetch active package rows preserving ranking by total successful sales.
     rows = StorePackage.query.filter(StorePackage.id.in_(ids), StorePackage.active == True).all()
     by_id = {p.id: p for p in rows}
     ordered = [by_id[i] for i in ids if i in by_id]
