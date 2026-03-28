@@ -4,7 +4,122 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='6') }}">
 <style>
   .co-wrap { max-width: 900px; margin: 0 auto; padding: 16px 12px 28px; }
-  .co-banner { background: #059669; color: #0b0f14; font-weight: 900; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 16px; }
+  .co-banner {
+    background: linear-gradient(180deg, rgba(17,17,19,0.98) 0%, rgba(11,11,12,0.98) 100%);
+    color: #f8fafc;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 22px 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.32);
+  }
+  .co-banner[hidden] { display: none !important; }
+  .co-summary {
+    display: grid;
+    gap: 18px;
+    justify-items: center;
+    text-align: center;
+  }
+  .co-summary-head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+  .co-summary-copy {
+    display: grid;
+    gap: 6px;
+    text-align: left;
+    justify-items: start;
+    min-width: 0;
+  }
+  .co-summary-art {
+    width: 74px;
+    height: 74px;
+    object-fit: cover;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.14);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.3);
+  }
+  .co-summary-game {
+    font-size: 30px;
+    line-height: 1;
+    font-weight: 900;
+    color: #ffffff;
+  }
+  .co-summary-item {
+    font-size: 20px;
+    line-height: 1.1;
+    font-weight: 900;
+    color: #ffffff;
+  }
+  .co-summary-meta {
+    display: grid;
+    gap: 4px;
+    justify-items: start;
+  }
+  .co-summary-nick {
+    color: #22c55e;
+    font-size: 14px;
+    font-weight: 900;
+  }
+  .co-summary-id {
+    color: #cbd5e1;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .co-summary-divider {
+    width: 100%;
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+  }
+  .co-summary-body {
+    width: 100%;
+    display: grid;
+    gap: 12px;
+  }
+  .co-summary-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+  }
+  .co-summary-row--total {
+    margin-top: 4px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .co-summary-label {
+    color: #e5e7eb;
+    font-size: 14px;
+    font-weight: 800;
+    text-align: left;
+  }
+  .co-summary-value {
+    color: #f8fafc;
+    font-size: 14px;
+    font-weight: 800;
+    text-align: right;
+  }
+  .co-summary-value--muted {
+    color: #94a3b8;
+    text-decoration: line-through;
+  }
+  .co-summary-value--discount {
+    color: #ff3355;
+  }
+  .co-summary-value--total {
+    color: #ff3355;
+    font-size: 24px;
+    font-weight: 900;
+    line-height: 1;
+  }
+  .co-summary-empty {
+    color: #cbd5e1;
+    font-size: 15px;
+    font-weight: 800;
+  }
   /* Charcoal card style */
   .co-card { background: rgba(43,47,54,0.4); border:1px solid rgba(148,163,184,0.1); border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
   .co-card h3 { margin: 0 0 8px; color: #e2e8f0; font-weight: 900; text-align:center; padding-bottom:10px; border-bottom:1px solid rgba(148,163,184,0.1); }
@@ -114,6 +229,12 @@
   .btn-whatsapp:hover { filter: brightness(1.05); }
   @media (max-width: 700px) {
     .co-wrap { padding-left: 10px; padding-right: 10px; }
+    .co-banner { padding: 20px 16px; border-radius: 16px; }
+    .co-summary-game { font-size: 26px; }
+    .co-summary-item { font-size: 18px; }
+    .co-summary-value--total { font-size: 22px; }
+    .co-summary-head { gap: 12px; }
+    .co-summary-art { width: 64px; height: 64px; border-radius: 14px; }
   }
 </style>
 {% endblock %}
@@ -147,15 +268,7 @@
 {% block content %}
 <section class="co-wrap" id="checkout" data-gid="{{ gid }}" data-whatsapp="{{ whatsapp_url }}" data-gname="{{ game_name }}" data-gimg="{{ game_image }}">
   <div class="co-banner" id="co-total">
-    <div style="display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:8px;">
-      {% if game_image %}
-        <img src="{{ game_image }}" alt="{{ game_name or 'Juego' }}" style="width:40px; height:40px; object-fit:cover; border-radius:8px; border:1px solid rgba(148,163,184,0.18);">
-      {% endif %}
-      {% if game_name %}
-        <div style="color:#0b0f14; background:rgba(255,255,255,0.75); padding:2px 8px; border-radius:8px; font-weight:900;">{{ game_name }}</div>
-      {% endif %}
-    </div>
-    <div style="font-weight:900;">Total a pagar</div>
+    <div class="co-summary-empty">Cargando resumen...</div>
   </div>
   <div id="co-disc-note" class="co-disc-note" hidden></div>
 
@@ -182,7 +295,6 @@
   </div>
 
   <div class="co-card">
-    <h3>Tiempo restante para completar el pago</h3>
     <div id="co-timer" style="text-align:center; font-weight:800;">30:00</div>
     <div class="co-actions">
       <div class="ref-group">
@@ -218,5 +330,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/checkout.js', v='7') }}" defer></script>
+<script src="{{ url_for('static', filename='js/checkout.js', v='9') }}" defer></script>
 {% endblock %}

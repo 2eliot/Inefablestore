@@ -40,23 +40,34 @@ document.addEventListener('DOMContentLoaded', () => {
       coTotal.setAttribute('hidden', '');
       return;
     }
-    const leftImg = gimg ? `<img src="${gimg}" alt="${gname || 'Juego'}" style="width:56px; height:56px; object-fit:cover; border-radius:12px; border:2px solid rgba(255,255,255,0.25); box-shadow:0 2px 8px rgba(0,0,0,0.35);">` : '';
-    const titleLine = gname ? `<div style="font-weight:900;">Juego: ${gname}</div>` : '';
+    const leftImg = gimg ? `<img class="co-summary-art" src="${gimg}" alt="${gname || 'Juego'}">` : '';
+    const titleLine = gname ? `<div class="co-summary-game">${gname}</div>` : '';
     let nn0 = qNick0;
     if (!nn0) {
       try { nn0 = (localStorage.getItem(`ffnick:${qCid0}`) || '').toString().trim(); } catch (_) { nn0 = ''; }
     }
     const idLabel0 = qZid0 ? 'ID/Zona ID' : 'ID';
     const idValue0 = qZid0 ? `${qCid0}/${qZid0}` : qCid0;
-    const idLine = `<div style="color:#0b0f14; font-weight:900; line-height:1.15;">${idLabel0}: ${idValue0}</div>`;
-    const nameLine = nn0 ? `<div style="color:#0b0f14; font-weight:900; line-height:1.15;">Nombre: ${nn0}</div>` : '';
+    const idLine = `<div class="co-summary-id">${idLabel0}: ${idValue0}</div>`;
+    const nameLine = nn0 ? `<div class="co-summary-nick">Nick: ${nn0}</div>` : '';
     coTotal.innerHTML = `
-      <div style="display:flex; align-items:center; gap:12px; justify-content:center;">
-        ${leftImg ? `<div style="flex:0 0 auto;">${leftImg}</div>` : ''}
-        <div style="flex:0 1 auto; min-width:0; text-align:left; display:grid; gap:2px; justify-items:start;">
-          ${titleLine}
-          ${idLine}
-          ${nameLine}
+      <div class="co-summary">
+        <div class="co-summary-head">
+          ${leftImg}
+          <div class="co-summary-copy">
+            ${titleLine}
+            <div class="co-summary-meta">
+              ${nameLine}
+              ${idLine}
+            </div>
+          </div>
+        </div>
+        <div class="co-summary-divider"></div>
+        <div class="co-summary-body">
+          <div class="co-summary-row co-summary-row--total">
+            <div class="co-summary-label">Total a pagar</div>
+            <div class="co-summary-value co-summary-value--total">...</div>
+          </div>
         </div>
       </div>
     `;
@@ -171,21 +182,24 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     try { coTotal.removeAttribute('hidden'); } catch (_) {}
+
     const t = computeTotals();
-    // Compose item summary for the TOP banner
-    let itemLine = '';
+    const qty = Math.max(1, quantity || 1);
+    const originalAmount = Number(t.baseBeforeDiscount || 0);
+    const totalAmount = Number(t.amount || 0);
+    const discountAmount = Math.max(0, originalAmount - totalAmount);
+
+    let selectedTitle = '';
     try {
       if (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) {
-        const it = allItems[selectedIndex];
-        const unitUsd = Number(it.price || 0);
-        const displayUnit = (t.displayCurrency === 'BSD' && rate && rate > 0) ? unitUsd * rate : unitUsd;
-        const qty = Math.max(1, quantity || 1);
-        itemLine = `${qty} x ${it.title} · ${formatPriceFor(t.displayCurrency, displayUnit)} c/u`;
+        const item = allItems[selectedIndex];
+        selectedTitle = qty > 1 ? `${item.title} x${qty}` : `${item.title}`;
       }
-    } catch(_) {}
-    // Compose game header (image left, data right)
-    const leftImg = gimg ? `<img src="${gimg}" alt="${gname || 'Juego'}" style="width:56px; height:56px; object-fit:cover; border-radius:12px; border:2px solid rgba(255,255,255,0.25); box-shadow:0 2px 8px rgba(0,0,0,0.35);">` : '';
-    const titleLine = gname ? `<div style="font-weight:900;">Juego: ${gname}</div>` : '';
+    } catch (_) {}
+
+    const leftImg = gimg ? `<img class="co-summary-art" src="${gimg}" alt="${gname || 'Juego'}">` : '';
+    const titleLine = gname ? `<div class="co-summary-game">${gname}</div>` : '';
+
     const playerBlock = (() => {
       const uid = (qCid || '').trim();
       let nn = (qNick || '').trim();
@@ -193,81 +207,70 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!nn && uid) {
         try {
           nn = (localStorage.getItem(`ffnick:${uid}`) || '').toString().trim();
-        } catch (_) { nn = ''; }
+        } catch (_) {
+          nn = '';
+        }
       }
-      // Only show this block when the flow actually includes player validation (cid present)
       if (!uid) return '';
       const safeName = nn || '';
-      const nameLine = safeName ? `<div style="color:#0b0f14; font-weight:900; line-height:1.15;">Nombre: ${safeName}</div>` : '';
+      const nameLine = safeName ? `<div class="co-summary-nick">Nick: ${safeName}</div>` : '';
       const idLabel = zid ? 'ID/Zona ID' : 'ID';
       const idValue = zid ? `${uid}/${zid}` : uid;
       return `
-        <div style="display:grid; gap:2px; justify-items:start; text-align:left;">
-          <div style="color:#0b0f14; font-weight:900; line-height:1.15;">${idLabel}: ${idValue}</div>
+        <div class="co-summary-meta">
           ${nameLine}
+          <div class="co-summary-id">${idLabel}: ${idValue}</div>
         </div>`;
     })();
-    // Top banner shows only player identity (totals are already shown below)
-    coTotal.innerHTML = `
-      <div style="display:flex; align-items:center; gap:12px; justify-content:center;">
-        ${leftImg ? `<div style="flex:0 0 auto;">${leftImg}</div>` : ''}
-        <div style="flex:0 1 auto; min-width:0; text-align:left; display:grid; gap:2px; justify-items:start;">
-          ${titleLine}
-          ${playerBlock}
-        </div>
-      </div>
-    `;
-    if (coDiscNote) { coDiscNote.setAttribute('hidden', ''); coDiscNote.innerHTML = ''; }
 
-    // If discount via creator code is active, show detailed breakdown
-    if (allItems && selectedIndex >= 0 && selectedIndex < allItems.length && window.__validRef && window.__validRef.discount) {
-      // Derive the exact discount fraction actually applied (item-specific overrides win)
-      let frac = Number(window.__validRef.discount || 0);
-      try {
-        const it = allItems[selectedIndex];
-        if (it && Array.isArray(window.__validRef.item_discounts)) {
-          const hit = window.__validRef.item_discounts.find(x => Number(x.item_id) === Number(it.id));
-          if (hit && typeof hit.discount === 'number') frac = Number(hit.discount || 0);
-        }
-      } catch(_){}
-      const pct = (frac * 100).toFixed(1).replace(/\.?0$/, ''); // 10.0 -> 10, 10.5 stays
-      // Unit price in current display currency
-      const it = allItems[selectedIndex];
-      const unitUsd = Number(it.price || 0);
-      const displayUnit = (t.displayCurrency === 'BSD' && rate && rate > 0) ? unitUsd * rate : unitUsd;
-      const qty = Math.max(1, quantity || 1);
-      // Compose styled breakdown (keeps theme colors; green accent comes from CSS var)
-      const thanks = (window.__validRef && window.__validRef.code) ? `Gracias por usar el código de ${window.__validRef.code}` : '';
-      coTotal.innerHTML = `
-        <div style="display:flex; align-items:center; gap:12px; justify-content:center;">
-          ${leftImg ? `<div style=\"flex:0 0 auto;\">${leftImg}</div>` : ''}
-          <div style="flex:0 1 auto; min-width:0; text-align:left; display:grid; gap:2px; justify-items:start;">
+    const rows = [];
+    if (originalAmount > 0) {
+      rows.push(`
+        <div class="co-summary-row">
+          <div class="co-summary-label">Precio original</div>
+          <div class="co-summary-value ${discountAmount > 0 ? 'co-summary-value--muted' : ''}">${formatPriceFor(t.displayCurrency, originalAmount)}</div>
+        </div>
+      `);
+    }
+    if (discountAmount > 0) {
+      rows.push(`
+        <div class="co-summary-row">
+          <div class="co-summary-label">Descuento aplicado</div>
+          <div class="co-summary-value co-summary-value--discount">- ${formatPriceFor(t.displayCurrency, discountAmount)}</div>
+        </div>
+      `);
+    }
+    rows.push(`
+      <div class="co-summary-row">
+        <div class="co-summary-label">Cantidad</div>
+        <div class="co-summary-value">${qty}</div>
+      </div>
+    `);
+    rows.push(`
+      <div class="co-summary-row co-summary-row--total">
+        <div class="co-summary-label">Total a pagar</div>
+        <div class="co-summary-value co-summary-value--total">${formatPriceFor(t.displayCurrency, totalAmount)}</div>
+      </div>
+    `);
+
+    coTotal.innerHTML = `
+      <div class="co-summary">
+        <div class="co-summary-head">
+          ${leftImg}
+          <div class="co-summary-copy">
             ${titleLine}
+            ${selectedTitle ? `<div class="co-summary-item">${selectedTitle}</div>` : ''}
             ${playerBlock}
           </div>
         </div>
-      `;
-      if (coDiscNote) {
-        coDiscNote.innerHTML = `
-          <div class="co-badge">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M20 7h-2.18A3 3 0 0 0 15 3a3 3 0 0 0-3 3 3 3 0 0 0-3-3 3 3 0 0 0-2.82 4H4a1 1 0 0 0-1 1v3h18V8a1 1 0 0 0-1-1zM9 5a1 1 0 1 1 0 2H7.82A1.82 1.82 0 0 1 9 5zm6 0a1.82 1.82 0 0 1 1.18 3H15a1 1 0 1 1 0-2zM3 13v6a1 1 0 0 0 1 1h7v-7H3zm10 0v7h7a1 1 0 0 0 1-1v-6h-8z"/></svg>
-            <span>${pct}% de descuento aplicado</span>
-          </div>
-          <div class="co-total">Monto a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
-          <div class="co-old">Precio original: ${formatPriceFor(t.displayCurrency, t.baseBeforeDiscount)}</div>
-          <div class="co-qty">Cantidad: ${qty}</div>
-        `;
-        coDiscNote.removeAttribute('hidden');
-      }
-    }
+        <div class="co-summary-divider"></div>
+        <div class="co-summary-body">${rows.join('')}</div>
+      </div>
+    `;
 
-    // When no discount: show simple block with total and quantity
-    if ((!window.__validRef || !window.__validRef.discount) && coDiscNote) {
-      coDiscNote.innerHTML = `
-        <div class="co-total">Monto a pagar: <span style=\"color:#10b981;\">${formatPriceFor(t.displayCurrency, t.amount)}</span></div>
-        <div class="co-qty">Cantidad: ${Math.max(1, quantity || 1)}</div>
-      `;
-      coDiscNote.removeAttribute('hidden');
+    if (coDiscNote) {
+      coDiscNote.setAttribute('hidden', '');
+      coDiscNote.innerHTML = '';
     }
   }
 
@@ -303,11 +306,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Optional player info lines (kept at top if present)
     // Player ID (qCid) intentionally hidden from checkout UI, but still used internally
     if (currency === 'BSD') {
-      // Show PM bank/name/phone/id
+      // Show only the payment data required in checkout
       addItem('bank', (paymentsCfg && paymentsCfg.pm_bank) || '');
-      addItem('user', (paymentsCfg && paymentsCfg.pm_name) || '');
-      addItem('user', (paymentsCfg && paymentsCfg.pm_phone) || '');
       addItem('id', (paymentsCfg && paymentsCfg.pm_id) || '');
+      addItem('user', (paymentsCfg && paymentsCfg.pm_phone) || '');
     } else {
       // Binance: show provider name, email and Pay ID
       addItem('bank', 'Binance');
