@@ -458,7 +458,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function shouldKeepVerifying(message, statusCode) {
       const msg = String(message || '').trim();
       if (!msg) return true;
-      if (msg === 'ID no encontrado') return true;
       if (msg === 'No se pudo verificar el ID') return true;
       if (statusCode >= 500) return true;
       return false;
