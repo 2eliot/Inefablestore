@@ -1978,64 +1978,66 @@ window.refreshGallery = refreshGallery;
   }
 
   function renderOrders(items) {
-  function fixMb(s){ s = String(s==null?'':s); return s.replace(/ÃƒÆ’Ã‚Â¡|ÃƒÂ¡/g,'Ã¡').replace(/ÃƒÆ’Ã‚Â©|ÃƒÂ©/g,'Ã©').replace(/ÃƒÆ’Ã‚Â­|ÃƒÂ­/g,'Ã­').replace(/ÃƒÆ’Ã‚Â³|ÃƒÂ³/g,'Ã³').replace(/ÃƒÆ’Ã‚Âº|ÃƒÂº/g,'Ãº').replace(/ÃƒÆ’Ã‚Â±|ÃƒÂ±/g,'Ã±').replace(/Ãƒâ€šÃ‚Â·/g,'Â·').replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½/g,'-').replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢/g,'â€¢'); }
+    function fixMb(s){ s = String(s==null?'':s); return s.replace(/ÃƒÆ’Ã‚Â¡|ÃƒÂ¡/g,'Ã¡').replace(/ÃƒÆ’Ã‚Â©|ÃƒÂ©/g,'Ã©').replace(/ÃƒÆ’Ã‚Â­|ÃƒÂ­/g,'Ã­').replace(/ÃƒÆ’Ã‚Â³|ÃƒÂ³/g,'Ã³').replace(/ÃƒÆ’Ã‚Âº|ÃƒÂº/g,'Ãº').replace(/ÃƒÆ’Ã‚Â±|ÃƒÂ±/g,'Ã±').replace(/Ãƒâ€šÃ‚Â·/g,'Â·').replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½/g,'-').replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢/g,'â€¢'); }
     if (!ordersList) return;
     ordersList.innerHTML = '';
     if (!items || items.length === 0) {
       ordersList.innerHTML = '<div class="empty-state"><h3>Sin Ã³rdenes</h3><p>Cuando los clientes confirmen pagos, sus Ã³rdenes aparecerÃ¡n aquÃ­.</p></div>';
       return;
     }
-    const fmtUSD = (amt) => {
-      try { return Number(amt||0).toLocaleString('en-US', { style:'currency', currency:'USD', maximumFractionDigits: 2 }); }
-      catch(_) { return `$${amt}`; }
-    };
-    const hex8 = (n) => {
-      const x = Math.max(0, parseInt(n, 10) || 0) >>> 0;
-      return x.toString(16).toUpperCase().padStart(8, '0');
-    };
     items.forEach(o => {
       const tile = document.createElement('div');
       tile.className = 'order-tile';
       tile.setAttribute('data-customer-name', o.customer_name || '');
-      const isAutoMapped = !!o.is_auto_mapped;
+      const autoSummary = o.auto_recharge_summary || {};
+      const totalAutoUnits = parseInt(autoSummary.total_units || 0, 10) || 0;
+      const completedAutoUnits = parseInt(autoSummary.completed_units || 0, 10) || 0;
+      const processingAutoUnits = parseInt(autoSummary.processing_units || 0, 10) || 0;
+      const retryableAutoUnits = parseInt(autoSummary.retryable_units || 0, 10) || 0;
+      const isAutoMapped = totalAutoUnits > 0;
+      const autoActionUnits = retryableAutoUnits > 0 ? retryableAutoUnits : totalAutoUnits;
+      const approveLabel = isAutoMapped
+        ? `${completedAutoUnits > 0 ? 'Continuar' : 'Procesar'} ${autoActionUnits} recarga${autoActionUnits === 1 ? '' : 's'}`
+        : 'Aprobar';
+      const approveDisabled = o.status !== 'pending' || (isAutoMapped && processingAutoUnits > 0 && retryableAutoUnits === 0);
+      const rejectDisabled = o.status !== 'pending' || (isAutoMapped && processingAutoUnits > 0);
+      const autoSummaryText = isAutoMapped
+        ? `Auto: ${completedAutoUnits}/${totalAutoUnits} completadas${processingAutoUnits ? ` · ${processingAutoUnits} verificando` : ''}${retryableAutoUnits ? ` · ${retryableAutoUnits} por reenviar` : ''}`
+        : '';
       tile.setAttribute('data-is-auto', isAutoMapped ? '1' : '0');
       const when = new Date(o.created_at).toLocaleString();
-      const juego = o.package_name || `#${o.store_package_id}`;
       const itemsArr = Array.isArray(o.items) ? o.items : [];
-      // Show quantity of packages purchased, not internal content amount
       const qtyTotal = itemsArr.length
         ? itemsArr.reduce((sum, it) => sum + parseInt(it.qty||1,10), 0)
         : 1;
       const diam = itemsArr.length
         ? itemsArr.map(it => `${parseInt(it.qty||1,10)}x ${fixMb(it.title||'')}`).join(' · ')
         : ((qtyTotal > 1 ? `${qtyTotal}x ` : '') + (fixMb(o.item_title) || ''));
-      // Display order amount with currency directly, rounded
       const amountRounded = Math.round(Number(o.amount||0));
       const amountDisp = `${amountRounded} ${o.currency || ''}`.trim();
-      // Add affiliate code if present
       const affiliateTag = o.affiliate_code ? ` <span class="aff-code">(${fixMb(o.affiliate_code)})</span>` : '';
       const statusIcon = o.status === 'approved' ? 'Aprobado' : o.status === 'rejected' ? 'Rechazado' : o.status === 'delivered' ? 'Entregado' : 'Pendiente';
       const statusClass = (o.status === 'approved' || o.status === 'delivered') ? 'ok' : o.status === 'rejected' ? 'rej' : 'pend';
-      const playerId = fixMb(o.customer_id || '-') ;
-      const txRef = fixMb(o.reference || '-') ;
+      const playerId = fixMb(o.customer_id || '-');
+      const txRef = fixMb(o.reference || '-');
       const gameName = fixMb(o.package_name || '');
       const playerNick = fixMb(o.customer_name || '');
       const isGift = (o.package_category || '').toLowerCase() === 'gift';
       tile.innerHTML = `
-        <div class=\"row-head\">
-          <div class=\"box-left\">
-            <div class=\"game-name\">${gameName} <span class=\"state ${statusClass}\">${statusIcon}</span></div>
-            <div class=\"package-name\">${diam || ''}</div>
-            ${playerNick && playerNick !== (o.name||'').trim() && playerNick !== (o.email||'').trim() ? `<div class=\"package-name\" style=\"color:#86efac;font-size:12px;\">👤 ${playerNick}</div>` : ''}
-            <div class=\"quantity-label\">Cantidad: <span class=\"quantity-value\">${itemsArr.length ? qtyTotal : 1}</span></div>
-            <div class=\"ref-section\">
-              <div class=\"ref-label\">REFERENCIA</div>
-              <div class=\"ref-value\">${txRef}</div>
+        <div class="row-head">
+          <div class="box-left">
+            <div class="game-name">${gameName} <span class="state ${statusClass}">${statusIcon}</span></div>
+            <div class="package-name">${diam || ''}</div>
+            ${playerNick && playerNick !== (o.name||'').trim() && playerNick !== (o.email||'').trim() ? `<div class="package-name" style="color:#86efac;font-size:12px;">👤 ${playerNick}</div>` : ''}
+            ${autoSummaryText ? `<div class="package-name" style="color:#93c5fd;font-size:12px;">${autoSummaryText}</div>` : ''}
+            <div class="quantity-label">Cantidad: <span class="quantity-value">${itemsArr.length ? qtyTotal : 1}</span></div>
+            <div class="ref-section">
+              <div class="ref-label">REFERENCIA</div>
+              <div class="ref-value">${txRef}</div>
             </div>
           </div>
           ${(() => {
-            const _isAutomated = !!o.is_auto_mapped;
-            if (_isAutomated) return `<div class="box-right">
+            if (isAutoMapped) return `<div class="box-right">
             <div class="id-section">
               <div class="id-label">${o.customer_zone ? 'ID - ZONA ID' : 'ID'} <a href="#" class="btn-show-id" style="color:#22c55e;font-weight:800;text-decoration:underline;font-size:12px;margin-left:6px;">Ver</a></div>
               <code class="hex" style="display:none;">${playerId}${o.customer_zone ? ' - ' + o.customer_zone : ''}</code>
@@ -2051,25 +2053,27 @@ window.refreshGallery = refreshGallery;
           </div>`;
           })()}
         </div>
-        <div class=\"row-foot\">
-          <div class=\"amount\">${amountDisp}${affiliateTag}</div>
+        <div class="row-foot">
+          <div class="amount">${amountDisp}${affiliateTag}</div>
           <div>${when}</div>
-          <div class=\"customer\">${o.name || o.email || 'Cliente'}${o.phone ? ' - ' + o.phone : ''}</div>
+          <div class="customer">${o.name || o.email || 'Cliente'}${o.phone ? ' - ' + o.phone : ''}</div>
         </div>
         ${o.payment_capture_url ? `<div style="padding:6px 12px 2px;"><button type="button" class="btn btn-sm" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7;font-size:11px;padding:4px 12px;border-radius:8px;cursor:pointer;width:100%;" onclick="openCaptureModal('${o.payment_capture_url.replace(/'/g, "\\'")}')">📷 Ver comprobante</button></div>` : ''}
         ${isGift ? `
-        <div class=\"row-actions\"> 
-          ${ (itemsArr.length && qtyTotal > 1)
-            ? `<textarea class=\"input gift-codes\" data-id=\"${o.id}\" placeholder=\"Un c\u00f3digo por l\u00ednea\" rows=\"${Math.min(6, Math.max(2, qtyTotal))}\" style=\"flex:1; min-width:260px; resize:vertical;\"></textarea>`
-            : `<input class=\"input gift-code\" data-id=\"${o.id}\" type=\"text\" placeholder=\"C\u00f3digo para el cliente\" value=\"${o.delivery_code || ''}\" style=\"flex:1; min-width:220px;\" />`
+        <div class="row-actions">
+          ${(itemsArr.length && qtyTotal > 1)
+            ? `<textarea class="input gift-codes" data-id="${o.id}" placeholder="Un c\u00f3digo por l\u00ednea" rows="${Math.min(6, Math.max(2, qtyTotal))}" style="flex:1; min-width:260px; resize:vertical;"></textarea>`
+            : `<input class="input gift-code" data-id="${o.id}" type="text" placeholder="C\u00f3digo para el cliente" value="${o.delivery_code || ''}" style="flex:1; min-width:220px;" />`
           }
         </div>` : ''}
         <div class="row-actions" style="justify-content:space-between;">
-            <button class="btn btn-approve" data-id="${o.id}" ${o.status !== 'pending' ? 'disabled' : ''}>Aprobar</button>
-            <button class="btn btn-reject" data-id="${o.id}" ${o.status !== 'pending' ? 'disabled' : ''} style="background:#dc2626;">Rechazar</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-approve" data-id="${o.id}" ${approveDisabled ? 'disabled' : ''}>${approveLabel}</button>
+            ${isAutoMapped && processingAutoUnits > 0 ? `<button class="btn btn-verify-recharge" data-id="${o.id}">Verificar ${processingAutoUnits}</button>` : ''}
           </div>
+          <button class="btn btn-reject" data-id="${o.id}" ${rejectDisabled ? 'disabled' : ''} style="background:#dc2626;">Rechazar</button>
+        </div>
       `;
-
       ordersList.appendChild(tile);
     });
   }
@@ -2090,13 +2094,14 @@ window.refreshGallery = refreshGallery;
         }
         return;
       }
+
       const copy = e.target.closest('.btn-copy');
       if (copy) {
         const value = copy.getAttribute('data-copy') || '';
         try { await navigator.clipboard.writeText(value); toast('Copiado'); } catch(_) { toast('No se pudo copiar'); }
         return;
       }
-      // --- Poll verify-recharge ---
+
       function _pollVerifyRecharge(orderId, btnEl) {
         let attempts = 0;
         const maxAttempts = 12;
@@ -2106,11 +2111,13 @@ window.refreshGallery = refreshGallery;
             .then(r => r.json())
             .then(d => {
               if (d.result === 'completed') {
-                toast(`✅ Verificado: recarga completada. Jugador: ${d.player_name || ''}`, 'success');
+                const done = d.summary && d.summary.total_units ? `${d.summary.completed_units}/${d.summary.total_units}` : 'completada';
+                toast(`✅ Cola completada: ${done} recargas listas${d.player_name ? `. Jugador: ${d.player_name}` : ''}`, 'success');
                 if (btnEl) { btnEl.textContent = 'Completada'; btnEl.style.background = '#22c55e'; }
                 setTimeout(() => fetchOrders(), 1500);
               } else if (d.result === 'processing') {
-                if (btnEl) btnEl.textContent = `Procesando... (${attempts})`;
+                const processing = d.summary && d.summary.processing_units ? d.summary.processing_units : attempts;
+                if (btnEl) btnEl.textContent = `Cola activa ${processing}... (${attempts})`;
                 if (attempts < maxAttempts) setTimeout(_doPoll, 5000);
                 else {
                   if (btnEl) { btnEl.textContent = 'Reintentar verificar'; btnEl.disabled = false; }
@@ -2118,7 +2125,7 @@ window.refreshGallery = refreshGallery;
                 }
               } else if (d.can_approve) {
                 toast(d.message || 'Recarga no completada. Puedes reintentar.', 'warning');
-                if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✓'; btnEl.onclick = null; }
+                if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Verificar'; btnEl.onclick = null; }
                 fetchOrders();
               } else {
                 if (btnEl) btnEl.textContent = 'Error verificando';
@@ -2127,10 +2134,20 @@ window.refreshGallery = refreshGallery;
             })
             .catch(() => {
               if (attempts < maxAttempts) setTimeout(_doPoll, 5000);
-              else if (btnEl) { btnEl.textContent = '✓'; btnEl.disabled = false; btnEl.onclick = null; }
+              else if (btnEl) { btnEl.textContent = 'Verificar'; btnEl.disabled = false; btnEl.onclick = null; }
             });
         }
         setTimeout(_doPoll, 2000);
+      }
+
+      const btnV = e.target.closest('.btn-verify-recharge');
+      if (btnV) {
+        const id = btnV.getAttribute('data-id');
+        if (!id) return;
+        btnV.disabled = true;
+        btnV.textContent = 'Verificando...';
+        _pollVerifyRecharge(id, btnV);
+        return;
       }
 
       const btnA = e.target.closest('.btn-approve');
@@ -2139,7 +2156,6 @@ window.refreshGallery = refreshGallery;
       if (!btn) return;
       const id = btn.getAttribute('data-id');
       const status = btnA ? 'approved' : 'rejected';
-      // Confirmation for auto-recharge via API
       if (btnA) {
         const tile = btnA.closest('.order-tile');
         const isAutoTile = tile && tile.getAttribute('data-is-auto') === '1';
@@ -2157,10 +2173,10 @@ window.refreshGallery = refreshGallery;
           if (!confirm(msg)) return;
         }
       }
+      let keepDisabled = false;
       try {
         btn.disabled = true;
         const payload = { status };
-        // If there is a gift code input for this order and approving, send it
         if (status === 'approved') {
           const codeInput = ordersList.querySelector(`.gift-code[data-id="${id}"]`);
           const codesArea = ordersList.querySelector(`.gift-codes[data-id="${id}"]`);
@@ -2178,25 +2194,31 @@ window.refreshGallery = refreshGallery;
         });
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo actualizar');
-        // Mostrar resultado de recarga automática Web B si aplica
         if (data.webb_recarga) {
           if (data.webb_recarga.ok) {
-            toast(`✅ Recarga enviada a Revendedores51 exitosamente`, 'success');
+            const summary = data.webb_recarga.summary || {};
+            const done = summary.total_units ? `${summary.completed_units}/${summary.total_units}` : '1/1';
+            toast(`✅ Cola completada al instante: ${done}`, 'success');
           } else if (data.webb_recarga.pending_verification) {
-            toast(`⚠️ Recarga reportó error: ${data.webb_recarga.error}. Verificando si se procesó...`, 'error');
+            const summary = data.webb_recarga.summary || {};
+            const processing = summary.processing_units || 0;
+            toast(`⚠️ Cola iniciada: ${processing} recarga(s) en proceso. La siguiente saldrá sola al completarse.${data.webb_recarga.error ? ` ${data.webb_recarga.error}` : ''}`, 'error');
+            keepDisabled = true;
             btn.disabled = true;
-            btn.textContent = btn.textContent ? 'Verificando...' : btn.textContent;
+            btn.textContent = 'Verificando...';
             _pollVerifyRecharge(data.webb_recarga.order_id, btn);
             return;
           } else {
-            toast(`⚠️ Recarga falló: ${data.webb_recarga.error}. La orden sigue pendiente, puedes reintentar.`, 'error');
+            const summary = data.webb_recarga.summary || {};
+            const retryable = summary.retryable_units || 0;
+            toast(`⚠️ Quedan ${retryable} recarga(s) por reenviar${data.webb_recarga.error ? `: ${data.webb_recarga.error}` : ''}.`, 'error');
           }
         }
         await fetchOrders();
       } catch (err) {
         toast(err.message || 'Error');
       } finally {
-        btn.disabled = false;
+        if (!keepDisabled) btn.disabled = false;
       }
     });
   }

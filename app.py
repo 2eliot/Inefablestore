@@ -1001,63 +1001,12 @@ def _binance_auto_approve(order):
 
     # Revendedores automation (only for auto_enabled items)
     try:
-        mapping = _get_order_auto_mapping(order)
-        if not mapping:
-            return  # Item not auto-enabled — order stays "approved" for manual dispatch
-        webb_url, webb_api_key, _, recharge_path = _revendedores_env()
-        player_id = (order.customer_id or "").strip()
-        if not webb_url or not webb_api_key or not player_id:
-            return
-        payload = {
-            "product_id": mapping.remote_product_id,
-            "package_id": mapping.remote_package_id,
-            "player_id": player_id,
-            "external_order_id": f"INE-{order.id}",
-        }
-        if (order.customer_zone or "").strip():
-            payload["player_id2"] = (order.customer_zone or "").strip()
-        try:
-            api_resp = _requests_lib.post(
-                f"{webb_url}{recharge_path}",
-                json=payload,
-                headers={"X-API-Key": webb_api_key, "Content-Type": "application/json"},
-                timeout=60,
+        result = _dispatch_order_auto_recharges(order, binance_auto=True)
+        if result.get("summary", {}).get("total_units"):
+            print(
+                f"[BinanceAuto] Order #{order.id}: "
+                f"{result['summary'].get('completed_units', 0)}/{result['summary'].get('total_units', 0)} completadas"
             )
-            api_data = api_resp.json() if api_resp.ok else {}
-        except Exception as exc:
-            order.automation_json = json.dumps({
-                "source": "revendedores_api",
-                "pending_verification": True,
-                "external_order_id": f"INE-{order.id}",
-                "error": str(exc),
-                "binance_auto": True,
-            })
-            try:
-                db.session.commit()
-            except Exception:
-                pass
-            return
-        if api_data.get("ok"):
-            order.status = "delivered"
-            order.automation_json = json.dumps({
-                "source": "revendedores_api",
-                "success": True,
-                "player_name": api_data.get("player_name", ""),
-                "reference_no": api_data.get("reference_no", ""),
-                "binance_auto": True,
-            })
-        else:
-            order.automation_json = json.dumps({
-                "source": "revendedores_api",
-                "pending_verification": True,
-                "external_order_id": f"INE-{order.id}",
-                "error": api_data.get("error") or "Recarga no completada",
-                "binance_auto": True,
-            })
-        try:
-            db.session.commit()
-        except Exception:
-            pass
     except Exception as exc:
         print(f"[BinanceAuto] Revendedores error for order #{order.id}: {exc}")
 
@@ -1086,10 +1035,7 @@ def _binance_order_verification_loop():
                 ).all()
                 for order in pending_orders:
                     try:
-                        if not order.item_id:
-                            continue
-                        mapping = _get_order_auto_mapping(order)
-                        if not mapping:
+                        if not _order_has_auto_recharges(order):
                             continue
                         if not order.reference:
                             continue
@@ -1896,16 +1842,336 @@ def _normalize_rev_catalog_payload(payload):
 
 
 def _get_order_auto_mapping(order_obj):
+    units = _build_order_auto_recharge_units(order_obj)
+    if not units:
+        return None
     try:
-        if not order_obj or not order_obj.item_id:
-            return None
         return RevendedoresItemMapping.query.filter_by(
-            store_item_id=int(order_obj.item_id),
+            store_item_id=int(units[0].get("store_item_id") or 0),
             active=True,
             auto_enabled=True,
         ).first()
     except Exception:
         return None
+
+
+def _load_order_automation_state(order_obj):
+    try:
+        payload = json.loads(order_obj.automation_json or "{}")
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_order_automation_state(order_obj, state):
+    try:
+        order_obj.automation_json = json.dumps(state or {}, ensure_ascii=False)
+    except Exception:
+        order_obj.automation_json = ""
+
+
+def _get_order_item_entries(order_obj):
+    entries = []
+    try:
+        parsed = json.loads(order_obj.items_json or "[]") if (order_obj.items_json or "").strip() else []
+        if isinstance(parsed, list):
+            for entry_index, ent in enumerate(parsed, start=1):
+                try:
+                    item_id = int(ent.get("item_id") or 0)
+                except Exception:
+                    item_id = 0
+                if item_id <= 0:
+                    continue
+                try:
+                    qty = max(int(ent.get("qty") or 1), 1)
+                except Exception:
+                    qty = 1
+                entries.append({
+                    "entry_index": entry_index,
+                    "item_id": item_id,
+                    "qty": qty,
+                    "title": str(ent.get("title") or "").strip(),
+                })
+    except Exception:
+        entries = []
+    if entries:
+        return entries
+    try:
+        if order_obj and order_obj.item_id:
+            item = GamePackageItem.query.get(order_obj.item_id)
+            entries.append({
+                "entry_index": 1,
+                "item_id": int(order_obj.item_id),
+                "qty": 1,
+                "title": str(item.title or "").strip() if item else "",
+            })
+    except Exception:
+        pass
+    return entries
+
+
+def _get_auto_mappings_for_item_ids(item_ids):
+    ids = sorted({int(x) for x in (item_ids or []) if int(x or 0) > 0})
+    if not ids:
+        return {}
+    try:
+        rows = RevendedoresItemMapping.query.filter(
+            RevendedoresItemMapping.store_item_id.in_(ids),
+            RevendedoresItemMapping.active == True,
+            RevendedoresItemMapping.auto_enabled == True,
+        ).all()
+        return {int(row.store_item_id): row for row in rows}
+    except Exception:
+        return {}
+
+
+def _legacy_auto_unit_seed(state):
+    if not isinstance(state, dict) or not state:
+        return None
+    if state.get("success"):
+        status = "completed"
+    elif state.get("pending_verification"):
+        status = "processing"
+    elif state.get("verified_failed") or state.get("error"):
+        status = "failed"
+    else:
+        status = "pending"
+    seed = {
+        "status": status,
+        "external_order_id": state.get("external_order_id") or "",
+        "player_name": state.get("player_name") or "",
+        "reference_no": state.get("reference_no") or "",
+        "error": state.get("error") or "",
+    }
+    return seed if any(seed.values()) else None
+
+
+def _build_order_auto_recharge_units(order_obj, automation_state=None):
+    state = automation_state if isinstance(automation_state, dict) else _load_order_automation_state(order_obj)
+    entries = _get_order_item_entries(order_obj)
+    mappings_by_item = _get_auto_mappings_for_item_ids([entry.get("item_id") for entry in entries])
+    planned_units = []
+    for entry in entries:
+        mapping = mappings_by_item.get(int(entry.get("item_id") or 0))
+        if not mapping:
+            continue
+        qty = max(int(entry.get("qty") or 1), 1)
+        for repeat_index in range(1, qty + 1):
+            planned_units.append({
+                "unit_key": f"{entry.get('entry_index')}:{entry.get('item_id')}:{repeat_index}",
+                "entry_index": int(entry.get("entry_index") or 0),
+                "repeat_index": repeat_index,
+                "store_item_id": int(entry.get("item_id") or 0),
+                "title": (entry.get("title") or mapping.remote_label or "").strip(),
+                "remote_product_id": mapping.remote_product_id,
+                "remote_package_id": mapping.remote_package_id,
+                "remote_label": (mapping.remote_label or "").strip(),
+            })
+    existing_units = {}
+    for raw_unit in state.get("units") or []:
+        if not isinstance(raw_unit, dict):
+            continue
+        unit_key = str(raw_unit.get("unit_key") or "").strip()
+        if unit_key:
+            existing_units[unit_key] = raw_unit
+    legacy_seed = _legacy_auto_unit_seed(state)
+    total_units = len(planned_units)
+    units = []
+    for index, planned in enumerate(planned_units, start=1):
+        previous = existing_units.get(planned["unit_key"])
+        if previous is None and legacy_seed and total_units == 1:
+            previous = legacy_seed
+        status = str((previous or {}).get("status") or "pending").strip().lower()
+        if status not in {"pending", "processing", "completed", "failed", "not_found"}:
+            status = "pending"
+        default_external_order_id = f"INE-{order_obj.id}" if total_units == 1 else f"INE-{order_obj.id}-{index}"
+        unit = {
+            "unit_key": planned["unit_key"],
+            "sequence": index,
+            "entry_index": planned["entry_index"],
+            "repeat_index": planned["repeat_index"],
+            "store_item_id": planned["store_item_id"],
+            "title": planned["title"],
+            "remote_product_id": planned["remote_product_id"],
+            "remote_package_id": planned["remote_package_id"],
+            "remote_label": planned["remote_label"],
+            "external_order_id": str((previous or {}).get("external_order_id") or default_external_order_id),
+            "status": status,
+            "player_name": str((previous or {}).get("player_name") or ""),
+            "reference_no": str((previous or {}).get("reference_no") or ""),
+            "remaining_balance": (previous or {}).get("remaining_balance"),
+            "error": str((previous or {}).get("error") or ""),
+            "last_attempt_at": str((previous or {}).get("last_attempt_at") or ""),
+            "last_checked_at": str((previous or {}).get("last_checked_at") or ""),
+        }
+        units.append(unit)
+    return units
+
+
+def _summarize_order_auto_recharges(units):
+    total_units = len(units or [])
+    completed_units = sum(1 for unit in (units or []) if (unit.get("status") or "") == "completed")
+    processing_units = sum(1 for unit in (units or []) if (unit.get("status") or "") == "processing")
+    failed_units = sum(1 for unit in (units or []) if (unit.get("status") or "") in ("failed", "not_found"))
+    pending_units = sum(1 for unit in (units or []) if (unit.get("status") or "") == "pending")
+    retryable_units = failed_units + pending_units
+    return {
+        "total_units": total_units,
+        "completed_units": completed_units,
+        "processing_units": processing_units,
+        "failed_units": failed_units,
+        "pending_units": pending_units,
+        "retryable_units": retryable_units,
+    }
+
+
+def _order_has_auto_recharges(order_obj):
+    return _summarize_order_auto_recharges(_build_order_auto_recharge_units(order_obj)).get("total_units", 0) > 0
+
+
+def _order_status_from_auto_summary(summary, fallback_status="approved"):
+    total_units = int(summary.get("total_units") or 0)
+    if total_units <= 0:
+        return fallback_status
+    if int(summary.get("completed_units") or 0) >= total_units:
+        return "delivered"
+    return "pending"
+
+
+def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
+    state = _load_order_automation_state(order_obj)
+    units = _build_order_auto_recharge_units(order_obj, state)
+    summary = _summarize_order_auto_recharges(units)
+    state.update({
+        "source": "revendedores_api",
+        "binance_auto": bool(binance_auto or state.get("binance_auto")),
+        "units": units,
+        "summary": summary,
+    })
+    if summary["total_units"] <= 0:
+        _save_order_automation_state(order_obj, state)
+        return {"ok": True, "summary": summary, "units": units}
+
+    webb_url, webb_api_key, _, recharge_path = _revendedores_env()
+    player_id = (order_obj.customer_id or "").strip()
+    if not webb_url or not webb_api_key:
+        state["error"] = "Falta configurar REVENDEDORES_BASE_URL y REVENDEDORES_API_KEY"
+        state["pending_verification"] = False
+        order_obj.status = "pending"
+        _save_order_automation_state(order_obj, state)
+        db.session.commit()
+        return {
+            "ok": False,
+            "error": state["error"],
+            "summary": summary,
+            "units": units,
+            "pending_verification": False,
+            "order_id": order_obj.id,
+        }
+    if not player_id:
+        state["error"] = "No se encontró ID de jugador para recarga automática"
+        state["pending_verification"] = False
+        order_obj.status = "pending"
+        _save_order_automation_state(order_obj, state)
+        db.session.commit()
+        return {
+            "ok": False,
+            "error": state["error"],
+            "summary": summary,
+            "units": units,
+            "pending_verification": False,
+            "order_id": order_obj.id,
+        }
+
+    processing_units = [unit for unit in units if (unit.get("status") or "") == "processing"]
+    if processing_units:
+        summary = _summarize_order_auto_recharges(units)
+        state["summary"] = summary
+        state["pending_verification"] = True
+        state["success"] = summary["total_units"] > 0 and summary["completed_units"] == summary["total_units"]
+        order_obj.status = _order_status_from_auto_summary(summary)
+        _save_order_automation_state(order_obj, state)
+        db.session.commit()
+        return {
+            "ok": state["success"],
+            "summary": summary,
+            "units": units,
+            "pending_verification": state["pending_verification"],
+            "order_id": order_obj.id,
+        }
+
+    retryable_statuses = {"pending", "failed", "not_found"}
+    last_error = ""
+    while True:
+        units_to_send = [unit for unit in units if (unit.get("status") or "") in retryable_statuses]
+        if not units_to_send:
+            break
+        unit = units_to_send[0]
+        payload = {
+            "product_id": unit.get("remote_product_id"),
+            "package_id": unit.get("remote_package_id"),
+            "player_id": player_id,
+            "external_order_id": unit.get("external_order_id"),
+        }
+        if (order_obj.customer_zone or "").strip():
+            payload["player_id2"] = (order_obj.customer_zone or "").strip()
+        unit["last_attempt_at"] = datetime.utcnow().isoformat()
+        try:
+            api_resp = _requests_lib.post(
+                f"{webb_url}{recharge_path}",
+                json=payload,
+                headers={"X-API-Key": webb_api_key, "Content-Type": "application/json"},
+                timeout=60,
+            )
+            try:
+                api_data = api_resp.json()
+            except Exception:
+                api_data = {"ok": False, "error": f"Respuesta inválida HTTP {api_resp.status_code}"}
+            if api_data.get("ok"):
+                unit["status"] = "completed"
+                unit["player_name"] = str(api_data.get("player_name") or "")
+                unit["reference_no"] = str(api_data.get("reference_no") or "")
+                unit["remaining_balance"] = api_data.get("remaining_balance")
+                unit["error"] = ""
+                last_error = ""
+                continue
+            else:
+                unit["status"] = "processing"
+                unit["error"] = str(api_data.get("error") or "Recarga no completada en Revendedores")
+                last_error = unit["error"]
+                break
+        except _requests_lib.exceptions.Timeout:
+            unit["status"] = "processing"
+            unit["error"] = "Revendedores no respondió en 60 segundos"
+            last_error = unit["error"]
+            break
+        except Exception as exc:
+            unit["status"] = "processing"
+            unit["error"] = str(exc)
+            last_error = unit["error"]
+            break
+
+    summary = _summarize_order_auto_recharges(units)
+    state["units"] = units
+    state["summary"] = summary
+    state["pending_verification"] = summary["processing_units"] > 0
+    state["success"] = summary["total_units"] > 0 and summary["completed_units"] == summary["total_units"]
+    state["last_attempt_at"] = datetime.utcnow().isoformat()
+    if last_error:
+        state["error"] = last_error
+    elif summary["processing_units"] <= 0 and summary["retryable_units"] <= 0 and state.get("error"):
+        state.pop("error", None)
+    order_obj.status = _order_status_from_auto_summary(summary)
+    _save_order_automation_state(order_obj, state)
+    db.session.commit()
+    return {
+        "ok": state["success"],
+        "summary": summary,
+        "units": units,
+        "error": state.get("error") or "",
+        "pending_verification": state["pending_verification"],
+        "order_id": order_obj.id,
+    }
 
 class User(db.Model):
     __tablename__ = "users"
@@ -3499,18 +3765,6 @@ def admin_orders_list():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     orders = Order.query.order_by(Order.created_at.desc()).all()
-    item_ids = sorted({int(x.item_id) for x in orders if x.item_id})
-    auto_map_ids = set()
-    if item_ids:
-        try:
-            mapped_rows = RevendedoresItemMapping.query.filter(
-                RevendedoresItemMapping.store_item_id.in_(item_ids),
-                RevendedoresItemMapping.active == True,
-                RevendedoresItemMapping.auto_enabled == True,
-            ).all()
-            auto_map_ids = {int(r.store_item_id) for r in mapped_rows}
-        except Exception:
-            auto_map_ids = set()
 
     out = []
     for x in orders:
@@ -3534,6 +3788,7 @@ def admin_orders_list():
                     delivery_codes = [str(c or '').strip() for c in dc_parsed if str(c or '').strip()]
         except Exception:
             delivery_codes = []
+        auto_summary = _summarize_order_auto_recharges(_build_order_auto_recharge_units(x))
         out.append({
             "id": x.id,
             "created_at": x.created_at.isoformat(),
@@ -3544,7 +3799,8 @@ def admin_orders_list():
             "item_id": x.item_id,
             "item_title": it.title if it else "",
             "item_price_usd": (it.price if it else 0.0),
-            "is_auto_mapped": bool(x.item_id and int(x.item_id) in auto_map_ids),
+            "is_auto_mapped": bool(auto_summary.get("total_units")),
+            "auto_recharge_summary": auto_summary,
             "items": items_payload,
             "customer_id": x.customer_id,
             "customer_zone": x.customer_zone or "",
@@ -3834,131 +4090,27 @@ def admin_orders_set_status(oid: int):
         pass
 
     # ── Auto-recarga vía API marca blanca de Revendedores ──
-    webb_result = None
-    webb_error = None
+    auto_dispatch = None
     try:
-        webb_url, webb_api_key, _, recharge_path = _revendedores_env()
-        mapping = _get_order_auto_mapping(o)
-
-        if mapping and status == "approved" and o.status in ("approved", "delivered"):
-            player_id = (o.customer_id or "").strip()
-            if not webb_url or not webb_api_key:
-                webb_error = "Falta configurar REVENDEDORES_BASE_URL y REVENDEDORES_API_KEY"
-            elif not player_id:
-                webb_error = "No se encontró ID de jugador para recarga automática"
-            else:
-                payload = {
-                    "product_id": mapping.remote_product_id,
-                    "package_id": mapping.remote_package_id,
-                    "player_id": player_id,
-                    "external_order_id": f"INE-{o.id}",
-                }
-                if (o.customer_zone or "").strip():
-                    payload["player_id2"] = (o.customer_zone or "").strip()
-
-                try:
-                    api_resp = _requests_lib.post(
-                        f"{webb_url}{recharge_path}",
-                        json=payload,
-                        headers={
-                            "X-API-Key": webb_api_key,
-                            "Content-Type": "application/json",
-                        },
-                        timeout=60,
-                    )
-                    try:
-                        api_data = api_resp.json()
-                    except Exception:
-                        api_data = {"ok": False, "error": f"Respuesta inválida HTTP {api_resp.status_code}"}
-
-                    if api_data.get("ok"):
-                        o.status = "delivered"
-                        o.automation_json = json.dumps({
-                            "source": "revendedores_api",
-                            "success": True,
-                            "player_name": api_data.get("player_name", ""),
-                            "reference_no": api_data.get("reference_no", ""),
-                        })
-                        db.session.commit()
-                        webb_result = {
-                            "pin": "",
-                            "package": mapping.remote_label or f"Paquete {mapping.remote_package_id}",
-                            "player_name": api_data.get("player_name", ""),
-                            "remaining_balance": api_data.get("remaining_balance"),
-                            "is_last": True,
-                        }
-                    else:
-                        webb_error = api_data.get("error") or "Recarga no completada en Revendedores"
-                        o.status = "pending"
-                        o.automation_json = json.dumps({
-                            "source": "revendedores_api",
-                            "pending_verification": True,
-                            "external_order_id": f"INE-{o.id}",
-                            "error": webb_error,
-                        })
-                        db.session.commit()
-                except _requests_lib.exceptions.Timeout:
-                    webb_error = "Revendedores no respondió en 60 segundos"
-                    o.status = "pending"
-                    o.automation_json = json.dumps({
-                        "source": "revendedores_api",
-                        "pending_verification": True,
-                        "external_order_id": f"INE-{o.id}",
-                        "error": webb_error,
-                    })
-                    db.session.commit()
-                except Exception as exc:
-                    webb_error = str(exc)
-                    o.status = "pending"
-                    o.automation_json = json.dumps({
-                        "source": "revendedores_api",
-                        "pending_verification": True,
-                        "external_order_id": f"INE-{o.id}",
-                        "error": webb_error,
-                    })
-                    db.session.commit()
-            if webb_error and o.status != "delivered":
-                o.status = "pending"
-                if not (o.automation_json or "").strip():
-                    o.automation_json = json.dumps({
-                        "source": "revendedores_api",
-                        "pending_verification": True,
-                        "external_order_id": f"INE-{o.id}",
-                        "error": webb_error,
-                    })
-                try:
-                    db.session.commit()
-                except Exception:
-                    pass
+        if status == "approved" and o.status in ("approved", "delivered") and _order_has_auto_recharges(o):
+            auto_dispatch = _dispatch_order_auto_recharges(o)
     except Exception as exc:
-        webb_error = str(exc)
-        o.status = "pending"
-        o.automation_json = json.dumps({
-            "source": "revendedores_api",
-            "pending_verification": True,
-            "external_order_id": f"INE-{o.id}",
+        auto_dispatch = {
+            "ok": False,
             "error": str(exc),
-        })
-        try:
-            db.session.commit()
-        except Exception:
-            pass
+            "pending_verification": False,
+            "order_id": o.id,
+            "summary": _summarize_order_auto_recharges(_build_order_auto_recharge_units(o)),
+        }
 
     response_payload = {"ok": True}
-    if webb_result:
+    if auto_dispatch and auto_dispatch.get("summary", {}).get("total_units"):
         response_payload["webb_recarga"] = {
-            "ok": True,
-            "package": webb_result.get("package", ""),
-            "player_name": webb_result.get("player_name", ""),
-            "remaining_balance": webb_result.get("remaining_balance"),
-            "is_last": webb_result.get("is_last", True),
-        }
-    if webb_error:
-        response_payload["webb_recarga"] = {
-            "ok": False,
-            "error": webb_error,
-            "pending_verification": True,
+            "ok": bool(auto_dispatch.get("ok")),
+            "error": auto_dispatch.get("error") or "",
+            "pending_verification": bool(auto_dispatch.get("pending_verification")),
             "order_id": o.id,
+            "summary": auto_dispatch.get("summary") or {},
         }
 
     return jsonify(response_payload)
@@ -3977,94 +4129,132 @@ def admin_orders_verify_recharge(oid: int):
     if o.status not in ("pending",):
         return jsonify({"ok": True, "result": "already_processed", "order_status": o.status})
 
-    auto_resp = {}
-    try:
-        auto_resp = json.loads(o.automation_json or '{}')
-    except Exception:
-        pass
+    auto_resp = _load_order_automation_state(o)
+    units = _build_order_auto_recharge_units(o, auto_resp)
+    summary = _summarize_order_auto_recharges(units)
 
-    if not auto_resp.get("pending_verification"):
+    if summary.get("total_units", 0) <= 0:
         return jsonify({"ok": True, "result": "no_verification_needed", "can_approve": True})
+    if summary.get("processing_units", 0) <= 0:
+        if summary.get("completed_units", 0) >= summary.get("total_units", 0):
+            return jsonify({
+                "ok": True,
+                "result": "completed",
+                "order_status": "delivered",
+                "summary": summary,
+            })
+        return jsonify({
+            "ok": True,
+            "result": "no_verification_needed",
+            "can_approve": summary.get("retryable_units", 0) > 0,
+            "summary": summary,
+        })
 
-    ext_order_id = auto_resp.get("external_order_id") or f"INE-{o.id}"
     webb_url, webb_api_key, _, _ = _revendedores_env()
 
     if not webb_url or not webb_api_key:
         return jsonify({"ok": False, "error": "Revendedores API no configurada"})
 
-    try:
-        resp = _requests_lib.get(
-            f"{webb_url}/api/v1/order-status",
-            params={"external_order_id": ext_order_id},
-            headers={"X-API-Key": webb_api_key},
-            timeout=15,
-        )
-        data = resp.json() if resp.ok else {}
-    except Exception as e:
-        return jsonify({"ok": False, "error": f"No se pudo verificar: {e}", "can_approve": False})
+    processing_units = [unit for unit in units if (unit.get("status") or "") == "processing"]
+    for unit in processing_units:
+        ext_order_id = unit.get("external_order_id") or f"INE-{o.id}"
+        try:
+            resp = _requests_lib.get(
+                f"{webb_url}/api/v1/order-status",
+                params={"external_order_id": ext_order_id},
+                headers={"X-API-Key": webb_api_key},
+                timeout=15,
+            )
+            data = resp.json() if resp.ok else {}
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"No se pudo verificar: {e}", "can_approve": False})
 
-    if not data.get("ok"):
-        return jsonify({"ok": False, "error": data.get("error", "Error consultando Revendedores"), "can_approve": False})
+        if not data.get("ok"):
+            return jsonify({"ok": False, "error": data.get("error", "Error consultando Revendedores"), "can_approve": False})
 
-    found = data.get("found", False)
-    rev_status = data.get("status", "")
-    rev_order = data.get("order", {})
+        found = data.get("found", False)
+        rev_status = str(data.get("status") or "").strip().lower()
+        rev_order = data.get("order", {}) or {}
+        unit["last_checked_at"] = datetime.utcnow().isoformat()
+        if found and rev_status == "completada":
+            unit["status"] = "completed"
+            unit["player_name"] = str(rev_order.get("player_name") or unit.get("player_name") or "")
+            unit["reference_no"] = str(rev_order.get("reference_no") or unit.get("reference_no") or "")
+            unit["error"] = ""
+        elif found and rev_status == "fallida":
+            unit["status"] = "failed"
+            unit["error"] = str(rev_order.get("error") or unit.get("error") or "Recarga falló en Revendedores")
+        elif found and rev_status == "procesando":
+            unit["status"] = "processing"
+        else:
+            unit["status"] = "not_found"
+            unit["error"] = "No se encontró la recarga en Revendedores"
 
-    if found and rev_status == "completada":
-        player_name = rev_order.get("player_name", "")
-        ref_no = rev_order.get("reference_no", "")
-        o.status = "delivered"
-        o.automation_json = json.dumps({
-            "source": "revendedores_api",
-            "success": True,
-            "verified": True,
-            "player_name": player_name,
-            "reference_no": ref_no,
-        })
-        db.session.commit()
-        return jsonify({
-            "ok": True,
-            "result": "completed",
-            "order_status": "delivered",
-            "player_name": player_name,
-            "reference_no": ref_no,
-        })
-    elif found and rev_status == "fallida":
-        o.automation_json = json.dumps({
-            "source": "revendedores_api",
-            "pending_verification": False,
-            "verified_failed": True,
-            "error": rev_order.get("error", ""),
-        })
-        db.session.commit()
-        return jsonify({
-            "ok": True,
-            "result": "failed",
-            "order_status": "pending",
-            "can_approve": True,
-            "message": "Recarga falló en Revendedores. Puedes reintentar.",
-        })
-    elif found and rev_status == "procesando":
+    summary = _summarize_order_auto_recharges(units)
+    auto_resp.update({
+        "source": "revendedores_api",
+        "units": units,
+        "summary": summary,
+        "pending_verification": summary.get("processing_units", 0) > 0,
+        "success": summary.get("total_units", 0) > 0 and summary.get("completed_units", 0) == summary.get("total_units", 0),
+    })
+    if summary.get("retryable_units", 0) > 0:
+        auto_resp["error"] = next((str(unit.get("error") or "") for unit in units if unit.get("error")), "")
+    elif auto_resp.get("error"):
+        auto_resp.pop("error", None)
+    o.status = _order_status_from_auto_summary(summary)
+    _save_order_automation_state(o, auto_resp)
+    db.session.commit()
+
+    if summary.get("processing_units", 0) <= 0 and summary.get("pending_units", 0) > 0 and summary.get("failed_units", 0) <= 0:
+        queued_result = _dispatch_order_auto_recharges(o, binance_auto=bool(auto_resp.get("binance_auto")))
+        queued_summary = queued_result.get("summary") or {}
+        if queued_summary.get("completed_units", 0) >= queued_summary.get("total_units", 0) and queued_summary.get("total_units", 0) > 0:
+            first_completed = next((unit for unit in (queued_result.get("units") or []) if (unit.get("status") or "") == "completed"), {})
+            return jsonify({
+                "ok": True,
+                "result": "completed",
+                "order_status": "delivered",
+                "player_name": first_completed.get("player_name", ""),
+                "reference_no": first_completed.get("reference_no", ""),
+                "summary": queued_summary,
+            })
         return jsonify({
             "ok": True,
             "result": "processing",
             "order_status": "pending",
             "can_approve": False,
-            "message": "La recarga aún se está procesando en Revendedores...",
+            "message": f"Cola automática en curso: {queued_summary.get('completed_units', 0)}/{queued_summary.get('total_units', 0)} completadas.",
+            "summary": queued_summary,
         })
-    else:
-        o.automation_json = json.dumps({
-            "source": "revendedores_api",
-            "pending_verification": False,
-        })
-        db.session.commit()
+
+    if summary.get("completed_units", 0) >= summary.get("total_units", 0):
+        first_completed = next((unit for unit in units if (unit.get("status") or "") == "completed"), {})
         return jsonify({
             "ok": True,
-            "result": "not_found",
-            "order_status": "pending",
-            "can_approve": True,
-            "message": "No se encontró la recarga en Revendedores. Puedes reintentar.",
+            "result": "completed",
+            "order_status": "delivered",
+            "player_name": first_completed.get("player_name", ""),
+            "reference_no": first_completed.get("reference_no", ""),
+            "summary": summary,
         })
+    if summary.get("processing_units", 0) > 0:
+        return jsonify({
+            "ok": True,
+            "result": "processing",
+            "order_status": "pending",
+            "can_approve": False,
+            "message": f"Hay {summary.get('processing_units', 0)} recarga(s) aún procesándose en Revendedores.",
+            "summary": summary,
+        })
+    return jsonify({
+        "ok": True,
+        "result": "failed",
+        "order_status": "pending",
+        "can_approve": summary.get("retryable_units", 0) > 0,
+        "message": f"Quedan {summary.get('retryable_units', 0)} recarga(s) por reenviar.",
+        "summary": summary,
+    })
 
 
 @app.route("/store/package/<int:gid>/items")

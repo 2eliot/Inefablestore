@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block styles %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='5') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='6') }}">
 <style>
   .co-wrap { max-width: 900px; margin: 0 auto; padding: 16px 12px 28px; }
   .co-banner { background: #059669; color: #0b0f14; font-weight: 900; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 16px; }
@@ -33,26 +33,9 @@
   }
   #co-ref.input::placeholder { color: #94a3b8; }
   #co-ref.input:focus { border-color:#10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
-  /* Wrapper to place the Paste button inside the input */
+  /* Wrapper for the reference input */
   .ref-input-wrap { position: relative; width: 100%; max-width: 480px; margin: 0 auto; }
-  .ref-input-wrap #co-ref.input { width: 100%; box-sizing: border-box; padding-right: 120px; padding-left: 120px; }
-  .ref-input-wrap #btn-paste-ref {
-    position: absolute;
-    right: 6px;
-    top: 50%;
-    transform: translateY(-50%);
-    height: calc(100% - 8px);
-    padding: 0 14px;
-    min-width: 90px;
-    width: auto !important;
-    z-index: 1;
-    background: transparent !important;
-    border: none !important;
-    color: #10b981 !important;
-    box-shadow: none !important;
-    font-weight: 900 !important;
-    border-left: 1px solid rgba(148,163,184,0.28) !important;
-  }
+  .ref-input-wrap #co-ref.input { width: 100%; box-sizing: border-box; padding-right: 16px; padding-left: 16px; }
   .co-hint { color: #94a3b8; font-size: 12px; margin-top: 6px; text-align: center; }
   /* Discount price styling */
   .price-old { text-decoration: line-through; color: rgba(148,163,184,0.6); margin-right: 8px; font-weight: 800; }
@@ -65,8 +48,7 @@
   /* Phone tweaks: keep input text fully visible and centered */
   @media (max-width: 480px) {
     .ref-input-wrap { max-width: 100%; }
-    .ref-input-wrap #btn-paste-ref { right: 4px; min-width: 72px; padding: 0 10px; }
-    .ref-input-wrap #co-ref.input { padding-right: 92px; padding-left: 92px; font-size: 14px; }
+    .ref-input-wrap #co-ref.input { padding-right: 14px; padding-left: 14px; font-size: 14px; }
   }
   /* Button disabled state - very visual */
   #btn-co-confirm {
@@ -187,15 +169,16 @@
     <div class="proof-dropzone" id="proofDropzone">
       <input type="file" id="payment_capture" name="payment_capture" accept="image/*" style="display:none;">
       <div class="proof-dropzone-inner" id="proofDropzoneInner">
-        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#64748b;">
+        <svg class="proof-dropzone-icon" viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#64748b;">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
+        <img class="proof-preview" id="proofPreview" alt="Vista previa del comprobante" style="display:none;" />
         <div class="proof-dropzone-title">Subir captura</div>
-        <div class="proof-dropzone-sub">Toca aquí para seleccionar la imagen</div>
+        <div class="proof-dropzone-sub">Toca aquí para seleccionar o cambiar la imagen</div>
         <div class="proof-file-name" id="proofFileName" style="display:none;"></div>
       </div>
     </div>
-    <p class="proof-warning">⚠️ Subir comprobantes falsos resultará en el bloqueo permanente de tu cuenta.</p>
+    <p class="proof-warning"><strong>Leer importante:</strong> subir comprobantes falsos resultará en el bloqueo permanente de tu cuenta.</p>
   </div>
 
   <div class="co-card">
@@ -211,7 +194,6 @@
         </div>
         <div class="ref-input-wrap">
           <input id="co-ref" class="input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="NUMERO DE REFERENCIA DE PAGO" required style="text-align: center;">
-          <button id="btn-paste-ref" type="button" class="btn" aria-label="Pegar referencia" title="Pegar" style="font-weight:800;">Pegar</button>
         </div>
         <div class="digit-counter" id="digit-counter"></div>
         <div class="ref-counter-text" id="ref-counter" style="text-align: center;">0 dígitos</div>
@@ -236,5 +218,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/checkout.js', v='6') }}" defer></script>
+<script src="{{ url_for('static', filename='js/checkout.js', v='7') }}" defer></script>
 {% endblock %}

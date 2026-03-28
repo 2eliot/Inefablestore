@@ -22,6 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const proofDropzone = document.getElementById('proofDropzone');
   const proofInner = document.getElementById('proofDropzoneInner');
   const proofFileName = document.getElementById('proofFileName');
+  const proofPreview = document.getElementById('proofPreview');
+  let proofPreviewUrl = '';
   let isReferenceValid = false;
   let hasCapture = false;
   let isBinanceAuto = false;
@@ -462,9 +464,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function onCaptureSelected(file) {
     hasCapture = true;
+    if (proofPreviewUrl) {
+      URL.revokeObjectURL(proofPreviewUrl);
+      proofPreviewUrl = '';
+    }
     if (proofFileName) {
       proofFileName.textContent = file.name;
       proofFileName.style.display = 'block';
+    }
+    if (proofPreview && file && String(file.type || '').startsWith('image/')) {
+      proofPreviewUrl = URL.createObjectURL(file);
+      proofPreview.src = proofPreviewUrl;
+      proofPreview.style.display = 'block';
     }
     if (proofInner) {
       proofInner.classList.add('proof-dropzone-inner--selected');
@@ -548,31 +559,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (_) {
         // Fallback: let the normal input handler sanitize afterwards
-      }
-    });
-  }
-  
-  // Paste button support: read clipboard and apply same logic
-  const btnPasteRef = document.getElementById('btn-paste-ref');
-  if (btnPasteRef) {
-    btnPasteRef.addEventListener('click', async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        const digits = String(text || '').replace(/\D/g, '');
-        const only = digits.substring(0, 21);
-        coRef.value = only;
-        updateDigitIndicators(only.length);
-        isReferenceValid = false;
-        if (refError) { refError.style.display = 'none'; refError.textContent = ''; }
-        isReferenceValid = (only.length >= 1 && only.length <= 21);
-        updateSubmitState();
-        if (only.length >= 1) {
-          checkReferenceAvailability(only);
-        }
-        coRef.focus();
-      } catch (_) {
-        // If clipboard API not allowed, fall back to focusing the field so user can Ctrl+V
-        coRef.focus();
       }
     });
   }
