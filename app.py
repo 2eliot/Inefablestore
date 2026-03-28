@@ -106,6 +106,25 @@ BINANCE_TOTAL_TIMEOUT = float(os.environ.get("BINANCE_TOTAL_TIMEOUT_SECONDS", "8
 db = SQLAlchemy(app)
 
 _PLAYER_SCRAPE_CACHE = {}
+_PLAYER_LOOKUP_INFLIGHT = {}
+_PLAYER_LOOKUP_LOCK = threading.Lock()
+_FFMANIA_TIMEOUT = (
+    float(os.environ.get("FFMANIA_CONNECT_TIMEOUT_SECONDS", "2.5")),
+    float(os.environ.get("FFMANIA_READ_TIMEOUT_SECONDS", "3.5")),
+)
+_FFMANIA_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "es-ES,es;q=0.9,en;q=0.8,pt-BR;q=0.7",
+    "Cache-Control": "no-cache",
+}
+_FFMANIA_SESSION = _requests_lib.Session()
+try:
+    _ffmania_adapter = _requests_lib.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=0)
+    _FFMANIA_SESSION.mount("https://", _ffmania_adapter)
+    _FFMANIA_SESSION.mount("http://", _ffmania_adapter)
+except Exception:
+    pass
 
 
 def _player_cache_get(key: str):
@@ -129,51 +148,88 @@ def _player_cache_set(key: str, val, ttl_seconds: int = 600):
         pass
 
 
-def _scrape_ffmania_nick(uid: str) -> str:
-    url = f"https://www.freefiremania.com.br/cuenta/{uid}.html"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
-        },
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            raw = resp.read() or b""
-    except urllib.error.HTTPError as e:
-        if int(getattr(e, "code", 0) or 0) == 404:
-            return ""
-        raise
-    html_txt = raw.decode("utf-8", errors="ignore")
+def _player_lookup_singleflight(key: str, loader, wait_timeout: float = 6.5):
+    created = False
+    with _PLAYER_LOOKUP_LOCK:
+        state = _PLAYER_LOOKUP_INFLIGHT.get(key)
+        if not state:
+            state = {"event": threading.Event(), "result": None, "error": None}
+            _PLAYER_LOOKUP_INFLIGHT[key] = state
+            created = True
+    if created:
+        try:
+            state["result"] = loader()
+            return state["result"]
+        except Exception as exc:
+            state["error"] = exc
+            raise
+        finally:
+            state["event"].set()
+            with _PLAYER_LOOKUP_LOCK:
+                _PLAYER_LOOKUP_INFLIGHT.pop(key, None)
+    state["event"].wait(wait_timeout)
+    if state.get("error"):
+        raise state["error"]
+    return state.get("result")
 
-    # Convert HTML to plain-ish text to make extraction resilient to markup changes/ads.
-    txt = html_txt
+
+def _extract_ffmania_nick(raw_html: str) -> str:
+    if not raw_html:
+        return ""
+    direct_patterns = [
+        r'"nick"\s*:\s*"([^"\\]+(?:\\.[^"\\]*)*)"',
+        r'"nickname"\s*:\s*"([^"\\]+(?:\\.[^"\\]*)*)"',
+        r'(?is)<[^>]*>\s*(?:Nombre|Nome|Nick)\s*:?\s*</[^>]*>\s*<[^>]*>\s*([^<]+?)\s*</',
+        r'(?im)\b(?:Nombre|Nome|Nick)\s*:\s*([^\n<]+)',
+    ]
+    for pat in direct_patterns:
+        m = re.search(pat, raw_html, flags=re.IGNORECASE)
+        if m:
+            nick = (m.group(1) or "").replace('\\/', '/').replace('\\"', '"')
+            nick = _html.unescape(nick)
+            nick = re.sub(r"\s+", " ", nick).strip()
+            if nick:
+                return nick
+
+    txt = raw_html
     txt = re.sub(r"(?is)<(script|style)[^>]*>.*?</\\1>", " ", txt)
     txt = re.sub(r"(?i)<br\\s*/?>", "\n", txt)
-    txt = re.sub(r"(?i)</(p|div|tr|li|h1|h2|h3|table|section|article)>", "\n", txt)
+    txt = re.sub(r"(?i)</(p|div|tr|li|h1|h2|h3|table|section|article|span)>", "\n", txt)
     txt = re.sub(r"(?is)<[^>]+>", " ", txt)
     txt = _html.unescape(txt)
     txt = re.sub(r"[\t\r]+", " ", txt)
     txt = re.sub(r"[ ]{2,}", " ", txt)
     txt = re.sub(r"\n{2,}", "\n", txt)
 
-    patterns = [
+    fallback_patterns = [
         r"(?im)^\s*Nombre\s*:\s*(.+?)\s*$",
         r"(?im)^\s*Nome\s*:\s*(.+?)\s*$",
         r"(?im)^\s*Nick\s*:\s*(.+?)\s*$",
-        r"\"nick\"\s*:\s*\"([^\"]+)\"",
     ]
-    nick = ""
-    for pat in patterns:
+    for pat in fallback_patterns:
         m = re.search(pat, txt, flags=re.IGNORECASE)
         if m:
-            nick = (m.group(1) or "").strip()
-            break
-    nick = re.sub(r"\s+", " ", nick).strip()
-    return nick
+            nick = re.sub(r"\s+", " ", (m.group(1) or "")).strip()
+            if nick:
+                return nick
+    return ""
+
+
+def _scrape_ffmania_nick(uid: str) -> str:
+    url = f"https://www.freefiremania.com.br/cuenta/{uid}.html"
+    try:
+        resp = _FFMANIA_SESSION.get(url, headers=_FFMANIA_HEADERS, timeout=_FFMANIA_TIMEOUT)
+    except _requests_lib.HTTPError as e:
+        if int(getattr(getattr(e, "response", None), "status_code", 0) or 0) == 404:
+            return ""
+        raise
+    except _requests_lib.RequestException:
+        raise
+
+    if int(resp.status_code or 0) == 404:
+        return ""
+    resp.raise_for_status()
+    return _extract_ffmania_nick(resp.text or "")
 
 
 def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
@@ -417,16 +473,14 @@ def store_player_verify_bloodstrike():
 
     cache_key = f"bs_smileone:{uid}"
     cached = _player_cache_get(cache_key)
-    if cached is not None:
-        if not cached:
-            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+    if cached:
         return jsonify({"ok": True, "uid": uid, "nick": cached, "cached": True})
 
     nick = _scrape_smileone_bloodstrike_nick(uid)
 
-    _player_cache_set(cache_key, nick, ttl_seconds=600)
     if not nick:
         return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+    _player_cache_set(cache_key, nick, ttl_seconds=600)
     return jsonify({"ok": True, "uid": uid, "nick": nick, "cached": False})
 
 
@@ -450,16 +504,14 @@ def store_player_verify_mobilelegends():
 
     cache_key = f"ml_smileone:{uid}:{zid}"
     cached = _player_cache_get(cache_key)
-    if cached is not None:
-        if not cached:
-            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+    if cached:
         return jsonify({"ok": True, "uid": uid, "zid": zid, "nick": cached, "cached": True})
 
     nick = _scrape_smileone_mobilelegends_nick(uid, zid)
 
-    _player_cache_set(cache_key, nick, ttl_seconds=600)
     if not nick:
         return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+    _player_cache_set(cache_key, nick, ttl_seconds=600)
     return jsonify({"ok": True, "uid": uid, "zid": zid, "nick": nick, "cached": False})
 
 
@@ -486,20 +538,17 @@ def store_player_verify():
 
     cache_key = f"ffmania:{uid}"
     cached = _player_cache_get(cache_key)
-    if cached is not None:
-        if not cached:
-            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+    if cached:
         return jsonify({"ok": True, "uid": uid, "nick": cached, "cached": True})
 
     try:
-        nick = _scrape_ffmania_nick(uid)
+        nick = _player_lookup_singleflight(cache_key, lambda: _scrape_ffmania_nick(uid))
     except Exception:
         return jsonify({"ok": False, "error": "No se pudo verificar el ID"}), 502
 
-    # Cache both hits and misses for short time to reduce external traffic
-    _player_cache_set(cache_key, nick, ttl_seconds=600)
     if not nick:
         return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+    _player_cache_set(cache_key, nick, ttl_seconds=600)
     return jsonify({"ok": True, "uid": uid, "nick": nick, "cached": False})
 
 # ==============================

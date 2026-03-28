@@ -373,6 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastVerifyRequested = '';
     let lastVerifySuccess = '';
     let inflightController = null;
+    const VERIFY_RETRY_MS = 700;
     const verifyBtnDefaultText = btnVerifyPlayer ? (btnVerifyPlayer.textContent || 'Verificar') : 'Verificar';
 
     function verificationKey(uid, zid) {
@@ -425,6 +426,44 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    function clearVerifyTimer() {
+      if (verifyTimer) {
+        clearTimeout(verifyTimer);
+        verifyTimer = null;
+      }
+    }
+
+    function cancelActiveVerification() {
+      clearVerifyTimer();
+      if (inflightController) {
+        try { inflightController.abort(); } catch (_) {}
+        inflightController = null;
+      }
+      verifying = false;
+      lastVerifyRequested = '';
+    }
+
+    function scheduleVerifyRetry(uid, zid) {
+      const targetKey = verificationKey(uid, zid);
+      clearVerifyTimer();
+      verifyTimer = setTimeout(() => {
+        verifyTimer = null;
+        const nextUid = (inputCustomerId.value || '').trim();
+        const nextZid = (inputCustomerZone ? inputCustomerZone.value : '').trim();
+        if (verificationKey(nextUid, nextZid) !== targetKey) return;
+        doVerify({ silent: false });
+      }, VERIFY_RETRY_MS);
+    }
+
+    function shouldKeepVerifying(message, statusCode) {
+      const msg = String(message || '').trim();
+      if (!msg) return true;
+      if (msg === 'ID no encontrado') return true;
+      if (msg === 'No se pudo verificar el ID') return true;
+      if (statusCode >= 500) return true;
+      return false;
+    }
+
     async function doVerify(opts) {
       const silent = !!(opts && opts.silent);
       if (verifying) return;
@@ -447,6 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       const verifyKey = verificationKey(uid, zid);
+      clearVerifyTimer();
       if (verifyKey === lastVerifySuccess) {
         const n0 = getCachedNick(uid, zid);
         if (n0) setNickUIOk(n0);
@@ -468,8 +508,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!silent) {
         setNickUILoading();
       } else {
-        if (btnVerifyPlayer) btnVerifyPlayer.disabled = true;
+        setNickUILoading();
       }
+      let keepPolling = false;
+      let responseStatus = 0;
       try {
         const verifyPath = isMlPackage
           ? '/store/player/verify/mobilelegends'
@@ -478,6 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isMlPackage) qp.set('zid', String(zid || ''));
         const url = `${verifyPath}?${qp.toString()}`;
         const res = await fetch(url, { signal: inflightController.signal });
+        responseStatus = Number(res.status || 0);
         const data = await res.json();
         if (verifyKey !== lastVerifyRequested) return;
         if (!res.ok || !data || !data.ok) throw new Error((data && data.error) || 'No se pudo verificar');
@@ -488,10 +531,24 @@ document.addEventListener('DOMContentLoaded', () => {
         setNickUIOk(nick);
       } catch (e) {
         if (e && e.name === 'AbortError') return;
-        if (!silent) setNickUIErr((e && e.message) ? e.message : 'No se pudo verificar');
+        const msg = (e && e.message) ? e.message : 'No se pudo verificar';
+        if (shouldKeepVerifying(msg, responseStatus)) {
+          keepPolling = true;
+          setNickUILoading();
+          scheduleVerifyRetry(uid, zid);
+        } else {
+          setNickUIErr(msg);
+        }
         setCachedNick(uid, '', zid);
       } finally {
         verifying = false;
+        if (keepPolling) {
+          if (btnVerifyPlayer) {
+            btnVerifyPlayer.textContent = 'Verificando...';
+            btnVerifyPlayer.disabled = true;
+          }
+          return;
+        }
         if (btnVerifyPlayer) {
           if (String(btnVerifyPlayer.textContent || '').trim() === 'Verificando...') {
             btnVerifyPlayer.textContent = verifyBtnDefaultText;
@@ -514,13 +571,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function scheduleSilentVerify() {
-      if (verifyTimer) clearTimeout(verifyTimer);
+      clearVerifyTimer();
       verifyTimer = setTimeout(() => {
+        verifyTimer = null;
         doVerify({ silent: true });
-      }, 500);
+      }, 0);
     }
 
     inputCustomerId.addEventListener('input', () => {
+      cancelActiveVerification();
       const uid = (inputCustomerId.value || '').trim();
       if (!uid) {
         verifiedNick = '';
@@ -543,6 +602,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
       inputCustomerZone.addEventListener('input', () => {
+        cancelActiveVerification();
         verifiedNick = '';
         try { root.dataset.verifiedNick = ''; } catch (_) {}
         if (playerNickname) playerNickname.textContent = '';
