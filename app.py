@@ -2122,7 +2122,10 @@ def _pabilo_build_payload(order_obj) -> dict:
         except Exception:
             payload["fecha_pago"] = str(order_obj.payer_payment_date)
 
+    cfg = _pabilo_config()
     movement_type = str(order_obj.payer_movement_type or "").strip().upper()
+    if not movement_type:
+        movement_type = str(cfg.get("default_movement_type") or "").strip().upper()
     if movement_type in ("MOVIL_PAY", "TRANSFER"):
         payload["movement_type"] = movement_type
 
