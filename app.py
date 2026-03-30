@@ -5917,7 +5917,17 @@ def _upsert_config_values(values: dict[str, str]) -> None:
         return
 
     table = AppConfig.__table__
-    dialect = (db.session.bind.dialect.name or "").lower()
+    bind = None
+    try:
+        bind = db.session.get_bind(mapper=AppConfig.__mapper__)
+    except Exception:
+        bind = None
+    if bind is None:
+        try:
+            bind = db.engine
+        except Exception:
+            bind = None
+    dialect = ((bind.dialect.name if bind is not None and getattr(bind, "dialect", None) is not None else "") or "").lower()
 
     if dialect == "postgresql":
         stmt = pg_insert(table).values(rows)
