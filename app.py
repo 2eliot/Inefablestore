@@ -1977,15 +1977,36 @@ def _is_pabilo_payment_method_enforced_for_order(order_obj) -> bool:
     return _order_has_auto_recharges(order_obj)
 
 
-def _order_is_pabilo_eligible(order_obj) -> bool:
+def _pabilo_eligibility_info(order_obj) -> dict:
     cfg = _pabilo_config()
-    if not cfg.get("enabled"):
-        return False
-    if (order_obj.method or "").strip().lower() != cfg.get("method"):
-        return False
-    if not _order_has_auto_recharges(order_obj):
-        return False
-    return True
+    order_method = (order_obj.method or "").strip().lower()
+    expected_method = (cfg.get("method") or "pm").strip().lower()
+    auto_mapped = bool(_order_has_auto_recharges(order_obj))
+    enabled = bool(cfg.get("enabled"))
+
+    reasons = []
+    if not enabled:
+        reasons.append("Pabilo esta desactivado")
+    if order_method != expected_method:
+        reasons.append(
+            f"Metodo incompatible: la orden usa {order_method.upper() or 'N/A'} y Pabilo exige {expected_method.upper()}"
+        )
+    if not auto_mapped:
+        reasons.append("La orden no tiene recargas mapeadas para automatizacion")
+
+    return {
+        "eligible": len(reasons) == 0,
+        "reason": "; ".join(reasons),
+        "reasons": reasons,
+        "enabled": enabled,
+        "expected_method": expected_method,
+        "order_method": order_method,
+        "auto_mapped": auto_mapped,
+    }
+
+
+def _order_is_pabilo_eligible(order_obj) -> bool:
+    return bool(_pabilo_eligibility_info(order_obj).get("eligible"))
 
 
 def _pabilo_verify_payment(order_obj):
@@ -2024,8 +2045,10 @@ def _pabilo_verify_payment(order_obj):
     payload = {
         "amount": int(amount_value) if float(amount_value).is_integer() else round(amount_value, 2),
         "bank_reference": str(order_obj.reference or "").strip(),
-        "movement_type": "GENERIC",
     }
+    movement_type = (get_config_value("pabilo_movement_type", "") or "").strip().upper()
+    if movement_type in ("MOVIL_PAY", "TRANSFER"):
+        payload["movement_type"] = movement_type
     headers = {
         "Content-Type": "application/json",
         "appKey": cfg.get("api_key"),
@@ -2061,7 +2084,6 @@ def _pabilo_verify_payment(order_obj):
                 params={
                     "amount": payload.get("amount"),
                     "bank_reference": payload.get("bank_reference"),
-                    "movement_type": payload.get("movement_type"),
                 },
                 headers={"appKey": cfg.get("api_key")},
                 timeout=cfg.get("timeout", 30),
@@ -4254,12 +4276,22 @@ def create_order():
         # If payment is confirmed, the order gets auto-approved and dispatched.
         auto_payment = None
         try:
-            if _order_is_pabilo_eligible(o):
+            eligibility = _pabilo_eligibility_info(o)
+            if eligibility.get("eligible"):
                 auto_payment = _pabilo_verify_and_update_order(
                     o,
                     auto_approve_on_verified=True,
                     source="checkout",
                 )
+            else:
+                auto_payment = {
+                    "ok": False,
+                    "verified": False,
+                    "skipped": True,
+                    "message": eligibility.get("reason") or "No elegible para verificacion Pabilo",
+                    "eligibility": eligibility,
+                    "order_status": o.status,
+                }
         except Exception as exc:
             auto_payment = {
                 "ok": False,
@@ -4354,6 +4386,7 @@ def admin_orders_list():
             delivery_codes = []
         auto_summary = _summarize_order_auto_recharges(_build_order_auto_recharge_units(x))
         payment_state = _pabilo_get_payment_state(x)
+        pabilo_eligibility = _pabilo_eligibility_info(x)
         out.append({
             "id": x.id,
             "created_at": x.created_at.isoformat(),
@@ -4367,7 +4400,8 @@ def admin_orders_list():
             "is_auto_mapped": bool(auto_summary.get("total_units")),
             "auto_recharge_summary": auto_summary,
             "payment_verify": payment_state,
-            "pabilo_eligible": _order_is_pabilo_eligible(x),
+            "pabilo_eligible": bool(pabilo_eligibility.get("eligible")),
+            "pabilo_eligibility": pabilo_eligibility,
             "items": items_payload,
             "customer_id": x.customer_id,
             "customer_zone": x.customer_zone or "",
@@ -4707,7 +4741,11 @@ def admin_orders_verify_payment(oid: int):
     if (o.status or "").lower() not in ("pending", "approved", "delivered"):
         return jsonify({"ok": False, "error": "La orden no permite verificación"}), 400
     if not _order_is_pabilo_eligible(o):
-        return jsonify({"ok": False, "error": "Esta orden no está sujeta a verificación Pabilo"}), 400
+        return jsonify({
+            "ok": False,
+            "error": "Esta orden no esta sujeta a verificacion Pabilo",
+            "eligibility": _pabilo_eligibility_info(o),
+        }), 400
 
     result = _pabilo_verify_and_update_order(o, auto_approve_on_verified=True, source="admin_manual")
     return jsonify({"ok": True, "payment_verify": result, "order_status": o.status})

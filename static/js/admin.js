@@ -2024,6 +2024,7 @@ window.refreshGallery = refreshGallery;
       tile.setAttribute('data-customer-name', o.customer_name || '');
       const autoSummary = o.auto_recharge_summary || {};
       const payVerify = o.payment_verify || {};
+      const pabiloEligibility = o.pabilo_eligibility || {};
       const totalAutoUnits = parseInt(autoSummary.total_units || 0, 10) || 0;
       const completedAutoUnits = parseInt(autoSummary.completed_units || 0, 10) || 0;
       const processingAutoUnits = parseInt(autoSummary.processing_units || 0, 10) || 0;
@@ -2038,13 +2039,15 @@ window.refreshGallery = refreshGallery;
       const autoSummaryText = isAutoMapped
         ? `Auto: ${completedAutoUnits}/${totalAutoUnits} completadas${processingAutoUnits ? ` · ${processingAutoUnits} verificando` : ''}${retryableAutoUnits ? ` · ${retryableAutoUnits} por reenviar` : ''}`
         : '';
-      const pabiloEligible = !!o.pabilo_eligible;
+      const pabiloEligible = (typeof pabiloEligibility.eligible === 'boolean')
+        ? !!pabiloEligibility.eligible
+        : !!o.pabilo_eligible;
       const pabiloVerified = !!payVerify.verified;
       const pabiloStateText = pabiloEligible
         ? (pabiloVerified
             ? `Pago verificado en Pabilo${payVerify.verification_id ? ` · ID ${payVerify.verification_id}` : ''}`
             : `Pago no verificado en Pabilo${payVerify.message ? ` · ${payVerify.message}` : ''}`)
-        : '';
+        : (pabiloEligibility.reason ? `Pabilo no aplica: ${pabiloEligibility.reason}` : '');
       tile.setAttribute('data-is-auto', isAutoMapped ? '1' : '0');
       const when = new Date(o.created_at).toLocaleString();
       const itemsArr = Array.isArray(o.items) ? o.items : [];
@@ -2071,7 +2074,7 @@ window.refreshGallery = refreshGallery;
             <div class="package-name">${diam || ''}</div>
             ${playerNick && playerNick !== (o.name||'').trim() && playerNick !== (o.email||'').trim() ? `<div class="package-name" style="color:#86efac;font-size:12px;">👤 ${playerNick}</div>` : ''}
             ${autoSummaryText ? `<div class="package-name" style="color:#93c5fd;font-size:12px;">${autoSummaryText}</div>` : ''}
-            ${pabiloStateText ? `<div class="package-name" style="color:${pabiloVerified ? '#6ee7b7' : '#fca5a5'};font-size:12px;">${pabiloStateText}</div>` : ''}
+            ${pabiloStateText ? `<div class="package-name" style="color:${pabiloEligible ? (pabiloVerified ? '#6ee7b7' : '#fca5a5') : '#cbd5e1'};font-size:12px;">${pabiloStateText}</div>` : ''}
             <div class="quantity-label">Cantidad: <span class="quantity-value">${itemsArr.length ? qtyTotal : 1}</span></div>
             <div class="ref-section">
               <div class="ref-label">REFERENCIA</div>
@@ -2205,7 +2208,10 @@ window.refreshGallery = refreshGallery;
             headers: { 'Content-Type': 'application/json' }
           });
           const data = await res.json().catch(() => ({}));
-          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo verificar el pago');
+          if (!res.ok || !data.ok) {
+            const eligReason = (data.eligibility && data.eligibility.reason) ? ` (${data.eligibility.reason})` : '';
+            throw new Error((data.error || 'No se pudo verificar el pago') + eligReason);
+          }
           const pv = data.payment_verify || {};
           if (pv.verified) {
             toast(`✅ Pago verificado en Pabilo${pv.verification_id ? ` · ${pv.verification_id}` : ''}`, 'success');
