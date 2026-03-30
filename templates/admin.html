@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/admin.js', v='23') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin.js', v='24') }}" defer></script>
 <style>
 </style>
 {% endblock %}
@@ -528,12 +528,24 @@
               <input id="pabilo-api-key" type="text" placeholder="pk_...">
             </div>
             <div class="form-row">
-              <label for="pabilo-user-bank-id">UserBankId de Pabilo</label>
-              <input id="pabilo-user-bank-id" type="text" placeholder="ub_...">
+              <label for="pabilo-pm-user-bank-id">UserBankId Pabilo para Pago Móvil</label>
+              <input id="pabilo-pm-user-bank-id" type="text" placeholder="ub_...">
+            </div>
+            <div class="form-row">
+              <label for="pabilo-binance-user-bank-id">UserBankId Pabilo para Binance</label>
+              <input id="pabilo-binance-user-bank-id" type="text" placeholder="ub_...">
             </div>
             <div class="form-row">
               <label for="pabilo-base-url">URL base Pabilo</label>
               <input id="pabilo-base-url" type="text" placeholder="https://api.pabilo.app">
+            </div>
+            <div class="form-row">
+              <label for="pabilo-default-movement-type">Tipo de movimiento por defecto</label>
+              <select id="pabilo-default-movement-type">
+                <option value="">Detectar desde la orden</option>
+                <option value="MOVIL_PAY">MOVIL_PAY</option>
+                <option value="TRANSFER">TRANSFER</option>
+              </select>
             </div>
             <div class="form-row">
               <label for="pabilo-timeout-seconds">Timeout (segundos)</label>

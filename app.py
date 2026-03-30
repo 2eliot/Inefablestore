@@ -621,6 +621,16 @@ class Order(db.Model):
     automation_json = db.Column(db.Text, default="")
     # Payment capture (voucher/comprobante image path relative to UPLOAD_FOLDER)
     payment_capture = db.Column(db.String(500), default="")
+    payer_dni_type = db.Column(db.String(2), default="")
+    payer_dni_number = db.Column(db.String(20), default="")
+    payer_bank_origin = db.Column(db.String(20), default="")
+    payer_phone = db.Column(db.String(20), default="")
+    payer_payment_date = db.Column(db.String(10), default="")
+    payer_movement_type = db.Column(db.String(20), default="")
+    payment_verification_id = db.Column(db.String(120), default="")
+    payment_verified_at = db.Column(db.DateTime, nullable=True)
+    payment_verification_attempts = db.Column(db.Integer, default=0)
+    payment_last_verification_at = db.Column(db.DateTime, nullable=True)
 
 
 class OrderSummary(db.Model):
@@ -1933,6 +1943,8 @@ def _pabilo_config():
         method = "pm"
     api_key = (get_config_value("pabilo_api_key", "") or "").strip()
     user_bank_id = (get_config_value("pabilo_user_bank_id", "") or "").strip()
+    pm_user_bank_id = (get_config_value("pabilo_pm_user_bank_id", "") or "").strip()
+    binance_user_bank_id = (get_config_value("pabilo_binance_user_bank_id", "") or "").strip()
     base_url = (
         get_config_value("pabilo_base_url", "")
         or os.environ.get("PABILO_BASE_URL", "https://api.pabilo.app")
@@ -1947,21 +1959,77 @@ def _pabilo_config():
     except Exception:
         timeout = 30
     enforce_method = get_config_value("pabilo_enforce_method", "1") == "1"
+    default_movement_type = (get_config_value("pabilo_default_movement_type", "") or "").strip().upper()
+    if default_movement_type not in ("MOVIL_PAY", "TRANSFER"):
+        default_movement_type = ""
+    user_bank_ids = {
+        "pm": pm_user_bank_id,
+        "binance": binance_user_bank_id,
+    }
+    if user_bank_id and not user_bank_ids.get(method):
+        user_bank_ids[method] = user_bank_id
     return {
         "enabled": enabled,
         "method": method,
         "api_key": api_key,
         "user_bank_id": user_bank_id,
+        "pm_user_bank_id": pm_user_bank_id,
+        "binance_user_bank_id": binance_user_bank_id,
+        "user_bank_ids": user_bank_ids,
         "base_url": base_url,
         "timeout": timeout,
         "enforce_method": enforce_method,
+        "default_movement_type": default_movement_type,
     }
+
+
+def _pabilo_normalize_method(raw_method: str) -> str:
+    method = (raw_method or "pm").strip().lower()
+    return method if method in ("pm", "binance") else "pm"
+
+
+def _pabilo_user_bank_id_for_method(method: str) -> str:
+    cfg = _pabilo_config()
+    normalized = _pabilo_normalize_method(method)
+    configured = str((cfg.get("user_bank_ids") or {}).get(normalized) or "").strip()
+    if configured:
+        return configured
+    legacy = str(cfg.get("user_bank_id") or "").strip()
+    if legacy and normalized == _pabilo_normalize_method(cfg.get("method") or "pm"):
+        return legacy
+    return ""
+
+
+def _pabilo_datetime_to_iso(value) -> str:
+    if isinstance(value, datetime):
+        try:
+            return value.isoformat()
+        except Exception:
+            return ""
+    return str(value or "")
 
 
 def _pabilo_get_payment_state(order_obj):
     state = _load_order_automation_state(order_obj)
     raw = state.get("payment_verify")
-    return raw if isinstance(raw, dict) else {}
+    raw_state = raw if isinstance(raw, dict) else {}
+    attempts = 0
+    try:
+        attempts = int(order_obj.payment_verification_attempts or raw_state.get("attempts") or 0)
+    except Exception:
+        attempts = 0
+    verified = bool(order_obj.payment_verified_at or raw_state.get("verified"))
+    verification_id = str(order_obj.payment_verification_id or raw_state.get("verification_id") or "")
+    last_checked_at = _pabilo_datetime_to_iso(order_obj.payment_last_verification_at) or str(raw_state.get("last_checked_at") or "")
+    provider = str(raw_state.get("provider") or ("pabilo" if (attempts or verified or verification_id) else ""))
+    return {
+        **raw_state,
+        "provider": provider,
+        "attempts": attempts,
+        "verified": verified,
+        "verification_id": verification_id,
+        "last_checked_at": last_checked_at,
+    }
 
 
 def _pabilo_set_payment_state(order_obj, payment_state: dict):
@@ -1979,10 +2047,12 @@ def _is_pabilo_payment_method_enforced_for_order(order_obj) -> bool:
 
 def _pabilo_eligibility_info(order_obj) -> dict:
     cfg = _pabilo_config()
-    order_method = (order_obj.method or "").strip().lower()
-    expected_method = (cfg.get("method") or "pm").strip().lower()
+    order_method = _pabilo_normalize_method(order_obj.method or "")
+    expected_method = _pabilo_normalize_method(cfg.get("method") or "pm")
     auto_mapped = bool(_order_has_auto_recharges(order_obj))
     enabled = bool(cfg.get("enabled"))
+    api_key = str(cfg.get("api_key") or "").strip()
+    user_bank_id = _pabilo_user_bank_id_for_method(expected_method)
 
     reasons = []
     if not enabled:
@@ -1993,6 +2063,10 @@ def _pabilo_eligibility_info(order_obj) -> dict:
         )
     if not auto_mapped:
         reasons.append("La orden no tiene recargas mapeadas para automatizacion")
+    if not api_key:
+        reasons.append("Falta API key de Pabilo")
+    if not user_bank_id:
+        reasons.append(f"Falta UserBankId de Pabilo para {expected_method.upper()}")
 
     return {
         "eligible": len(reasons) == 0,
@@ -2002,6 +2076,8 @@ def _pabilo_eligibility_info(order_obj) -> dict:
         "expected_method": expected_method,
         "order_method": order_method,
         "auto_mapped": auto_mapped,
+        "has_api_key": bool(api_key),
+        "user_bank_id": user_bank_id,
     }
 
 
@@ -2012,28 +2088,29 @@ def _order_is_pabilo_eligible(order_obj) -> bool:
 def _pabilo_verify_payment(order_obj):
     if not order_obj:
         return {"ok": False, "verified": False, "message": "Orden inválida"}
-    cfg = _pabilo_config()
-    if not cfg.get("enabled"):
-        return {"ok": False, "verified": False, "message": "Pabilo está desactivado"}
-    if (order_obj.method or "").strip().lower() != cfg.get("method"):
+    eligibility = _pabilo_eligibility_info(order_obj)
+    if not eligibility.get("eligible"):
         return {
             "ok": False,
             "verified": False,
-            "message": f"Este pedido debe pagarse por {cfg.get('method').upper()} para usar Pabilo.",
+            "message": eligibility.get("reason") or "La orden no es elegible para Pabilo",
+            "eligibility": eligibility,
         }
-    if not cfg.get("api_key"):
-        return {"ok": False, "verified": False, "message": "Falta API key de Pabilo"}
-    if not cfg.get("user_bank_id"):
-        return {"ok": False, "verified": False, "message": "Falta userBankId de Pabilo"}
+    cfg = _pabilo_config()
     if not (order_obj.reference or "").strip():
         return {"ok": False, "verified": False, "message": "La orden no tiene referencia"}
+
+    order_method = _pabilo_normalize_method(order_obj.method or "")
+    user_bank_id = _pabilo_user_bank_id_for_method(order_method)
+    if not user_bank_id:
+        return {"ok": False, "verified": False, "message": f"Falta UserBankId de Pabilo para {order_method.upper()}"}
 
     raw_base_url = str(cfg.get('base_url') or '').strip().rstrip('/')
     if "/userbankpayment/" in raw_base_url:
         # Allow advanced config where full endpoint is already provided.
         url = raw_base_url
     else:
-        url = f"{raw_base_url}/userbankpayment/{cfg.get('user_bank_id')}/betaserio"
+        url = f"{raw_base_url}/userbankpayment/{user_bank_id}/betaserio"
     amount_value = 0.0
     try:
         amount_value = float(order_obj.amount or 0.0)
@@ -2046,7 +2123,22 @@ def _pabilo_verify_payment(order_obj):
         "amount": int(amount_value) if float(amount_value).is_integer() else round(amount_value, 2),
         "bank_reference": str(order_obj.reference or "").strip(),
     }
-    movement_type = (get_config_value("pabilo_movement_type", "") or "").strip().upper()
+    payer_dni_number = str(order_obj.payer_dni_number or "").strip()
+    if payer_dni_number:
+        payload["dni_pagador"] = {
+            "dniType": (str(order_obj.payer_dni_type or "V").strip().upper() or "V")[:2],
+            "dniNumber": payer_dni_number,
+        }
+    payer_phone = str(order_obj.payer_phone or order_obj.phone or "").strip()
+    if payer_phone:
+        payload["phone_pagador"] = payer_phone
+    payer_bank_origin = str(order_obj.payer_bank_origin or "").strip()
+    if payer_bank_origin:
+        payload["bank_origin"] = payer_bank_origin
+    payer_payment_date = str(order_obj.payer_payment_date or "").strip()
+    if payer_payment_date:
+        payload["fecha_pago"] = payer_payment_date
+    movement_type = (str(order_obj.payer_movement_type or "").strip().upper() or str(cfg.get("default_movement_type") or "").strip().upper())
     if movement_type in ("MOVIL_PAY", "TRANSFER"):
         payload["movement_type"] = movement_type
     headers = {
@@ -2081,10 +2173,7 @@ def _pabilo_verify_payment(order_obj):
         try:
             resp_get = _requests_lib.get(
                 url,
-                params={
-                    "amount": payload.get("amount"),
-                    "bank_reference": payload.get("bank_reference"),
-                },
+                params=payload,
                 headers={"appKey": cfg.get("api_key")},
                 timeout=cfg.get("timeout", 30),
             )
@@ -2171,7 +2260,7 @@ def _pabilo_verify_payment(order_obj):
         }
 
     if not verification_id:
-        verification_id = f"fallback:{cfg.get('method')}:{str(order_obj.reference or '').strip()}"
+        verification_id = f"fallback:{order_method}:{str(order_obj.reference or '').strip()}"
 
     return {
         "ok": True,
@@ -2186,21 +2275,27 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
     current = _pabilo_get_payment_state(order_obj)
     attempts = 0
     try:
-        attempts = int(current.get("attempts") or 0)
+        attempts = int(order_obj.payment_verification_attempts or current.get("attempts") or 0)
     except Exception:
         attempts = 0
 
     result = _pabilo_verify_payment(order_obj)
-    now_iso = datetime.utcnow().isoformat()
+    checked_at = datetime.utcnow()
+    now_iso = checked_at.isoformat()
+    order_obj.payment_verification_attempts = attempts + 1
+    order_obj.payment_last_verification_at = checked_at
+    if result.get("verified"):
+        order_obj.payment_verified_at = checked_at
+        order_obj.payment_verification_id = str(result.get("verification_id") or order_obj.payment_verification_id or "")
 
     state = {
         "provider": "pabilo",
         "enabled": bool(_pabilo_config().get("enabled")),
-        "method": _pabilo_config().get("method"),
+        "method": _pabilo_normalize_method(order_obj.method or ""),
         "attempts": attempts + 1,
         "last_checked_at": now_iso,
         "verified": bool(result.get("verified")),
-        "verification_id": str(result.get("verification_id") or ""),
+        "verification_id": str(result.get("verification_id") or order_obj.payment_verification_id or ""),
         "message": str(result.get("message") or ""),
         "source": source,
     }
@@ -2727,6 +2822,16 @@ with app.app_context():
             add_order_col('items_json', "items_json TEXT DEFAULT ''")
             add_order_col('automation_json', "automation_json TEXT DEFAULT ''")
             add_order_col('payment_capture', "payment_capture TEXT DEFAULT ''")
+            add_order_col('payer_dni_type', "payer_dni_type TEXT DEFAULT ''")
+            add_order_col('payer_dni_number', "payer_dni_number TEXT DEFAULT ''")
+            add_order_col('payer_bank_origin', "payer_bank_origin TEXT DEFAULT ''")
+            add_order_col('payer_phone', "payer_phone TEXT DEFAULT ''")
+            add_order_col('payer_payment_date', "payer_payment_date TEXT DEFAULT ''")
+            add_order_col('payer_movement_type', "payer_movement_type TEXT DEFAULT ''")
+            add_order_col('payment_verification_id', "payment_verification_id TEXT DEFAULT ''")
+            add_order_col('payment_verified_at', f"payment_verified_at {'TIMESTAMP' if _is_pg else 'TEXT'}")
+            add_order_col('payment_verification_attempts', "payment_verification_attempts INTEGER DEFAULT 0")
+            add_order_col('payment_last_verification_at', f"payment_last_verification_at {'TIMESTAMP' if _is_pg else 'TEXT'}")
             db.session.commit()
         # Special users table migration: ensure new columns
         try:
@@ -3277,8 +3382,30 @@ def store_payments():
         "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
         "pabilo_method": get_config_value("pabilo_method", "pm"),
         "pabilo_enforce_method": get_config_value("pabilo_enforce_method", "1"),
+        "pabilo_default_movement_type": get_config_value("pabilo_default_movement_type", ""),
     }
     return jsonify({"ok": True, "payments": data})
+
+
+@app.route("/store/item/<int:item_id>/automation-check", methods=["GET"])
+def store_item_automation_check(item_id: int):
+    method = _pabilo_normalize_method(request.args.get("method") or "pm")
+    mapping = RevendedoresItemMapping.query.filter_by(
+        store_item_id=item_id,
+        active=True,
+        auto_enabled=True,
+    ).first()
+    auto_recharge = mapping is not None
+    pabilo_cfg = _pabilo_config()
+    configured_method = _pabilo_normalize_method(pabilo_cfg.get("method") or "pm")
+    collect_payer_data = bool(auto_recharge and pabilo_cfg.get("enabled") and method == configured_method)
+    return jsonify({
+        "ok": True,
+        "auto_recharge": auto_recharge,
+        "pabilo_enabled": bool(pabilo_cfg.get("enabled")),
+        "pabilo_method": configured_method,
+        "collect_payer_data": collect_payer_data,
+    })
 
 
  
@@ -3413,10 +3540,13 @@ def admin_config_payments_get():
         "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
         "pabilo_api_key": get_config_value("pabilo_api_key", ""),
         "pabilo_user_bank_id": get_config_value("pabilo_user_bank_id", ""),
+        "pabilo_pm_user_bank_id": get_config_value("pabilo_pm_user_bank_id", ""),
+        "pabilo_binance_user_bank_id": get_config_value("pabilo_binance_user_bank_id", ""),
         "pabilo_method": get_config_value("pabilo_method", "pm"),
         "pabilo_base_url": get_config_value("pabilo_base_url", os.environ.get("PABILO_BASE_URL", "https://api.pabilo.app")),
         "pabilo_timeout_seconds": get_config_value("pabilo_timeout_seconds", os.environ.get("PABILO_TIMEOUT", "30")),
         "pabilo_enforce_method": get_config_value("pabilo_enforce_method", "1"),
+        "pabilo_default_movement_type": get_config_value("pabilo_default_movement_type", ""),
     })
 
 
@@ -3439,11 +3569,15 @@ def admin_config_payments_set():
         "pabilo_auto_verify_enabled": "1" if data.get("pabilo_auto_verify_enabled") else "0",
         "pabilo_api_key": (data.get("pabilo_api_key") or "").strip(),
         "pabilo_user_bank_id": (data.get("pabilo_user_bank_id") or "").strip(),
+        "pabilo_pm_user_bank_id": (data.get("pabilo_pm_user_bank_id") or "").strip(),
+        "pabilo_binance_user_bank_id": (data.get("pabilo_binance_user_bank_id") or "").strip(),
     }
     pabilo_method = (data.get("pabilo_method") or "pm").strip().lower()
     if pabilo_method not in ("pm", "binance"):
         pabilo_method = "pm"
     values["pabilo_method"] = pabilo_method
+    selected_user_bank_id = values.get("pabilo_pm_user_bank_id", "") if pabilo_method == "pm" else values.get("pabilo_binance_user_bank_id", "")
+    values["pabilo_user_bank_id"] = selected_user_bank_id or values.get("pabilo_user_bank_id", "")
     values["pabilo_base_url"] = (data.get("pabilo_base_url") or "").strip()
     timeout_raw = (data.get("pabilo_timeout_seconds") or "").strip()
     try:
@@ -3452,6 +3586,10 @@ def admin_config_payments_set():
         timeout_val = "30"
     values["pabilo_timeout_seconds"] = timeout_val
     values["pabilo_enforce_method"] = "1" if data.get("pabilo_enforce_method", True) else "0"
+    default_movement_type = (data.get("pabilo_default_movement_type") or "").strip().upper()
+    if default_movement_type not in ("", "MOVIL_PAY", "TRANSFER"):
+        default_movement_type = ""
+    values["pabilo_default_movement_type"] = default_movement_type
     try:
         set_config_values(values)
     except Exception as exc:
@@ -3471,10 +3609,13 @@ def admin_config_payments_set():
             "pabilo_auto_verify_enabled": values.get("pabilo_auto_verify_enabled", "0"),
             "pabilo_api_key": values.get("pabilo_api_key", ""),
             "pabilo_user_bank_id": values.get("pabilo_user_bank_id", ""),
+            "pabilo_pm_user_bank_id": values.get("pabilo_pm_user_bank_id", ""),
+            "pabilo_binance_user_bank_id": values.get("pabilo_binance_user_bank_id", ""),
             "pabilo_method": values.get("pabilo_method", "pm"),
             "pabilo_base_url": values.get("pabilo_base_url", ""),
             "pabilo_timeout_seconds": values.get("pabilo_timeout_seconds", "30"),
             "pabilo_enforce_method": values.get("pabilo_enforce_method", "1"),
+            "pabilo_default_movement_type": values.get("pabilo_default_movement_type", ""),
         }
     })
 
@@ -4081,6 +4222,19 @@ def create_order():
         customer_zone = _get("customer_zone").strip()
         special_code = _get("special_code").strip()
         verified_nick = _get("nn").strip()
+        payer_dni_type = (_get("payer_dni_type") or "").strip().upper()
+        payer_dni_number = (_get("payer_dni_number") or "").strip()
+        payer_bank_origin = (_get("payer_bank_origin") or "").strip()
+        payer_phone = (_get("payer_phone") or "").strip()
+        payer_payment_date = (_get("payer_payment_date") or "").strip()
+        payer_movement_type = (_get("payer_movement_type") or "").strip().upper()
+
+        if payer_dni_type and payer_dni_type not in ("V", "E", "J", "P", "G"):
+            payer_dni_type = ""
+        if payer_payment_date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", payer_payment_date):
+            return jsonify({"ok": False, "error": "La fecha de pago es inválida"}), 400
+        if payer_movement_type and payer_movement_type not in ("MOVIL_PAY", "TRANSFER"):
+            payer_movement_type = ""
 
         if not email:
             return jsonify({"ok": False, "error": "Correo requerido"}), 400
@@ -4153,6 +4307,12 @@ def create_order():
             customer_name=verified_nick or name or email or customer_id,
             status="pending",
             special_code=special_code,
+            payer_dni_type=payer_dni_type,
+            payer_dni_number=payer_dni_number,
+            payer_bank_origin=payer_bank_origin,
+            payer_phone=payer_phone or phone,
+            payer_payment_date=payer_payment_date,
+            payer_movement_type=payer_movement_type,
         )
         # If client sent multiple items, store them in items_json
         # Apply influencer discount if special_code provided

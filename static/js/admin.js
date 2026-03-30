@@ -219,8 +219,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const pabiloAutoVerifyEnabled = document.getElementById('pabilo-auto-verify-enabled');
   const pabiloMethod = document.getElementById('pabilo-method');
   const pabiloApiKey = document.getElementById('pabilo-api-key');
-  const pabiloUserBankId = document.getElementById('pabilo-user-bank-id');
+  const pabiloPmUserBankId = document.getElementById('pabilo-pm-user-bank-id');
+  const pabiloBinanceUserBankId = document.getElementById('pabilo-binance-user-bank-id');
   const pabiloBaseUrl = document.getElementById('pabilo-base-url');
+  const pabiloDefaultMovementType = document.getElementById('pabilo-default-movement-type');
   const pabiloTimeoutSeconds = document.getElementById('pabilo-timeout-seconds');
   const pabiloEnforceMethod = document.getElementById('pabilo-enforce-method');
   const payMethodSelect = document.getElementById('pay-method-select');
@@ -824,8 +826,10 @@ window.fetchPayments = fetchPayments;
       pabilo_auto_verify_enabled: pabiloAutoVerifyEnabled ? pabiloAutoVerifyEnabled.checked : false,
       pabilo_method: pabiloMethod ? pabiloMethod.value : 'pm',
       pabilo_api_key: pabiloApiKey ? pabiloApiKey.value.trim() : '',
-      pabilo_user_bank_id: pabiloUserBankId ? pabiloUserBankId.value.trim() : '',
+      pabilo_pm_user_bank_id: pabiloPmUserBankId ? pabiloPmUserBankId.value.trim() : '',
+      pabilo_binance_user_bank_id: pabiloBinanceUserBankId ? pabiloBinanceUserBankId.value.trim() : '',
       pabilo_base_url: pabiloBaseUrl ? pabiloBaseUrl.value.trim() : '',
+      pabilo_default_movement_type: pabiloDefaultMovementType ? pabiloDefaultMovementType.value : '',
       pabilo_timeout_seconds: pabiloTimeoutSeconds ? pabiloTimeoutSeconds.value.trim() : '30',
       pabilo_enforce_method: pabiloEnforceMethod ? pabiloEnforceMethod.checked : true
     };
@@ -858,8 +862,10 @@ window.fetchPayments = fetchPayments;
     if (pabiloAutoVerifyEnabled) pabiloAutoVerifyEnabled.checked = (data.pabilo_auto_verify_enabled === '1' || data.pabilo_auto_verify_enabled === 1 || data.pabilo_auto_verify_enabled === true);
     if (pabiloMethod) pabiloMethod.value = (data.pabilo_method || 'pm').toLowerCase() === 'binance' ? 'binance' : 'pm';
     if (pabiloApiKey) pabiloApiKey.value = data.pabilo_api_key || '';
-    if (pabiloUserBankId) pabiloUserBankId.value = data.pabilo_user_bank_id || '';
+    if (pabiloPmUserBankId) pabiloPmUserBankId.value = data.pabilo_pm_user_bank_id || data.pabilo_user_bank_id || '';
+    if (pabiloBinanceUserBankId) pabiloBinanceUserBankId.value = data.pabilo_binance_user_bank_id || '';
     if (pabiloBaseUrl) pabiloBaseUrl.value = data.pabilo_base_url || '';
+    if (pabiloDefaultMovementType) pabiloDefaultMovementType.value = data.pabilo_default_movement_type || '';
     if (pabiloTimeoutSeconds) pabiloTimeoutSeconds.value = data.pabilo_timeout_seconds || '30';
     if (pabiloEnforceMethod) pabiloEnforceMethod.checked = !(data.pabilo_enforce_method === '0' || data.pabilo_enforce_method === 0 || data.pabilo_enforce_method === false);
     showPaySection((payMethodSelect && payMethodSelect.value) || activePayMethodView || 'pm');
