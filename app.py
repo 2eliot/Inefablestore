@@ -10,7 +10,7 @@ import html as _html
 import hashlib
 import hmac as _hmac_module
 from datetime import datetime, timedelta, timezone
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory, current_app
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
