@@ -2089,12 +2089,6 @@ def _pabilo_request_info(order_obj) -> dict:
         reasons.append(f"Falta UserBankId de Pabilo para {order_method.upper() or expected_method.upper()}")
     if not str(order_obj.reference or "").strip():
         reasons.append("La orden no tiene referencia")
-    try:
-        amount_value = float(order_obj.amount or 0.0)
-    except Exception:
-        amount_value = 0.0
-    if amount_value <= 0:
-        reasons.append("La orden no tiene monto válido")
 
     return {
         "requestable": len(reasons) == 0,
@@ -2105,8 +2099,34 @@ def _pabilo_request_info(order_obj) -> dict:
         "order_method": order_method,
         "has_api_key": bool(api_key),
         "user_bank_id": user_bank_id,
-        "amount": amount_value,
     }
+
+
+def _pabilo_build_payload(order_obj) -> dict:
+    payload = {
+        "bank_reference": str(order_obj.reference or "").strip(),
+    }
+
+    if str(order_obj.payer_dni_number or "").strip():
+        payload["dni_pagador"] = {
+            "dniType": str(order_obj.payer_dni_type or "V").strip().upper(),
+            "dniNumber": str(order_obj.payer_dni_number or "").strip(),
+        }
+    if str(order_obj.payer_phone or "").strip():
+        payload["phone_pagador"] = str(order_obj.payer_phone or "").strip()
+    if str(order_obj.payer_bank_origin or "").strip():
+        payload["bank_origin"] = str(order_obj.payer_bank_origin or "").strip()
+    if order_obj.payer_payment_date:
+        try:
+            payload["fecha_pago"] = order_obj.payer_payment_date.strftime("%Y-%m-%d")
+        except Exception:
+            payload["fecha_pago"] = str(order_obj.payer_payment_date)
+
+    movement_type = str(order_obj.payer_movement_type or "").strip().upper()
+    if movement_type in ("MOVIL_PAY", "TRANSFER"):
+        payload["movement_type"] = movement_type
+
+    return payload
 
 
 def _pabilo_eligibility_info(order_obj) -> dict:
@@ -2158,20 +2178,7 @@ def _pabilo_verify_payment(order_obj):
     configured_url = _pabilo_verify_endpoint(user_bank_id, str(cfg.get('base_url') or '').strip())
     official_url = _pabilo_verify_endpoint(user_bank_id, "https://api.pabilo.app")
     url = configured_url
-    amount_value = 0.0
-    try:
-        amount_value = float(order_obj.amount or 0.0)
-    except Exception:
-        amount_value = 0.0
-    if amount_value <= 0:
-        return {"ok": False, "verified": False, "message": "La orden no tiene monto válido", "request": request_info}
-    if order_method == "pm" or str(order_obj.currency or "").strip().upper() in ("BSD", "VES", "BS"):
-        amount_value = float(int(round(amount_value)))
-
-    payload = {
-        "bank_reference": str(order_obj.reference or "").strip(),
-        "amount": int(amount_value) if float(amount_value).is_integer() else round(amount_value, 2),
-    }
+    payload = _pabilo_build_payload(order_obj)
     headers = {
         "Content-Type": "application/json",
         "appKey": cfg.get("api_key"),
