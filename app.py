@@ -21,6 +21,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import secrets
 import requests as _requests_lib
+from sqlalchemy.exc import IntegrityError
 
 # Create Flask app
 app = Flask(__name__, instance_relative_config=True)
@@ -3212,7 +3213,10 @@ def admin_config_logo_set():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
-    set_config_value("logo_path", (data.get("logo_path") or "").strip())
+    try:
+        set_config_values({"logo_path": (data.get("logo_path") or "").strip()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar logo: {exc}"}), 500
     return jsonify({"ok": True})
 
 
@@ -3233,7 +3237,10 @@ def admin_config_site_name_set():
     site_name = (data.get("site_name") or "").strip()
     if not site_name:
         return jsonify({"ok": False, "error": "El nombre del sitio no puede estar vacío"}), 400
-    set_config_value("site_name", site_name)
+    try:
+        set_config_values({"site_name": site_name})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar nombre del sitio: {exc}"}), 500
     return jsonify({"ok": True, "site_name": site_name})
 
 
@@ -3251,7 +3258,10 @@ def admin_config_mid_banner_set():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
-    set_config_value("mid_banner_path", (data.get("mid_banner_path") or "").strip())
+    try:
+        set_config_values({"mid_banner_path": (data.get("mid_banner_path") or "").strip()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar banner: {exc}"}), 500
     return jsonify({"ok": True})
 
 
@@ -3269,7 +3279,10 @@ def admin_config_thanks_image_set():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
-    set_config_value("thanks_image_path", (data.get("thanks_image_path") or "").strip())
+    try:
+        set_config_values({"thanks_image_path": (data.get("thanks_image_path") or "").strip()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar imagen de gracias: {exc}"}), 500
     return jsonify({"ok": True})
 
 
@@ -3287,7 +3300,10 @@ def admin_config_rate_set():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
-    set_config_value("exchange_rate_bsd_per_usd", (data.get("rate_bsd_per_usd") or "").strip())
+    try:
+        set_config_values({"exchange_rate_bsd_per_usd": (data.get("rate_bsd_per_usd") or "").strip()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar tasa: {exc}"}), 500
     return jsonify({"ok": True})
 
 
@@ -3323,30 +3339,36 @@ def admin_config_payments_set():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
-    set_config_value("pm_bank", (data.get("pm_bank") or "").strip())
-    set_config_value("pm_name", (data.get("pm_name") or "").strip())
-    set_config_value("pm_phone", (data.get("pm_phone") or "").strip())
-    set_config_value("pm_id", (data.get("pm_id") or "").strip())
-    set_config_value("binance_email", (data.get("binance_email") or "").strip())
-    set_config_value("binance_phone", (data.get("binance_phone") or "").strip())
-    set_config_value("pm_image_path", (data.get("pm_image_path") or "").strip())
-    set_config_value("binance_image_path", (data.get("binance_image_path") or "").strip())
-    set_config_value("binance_auto_enabled", "1" if data.get("binance_auto_enabled") else "0")
-    set_config_value("pabilo_auto_verify_enabled", "1" if data.get("pabilo_auto_verify_enabled") else "0")
-    set_config_value("pabilo_api_key", (data.get("pabilo_api_key") or "").strip())
-    set_config_value("pabilo_user_bank_id", (data.get("pabilo_user_bank_id") or "").strip())
+    values = {
+        "pm_bank": (data.get("pm_bank") or "").strip(),
+        "pm_name": (data.get("pm_name") or "").strip(),
+        "pm_phone": (data.get("pm_phone") or "").strip(),
+        "pm_id": (data.get("pm_id") or "").strip(),
+        "binance_email": (data.get("binance_email") or "").strip(),
+        "binance_phone": (data.get("binance_phone") or "").strip(),
+        "pm_image_path": (data.get("pm_image_path") or "").strip(),
+        "binance_image_path": (data.get("binance_image_path") or "").strip(),
+        "binance_auto_enabled": "1" if data.get("binance_auto_enabled") else "0",
+        "pabilo_auto_verify_enabled": "1" if data.get("pabilo_auto_verify_enabled") else "0",
+        "pabilo_api_key": (data.get("pabilo_api_key") or "").strip(),
+        "pabilo_user_bank_id": (data.get("pabilo_user_bank_id") or "").strip(),
+    }
     pabilo_method = (data.get("pabilo_method") or "pm").strip().lower()
     if pabilo_method not in ("pm", "binance"):
         pabilo_method = "pm"
-    set_config_value("pabilo_method", pabilo_method)
-    set_config_value("pabilo_base_url", (data.get("pabilo_base_url") or "").strip())
+    values["pabilo_method"] = pabilo_method
+    values["pabilo_base_url"] = (data.get("pabilo_base_url") or "").strip()
     timeout_raw = (data.get("pabilo_timeout_seconds") or "").strip()
     try:
         timeout_val = str(max(int(timeout_raw or "30"), 5))
     except Exception:
         timeout_val = "30"
-    set_config_value("pabilo_timeout_seconds", timeout_val)
-    set_config_value("pabilo_enforce_method", "1" if data.get("pabilo_enforce_method", True) else "0")
+    values["pabilo_timeout_seconds"] = timeout_val
+    values["pabilo_enforce_method"] = "1" if data.get("pabilo_enforce_method", True) else "0"
+    try:
+        set_config_values(values)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar configuración de pagos: {exc}"}), 500
     return jsonify({"ok": True})
 
 
@@ -3371,7 +3393,10 @@ def admin_config_mail_set():
     email = (data.get("admin_notify_email") or "").strip()
     if not email:
         return jsonify({"ok": False, "error": "Email requerido"}), 400
-    set_config_value("admin_notify_email", email)
+    try:
+        set_config_values({"admin_notify_email": email})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar correo: {exc}"}), 500
     return jsonify({"ok": True, "admin_notify_email": email})
 
 
@@ -3409,9 +3434,14 @@ def admin_config_hero_set():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
-    set_config_value("hero_1", (data.get("hero_1") or "").strip())
-    set_config_value("hero_2", (data.get("hero_2") or "").strip())
-    set_config_value("hero_3", (data.get("hero_3") or "").strip())
+    try:
+        set_config_values({
+            "hero_1": (data.get("hero_1") or "").strip(),
+            "hero_2": (data.get("hero_2") or "").strip(),
+            "hero_3": (data.get("hero_3") or "").strip(),
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar carrusel: {exc}"}), 500
     return jsonify({"ok": True})
 
 
@@ -3434,7 +3464,10 @@ def admin_config_active_login_game_set():
     data = request.get_json(silent=True) or {}
     val = (data.get("active_login_game_id") or "").strip()
     # allow empty to disable
-    set_config_value("active_login_game_id", val)
+    try:
+        set_config_values({"active_login_game_id": val})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar juego activo: {exc}"}), 500
     return jsonify({"ok": True, "active_login_game_id": val})
 
 
@@ -3453,7 +3486,10 @@ def admin_config_bs_package_id_set():
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
     val = (data.get("bs_package_id") or "").strip()
-    set_config_value("bs_package_id", val)
+    try:
+        set_config_values({"bs_package_id": val})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar bs_package_id: {exc}"}), 500
     return jsonify({"ok": True, "bs_package_id": val})
 
 
@@ -3472,7 +3508,10 @@ def admin_config_bs_server_id_set():
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
     val = (data.get("bs_server_id") or "").strip()
-    set_config_value("bs_server_id", val)
+    try:
+        set_config_values({"bs_server_id": val})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar bs_server_id: {exc}"}), 500
     return jsonify({"ok": True, "bs_server_id": val})
 
 
@@ -3491,7 +3530,10 @@ def admin_config_ml_package_id_set():
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
     val = (data.get("ml_package_id") or "").strip()
-    set_config_value("ml_package_id", val)
+    try:
+        set_config_values({"ml_package_id": val})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar ml_package_id: {exc}"}), 500
     return jsonify({"ok": True, "ml_package_id": val})
 
 
@@ -3510,7 +3552,10 @@ def admin_config_ml_smile_pid_set():
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
     val = (data.get("ml_smile_pid") or "").strip()
-    set_config_value("ml_smile_pid", val)
+    try:
+        set_config_values({"ml_smile_pid": val})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar ml_smile_pid: {exc}"}), 500
     return jsonify({"ok": True, "ml_smile_pid": val})
 
 
@@ -5823,14 +5868,47 @@ def admin_stats_package(pkg_id: int):
     })
 
 
-def set_config_value(key: str, value: str) -> None:
-    row = AppConfig.query.filter_by(key=key).first()
-    if not row:
-        row = AppConfig(key=key, value=value)
-        db.session.add(row)
-    else:
-        row.value = value
-    db.session.commit()
+def set_config_value(key: str, value: str, *, commit: bool = True) -> None:
+    """Persist a single config key safely.
+
+    In production with concurrent requests/workers, initial inserts can race.
+    This helper retries as update on unique conflicts and always rolls back
+    failed transactions so later saves continue working.
+    """
+    try:
+        row = AppConfig.query.filter_by(key=key).first()
+        if not row:
+            db.session.add(AppConfig(key=key, value=value))
+            # Flush now so we can catch unique violations before optional commit.
+            db.session.flush()
+        else:
+            row.value = value
+        if commit:
+            db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        # Another worker likely inserted the same key. Retry as update.
+        row = AppConfig.query.filter_by(key=key).first()
+        if row:
+            row.value = value
+        else:
+            db.session.add(AppConfig(key=key, value=value))
+        if commit:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def set_config_values(values: dict[str, str]) -> None:
+    """Persist multiple config keys in a single transaction."""
+    try:
+        for cfg_key, cfg_value in (values or {}).items():
+            set_config_value(str(cfg_key), str(cfg_value), commit=False)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 @app.route("/auth/login", methods=["POST"])
@@ -5912,9 +5990,14 @@ def auth_profile_set():
     if not email:
         return jsonify({"ok": False, "error": "El email es requerido"}), 400
     if user.get("role") == "admin":
-        set_config_value("profile_name", name)
-        set_config_value("profile_email", email)
-        set_config_value("profile_phone", phone)
+        try:
+            set_config_values({
+                "profile_name": name,
+                "profile_email": email,
+                "profile_phone": phone,
+            })
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"No se pudo guardar perfil: {exc}"}), 500
         return jsonify({"ok": True})
     # Normal user update
     if user.get("role") == "user":
