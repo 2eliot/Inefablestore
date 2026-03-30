@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/admin.js', v='25') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin.js', v='26') }}" defer></script>
 <style>
 </style>
 {% endblock %}
@@ -53,6 +53,7 @@
             <p>Cuando los clientes confirmen pagos, sus órdenes aparecerán aquí.</p>
           </div>
         </div>
+        <div id="orders-pagination" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:14px;"></div>
 
         <hr style="margin:16px 0; opacity:.35;">
         <div class="panel-header" style="padding:0; margin-bottom:8px;">

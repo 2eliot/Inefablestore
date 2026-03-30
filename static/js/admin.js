@@ -288,8 +288,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Orders elements
   const btnOrdersRefresh = document.getElementById('btn-orders-refresh');
   const ordersList = document.getElementById('orders-list');
+  const ordersPagination = document.getElementById('orders-pagination');
   const btnOrdersWdRefresh = document.getElementById('btn-orders-wd-refresh');
   const ordersWdList = document.getElementById('orders-wd-list');
+  let ordersCurrentPage = 1;
+  const ordersPerPage = 50;
   // Revendedores mapping elements
   const btnRevSync = document.getElementById('btn-rev-sync');
   const btnRevRefresh = document.getElementById('btn-rev-refresh');
@@ -2005,14 +2008,48 @@ window.refreshGallery = refreshGallery;
   // =====================
   // Orders: list + actions
   // =====================
-  async function fetchOrders() {
+  function renderOrdersPagination(meta) {
+    if (!ordersPagination) return;
+    const pagination = meta || {};
+    const totalPages = Math.max(parseInt(pagination.total_pages || 1, 10) || 1, 1);
+    const page = Math.min(Math.max(parseInt(pagination.page || 1, 10) || 1, 1), totalPages);
+    const totalOrders = parseInt(pagination.total_orders || 0, 10) || 0;
+
+    if (totalOrders <= ordersPerPage) {
+      ordersPagination.innerHTML = '';
+      return;
+    }
+
+    const pageButtons = [];
+    const start = Math.max(1, page - 2);
+    const end = Math.min(totalPages, start + 4);
+    for (let current = start; current <= end; current += 1) {
+      pageButtons.push(`
+        <button class="btn btn-orders-page${current === page ? ' primary' : ''}" data-page="${current}" type="button" ${current === page ? 'disabled' : ''}>${current}</button>
+      `);
+    }
+
+    ordersPagination.innerHTML = `
+      <button class="btn btn-orders-page-nav" data-page="${page - 1}" type="button" ${page <= 1 ? 'disabled' : ''}>Anterior</button>
+      <span style="color:#cbd5e1;font-size:13px;">Página ${page} de ${totalPages} · ${totalOrders} órdenes</span>
+      ${pageButtons.join('')}
+      <button class="btn btn-orders-page-nav" data-page="${page + 1}" type="button" ${page >= totalPages ? 'disabled' : ''}>Siguiente</button>
+    `;
+  }
+
+  async function fetchOrders(page = ordersCurrentPage) {
     try {
-      const res = await fetch('/admin/orders');
+      const normalizedPage = Math.max(parseInt(page || 1, 10) || 1, 1);
+      const res = await fetch(`/admin/orders?page=${normalizedPage}&per_page=${ordersPerPage}`);
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo listar');
+      const pagination = data.pagination || {};
+      ordersCurrentPage = Math.max(parseInt(pagination.page || normalizedPage, 10) || normalizedPage, 1);
       renderOrders(data.orders || []);
+      renderOrdersPagination(pagination);
     } catch (e) {
       if (ordersList) ordersList.innerHTML = `<div class="empty-state"><p>${e.message || 'Error'}</p></div>`;
+      if (ordersPagination) ordersPagination.innerHTML = '';
     }
   }
 
@@ -2315,6 +2352,14 @@ window.refreshGallery = refreshGallery;
       } finally {
         if (!keepDisabled) btn.disabled = false;
       }
+    });
+  }
+  if (ordersPagination) {
+    ordersPagination.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-page]');
+      if (!btn) return;
+      const page = parseInt(btn.getAttribute('data-page') || '1', 10) || 1;
+      await fetchOrders(page);
     });
   }
 

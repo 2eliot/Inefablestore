@@ -4687,7 +4687,28 @@ def admin_orders_list():
     user = session.get("user")
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
-    orders = Order.query.order_by(Order.created_at.desc()).all()
+    try:
+        page = max(int(request.args.get("page", 1) or 1), 1)
+    except Exception:
+        page = 1
+    try:
+        per_page = int(request.args.get("per_page", 50) or 50)
+    except Exception:
+        per_page = 50
+    per_page = 50 if per_page <= 0 else min(per_page, 50)
+
+    base_query = Order.query.order_by(Order.created_at.desc())
+    total_orders = base_query.count()
+    total_pages = max((total_orders + per_page - 1) // per_page, 1)
+    if page > total_pages:
+        page = total_pages
+
+    orders = (
+        base_query
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
 
     out = []
     for x in orders:
@@ -4750,7 +4771,18 @@ def admin_orders_list():
                 if x.payment_capture else ""
             ),
         })
-    return jsonify({"ok": True, "orders": out})
+    return jsonify({
+        "ok": True,
+        "orders": out,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total_orders": total_orders,
+            "total_pages": total_pages,
+            "has_prev": page > 1,
+            "has_next": page < total_pages,
+        },
+    })
 
 
 # ==============================
