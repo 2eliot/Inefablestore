@@ -2045,39 +2045,65 @@ def _is_pabilo_payment_method_enforced_for_order(order_obj) -> bool:
     return _order_has_auto_recharges(order_obj)
 
 
-def _pabilo_eligibility_info(order_obj) -> dict:
+def _pabilo_request_info(order_obj) -> dict:
     cfg = _pabilo_config()
     order_method = _pabilo_normalize_method(order_obj.method or "")
     expected_method = _pabilo_normalize_method(cfg.get("method") or "pm")
-    auto_mapped = bool(_order_has_auto_recharges(order_obj))
     enabled = bool(cfg.get("enabled"))
     api_key = str(cfg.get("api_key") or "").strip()
-    user_bank_id = _pabilo_user_bank_id_for_method(expected_method)
-
+    user_bank_id = _pabilo_user_bank_id_for_method(order_method)
     reasons = []
+
     if not enabled:
         reasons.append("Pabilo esta desactivado")
     if order_method != expected_method:
         reasons.append(
             f"Metodo incompatible: la orden usa {order_method.upper() or 'N/A'} y Pabilo exige {expected_method.upper()}"
         )
-    if not auto_mapped:
-        reasons.append("La orden no tiene recargas mapeadas para automatizacion")
     if not api_key:
         reasons.append("Falta API key de Pabilo")
     if not user_bank_id:
-        reasons.append(f"Falta UserBankId de Pabilo para {expected_method.upper()}")
+        reasons.append(f"Falta UserBankId de Pabilo para {order_method.upper() or expected_method.upper()}")
+    if not str(order_obj.reference or "").strip():
+        reasons.append("La orden no tiene referencia")
+    try:
+        amount_value = float(order_obj.amount or 0.0)
+    except Exception:
+        amount_value = 0.0
+    if amount_value <= 0:
+        reasons.append("La orden no tiene monto válido")
 
     return {
-        "eligible": len(reasons) == 0,
+        "requestable": len(reasons) == 0,
         "reason": "; ".join(reasons),
         "reasons": reasons,
         "enabled": enabled,
         "expected_method": expected_method,
         "order_method": order_method,
-        "auto_mapped": auto_mapped,
         "has_api_key": bool(api_key),
         "user_bank_id": user_bank_id,
+        "amount": amount_value,
+    }
+
+
+def _pabilo_eligibility_info(order_obj) -> dict:
+    request_info = _pabilo_request_info(order_obj)
+    auto_mapped = bool(_order_has_auto_recharges(order_obj))
+    reasons = list(request_info.get("reasons") or [])
+    if not auto_mapped:
+        reasons.append("La orden no tiene recargas mapeadas para automatizacion")
+
+    return {
+        "eligible": len(reasons) == 0,
+        "reason": "; ".join(reasons),
+        "reasons": reasons,
+        "enabled": bool(request_info.get("enabled")),
+        "expected_method": request_info.get("expected_method"),
+        "order_method": request_info.get("order_method"),
+        "auto_mapped": auto_mapped,
+        "has_api_key": bool(request_info.get("has_api_key")),
+        "user_bank_id": request_info.get("user_bank_id"),
+        "requestable": bool(request_info.get("requestable")),
     }
 
 
@@ -2088,13 +2114,14 @@ def _order_is_pabilo_eligible(order_obj) -> bool:
 def _pabilo_verify_payment(order_obj):
     if not order_obj:
         return {"ok": False, "verified": False, "message": "Orden inválida"}
-    eligibility = _pabilo_eligibility_info(order_obj)
-    if not eligibility.get("eligible"):
+    request_info = _pabilo_request_info(order_obj)
+    if not request_info.get("requestable"):
         return {
             "ok": False,
             "verified": False,
-            "message": eligibility.get("reason") or "La orden no es elegible para Pabilo",
-            "eligibility": eligibility,
+            "message": request_info.get("reason") or "La orden no se puede consultar en Pabilo",
+            "eligibility": _pabilo_eligibility_info(order_obj),
+            "request": request_info,
         }
     cfg = _pabilo_config()
     if not (order_obj.reference or "").strip():
@@ -2103,7 +2130,7 @@ def _pabilo_verify_payment(order_obj):
     order_method = _pabilo_normalize_method(order_obj.method or "")
     user_bank_id = _pabilo_user_bank_id_for_method(order_method)
     if not user_bank_id:
-        return {"ok": False, "verified": False, "message": f"Falta UserBankId de Pabilo para {order_method.upper()}"}
+        return {"ok": False, "verified": False, "message": f"Falta UserBankId de Pabilo para {order_method.upper()}", "request": request_info}
 
     raw_base_url = str(cfg.get('base_url') or '').strip().rstrip('/')
     if "/userbankpayment/" in raw_base_url:
@@ -4467,11 +4494,12 @@ def create_order():
         # If payment is confirmed, the order gets auto-approved and dispatched.
         auto_payment = None
         try:
+            request_info = _pabilo_request_info(o)
             eligibility = _pabilo_eligibility_info(o)
-            if eligibility.get("eligible"):
+            if request_info.get("requestable"):
                 auto_payment = _pabilo_verify_and_update_order(
                     o,
-                    auto_approve_on_verified=True,
+                    auto_approve_on_verified=bool(eligibility.get("eligible")),
                     source="checkout",
                 )
             else:
@@ -4479,7 +4507,8 @@ def create_order():
                     "ok": False,
                     "verified": False,
                     "skipped": True,
-                    "message": eligibility.get("reason") or "No elegible para verificacion Pabilo",
+                    "message": request_info.get("reason") or "No se pudo consultar Pabilo",
+                    "request": request_info,
                     "eligibility": eligibility,
                     "order_status": o.status,
                 }
@@ -4577,6 +4606,7 @@ def admin_orders_list():
             delivery_codes = []
         auto_summary = _summarize_order_auto_recharges(_build_order_auto_recharge_units(x))
         payment_state = _pabilo_get_payment_state(x)
+        pabilo_request = _pabilo_request_info(x)
         pabilo_eligibility = _pabilo_eligibility_info(x)
         out.append({
             "id": x.id,
@@ -4591,6 +4621,7 @@ def admin_orders_list():
             "is_auto_mapped": bool(auto_summary.get("total_units")),
             "auto_recharge_summary": auto_summary,
             "payment_verify": payment_state,
+            "pabilo_request": pabilo_request,
             "pabilo_eligible": bool(pabilo_eligibility.get("eligible")),
             "pabilo_eligibility": pabilo_eligibility,
             "items": items_payload,
@@ -4931,14 +4962,20 @@ def admin_orders_verify_payment(oid: int):
         return jsonify({"ok": False, "error": "No existe"}), 404
     if (o.status or "").lower() not in ("pending", "approved", "delivered"):
         return jsonify({"ok": False, "error": "La orden no permite verificación"}), 400
-    if not _order_is_pabilo_eligible(o):
+    request_info = _pabilo_request_info(o)
+    if not request_info.get("requestable"):
         return jsonify({
             "ok": False,
-            "error": "Esta orden no esta sujeta a verificacion Pabilo",
+            "error": "Esta orden no se puede consultar en Pabilo",
+            "request": request_info,
             "eligibility": _pabilo_eligibility_info(o),
         }), 400
 
-    result = _pabilo_verify_and_update_order(o, auto_approve_on_verified=True, source="admin_manual")
+    result = _pabilo_verify_and_update_order(
+        o,
+        auto_approve_on_verified=bool(_order_is_pabilo_eligible(o)),
+        source="admin_manual",
+    )
     return jsonify({"ok": True, "payment_verify": result, "order_status": o.status})
 
 

@@ -2030,6 +2030,7 @@ window.refreshGallery = refreshGallery;
       tile.setAttribute('data-customer-name', o.customer_name || '');
       const autoSummary = o.auto_recharge_summary || {};
       const payVerify = o.payment_verify || {};
+      const pabiloRequest = o.pabilo_request || {};
       const pabiloEligibility = o.pabilo_eligibility || {};
       const totalAutoUnits = parseInt(autoSummary.total_units || 0, 10) || 0;
       const completedAutoUnits = parseInt(autoSummary.completed_units || 0, 10) || 0;
@@ -2049,11 +2050,16 @@ window.refreshGallery = refreshGallery;
         ? !!pabiloEligibility.eligible
         : !!o.pabilo_eligible;
       const pabiloVerified = !!payVerify.verified;
+      const pabiloRequestable = (typeof pabiloRequest.requestable === 'boolean')
+        ? !!pabiloRequest.requestable
+        : pabiloEligible;
       const pabiloStateText = pabiloEligible
         ? (pabiloVerified
             ? `Pago verificado en Pabilo${payVerify.verification_id ? ` · ID ${payVerify.verification_id}` : ''}`
             : `Pago no verificado en Pabilo${payVerify.message ? ` · ${payVerify.message}` : ''}`)
-        : (pabiloEligibility.reason ? `Pabilo no aplica: ${pabiloEligibility.reason}` : '');
+        : (pabiloRequestable
+            ? `Solicitud Pabilo permitida${payVerify.message ? ` · ${payVerify.message}` : ''}`
+            : (pabiloRequest.reason ? `Pabilo no consulta: ${pabiloRequest.reason}` : (pabiloEligibility.reason ? `Pabilo no aplica: ${pabiloEligibility.reason}` : '')));
       tile.setAttribute('data-is-auto', isAutoMapped ? '1' : '0');
       const when = new Date(o.created_at).toLocaleString();
       const itemsArr = Array.isArray(o.items) ? o.items : [];
@@ -2119,7 +2125,7 @@ window.refreshGallery = refreshGallery;
         </div>` : ''}
         <div class="row-actions" style="justify-content:space-between;">
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            ${pabiloEligible && o.status === 'pending' && !pabiloVerified ? `<button class="btn btn-verify-payment" data-id="${o.id}">Verificar pago</button>` : ''}
+            ${pabiloRequestable && ['pending', 'approved', 'delivered'].includes(o.status) && !pabiloVerified ? `<button class="btn btn-verify-payment" data-id="${o.id}">Verificar pago</button>` : ''}
             <button class="btn btn-approve" data-id="${o.id}" ${approveDisabled ? 'disabled' : ''}>${approveLabel}</button>
             ${isAutoMapped && processingAutoUnits > 0 ? `<button class="btn btn-verify-recharge" data-id="${o.id}">Verificar ${processingAutoUnits}</button>` : ''}
           </div>
@@ -2215,8 +2221,9 @@ window.refreshGallery = refreshGallery;
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || !data.ok) {
-            const eligReason = (data.eligibility && data.eligibility.reason) ? ` (${data.eligibility.reason})` : '';
-            throw new Error((data.error || 'No se pudo verificar el pago') + eligReason);
+            const requestReason = (data.request && data.request.reason) ? ` (${data.request.reason})` : '';
+            const eligReason = (!requestReason && data.eligibility && data.eligibility.reason) ? ` (${data.eligibility.reason})` : '';
+            throw new Error((data.error || 'No se pudo verificar el pago') + requestReason + eligReason);
           }
           const pv = data.payment_verify || {};
           if (pv.verified) {
