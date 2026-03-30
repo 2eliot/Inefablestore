@@ -2119,28 +2119,28 @@ def _pabilo_verify_payment(order_obj):
     if amount_value < 0:
         amount_value = 0.0
 
-    payload = {
-        "amount": int(amount_value) if float(amount_value).is_integer() else round(amount_value, 2),
+    base_payload = {
         "bank_reference": str(order_obj.reference or "").strip(),
     }
+    amount_payload_value = int(amount_value) if float(amount_value).is_integer() else round(amount_value, 2)
     payer_dni_number = str(order_obj.payer_dni_number or "").strip()
     if payer_dni_number:
-        payload["dni_pagador"] = {
+        base_payload["dni_pagador"] = {
             "dniType": (str(order_obj.payer_dni_type or "V").strip().upper() or "V")[:2],
             "dniNumber": payer_dni_number,
         }
     payer_phone = str(order_obj.payer_phone or order_obj.phone or "").strip()
     if payer_phone:
-        payload["phone_pagador"] = payer_phone
+        base_payload["phone_pagador"] = payer_phone
     payer_bank_origin = str(order_obj.payer_bank_origin or "").strip()
     if payer_bank_origin:
-        payload["bank_origin"] = payer_bank_origin
+        base_payload["bank_origin"] = payer_bank_origin
     payer_payment_date = str(order_obj.payer_payment_date or "").strip()
     if payer_payment_date:
-        payload["fecha_pago"] = payer_payment_date
+        base_payload["fecha_pago"] = payer_payment_date
     movement_type = (str(order_obj.payer_movement_type or "").strip().upper() or str(cfg.get("default_movement_type") or "").strip().upper())
     if movement_type in ("MOVIL_PAY", "TRANSFER"):
-        payload["movement_type"] = movement_type
+        base_payload["movement_type"] = movement_type
     headers = {
         "Content-Type": "application/json",
         "appKey": cfg.get("api_key"),
@@ -2152,123 +2152,154 @@ def _pabilo_verify_payment(order_obj):
         except Exception:
             return {}
 
-    try:
-        resp = _requests_lib.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=cfg.get("timeout", 30),
-        )
-    except _requests_lib.exceptions.Timeout:
-        return {"ok": False, "verified": False, "message": "Pabilo no respondió a tiempo"}
-    except _requests_lib.exceptions.ConnectionError:
-        return {"ok": False, "verified": False, "message": "No se pudo conectar con Pabilo"}
-    except Exception as exc:
-        return {"ok": False, "verified": False, "message": f"Error consultando Pabilo: {exc}"}
+    payload_candidates = [dict(base_payload)]
+    if amount_payload_value > 0:
+        payload_with_amount = dict(base_payload)
+        payload_with_amount["amount"] = amount_payload_value
+        payload_candidates.append(payload_with_amount)
 
-    data = _decode_response_json(resp)
+    resp = None
+    data = {}
+    payload = payload_candidates[0]
+    last_eval = None
 
-    # Some Pabilo environments expose this endpoint as GET instead of POST.
-    if resp.status_code == 405:
+    def _execute_request(request_payload):
         try:
-            resp_get = _requests_lib.get(
+            response = _requests_lib.post(
                 url,
-                params=payload,
-                headers={"appKey": cfg.get("api_key")},
+                json=request_payload,
+                headers=headers,
                 timeout=cfg.get("timeout", 30),
             )
-            if resp_get is not None:
-                resp = resp_get
-                data = _decode_response_json(resp_get)
-        except Exception:
-            pass
+        except _requests_lib.exceptions.Timeout:
+            return None, {"ok": False, "verified": False, "message": "Pabilo no respondió a tiempo"}
+        except _requests_lib.exceptions.ConnectionError:
+            return None, {"ok": False, "verified": False, "message": "No se pudo conectar con Pabilo"}
+        except Exception as exc:
+            return None, {"ok": False, "verified": False, "message": f"Error consultando Pabilo: {exc}"}
 
-    payload_data = data.get("data") if isinstance(data.get("data"), dict) else data
-    if not isinstance(payload_data, dict):
-        payload_data = {}
-    ub_payment = payload_data.get("user_bank_payment") if isinstance(payload_data.get("user_bank_payment"), dict) else {}
+        response_data = _decode_response_json(response)
 
-    accepted_statuses = {
-        "verified", "approve", "approved", "aprobado",
-        "success", "successful", "completed", "completada",
-        "paid", "pagado",
-    }
-    payment_status = str(
-        ub_payment.get("status")
-        or payload_data.get("status_payment")
-        or payload_data.get("status")
-        or ""
-    ).strip().lower()
-    root_status = str(data.get("status") or "").strip().lower()
-    root_message = str(data.get("message") or "").strip().lower()
-    verified_flag = bool(payload_data.get("verified") or data.get("verified"))
-    verified = (
-        (payment_status in accepted_statuses)
-        or (root_status in accepted_statuses)
-        or ("payment confirmed" in root_message)
-        or verified_flag
-    )
+        if response.status_code == 405:
+            try:
+                resp_get = _requests_lib.get(
+                    url,
+                    params=request_payload,
+                    headers={"appKey": cfg.get("api_key")},
+                    timeout=cfg.get("timeout", 30),
+                )
+                if resp_get is not None:
+                    response = resp_get
+                    response_data = _decode_response_json(resp_get)
+            except Exception:
+                pass
 
-    verification_id = (
-        ub_payment.get("id")
-        or ub_payment.get("bank_reference_id")
-        or payload_data.get("id")
-        or payload_data.get("verification_id")
-        or payload_data.get("payment_id")
-        or data.get("id")
-        or data.get("verification_id")
-    )
+        return response, response_data
 
-    if resp.status_code in (401, 403):
-        return {
-            "ok": False,
-            "verified": False,
-            "message": "La API key de Pabilo es inválida o no tiene permisos",
-            "response": data,
+    def _evaluate_response(response, response_data, request_payload):
+        payload_data = response_data.get("data") if isinstance(response_data.get("data"), dict) else response_data
+        if not isinstance(payload_data, dict):
+            payload_data = {}
+        ub_payment = payload_data.get("user_bank_payment") if isinstance(payload_data.get("user_bank_payment"), dict) else {}
+
+        accepted_statuses = {
+            "verified", "approve", "approved", "aprobado",
+            "success", "successful", "completed", "completada",
+            "paid", "pagado",
         }
-    if resp.status_code == 404:
-        return {
-            "ok": True,
-            "verified": False,
-            "message": "El pago todavía no aparece en Pabilo",
-            "response": data,
-        }
-    if resp.status_code >= 400:
-        if resp.status_code == 405:
-            return {
+        payment_status = str(
+            ub_payment.get("status")
+            or payload_data.get("status_payment")
+            or payload_data.get("status")
+            or ""
+        ).strip().lower()
+        root_status = str(response_data.get("status") or "").strip().lower()
+        root_message = str(response_data.get("message") or "").strip().lower()
+        verified_flag = bool(payload_data.get("verified") or response_data.get("verified"))
+        verified = (
+            (payment_status in accepted_statuses)
+            or (root_status in accepted_statuses)
+            or ("payment confirmed" in root_message)
+            or verified_flag
+        )
+
+        verification_id = (
+            ub_payment.get("id")
+            or ub_payment.get("bank_reference_id")
+            or payload_data.get("id")
+            or payload_data.get("verification_id")
+            or payload_data.get("payment_id")
+            or response_data.get("id")
+            or response_data.get("verification_id")
+        )
+
+        if response is None:
+            return request_payload, response_data
+        if response.status_code in (401, 403):
+            return request_payload, {
                 "ok": False,
                 "verified": False,
-                "message": (
-                    "Pabilo respondió 405 (método no permitido). "
-                    "Verifica la URL base y/o endpoint en configuración."
-                ),
-                "response": data,
+                "message": "La API key de Pabilo es inválida o no tiene permisos",
+                "response": response_data,
             }
-        return {
-            "ok": False,
-            "verified": False,
-            "message": str(data.get("message") or data.get("error") or f"Error HTTP {resp.status_code} en Pabilo"),
-            "response": data,
-        }
-
-    if not verified:
-        return {
+        if response.status_code == 404:
+            return request_payload, {
+                "ok": True,
+                "verified": False,
+                "message": "El pago todavía no aparece en Pabilo",
+                "response": response_data,
+            }
+        if response.status_code >= 400:
+            if response.status_code == 405:
+                return request_payload, {
+                    "ok": False,
+                    "verified": False,
+                    "message": (
+                        "Pabilo respondió 405 (método no permitido). "
+                        "Verifica la URL base y/o endpoint en configuración."
+                    ),
+                    "response": response_data,
+                }
+            return request_payload, {
+                "ok": False,
+                "verified": False,
+                "message": str(response_data.get("message") or response_data.get("error") or f"Error HTTP {response.status_code} en Pabilo"),
+                "response": response_data,
+            }
+        if not verified:
+            response_message = str(response_data.get("message") or payload_data.get("message") or "").strip()
+            return request_payload, {
+                "ok": True,
+                "verified": False,
+                "message": response_message or "La transacción aún no está verificada en Pabilo",
+                "response": response_data,
+            }
+        if not verification_id:
+            verification_id = f"fallback:{order_method}:{str(order_obj.reference or '').strip()}"
+        return request_payload, {
             "ok": True,
-            "verified": False,
-            "message": "La transacción aún no está verificada en Pabilo",
-            "response": data,
+            "verified": True,
+            "verification_id": str(verification_id),
+            "message": "Pago verificado en Pabilo",
+            "response": response_data,
         }
 
-    if not verification_id:
-        verification_id = f"fallback:{order_method}:{str(order_obj.reference or '').strip()}"
+    for candidate in payload_candidates:
+        resp, data = _execute_request(candidate)
+        payload, last_eval = _evaluate_response(resp, data, candidate)
+        if last_eval.get("verified"):
+            return last_eval
+        if last_eval.get("ok") is False:
+            return last_eval
+        if len(payload_candidates) == 1:
+            return last_eval
+        message = str(last_eval.get("message") or "").lower()
+        if "todavía no aparece" not in message and "aún no está" not in message and "aun no esta" not in message:
+            return last_eval
 
-    return {
-        "ok": True,
-        "verified": True,
-        "verification_id": str(verification_id),
-        "message": "Pago verificado en Pabilo",
-        "response": data,
-    }
+    if last_eval is not None:
+        return last_eval
+    return {"ok": False, "verified": False, "message": "No se pudo completar la verificación con Pabilo"}
 
 
 def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool = False, source: str = "manual"):
