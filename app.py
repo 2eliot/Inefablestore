@@ -2122,10 +2122,7 @@ def _pabilo_build_payload(order_obj) -> dict:
         except Exception:
             payload["fecha_pago"] = str(order_obj.payer_payment_date)
 
-    cfg = _pabilo_config()
     movement_type = str(order_obj.payer_movement_type or "").strip().upper()
-    if not movement_type:
-        movement_type = str(cfg.get("default_movement_type") or "").strip().upper()
     if movement_type in ("MOVIL_PAY", "TRANSFER"):
         payload["movement_type"] = movement_type
 
@@ -2221,6 +2218,29 @@ def _pabilo_verify_payment(order_obj):
             "message": f"Error consultando Pabilo: {exc}",
             "request_meta": {"url": url, "payload": payload, "status_code": 0},
         }
+
+    response_text = ""
+    try:
+        response_text = resp.text or ""
+    except Exception:
+        response_text = ""
+
+    if "movement_type" in payload and int(resp.status_code or 0) >= 400:
+        lowered_response = response_text.lower()
+        if "movement_type is not available for this bank" in lowered_response:
+            retry_payload = dict(payload)
+            retry_payload.pop("movement_type", None)
+            try:
+                retry_resp = _requests_lib.post(
+                    url,
+                    json=retry_payload,
+                    headers=headers,
+                    timeout=cfg.get("timeout", 30),
+                )
+                resp = retry_resp
+                payload = retry_payload
+            except Exception:
+                pass
 
     if int(resp.status_code or 0) == 405 and official_url != configured_url:
         try:
