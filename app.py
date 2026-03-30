@@ -4294,6 +4294,21 @@ def _start_checkout_automation(order_id: int, app_obj) -> None:
                 order_obj = Order.query.get(order_id)
                 if not order_obj:
                     return
+
+                try:
+                    to_addr = get_config_value("admin_notify_email", ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL)
+                    if to_addr:
+                        pkg = StorePackage.query.get(order_obj.store_package_id)
+                        it = GamePackageItem.query.get(order_obj.item_id) if order_obj.item_id else None
+                        admin_html, admin_text = build_admin_new_order_email(order_obj, pkg, it)
+                        brand = _email_brand()
+                        try:
+                            send_email_html(to_addr, f"[{brand}] Nueva orden #{order_obj.id}", admin_html, admin_text)
+                        except Exception:
+                            send_email_async(to_addr, f"Nueva orden #{order_obj.id} pendiente", admin_text)
+                except Exception:
+                    pass
+
                 if (order_obj.status or "").lower() != "pending":
                     return
 
@@ -4638,19 +4653,6 @@ def create_order():
         db.session.commit()
         try:
             _start_checkout_automation(o.id, current_app._get_current_object())
-        except Exception:
-            pass
-        # Notify admin by email about new pending order (HTML)
-        try:
-            to_addr = get_config_value("admin_notify_email", ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL)
-            pkg = StorePackage.query.get(o.store_package_id)
-            it = GamePackageItem.query.get(o.item_id) if o.item_id else None
-            admin_html, admin_text = build_admin_new_order_email(o, pkg, it)
-            brand = _email_brand()
-            try:
-                send_email_async(to_addr, f"[{brand}] Nueva orden #{o.id}", admin_text)
-            except Exception:
-                send_email(to_addr, f"Nueva orden #{o.id} pendiente", admin_text)
         except Exception:
             pass
         # Purge per-user beyond latest 30 (by email or customer_id)
