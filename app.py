@@ -4257,6 +4257,36 @@ def thanks_order_progress(oid: int):
     return jsonify(_thanks_progress_payload(o))
 
 
+def _start_checkout_automation(order_id: int, app_obj) -> None:
+    def _runner():
+        try:
+            with app_obj.app_context():
+                order_obj = Order.query.get(order_id)
+                if not order_obj:
+                    return
+                if (order_obj.status or "").lower() != "pending":
+                    return
+
+                request_info = _pabilo_request_info(order_obj)
+                eligibility = _pabilo_eligibility_info(order_obj)
+                if request_info.get("requestable"):
+                    _pabilo_verify_and_update_order(
+                        order_obj,
+                        auto_approve_on_verified=bool(eligibility.get("eligible")),
+                        source="checkout",
+                    )
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+
+    try:
+        threading.Thread(target=_runner, daemon=True, name=f"checkout-auto-{order_id}").start()
+    except Exception:
+        pass
+
+
 # ===============
 # Orders API
 # ===============
@@ -4576,36 +4606,10 @@ def create_order():
         except Exception:
             pass
         db.session.commit()
-
-        # Attempt automatic Pabilo verification on eligible mapped orders.
-        # If payment is confirmed, the order gets auto-approved and dispatched.
-        auto_payment = None
         try:
-            request_info = _pabilo_request_info(o)
-            eligibility = _pabilo_eligibility_info(o)
-            if request_info.get("requestable"):
-                auto_payment = _pabilo_verify_and_update_order(
-                    o,
-                    auto_approve_on_verified=bool(eligibility.get("eligible")),
-                    source="checkout",
-                )
-            else:
-                auto_payment = {
-                    "ok": False,
-                    "verified": False,
-                    "skipped": True,
-                    "message": request_info.get("reason") or "No se pudo consultar Pabilo",
-                    "request": request_info,
-                    "eligibility": eligibility,
-                    "order_status": o.status,
-                }
-        except Exception as exc:
-            auto_payment = {
-                "ok": False,
-                "verified": False,
-                "message": f"Error verificando pago con Pabilo: {exc}",
-                "order_status": o.status,
-            }
+            _start_checkout_automation(o.id, current_app._get_current_object())
+        except Exception:
+            pass
         # Notify admin by email about new pending order (HTML)
         try:
             to_addr = get_config_value("admin_notify_email", ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL)
@@ -4649,10 +4653,7 @@ def create_order():
                 db.session.commit()
         except Exception:
             db.session.rollback()
-        response_payload = {"ok": True, "order_id": o.id}
-        if auto_payment:
-            response_payload["payment_auto"] = auto_payment
-        return jsonify(response_payload)
+        return jsonify({"ok": True, "order_id": o.id})
     except Exception as e:
         # Return error to client to help diagnose instead of 500
         try:
