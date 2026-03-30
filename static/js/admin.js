@@ -226,6 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const payMethodSelect = document.getElementById('pay-method-select');
   const pmSection = document.getElementById('pm-section');
   const binSection = document.getElementById('binance-section');
+  let activePayMethodView = (payMethodSelect && payMethodSelect.value) ? payMethodSelect.value : 'pm';
 
   function showPaySection(which) {
     const raw = which != null ? which : (payMethodSelect && payMethodSelect.value);
@@ -235,11 +236,18 @@ document.addEventListener('DOMContentLoaded', () => {
       if (binSection) binSection.style.display = 'none';
       return;
     }
+    activePayMethodView = val;
+    if (payMethodSelect && payMethodSelect.value !== val) {
+      payMethodSelect.value = val;
+    }
     if (pmSection) pmSection.style.display = (val === 'pm') ? '' : 'none';
     if (binSection) binSection.style.display = (val === 'binance') ? '' : 'none';
   }
   if (payMethodSelect) {
-    payMethodSelect.addEventListener('change', () => showPaySection(payMethodSelect.value));
+    payMethodSelect.addEventListener('change', () => {
+      activePayMethodView = payMethodSelect.value || activePayMethodView || 'pm';
+      showPaySection(activePayMethodView);
+    });
   }
   if (binAutoEnabled) {
     binAutoEnabled.addEventListener('change', () => {
@@ -815,8 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (pabiloBaseUrl) pabiloBaseUrl.value = data.pabilo_base_url || '';
         if (pabiloTimeoutSeconds) pabiloTimeoutSeconds.value = data.pabilo_timeout_seconds || '30';
         if (pabiloEnforceMethod) pabiloEnforceMethod.checked = !(data.pabilo_enforce_method === '0' || data.pabilo_enforce_method === 0 || data.pabilo_enforce_method === false);
-        // Do not auto-select any method; keep placeholder until user chooses
-        showPaySection();
+        showPaySection((payMethodSelect && payMethodSelect.value) || activePayMethodView || 'pm');
       }
 window.fetchPayments = fetchPayments;
     } catch (_) { /* ignore */ }
@@ -2548,7 +2555,7 @@ window.fetchHero = fetchHero;
         const resp = await savePayments();
         if (resp && resp.ok) {
           toast('Métodos de pago guardados', 'success');
-          await fetchPayments();
+          showPaySection(activePayMethodView || 'pm');
         } else {
           toast('Guardado, pero respuesta inesperada');
         }
