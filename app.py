@@ -2007,18 +2007,41 @@ def _pabilo_verify_payment(order_obj):
     if not (order_obj.reference or "").strip():
         return {"ok": False, "verified": False, "message": "La orden no tiene referencia"}
 
-    url = f"{cfg.get('base_url')}/userbankpayment/{cfg.get('user_bank_id')}/betaserio"
+    raw_base_url = str(cfg.get('base_url') or '').strip().rstrip('/')
+    if "/userbankpayment/" in raw_base_url:
+        # Allow advanced config where full endpoint is already provided.
+        url = raw_base_url
+    else:
+        url = f"{raw_base_url}/userbankpayment/{cfg.get('user_bank_id')}/betaserio"
+    amount_value = 0.0
+    try:
+        amount_value = float(order_obj.amount or 0.0)
+    except Exception:
+        amount_value = 0.0
+    if amount_value < 0:
+        amount_value = 0.0
+
     payload = {
+        "amount": int(amount_value) if float(amount_value).is_integer() else round(amount_value, 2),
         "bank_reference": str(order_obj.reference or "").strip(),
+        "movement_type": "GENERIC",
     }
+    headers = {
+        "Content-Type": "application/json",
+        "appKey": cfg.get("api_key"),
+    }
+
+    def _decode_response_json(resp_obj):
+        try:
+            return resp_obj.json()
+        except Exception:
+            return {}
+
     try:
         resp = _requests_lib.post(
             url,
             json=payload,
-            headers={
-                "Content-Type": "application/json",
-                "appKey": cfg.get("api_key"),
-            },
+            headers=headers,
             timeout=cfg.get("timeout", 30),
         )
     except _requests_lib.exceptions.Timeout:
@@ -2028,27 +2051,57 @@ def _pabilo_verify_payment(order_obj):
     except Exception as exc:
         return {"ok": False, "verified": False, "message": f"Error consultando Pabilo: {exc}"}
 
-    try:
-        data = resp.json()
-    except Exception:
-        data = {}
+    data = _decode_response_json(resp)
+
+    # Some Pabilo environments expose this endpoint as GET instead of POST.
+    if resp.status_code == 405:
+        try:
+            resp_get = _requests_lib.get(
+                url,
+                params={
+                    "amount": payload.get("amount"),
+                    "bank_reference": payload.get("bank_reference"),
+                    "movement_type": payload.get("movement_type"),
+                },
+                headers={"appKey": cfg.get("api_key")},
+                timeout=cfg.get("timeout", 30),
+            )
+            if resp_get is not None:
+                resp = resp_get
+                data = _decode_response_json(resp_get)
+        except Exception:
+            pass
 
     payload_data = data.get("data") if isinstance(data.get("data"), dict) else data
     if not isinstance(payload_data, dict):
         payload_data = {}
+    ub_payment = payload_data.get("user_bank_payment") if isinstance(payload_data.get("user_bank_payment"), dict) else {}
 
     accepted_statuses = {
         "verified", "approve", "approved", "aprobado",
         "success", "successful", "completed", "completada",
         "paid", "pagado",
     }
-    payment_status = str(payload_data.get("status_payment") or payload_data.get("status") or "").strip().lower()
+    payment_status = str(
+        ub_payment.get("status")
+        or payload_data.get("status_payment")
+        or payload_data.get("status")
+        or ""
+    ).strip().lower()
     root_status = str(data.get("status") or "").strip().lower()
+    root_message = str(data.get("message") or "").strip().lower()
     verified_flag = bool(payload_data.get("verified") or data.get("verified"))
-    verified = (payment_status in accepted_statuses) or (root_status in accepted_statuses) or verified_flag
+    verified = (
+        (payment_status in accepted_statuses)
+        or (root_status in accepted_statuses)
+        or ("payment confirmed" in root_message)
+        or verified_flag
+    )
 
     verification_id = (
-        payload_data.get("id")
+        ub_payment.get("id")
+        or ub_payment.get("bank_reference_id")
+        or payload_data.get("id")
         or payload_data.get("verification_id")
         or payload_data.get("payment_id")
         or data.get("id")
@@ -2070,6 +2123,16 @@ def _pabilo_verify_payment(order_obj):
             "response": data,
         }
     if resp.status_code >= 400:
+        if resp.status_code == 405:
+            return {
+                "ok": False,
+                "verified": False,
+                "message": (
+                    "Pabilo respondió 405 (método no permitido). "
+                    "Verifica la URL base y/o endpoint en configuración."
+                ),
+                "response": data,
+            }
         return {
             "ok": False,
             "verified": False,
