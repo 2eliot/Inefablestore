@@ -277,48 +277,6 @@
     <div id="co-info"></div>
   </div>
 
-  <div class="co-card" id="pabilo-payer-card" hidden>
-    <h3>Datos para verificación automática</h3>
-    <p style="margin:0 0 12px; color:#94a3b8; font-size:12px; line-height:1.5; text-align:center;">Si tu banco o tu tipo de cuenta lo requiere, completa estos datos para que Pabilo pueda encontrar el pago más fácil.</p>
-    <div style="display:grid; gap:10px;">
-      <div class="form-row" style="display:grid; grid-template-columns: 120px 1fr; gap:10px; align-items:center; margin:0;">
-        <label for="pabilo-dni-type">Tipo de documento</label>
-        <select id="pabilo-dni-type" class="input">
-          <option value="">Opcional</option>
-          <option value="V">V</option>
-          <option value="E">E</option>
-          <option value="J">J</option>
-          <option value="P">P</option>
-          <option value="G">G</option>
-        </select>
-      </div>
-      <div class="form-row" style="display:grid; grid-template-columns: 120px 1fr; gap:10px; align-items:center; margin:0;">
-        <label for="pabilo-dni-number">Cédula / RIF</label>
-        <input id="pabilo-dni-number" class="input" type="text" placeholder="12345678">
-      </div>
-      <div class="form-row" style="display:grid; grid-template-columns: 120px 1fr; gap:10px; align-items:center; margin:0;">
-        <label for="pabilo-bank-origin">Banco origen</label>
-        <input id="pabilo-bank-origin" class="input" type="text" placeholder="0102">
-      </div>
-      <div class="form-row" style="display:grid; grid-template-columns: 120px 1fr; gap:10px; align-items:center; margin:0;">
-        <label for="pabilo-payer-phone">Teléfono pagador</label>
-        <input id="pabilo-payer-phone" class="input" type="text" placeholder="04141234567">
-      </div>
-      <div class="form-row" style="display:grid; grid-template-columns: 120px 1fr; gap:10px; align-items:center; margin:0;">
-        <label for="pabilo-payment-date">Fecha del pago</label>
-        <input id="pabilo-payment-date" class="input" type="date">
-      </div>
-      <div class="form-row" style="display:grid; grid-template-columns: 120px 1fr; gap:10px; align-items:center; margin:0;">
-        <label for="pabilo-movement-type">Tipo de movimiento</label>
-        <select id="pabilo-movement-type" class="input">
-          <option value="">Opcional</option>
-          <option value="MOVIL_PAY">Pago Móvil</option>
-          <option value="TRANSFER">Transferencia</option>
-        </select>
-      </div>
-    </div>
-  </div>
-
   <div class="co-card proof-card">
     <h3>Comprobante de pago</h3>
     <div class="proof-dropzone" id="proofDropzone">
@@ -372,5 +330,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/checkout.js', v='10') }}" defer></script>
+<script src="{{ url_for('static', filename='js/checkout.js', v='11') }}" defer></script>
 {% endblock %}

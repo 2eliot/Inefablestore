@@ -14,13 +14,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const blockedOverlay = document.getElementById('blocked-overlay');
   const blockedClose = document.getElementById('blocked-close');
   const blockedWhats = document.getElementById('blocked-whatsapp');
-  const pabiloPayerCard = document.getElementById('pabilo-payer-card');
-  const pabiloDniType = document.getElementById('pabilo-dni-type');
-  const pabiloDniNumber = document.getElementById('pabilo-dni-number');
-  const pabiloBankOrigin = document.getElementById('pabilo-bank-origin');
-  const pabiloPayerPhone = document.getElementById('pabilo-payer-phone');
-  const pabiloPaymentDate = document.getElementById('pabilo-payment-date');
-  const pabiloMovementType = document.getElementById('pabilo-movement-type');
   const waLink = (root.getAttribute('data-whatsapp') || '').trim();
   const gname = (root.getAttribute('data-gname') || '').trim();
   const gimg = (root.getAttribute('data-gimg') || '').trim();
@@ -35,7 +28,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let hasCapture = false;
   let isBinanceAuto = false;
   let binanceAutoCode = '';
-  let isPabiloOrder = false;
 
   // Render basic game block immediately to avoid waiting for fetches
   (function initialHeader(){
@@ -186,53 +178,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function currentCheckoutMethod() {
     if (qMethod === 'binance') return 'binance';
     return 'pm';
-  }
-
-  function pabiloPayloadFromForm() {
-    return {
-      payer_dni_type: pabiloDniType ? (pabiloDniType.value || '').trim().toUpperCase() : '',
-      payer_dni_number: pabiloDniNumber ? (pabiloDniNumber.value || '').trim() : '',
-      payer_bank_origin: pabiloBankOrigin ? (pabiloBankOrigin.value || '').trim() : '',
-      payer_phone: pabiloPayerPhone ? (pabiloPayerPhone.value || '').trim() : '',
-      payer_payment_date: pabiloPaymentDate ? (pabiloPaymentDate.value || '').trim() : '',
-      payer_movement_type: pabiloMovementType ? (pabiloMovementType.value || '').trim().toUpperCase() : ''
-    };
-  }
-
-  function syncPabiloPayerDefaults() {
-    if (pabiloPayerPhone && !pabiloPayerPhone.value && qPhone) {
-      pabiloPayerPhone.value = qPhone;
-    }
-    if (pabiloPaymentDate && !pabiloPaymentDate.value) {
-      const now = new Date();
-      const y = now.getFullYear();
-      const m = String(now.getMonth() + 1).padStart(2, '0');
-      const d = String(now.getDate()).padStart(2, '0');
-      pabiloPaymentDate.value = `${y}-${m}-${d}`;
-    }
-    if (pabiloMovementType && !pabiloMovementType.value && paymentsCfg && paymentsCfg.pabilo_default_movement_type) {
-      pabiloMovementType.value = paymentsCfg.pabilo_default_movement_type;
-    }
-  }
-
-  async function syncPabiloPayerSection() {
-    const item = (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) ? allItems[selectedIndex] : null;
-    if (!pabiloPayerCard || !item || isBinanceAuto) {
-      isPabiloOrder = false;
-      if (pabiloPayerCard) pabiloPayerCard.hidden = true;
-      return;
-    }
-    try {
-      const method = currentCheckoutMethod();
-      const res = await fetch(`/store/item/${item.id}/automation-check?method=${encodeURIComponent(method)}`);
-      const data = await res.json().catch(() => ({}));
-      isPabiloOrder = !!(res.ok && data.ok && data.collect_payer_data);
-      pabiloPayerCard.hidden = !isPabiloOrder;
-      if (isPabiloOrder) syncPabiloPayerDefaults();
-    } catch (_) {
-      isPabiloOrder = false;
-      pabiloPayerCard.hidden = true;
-    }
   }
 
   function renderHeader() {
@@ -421,8 +366,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderHeader();
     renderInfo();
     startTimer(30*60);
-    syncPabiloPayerDefaults();
-    syncPabiloPayerSection();
     if (globalBinanceAuto && allItems.length > 0 && selectedIndex >= 0 && selectedIndex < allItems.length) {
       const selItem = allItems[selectedIndex];
       fetch(`/store/item/${selItem.id}/auto-check`).then(r => r.json()).then(data => {
@@ -459,7 +402,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Hide reference section (label, input, digits, paste button, error, counter)
     const refGroup = coRef ? coRef.closest('.ref-group') : null;
     if (refGroup) refGroup.style.display = 'none';
-    if (pabiloPayerCard) pabiloPayerCard.hidden = true;
     // Fetch unique code from server
     fetch('/orders/generate-binance-code').then(r => r.json()).then(data => {
       if (data && data.ok && data.code) {
@@ -731,7 +673,6 @@ document.addEventListener('DOMContentLoaded', () => {
           special_code: qRefCode || '',
           nn: nn
         };
-        Object.assign(payload, pabiloPayloadFromForm());
         const originalText = btnConfirm.textContent;
         btnConfirm.textContent = 'Procesando...';
         btnConfirm.disabled = true;
@@ -826,10 +767,6 @@ document.addEventListener('DOMContentLoaded', () => {
       fd.append('customer_zone', customer_zone);
       fd.append('special_code', qRefCode || '');
       fd.append('nn', nn);
-      const pabiloPayload = pabiloPayloadFromForm();
-      Object.entries(pabiloPayload).forEach(([key, value]) => {
-        if (value) fd.append(key, value);
-      });
       fd.append('payment_capture', proofInput.files[0]);
       // UI loading state
       const originalText = btnConfirm.textContent;
