@@ -167,7 +167,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (currency === 'BSD') {
       if (rate && rate > 0) {
-        return { amount: totalUsd * rate, displayCurrency: 'BSD', usedCurrency: 'BSD', baseBeforeDiscount: baseUsd * rate };
+        return {
+          amount: Math.round(totalUsd * rate),
+          displayCurrency: 'BSD',
+          usedCurrency: 'BSD',
+          baseBeforeDiscount: Math.round(baseUsd * rate)
+        };
       }
       // Fallback to USD if rate is not available to avoid showing 0
       return { amount: totalUsd, displayCurrency: 'USD', usedCurrency: 'USD', baseBeforeDiscount: baseUsd };

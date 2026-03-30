@@ -2000,6 +2000,29 @@ def _pabilo_user_bank_id_for_method(method: str) -> str:
     return ""
 
 
+def _pabilo_verify_endpoint(user_bank_id: str, base_url: str = "") -> str:
+    raw_base_url = str(base_url or "").strip()
+    if not raw_base_url:
+        raw_base_url = "https://api.pabilo.app"
+    if raw_base_url.startswith("http://"):
+        raw_base_url = "https://" + raw_base_url[len("http://"):]
+    elif not raw_base_url.startswith("https://"):
+        raw_base_url = "https://" + raw_base_url.lstrip("/")
+
+    lowered = raw_base_url.lower()
+    if "pabilo.app/docs" in lowered or lowered.endswith("pabilo.app"):
+        raw_base_url = "https://api.pabilo.app"
+        lowered = raw_base_url.lower()
+    raw_base_url = raw_base_url.rstrip("/")
+
+    if "/userbankpayment/" in lowered:
+        if not lowered.endswith("/betaserio"):
+            raw_base_url = raw_base_url + "/betaserio"
+        return raw_base_url
+
+    return f"{raw_base_url}/userbankpayment/{str(user_bank_id or '').strip()}/betaserio"
+
+
 def _pabilo_datetime_to_iso(value) -> str:
     if isinstance(value, datetime):
         try:
@@ -2132,12 +2155,9 @@ def _pabilo_verify_payment(order_obj):
     if not user_bank_id:
         return {"ok": False, "verified": False, "message": f"Falta UserBankId de Pabilo para {order_method.upper()}", "request": request_info}
 
-    raw_base_url = str(cfg.get('base_url') or '').strip().rstrip('/')
-    if "/userbankpayment/" in raw_base_url:
-        # Allow advanced config where full endpoint is already provided.
-        url = raw_base_url
-    else:
-        url = f"{raw_base_url}/userbankpayment/{user_bank_id}/betaserio"
+    configured_url = _pabilo_verify_endpoint(user_bank_id, str(cfg.get('base_url') or '').strip())
+    official_url = _pabilo_verify_endpoint(user_bank_id, "https://api.pabilo.app")
+    url = configured_url
     amount_value = 0.0
     try:
         amount_value = float(order_obj.amount or 0.0)
@@ -2145,6 +2165,8 @@ def _pabilo_verify_payment(order_obj):
         amount_value = 0.0
     if amount_value <= 0:
         return {"ok": False, "verified": False, "message": "La orden no tiene monto válido", "request": request_info}
+    if order_method == "pm" or str(order_obj.currency or "").strip().upper() in ("BSD", "VES", "BS"):
+        amount_value = float(int(round(amount_value)))
 
     payload = {
         "bank_reference": str(order_obj.reference or "").strip(),
@@ -2189,6 +2211,19 @@ def _pabilo_verify_payment(order_obj):
             "message": f"Error consultando Pabilo: {exc}",
             "request_meta": {"url": url, "payload": payload, "status_code": 0},
         }
+
+    if int(resp.status_code or 0) == 405 and official_url != configured_url:
+        try:
+            retry_resp = _requests_lib.post(
+                official_url,
+                json=payload,
+                headers=headers,
+                timeout=cfg.get("timeout", 30),
+            )
+            resp = retry_resp
+            url = official_url
+        except Exception:
+            pass
 
     data = _decode_response_json(resp)
     payload_data = data.get("data") if isinstance(data.get("data"), dict) else data
@@ -4234,6 +4269,9 @@ def create_order():
             amount = float(_get("amount") or 0)
         except Exception:
             amount = 0.0
+        currency_upper = currency.upper()
+        if method == "pm" or currency_upper in ("BSD", "VES", "BS"):
+            amount = float(int(round(amount))) if amount > 0 else 0.0
         reference = _get("reference").strip()
         name = _get("name").strip()
         email = _get("email").strip()
