@@ -2127,6 +2127,7 @@ window.refreshGallery = refreshGallery;
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             ${pabiloRequestable && ['pending', 'approved', 'delivered'].includes(o.status) && !pabiloVerified ? `<button class="btn btn-verify-payment" data-id="${o.id}">Verificar pago</button>` : ''}
             <button class="btn btn-approve" data-id="${o.id}" ${approveDisabled ? 'disabled' : ''}>${approveLabel}</button>
+            ${isAutoMapped && o.status === 'pending' ? `<button class="btn btn-approve-manual" data-id="${o.id}" ${approveDisabled ? 'disabled' : ''} style="background:#b45309;">Procesar manual</button>` : ''}
             ${isAutoMapped && processingAutoUnits > 0 ? `<button class="btn btn-verify-recharge" data-id="${o.id}">Verificar ${processingAutoUnits}</button>` : ''}
           </div>
           <button class="btn btn-reject" data-id="${o.id}" ${rejectDisabled ? 'disabled' : ''} style="background:#dc2626;">Rechazar</button>
@@ -2242,25 +2243,27 @@ window.refreshGallery = refreshGallery;
       }
 
       const btnA = e.target.closest('.btn-approve');
+      const btnAM = e.target.closest('.btn-approve-manual');
       const btnR = e.target.closest('.btn-reject');
-      const btn = btnA || btnR;
+      const btn = btnA || btnAM || btnR;
       if (!btn) return;
       const id = btn.getAttribute('data-id');
-      const status = btnA ? 'approved' : 'rejected';
-      if (btnA) {
-        const tile = btnA.closest('.order-tile');
+      const status = (btnA || btnAM) ? 'approved' : 'rejected';
+      const manualOverride = !!btnAM;
+      if (btnA || btnAM) {
+        const tile = btn.closest('.order-tile');
         const isAutoTile = tile && tile.getAttribute('data-is-auto') === '1';
         if (isAutoTile) {
           const _game = tile ? (tile.querySelector('.game-name')?.textContent || '').trim() : '';
           const _pid = tile ? (tile.querySelector('.hex')?.textContent || '').trim() : '';
           const _ref = tile ? (tile.querySelector('.ref-value')?.textContent || '').trim() : '';
           const _nick = tile ? (tile.getAttribute('data-customer-name') || '') : '';
-          const msg = `⚠️ RECARGA AUTOMÁTICA E IRREVERSIBLE\n\n` +
+          const msg = `${manualOverride ? '⚠️ RECARGA MANUAL SIN VERIFICACION PABILO' : '⚠️ RECARGA AUTOMÁTICA E IRREVERSIBLE'}\n\n` +
             `Juego: ${_game}\n` +
             `ID: ${_pid}\n` +
             (_nick ? `Nombre: ${_nick}\n` : '') +
             `Referencia: ${_ref}\n\n` +
-            `¿Confirmar envío?`;
+            `${manualOverride ? 'Esta acción enviará la recarga aunque el pago no esté verificado en Pabilo. Úsala solo si validaste el voucher manualmente.\n\n¿Confirmar envío manual?' : '¿Confirmar envío?'}`;
           if (!confirm(msg)) return;
         }
       }
@@ -2268,6 +2271,7 @@ window.refreshGallery = refreshGallery;
       try {
         btn.disabled = true;
         const payload = { status };
+        if (manualOverride) payload.skip_payment_verification = true;
         if (status === 'approved') {
           const codeInput = ordersList.querySelector(`.gift-code[data-id="${id}"]`);
           const codesArea = ordersList.querySelector(`.gift-codes[data-id="${id}"]`);

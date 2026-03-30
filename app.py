@@ -4898,6 +4898,7 @@ def admin_orders_set_status(oid: int):
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
     status = (data.get("status") or "").strip().lower()
+    skip_payment_verification = bool(data.get("skip_payment_verification"))
     if status not in ("approved", "rejected"):
         return jsonify({"ok": False, "error": "Estado inválido"}), 400
     o = Order.query.get(oid)
@@ -4905,7 +4906,7 @@ def admin_orders_set_status(oid: int):
         return jsonify({"ok": False, "error": "No existe"}), 404
 
     # Enforce payment verification via Pabilo for mapped auto-recharge orders when enabled.
-    if status == "approved" and (o.status or "").lower() == "pending" and _order_is_pabilo_eligible(o):
+    if status == "approved" and (o.status or "").lower() == "pending" and _order_is_pabilo_eligible(o) and not skip_payment_verification:
         payment_state = _pabilo_get_payment_state(o)
         if not payment_state.get("verified"):
             verification = _pabilo_verify_and_update_order(o, auto_approve_on_verified=False, source="admin_approve")
@@ -4915,6 +4916,14 @@ def admin_orders_set_status(oid: int):
                     "error": verification.get("message") or "Pago no verificado en Pabilo",
                     "payment_verify": verification,
                 }), 409
+    elif status == "approved" and (o.status or "").lower() == "pending" and skip_payment_verification:
+        pay_state = _pabilo_get_payment_state(o)
+        pay_state["provider"] = str(pay_state.get("provider") or "pabilo")
+        pay_state["manual_override"] = True
+        pay_state["manual_override_at"] = datetime.utcnow().isoformat()
+        pay_state["message"] = "Recarga aprobada manualmente por admin sin verificación Pabilo"
+        _pabilo_set_payment_state(o, pay_state)
+        db.session.commit()
     # Optional: allow passing single or multiple gift codes when approving gift card orders
     code = (data.get("delivery_code") or "").strip()
     if code:
@@ -5049,6 +5058,8 @@ def admin_orders_set_status(oid: int):
         }
 
     response_payload = {"ok": True}
+    if skip_payment_verification:
+        response_payload["manual_override"] = True
     if auto_dispatch and auto_dispatch.get("summary", {}).get("total_units"):
         response_payload["webb_recarga"] = {
             "ok": bool(auto_dispatch.get("ok")),
