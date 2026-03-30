@@ -505,6 +505,50 @@
               Las órdenes con pago Binance cuyo artículo tenga <b>auto habilitado</b> en el mapeo de Revendedores serán verificadas y aprobadas automáticamente cuando la API de Binance confirme el pago exacto con el código de referencia en la nota del beneficiario.
             </div>
           </div>
+          <div style="margin-top:18px; border:1px solid rgba(59,130,246,0.35); background:rgba(59,130,246,0.08); border-radius:10px; padding:12px;">
+            <h4 style="margin:0 0 10px; color:#bfdbfe;">Pabilo - Verificación automática de pago</h4>
+            <div class="form-row" style="margin-bottom:10px;">
+              <label style="margin-bottom:0;">Activar verificación Pabilo</label>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <label class="toggle-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                  <input id="pabilo-auto-verify-enabled" type="checkbox">
+                  <span>Encender verificación de pago en Pabilo</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="pabilo-method">Método de pago permitido</label>
+              <select id="pabilo-method">
+                <option value="pm">Pago Móvil</option>
+                <option value="binance">Binance</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="pabilo-api-key">API Key de Pabilo</label>
+              <input id="pabilo-api-key" type="text" placeholder="pk_...">
+            </div>
+            <div class="form-row">
+              <label for="pabilo-user-bank-id">UserBankId de Pabilo</label>
+              <input id="pabilo-user-bank-id" type="text" placeholder="ub_...">
+            </div>
+            <div class="form-row">
+              <label for="pabilo-base-url">URL base Pabilo</label>
+              <input id="pabilo-base-url" type="text" placeholder="https://api.pabilo.app">
+            </div>
+            <div class="form-row">
+              <label for="pabilo-timeout-seconds">Timeout (segundos)</label>
+              <input id="pabilo-timeout-seconds" type="number" min="5" step="1" placeholder="30">
+            </div>
+            <div class="form-row" style="margin-bottom:0;">
+              <label style="margin-bottom:0;">Restringir juegos mapeados al método elegido</label>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <label class="toggle-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                  <input id="pabilo-enforce-method" type="checkbox" checked>
+                  <span>Solo aceptar ese método en juegos con mapeo automático</span>
+                </label>
+              </div>
+            </div>
+          </div>
           <div class="form-row">
             <label>&nbsp;</label>
             <div>

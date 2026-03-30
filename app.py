@@ -967,17 +967,10 @@ def _binance_verify_payment(order_reference: str, expected_usdt: float, since_ms
     return False
 
 
-
-def _binance_auto_approve(order):
-    """Approve a Binance-paid order and trigger Revendedores automation.
-
-    Mirrors the approval logic of admin_orders_set_status but is called from
-    the background thread after Binance API payment confirmation.
-    ONLY triggers for orders where the item has auto_enabled=True in the mapping.
-    """
-    # Final safety check: order must still be pending
+def _auto_approve_order(order, *, source_label: str = "AutoApprove", binance_auto: bool = False):
+    """Approve a pending order, credit affiliate commission, notify user, and dispatch auto recharges."""
     if (order.status or "").lower() != "pending":
-        print(f"[BinanceAuto] Order #{order.id} is '{order.status}', not pending. Aborting auto-approve.")
+        print(f"[{source_label}] Order #{order.id} is '{order.status}', not pending. Aborting auto-approve.")
         return
     try:
         order.status = "approved"
@@ -987,7 +980,7 @@ def _binance_auto_approve(order):
             db.session.rollback()
         except Exception:
             pass
-        print(f"[BinanceAuto] DB error approving order #{order.id}: {exc}")
+        print(f"[{source_label}] DB error approving order #{order.id}: {exc}")
         return
 
     # Affiliate commission crediting (mirrors admin_orders_set_status)
@@ -1050,14 +1043,25 @@ def _binance_auto_approve(order):
 
     # Revendedores automation (only for auto_enabled items)
     try:
-        result = _dispatch_order_auto_recharges(order, binance_auto=True)
+        result = _dispatch_order_auto_recharges(order, binance_auto=binance_auto)
         if result.get("summary", {}).get("total_units"):
             print(
-                f"[BinanceAuto] Order #{order.id}: "
+                f"[{source_label}] Order #{order.id}: "
                 f"{result['summary'].get('completed_units', 0)}/{result['summary'].get('total_units', 0)} completadas"
             )
     except Exception as exc:
-        print(f"[BinanceAuto] Revendedores error for order #{order.id}: {exc}")
+        print(f"[{source_label}] Revendedores error for order #{order.id}: {exc}")
+
+
+
+def _binance_auto_approve(order):
+    """Approve a Binance-paid order and trigger Revendedores automation.
+
+    Mirrors the approval logic of admin_orders_set_status but is called from
+    the background thread after Binance API payment confirmation.
+    ONLY triggers for orders where the item has auto_enabled=True in the mapping.
+    """
+    _auto_approve_order(order, source_label="BinanceAuto", binance_auto=True)
 
 
 def _binance_order_verification_loop():
@@ -1917,6 +1921,322 @@ def _save_order_automation_state(order_obj, state):
         order_obj.automation_json = json.dumps(state or {}, ensure_ascii=False)
     except Exception:
         order_obj.automation_json = ""
+
+
+def _pabilo_config():
+    enabled = get_config_value("pabilo_auto_verify_enabled", "0") == "1"
+    method = (get_config_value("pabilo_method", "pm") or "pm").strip().lower()
+    if method not in ("pm", "binance"):
+        method = "pm"
+    api_key = (get_config_value("pabilo_api_key", "") or "").strip()
+    user_bank_id = (get_config_value("pabilo_user_bank_id", "") or "").strip()
+    base_url = (
+        get_config_value("pabilo_base_url", "")
+        or os.environ.get("PABILO_BASE_URL", "https://api.pabilo.app")
+        or "https://api.pabilo.app"
+    ).strip().rstrip("/")
+    try:
+        timeout = int(get_config_value("pabilo_timeout_seconds", str(int(os.environ.get("PABILO_TIMEOUT", "30")))))
+    except Exception:
+        timeout = int(os.environ.get("PABILO_TIMEOUT", "30"))
+    try:
+        timeout = max(timeout, 5)
+    except Exception:
+        timeout = 30
+    enforce_method = get_config_value("pabilo_enforce_method", "1") == "1"
+    return {
+        "enabled": enabled,
+        "method": method,
+        "api_key": api_key,
+        "user_bank_id": user_bank_id,
+        "base_url": base_url,
+        "timeout": timeout,
+        "enforce_method": enforce_method,
+    }
+
+
+def _pabilo_get_payment_state(order_obj):
+    state = _load_order_automation_state(order_obj)
+    raw = state.get("payment_verify")
+    return raw if isinstance(raw, dict) else {}
+
+
+def _pabilo_set_payment_state(order_obj, payment_state: dict):
+    state = _load_order_automation_state(order_obj)
+    state["payment_verify"] = payment_state or {}
+    _save_order_automation_state(order_obj, state)
+
+
+def _is_pabilo_payment_method_enforced_for_order(order_obj) -> bool:
+    cfg = _pabilo_config()
+    if not cfg.get("enabled") or not cfg.get("enforce_method"):
+        return False
+    return _order_has_auto_recharges(order_obj)
+
+
+def _order_is_pabilo_eligible(order_obj) -> bool:
+    cfg = _pabilo_config()
+    if not cfg.get("enabled"):
+        return False
+    if (order_obj.method or "").strip().lower() != cfg.get("method"):
+        return False
+    if not _order_has_auto_recharges(order_obj):
+        return False
+    return True
+
+
+def _pabilo_verify_payment(order_obj):
+    if not order_obj:
+        return {"ok": False, "verified": False, "message": "Orden inválida"}
+    cfg = _pabilo_config()
+    if not cfg.get("enabled"):
+        return {"ok": False, "verified": False, "message": "Pabilo está desactivado"}
+    if (order_obj.method or "").strip().lower() != cfg.get("method"):
+        return {
+            "ok": False,
+            "verified": False,
+            "message": f"Este pedido debe pagarse por {cfg.get('method').upper()} para usar Pabilo.",
+        }
+    if not cfg.get("api_key"):
+        return {"ok": False, "verified": False, "message": "Falta API key de Pabilo"}
+    if not cfg.get("user_bank_id"):
+        return {"ok": False, "verified": False, "message": "Falta userBankId de Pabilo"}
+    if not (order_obj.reference or "").strip():
+        return {"ok": False, "verified": False, "message": "La orden no tiene referencia"}
+
+    url = f"{cfg.get('base_url')}/userbankpayment/{cfg.get('user_bank_id')}/betaserio"
+    payload = {
+        "bank_reference": str(order_obj.reference or "").strip(),
+    }
+    try:
+        resp = _requests_lib.post(
+            url,
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "appKey": cfg.get("api_key"),
+            },
+            timeout=cfg.get("timeout", 30),
+        )
+    except _requests_lib.exceptions.Timeout:
+        return {"ok": False, "verified": False, "message": "Pabilo no respondió a tiempo"}
+    except _requests_lib.exceptions.ConnectionError:
+        return {"ok": False, "verified": False, "message": "No se pudo conectar con Pabilo"}
+    except Exception as exc:
+        return {"ok": False, "verified": False, "message": f"Error consultando Pabilo: {exc}"}
+
+    try:
+        data = resp.json()
+    except Exception:
+        data = {}
+
+    payload_data = data.get("data") if isinstance(data.get("data"), dict) else data
+    if not isinstance(payload_data, dict):
+        payload_data = {}
+
+    accepted_statuses = {
+        "verified", "approve", "approved", "aprobado",
+        "success", "successful", "completed", "completada",
+        "paid", "pagado",
+    }
+    payment_status = str(payload_data.get("status_payment") or payload_data.get("status") or "").strip().lower()
+    root_status = str(data.get("status") or "").strip().lower()
+    verified_flag = bool(payload_data.get("verified") or data.get("verified"))
+    verified = (payment_status in accepted_statuses) or (root_status in accepted_statuses) or verified_flag
+
+    verification_id = (
+        payload_data.get("id")
+        or payload_data.get("verification_id")
+        or payload_data.get("payment_id")
+        or data.get("id")
+        or data.get("verification_id")
+    )
+
+    if resp.status_code in (401, 403):
+        return {
+            "ok": False,
+            "verified": False,
+            "message": "La API key de Pabilo es inválida o no tiene permisos",
+            "response": data,
+        }
+    if resp.status_code == 404:
+        return {
+            "ok": True,
+            "verified": False,
+            "message": "El pago todavía no aparece en Pabilo",
+            "response": data,
+        }
+    if resp.status_code >= 400:
+        return {
+            "ok": False,
+            "verified": False,
+            "message": str(data.get("message") or data.get("error") or f"Error HTTP {resp.status_code} en Pabilo"),
+            "response": data,
+        }
+
+    if not verified:
+        return {
+            "ok": True,
+            "verified": False,
+            "message": "La transacción aún no está verificada en Pabilo",
+            "response": data,
+        }
+
+    if not verification_id:
+        verification_id = f"fallback:{cfg.get('method')}:{str(order_obj.reference or '').strip()}"
+
+    return {
+        "ok": True,
+        "verified": True,
+        "verification_id": str(verification_id),
+        "message": "Pago verificado en Pabilo",
+        "response": data,
+    }
+
+
+def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool = False, source: str = "manual"):
+    current = _pabilo_get_payment_state(order_obj)
+    attempts = 0
+    try:
+        attempts = int(current.get("attempts") or 0)
+    except Exception:
+        attempts = 0
+
+    result = _pabilo_verify_payment(order_obj)
+    now_iso = datetime.utcnow().isoformat()
+
+    state = {
+        "provider": "pabilo",
+        "enabled": bool(_pabilo_config().get("enabled")),
+        "method": _pabilo_config().get("method"),
+        "attempts": attempts + 1,
+        "last_checked_at": now_iso,
+        "verified": bool(result.get("verified")),
+        "verification_id": str(result.get("verification_id") or ""),
+        "message": str(result.get("message") or ""),
+        "source": source,
+    }
+    _pabilo_set_payment_state(order_obj, state)
+    db.session.commit()
+
+    if result.get("verified") and auto_approve_on_verified and (order_obj.status or "").lower() == "pending":
+        _auto_approve_order(order_obj, source_label="PabiloAuto", binance_auto=False)
+
+    return {
+        "ok": bool(result.get("ok")),
+        "verified": bool(result.get("verified")),
+        "verification_id": state.get("verification_id") or "",
+        "message": state.get("message") or "",
+        "order_status": order_obj.status,
+    }
+
+
+def _thanks_progress_payload(order_obj):
+    """Build dynamic progress state for the thank-you page.
+
+    Only returns tracker visibility for orders mapped to auto-recharge + Pabilo flow.
+    """
+    auto_mapped = _order_has_auto_recharges(order_obj)
+    pay_state = _pabilo_get_payment_state(order_obj)
+    cfg = _pabilo_config()
+    method = (order_obj.method or "").strip().lower()
+    pabilo_like = bool(
+        _order_is_pabilo_eligible(order_obj)
+        or pay_state.get("provider") == "pabilo"
+        or int(pay_state.get("attempts") or 0) > 0
+    )
+    is_pabilo_auto = bool(auto_mapped and pabilo_like)
+
+    if not is_pabilo_auto:
+        return {
+            "ok": True,
+            "visible": False,
+            "order_id": order_obj.id,
+            "status": (order_obj.status or "").lower(),
+        }
+
+    summary = _summarize_order_auto_recharges(_build_order_auto_recharge_units(order_obj))
+    attempts = 0
+    try:
+        attempts = int(pay_state.get("attempts") or 0)
+    except Exception:
+        attempts = 0
+
+    payment_checked = attempts > 0
+    payment_verified = bool(pay_state.get("verified"))
+    order_validated = (order_obj.status or "").lower() in ("approved", "delivered")
+    recharge_connected = bool(
+        summary.get("total_units", 0) > 0
+        and (
+            summary.get("processing_units", 0) > 0
+            or summary.get("completed_units", 0) > 0
+            or summary.get("failed_units", 0) > 0
+        )
+    )
+    recharge_done = bool(
+        summary.get("total_units", 0) > 0
+        and summary.get("completed_units", 0) >= summary.get("total_units", 0)
+    )
+
+    steps = [
+        {
+            "id": "search",
+            "label": "Buscando pago en el sistema",
+            "done": payment_checked,
+        },
+        {
+            "id": "payment",
+            "label": "Pago confirmado",
+            "done": payment_verified,
+        },
+        {
+            "id": "validate",
+            "label": "Validando la orden",
+            "done": order_validated,
+        },
+        {
+            "id": "dispatch",
+            "label": "Conectando con servidor de recargas",
+            "done": recharge_connected,
+        },
+        {
+            "id": "completed",
+            "label": "Recarga procesada correctamente",
+            "done": recharge_done,
+        },
+    ]
+
+    current_message = "Procesando tu recarga..."
+    if recharge_done:
+        current_message = "Recarga completada"
+    elif recharge_connected:
+        current_message = "Conectando y procesando recarga"
+    elif order_validated:
+        current_message = "Orden validada, enviando recarga"
+    elif payment_verified:
+        current_message = "Pago confirmado, validando orden"
+    elif payment_checked:
+        current_message = "Pago en revisión"
+
+    return {
+        "ok": True,
+        "visible": True,
+        "order_id": order_obj.id,
+        "status": (order_obj.status or "").lower(),
+        "method": method,
+        "configured_method": cfg.get("method"),
+        "steps": steps,
+        "summary": summary,
+        "payment": {
+            "checked": payment_checked,
+            "verified": payment_verified,
+            "attempts": attempts,
+            "message": str(pay_state.get("message") or ""),
+            "verification_id": str(pay_state.get("verification_id") or ""),
+        },
+        "completed": recharge_done,
+        "current_message": current_message,
+    }
 
 
 def _get_order_item_entries(order_obj):
@@ -2866,6 +3186,9 @@ def store_payments():
         "pm_image_path": get_config_value("pm_image_path", ""),
         "binance_image_path": get_config_value("binance_image_path", ""),
         "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
+        "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
+        "pabilo_method": get_config_value("pabilo_method", "pm"),
+        "pabilo_enforce_method": get_config_value("pabilo_enforce_method", "1"),
     }
     return jsonify({"ok": True, "payments": data})
 
@@ -2984,6 +3307,13 @@ def admin_config_payments_get():
         "pm_image_path": get_config_value("pm_image_path", ""),
         "binance_image_path": get_config_value("binance_image_path", ""),
         "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
+        "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
+        "pabilo_api_key": get_config_value("pabilo_api_key", ""),
+        "pabilo_user_bank_id": get_config_value("pabilo_user_bank_id", ""),
+        "pabilo_method": get_config_value("pabilo_method", "pm"),
+        "pabilo_base_url": get_config_value("pabilo_base_url", os.environ.get("PABILO_BASE_URL", "https://api.pabilo.app")),
+        "pabilo_timeout_seconds": get_config_value("pabilo_timeout_seconds", os.environ.get("PABILO_TIMEOUT", "30")),
+        "pabilo_enforce_method": get_config_value("pabilo_enforce_method", "1"),
     })
 
 
@@ -3002,6 +3332,21 @@ def admin_config_payments_set():
     set_config_value("pm_image_path", (data.get("pm_image_path") or "").strip())
     set_config_value("binance_image_path", (data.get("binance_image_path") or "").strip())
     set_config_value("binance_auto_enabled", "1" if data.get("binance_auto_enabled") else "0")
+    set_config_value("pabilo_auto_verify_enabled", "1" if data.get("pabilo_auto_verify_enabled") else "0")
+    set_config_value("pabilo_api_key", (data.get("pabilo_api_key") or "").strip())
+    set_config_value("pabilo_user_bank_id", (data.get("pabilo_user_bank_id") or "").strip())
+    pabilo_method = (data.get("pabilo_method") or "pm").strip().lower()
+    if pabilo_method not in ("pm", "binance"):
+        pabilo_method = "pm"
+    set_config_value("pabilo_method", pabilo_method)
+    set_config_value("pabilo_base_url", (data.get("pabilo_base_url") or "").strip())
+    timeout_raw = (data.get("pabilo_timeout_seconds") or "").strip()
+    try:
+        timeout_val = str(max(int(timeout_raw or "30"), 5))
+    except Exception:
+        timeout_val = "30"
+    set_config_value("pabilo_timeout_seconds", timeout_val)
+    set_config_value("pabilo_enforce_method", "1" if data.get("pabilo_enforce_method", True) else "0")
     return jsonify({"ok": True})
 
 
@@ -3468,6 +3813,15 @@ def thanks_order(oid: int):
     return render_template("thanks.html", order_id=oid, logo_url=logo_url, site_name=site_name)
 
 
+@app.route("/gracias/<int:oid>/progress", methods=["GET"])
+def thanks_order_progress(oid: int):
+    """Public minimal progress endpoint for thank-you page polling."""
+    o = Order.query.get(oid)
+    if not o:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    return jsonify(_thanks_progress_payload(o))
+
+
 # ===============
 # Orders API
 # ===============
@@ -3728,6 +4082,16 @@ def create_order():
         except Exception:
             pass
         o.price = round(float(order_total_usd or 0.0), 2)
+
+        # Optional enforcement: mapped auto-recharge orders must use selected Pabilo method.
+        if _is_pabilo_payment_method_enforced_for_order(o):
+            required_method = (_pabilo_config().get("method") or "pm").strip().lower()
+            if (method or "").strip().lower() != required_method:
+                return jsonify({
+                    "ok": False,
+                    "error": f"Este juego solo acepta pagos por {required_method.upper()} para recarga automática.",
+                }), 400
+
         # Try to resolve special user id now for convenience
         try:
             if special_code:
@@ -3755,6 +4119,24 @@ def create_order():
         except Exception:
             pass
         db.session.commit()
+
+        # Attempt automatic Pabilo verification on eligible mapped orders.
+        # If payment is confirmed, the order gets auto-approved and dispatched.
+        auto_payment = None
+        try:
+            if _order_is_pabilo_eligible(o):
+                auto_payment = _pabilo_verify_and_update_order(
+                    o,
+                    auto_approve_on_verified=True,
+                    source="checkout",
+                )
+        except Exception as exc:
+            auto_payment = {
+                "ok": False,
+                "verified": False,
+                "message": f"Error verificando pago con Pabilo: {exc}",
+                "order_status": o.status,
+            }
         # Notify admin by email about new pending order (HTML)
         try:
             to_addr = get_config_value("admin_notify_email", ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL)
@@ -3798,7 +4180,10 @@ def create_order():
                 db.session.commit()
         except Exception:
             db.session.rollback()
-        return jsonify({"ok": True, "order_id": o.id})
+        response_payload = {"ok": True, "order_id": o.id}
+        if auto_payment:
+            response_payload["payment_auto"] = auto_payment
+        return jsonify(response_payload)
     except Exception as e:
         # Return error to client to help diagnose instead of 500
         try:
@@ -3838,6 +4223,7 @@ def admin_orders_list():
         except Exception:
             delivery_codes = []
         auto_summary = _summarize_order_auto_recharges(_build_order_auto_recharge_units(x))
+        payment_state = _pabilo_get_payment_state(x)
         out.append({
             "id": x.id,
             "created_at": x.created_at.isoformat(),
@@ -3850,6 +4236,8 @@ def admin_orders_list():
             "item_price_usd": (it.price if it else 0.0),
             "is_auto_mapped": bool(auto_summary.get("total_units")),
             "auto_recharge_summary": auto_summary,
+            "payment_verify": payment_state,
+            "pabilo_eligible": _order_is_pabilo_eligible(x),
             "items": items_payload,
             "customer_id": x.customer_id,
             "customer_zone": x.customer_zone or "",
@@ -4022,6 +4410,18 @@ def admin_orders_set_status(oid: int):
     o = Order.query.get(oid)
     if not o:
         return jsonify({"ok": False, "error": "No existe"}), 404
+
+    # Enforce payment verification via Pabilo for mapped auto-recharge orders when enabled.
+    if status == "approved" and (o.status or "").lower() == "pending" and _order_is_pabilo_eligible(o):
+        payment_state = _pabilo_get_payment_state(o)
+        if not payment_state.get("verified"):
+            verification = _pabilo_verify_and_update_order(o, auto_approve_on_verified=False, source="admin_approve")
+            if not verification.get("verified"):
+                return jsonify({
+                    "ok": False,
+                    "error": verification.get("message") or "Pago no verificado en Pabilo",
+                    "payment_verify": verification,
+                }), 409
     # Optional: allow passing single or multiple gift codes when approving gift card orders
     code = (data.get("delivery_code") or "").strip()
     if code:
@@ -4163,6 +4563,24 @@ def admin_orders_set_status(oid: int):
         }
 
     return jsonify(response_payload)
+
+
+@app.route("/admin/orders/<int:oid>/verify-payment", methods=["POST"])
+def admin_orders_verify_payment(oid: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    o = Order.query.get(oid)
+    if not o:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    if (o.status or "").lower() not in ("pending", "approved", "delivered"):
+        return jsonify({"ok": False, "error": "La orden no permite verificación"}), 400
+    if not _order_is_pabilo_eligible(o):
+        return jsonify({"ok": False, "error": "Esta orden no está sujeta a verificación Pabilo"}), 400
+
+    result = _pabilo_verify_and_update_order(o, auto_approve_on_verified=True, source="admin_manual")
+    return jsonify({"ok": True, "payment_verify": result, "order_status": o.status})
 
 
 @app.route("/admin/orders/<int:oid>/verify-recharge", methods=["POST"])

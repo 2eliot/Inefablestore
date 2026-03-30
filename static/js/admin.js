@@ -216,6 +216,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const binImage = document.getElementById('binance-image');
   const binAutoEnabled = document.getElementById('binance-auto-enabled');
   const binAutoNote = document.getElementById('binance-auto-note');
+  const pabiloAutoVerifyEnabled = document.getElementById('pabilo-auto-verify-enabled');
+  const pabiloMethod = document.getElementById('pabilo-method');
+  const pabiloApiKey = document.getElementById('pabilo-api-key');
+  const pabiloUserBankId = document.getElementById('pabilo-user-bank-id');
+  const pabiloBaseUrl = document.getElementById('pabilo-base-url');
+  const pabiloTimeoutSeconds = document.getElementById('pabilo-timeout-seconds');
+  const pabiloEnforceMethod = document.getElementById('pabilo-enforce-method');
   const payMethodSelect = document.getElementById('pay-method-select');
   const pmSection = document.getElementById('pm-section');
   const binSection = document.getElementById('binance-section');
@@ -801,6 +808,13 @@ document.addEventListener('DOMContentLoaded', () => {
           binAutoEnabled.checked = (data.binance_auto_enabled === '1' || data.binance_auto_enabled === 1);
           if (binAutoNote) binAutoNote.style.display = binAutoEnabled.checked ? '' : 'none';
         }
+        if (pabiloAutoVerifyEnabled) pabiloAutoVerifyEnabled.checked = (data.pabilo_auto_verify_enabled === '1' || data.pabilo_auto_verify_enabled === 1);
+        if (pabiloMethod) pabiloMethod.value = (data.pabilo_method || 'pm').toLowerCase() === 'binance' ? 'binance' : 'pm';
+        if (pabiloApiKey) pabiloApiKey.value = data.pabilo_api_key || '';
+        if (pabiloUserBankId) pabiloUserBankId.value = data.pabilo_user_bank_id || '';
+        if (pabiloBaseUrl) pabiloBaseUrl.value = data.pabilo_base_url || '';
+        if (pabiloTimeoutSeconds) pabiloTimeoutSeconds.value = data.pabilo_timeout_seconds || '30';
+        if (pabiloEnforceMethod) pabiloEnforceMethod.checked = !(data.pabilo_enforce_method === '0' || data.pabilo_enforce_method === 0 || data.pabilo_enforce_method === false);
         // Do not auto-select any method; keep placeholder until user chooses
         showPaySection();
       }
@@ -818,7 +832,14 @@ window.fetchPayments = fetchPayments;
       binance_phone: binPhone ? binPhone.value.trim() : '',
       pm_image_path: pmImage ? pmImage.value.trim() : '',
       binance_image_path: binImage ? binImage.value.trim() : '',
-      binance_auto_enabled: binAutoEnabled ? binAutoEnabled.checked : false
+      binance_auto_enabled: binAutoEnabled ? binAutoEnabled.checked : false,
+      pabilo_auto_verify_enabled: pabiloAutoVerifyEnabled ? pabiloAutoVerifyEnabled.checked : false,
+      pabilo_method: pabiloMethod ? pabiloMethod.value : 'pm',
+      pabilo_api_key: pabiloApiKey ? pabiloApiKey.value.trim() : '',
+      pabilo_user_bank_id: pabiloUserBankId ? pabiloUserBankId.value.trim() : '',
+      pabilo_base_url: pabiloBaseUrl ? pabiloBaseUrl.value.trim() : '',
+      pabilo_timeout_seconds: pabiloTimeoutSeconds ? pabiloTimeoutSeconds.value.trim() : '30',
+      pabilo_enforce_method: pabiloEnforceMethod ? pabiloEnforceMethod.checked : true
     };
     const res = await fetch('/admin/config/payments', {
       method: 'POST',
@@ -1990,6 +2011,7 @@ window.refreshGallery = refreshGallery;
       tile.className = 'order-tile';
       tile.setAttribute('data-customer-name', o.customer_name || '');
       const autoSummary = o.auto_recharge_summary || {};
+      const payVerify = o.payment_verify || {};
       const totalAutoUnits = parseInt(autoSummary.total_units || 0, 10) || 0;
       const completedAutoUnits = parseInt(autoSummary.completed_units || 0, 10) || 0;
       const processingAutoUnits = parseInt(autoSummary.processing_units || 0, 10) || 0;
@@ -2003,6 +2025,13 @@ window.refreshGallery = refreshGallery;
       const rejectDisabled = o.status !== 'pending' || (isAutoMapped && processingAutoUnits > 0);
       const autoSummaryText = isAutoMapped
         ? `Auto: ${completedAutoUnits}/${totalAutoUnits} completadas${processingAutoUnits ? ` · ${processingAutoUnits} verificando` : ''}${retryableAutoUnits ? ` · ${retryableAutoUnits} por reenviar` : ''}`
+        : '';
+      const pabiloEligible = !!o.pabilo_eligible;
+      const pabiloVerified = !!payVerify.verified;
+      const pabiloStateText = pabiloEligible
+        ? (pabiloVerified
+            ? `Pago verificado en Pabilo${payVerify.verification_id ? ` · ID ${payVerify.verification_id}` : ''}`
+            : `Pago no verificado en Pabilo${payVerify.message ? ` · ${payVerify.message}` : ''}`)
         : '';
       tile.setAttribute('data-is-auto', isAutoMapped ? '1' : '0');
       const when = new Date(o.created_at).toLocaleString();
@@ -2030,6 +2059,7 @@ window.refreshGallery = refreshGallery;
             <div class="package-name">${diam || ''}</div>
             ${playerNick && playerNick !== (o.name||'').trim() && playerNick !== (o.email||'').trim() ? `<div class="package-name" style="color:#86efac;font-size:12px;">👤 ${playerNick}</div>` : ''}
             ${autoSummaryText ? `<div class="package-name" style="color:#93c5fd;font-size:12px;">${autoSummaryText}</div>` : ''}
+            ${pabiloStateText ? `<div class="package-name" style="color:${pabiloVerified ? '#6ee7b7' : '#fca5a5'};font-size:12px;">${pabiloStateText}</div>` : ''}
             <div class="quantity-label">Cantidad: <span class="quantity-value">${itemsArr.length ? qtyTotal : 1}</span></div>
             <div class="ref-section">
               <div class="ref-label">REFERENCIA</div>
@@ -2068,6 +2098,7 @@ window.refreshGallery = refreshGallery;
         </div>` : ''}
         <div class="row-actions" style="justify-content:space-between;">
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            ${pabiloEligible && o.status === 'pending' && !pabiloVerified ? `<button class="btn btn-verify-payment" data-id="${o.id}">Verificar pago</button>` : ''}
             <button class="btn btn-approve" data-id="${o.id}" ${approveDisabled ? 'disabled' : ''}>${approveLabel}</button>
             ${isAutoMapped && processingAutoUnits > 0 ? `<button class="btn btn-verify-recharge" data-id="${o.id}">Verificar ${processingAutoUnits}</button>` : ''}
           </div>
@@ -2147,6 +2178,35 @@ window.refreshGallery = refreshGallery;
         btnV.disabled = true;
         btnV.textContent = 'Verificando...';
         _pollVerifyRecharge(id, btnV);
+        return;
+      }
+
+      const btnP = e.target.closest('.btn-verify-payment');
+      if (btnP) {
+        const id = btnP.getAttribute('data-id');
+        if (!id) return;
+        try {
+          btnP.disabled = true;
+          btnP.textContent = 'Verificando...';
+          const res = await fetch(`/admin/orders/${id}/verify-payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo verificar el pago');
+          const pv = data.payment_verify || {};
+          if (pv.verified) {
+            toast(`✅ Pago verificado en Pabilo${pv.verification_id ? ` · ${pv.verification_id}` : ''}`, 'success');
+          } else {
+            toast(pv.message || 'Pago no verificado todavía', 'warning');
+          }
+          await fetchOrders();
+        } catch (err) {
+          toast(err.message || 'Error verificando pago');
+        } finally {
+          btnP.disabled = false;
+          btnP.textContent = 'Verificar pago';
+        }
         return;
       }
 

@@ -17,6 +17,28 @@
   .ty-btn{display:inline-block;margin-top:8px;background:#22c55e;color:#062a1d;padding:12px 16px;border-radius:10px;text-decoration:none;font-weight:900;border:1px solid #16a34a}
   .ty-ill{display:flex;justify-content:center;margin:0 0 -10px}
   .ty-ill img{max-width:260px;width:100%;filter:drop-shadow(0 10px 30px rgba(0,0,0,.35))}
+  .ty-progress{display:none;max-width:620px;width:100%;margin:14px auto 0;padding:16px 14px;border-radius:14px;background:#091423;border:1px solid rgba(34,197,94,.22)}
+  .ty-progress.visible{display:block;animation:ty-fade-in .35s ease-out both}
+  .ty-progress-title{margin:0 0 8px;color:#93c5fd;font-size:22px;font-weight:900}
+  .ty-progress-sub{margin:0 0 12px;color:#cbd5e1;font-weight:700}
+  .ty-steps{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+  .ty-step{display:flex;align-items:center;gap:10px;padding:8px 6px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(2,6,23,.45);transition:background-color .25s ease,border-color .25s ease,transform .25s ease,box-shadow .25s ease}
+  .ty-step-ico{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#ef4444;border:1px solid rgba(239,68,68,.5);background:rgba(127,29,29,.35);transition:color .25s ease,border-color .25s ease,background-color .25s ease,transform .25s ease}
+  .ty-step.done .ty-step-ico{color:#22c55e;border-color:rgba(34,197,94,.55);background:rgba(6,78,59,.45)}
+  .ty-step-label{color:#e2e8f0;font-weight:800}
+  .ty-step.done .ty-step-label{color:#86efac}
+  .ty-step.done{background:rgba(6,78,59,.28);border-color:rgba(34,197,94,.35)}
+  .ty-step.just-completed{box-shadow:0 0 0 1px rgba(34,197,94,.4), 0 0 20px rgba(34,197,94,.18);transform:translateY(-1px)}
+  .ty-step.just-completed .ty-step-ico{animation:ty-check-pop .35s ease-out both}
+  @keyframes ty-check-pop{
+    0%{transform:scale(.72)}
+    60%{transform:scale(1.12)}
+    100%{transform:scale(1)}
+  }
+  @keyframes ty-fade-in{
+    0%{opacity:0;transform:translateY(4px)}
+    100%{opacity:1;transform:translateY(0)}
+  }
   @media (max-width: 640px){
     .ty-wrap{padding:8px 4px 20px}
     .ty-card{
@@ -38,6 +60,9 @@
     .ty-btn{margin-top:2px;padding:8px 12px;font-size:13px}
     .ty-ill{margin:-2px 0 -8px}
     .ty-ill img{max-width:140px}
+    .ty-progress{padding:12px 10px}
+    .ty-progress-title{font-size:18px}
+    .ty-step{padding:7px 5px}
   }
 </style>
 {% endblock %}
@@ -82,6 +107,11 @@
           <a class="social-icon tiktok" href="{{ tk or 'https://www.tiktok.com/@inefablestore' }}" target="_blank" rel="noopener" aria-label="TikTok" title="TikTok">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg>
           </a>
+        </div>
+        <div id="ty-progress" class="ty-progress" data-order-id="{{ order_id }}" aria-live="polite">
+          <h3 id="ty-progress-title" class="ty-progress-title">Procesando recarga</h3>
+          <p id="ty-progress-sub" class="ty-progress-sub">Iniciando seguimiento...</p>
+          <ul id="ty-steps" class="ty-steps"></ul>
         </div>
         <a class="ty-btn" href="/">Regresar a comprar</a>
       </div>
@@ -176,4 +206,79 @@
 </footer>
 {% endblock %}
 
-{% block scripts %}{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    var root = document.getElementById('ty-progress');
+    if (!root) return;
+    var orderId = root.getAttribute('data-order-id');
+    var titleEl = document.getElementById('ty-progress-title');
+    var subEl = document.getElementById('ty-progress-sub');
+    var listEl = document.getElementById('ty-steps');
+    var timer = null;
+    var prevDoneMap = {};
+
+    function renderSteps(payload) {
+      if (!payload || !payload.visible) {
+        root.classList.remove('visible');
+        return;
+      }
+      root.classList.add('visible');
+
+      var steps = Array.isArray(payload.steps) ? payload.steps : [];
+      if (titleEl) {
+        titleEl.textContent = payload.completed ? 'Recarga completada' : 'Estado de procesamiento';
+      }
+      if (subEl) {
+        subEl.textContent = payload.current_message || 'Procesando tu recarga...';
+      }
+      if (!listEl) return;
+
+      listEl.innerHTML = steps.map(function (st, idx) {
+        var done = !!st.done;
+        var key = (st.id || ('step_' + idx)).toString();
+        var wasDone = !!prevDoneMap[key];
+        var justDone = done && !wasDone;
+        return '<li class="ty-step' + (done ? ' done' : '') + (justDone ? ' just-completed' : '') + '">'
+          + '<span class="ty-step-ico">' + (done ? '✓' : 'x') + '</span>'
+          + '<span class="ty-step-label">' + (st.label || '') + '</span>'
+          + '</li>';
+      }).join('');
+
+      var nextMap = {};
+      steps.forEach(function (st, idx) {
+        var key = (st.id || ('step_' + idx)).toString();
+        nextMap[key] = !!st.done;
+      });
+      prevDoneMap = nextMap;
+
+      var highlighted = listEl.querySelectorAll('.ty-step.just-completed');
+      highlighted.forEach(function (el) {
+        setTimeout(function () { el.classList.remove('just-completed'); }, 420);
+      });
+    }
+
+    function stopPolling() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+
+    function pollOnce() {
+      if (!orderId) return;
+      fetch('/gracias/' + encodeURIComponent(orderId) + '/progress', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data || !data.ok) return;
+          renderSteps(data);
+          if (data.completed) stopPolling();
+        })
+        .catch(function () { /* keep polling silently */ });
+    }
+
+    pollOnce();
+    timer = setInterval(pollOnce, 5000);
+  })();
+</script>
+{% endblock %}
