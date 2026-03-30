@@ -22,6 +22,8 @@ from email.mime.multipart import MIMEMultipart
 import secrets
 import requests as _requests_lib
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 # Create Flask app
 app = Flask(__name__, instance_relative_config=True)
@@ -3369,7 +3371,27 @@ def admin_config_payments_set():
         set_config_values(values)
     except Exception as exc:
         return jsonify({"ok": False, "error": f"No se pudo guardar configuración de pagos: {exc}"}), 500
-    return jsonify({"ok": True})
+    return jsonify({
+        "ok": True,
+        "saved": {
+            "pm_bank": values.get("pm_bank", ""),
+            "pm_name": values.get("pm_name", ""),
+            "pm_phone": values.get("pm_phone", ""),
+            "pm_id": values.get("pm_id", ""),
+            "binance_email": values.get("binance_email", ""),
+            "binance_phone": values.get("binance_phone", ""),
+            "pm_image_path": values.get("pm_image_path", ""),
+            "binance_image_path": values.get("binance_image_path", ""),
+            "binance_auto_enabled": values.get("binance_auto_enabled", "0"),
+            "pabilo_auto_verify_enabled": values.get("pabilo_auto_verify_enabled", "0"),
+            "pabilo_api_key": values.get("pabilo_api_key", ""),
+            "pabilo_user_bank_id": values.get("pabilo_user_bank_id", ""),
+            "pabilo_method": values.get("pabilo_method", "pm"),
+            "pabilo_base_url": values.get("pabilo_base_url", ""),
+            "pabilo_timeout_seconds": values.get("pabilo_timeout_seconds", "30"),
+            "pabilo_enforce_method": values.get("pabilo_enforce_method", "1"),
+        }
+    })
 
 
 @app.route("/admin/config/mail", methods=["GET"])
@@ -5869,46 +5891,59 @@ def admin_stats_package(pkg_id: int):
 
 
 def set_config_value(key: str, value: str, *, commit: bool = True) -> None:
-    """Persist a single config key safely.
-
-    In production with concurrent requests/workers, initial inserts can race.
-    This helper retries as update on unique conflicts and always rolls back
-    failed transactions so later saves continue working.
-    """
-    try:
-        row = AppConfig.query.filter_by(key=key).first()
-        if not row:
-            db.session.add(AppConfig(key=key, value=value))
-            # Flush now so we can catch unique violations before optional commit.
-            db.session.flush()
-        else:
-            row.value = value
-        if commit:
-            db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        # Another worker likely inserted the same key. Retry as update.
-        row = AppConfig.query.filter_by(key=key).first()
-        if row:
-            row.value = value
-        else:
-            db.session.add(AppConfig(key=key, value=value))
-        if commit:
-            db.session.commit()
-    except Exception:
-        db.session.rollback()
-        raise
+    values = {str(key): str(value)}
+    if commit:
+        set_config_values(values)
+        return
+    _upsert_config_values(values)
 
 
 def set_config_values(values: dict[str, str]) -> None:
     """Persist multiple config keys in a single transaction."""
     try:
-        for cfg_key, cfg_value in (values or {}).items():
-            set_config_value(str(cfg_key), str(cfg_value), commit=False)
+        _upsert_config_values(values or {})
         db.session.commit()
     except Exception:
         db.session.rollback()
         raise
+
+
+def _upsert_config_values(values: dict[str, str]) -> None:
+    rows = [
+        {"key": str(cfg_key), "value": str(cfg_value)}
+        for cfg_key, cfg_value in (values or {}).items()
+    ]
+    if not rows:
+        return
+
+    table = AppConfig.__table__
+    dialect = (db.session.bind.dialect.name or "").lower()
+
+    if dialect == "postgresql":
+        stmt = pg_insert(table).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[table.c.key],
+            set_={"value": stmt.excluded.value},
+        )
+        db.session.execute(stmt)
+        return
+
+    if dialect == "sqlite":
+        stmt = sqlite_insert(table).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[table.c.key],
+            set_={"value": stmt.excluded.value},
+        )
+        db.session.execute(stmt)
+        return
+
+    # Fallback for other dialects.
+    for row_data in rows:
+        row = AppConfig.query.filter_by(key=row_data["key"]).first()
+        if row:
+            row.value = row_data["value"]
+        else:
+            db.session.add(AppConfig(key=row_data["key"], value=row_data["value"]))
 
 
 @app.route("/auth/login", methods=["POST"])

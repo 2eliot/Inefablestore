@@ -804,26 +804,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/admin/config/payments');
       const data = await res.json();
       if (data && data.ok) {
-        if (pmBank) pmBank.value = data.pm_bank || '';
-        if (pmName) pmName.value = data.pm_name || '';
-        if (pmPhone) pmPhone.value = data.pm_phone || '';
-        if (pmId) pmId.value = data.pm_id || '';
-        if (binEmail) binEmail.value = data.binance_email || '';
-        if (binPhone) binPhone.value = data.binance_phone || '';
-        if (pmImage) { pmImage.value = data.pm_image_path || ''; syncDropdown(pmImage); }
-        if (binImage) { binImage.value = data.binance_image_path || ''; syncDropdown(binImage); }
-        if (binAutoEnabled) {
-          binAutoEnabled.checked = (data.binance_auto_enabled === '1' || data.binance_auto_enabled === 1);
-          if (binAutoNote) binAutoNote.style.display = binAutoEnabled.checked ? '' : 'none';
-        }
-        if (pabiloAutoVerifyEnabled) pabiloAutoVerifyEnabled.checked = (data.pabilo_auto_verify_enabled === '1' || data.pabilo_auto_verify_enabled === 1);
-        if (pabiloMethod) pabiloMethod.value = (data.pabilo_method || 'pm').toLowerCase() === 'binance' ? 'binance' : 'pm';
-        if (pabiloApiKey) pabiloApiKey.value = data.pabilo_api_key || '';
-        if (pabiloUserBankId) pabiloUserBankId.value = data.pabilo_user_bank_id || '';
-        if (pabiloBaseUrl) pabiloBaseUrl.value = data.pabilo_base_url || '';
-        if (pabiloTimeoutSeconds) pabiloTimeoutSeconds.value = data.pabilo_timeout_seconds || '30';
-        if (pabiloEnforceMethod) pabiloEnforceMethod.checked = !(data.pabilo_enforce_method === '0' || data.pabilo_enforce_method === 0 || data.pabilo_enforce_method === false);
-        showPaySection((payMethodSelect && payMethodSelect.value) || activePayMethodView || 'pm');
+        applyPaymentsData(data);
       }
 window.fetchPayments = fetchPayments;
     } catch (_) { /* ignore */ }
@@ -858,6 +839,30 @@ window.fetchPayments = fetchPayments;
       throw new Error(txt || 'No se pudo guardar mÃ©todos de pago');
     }
     return res.json();
+  }
+
+  function applyPaymentsData(data) {
+    if (!data) return;
+    if (pmBank) pmBank.value = data.pm_bank || '';
+    if (pmName) pmName.value = data.pm_name || '';
+    if (pmPhone) pmPhone.value = data.pm_phone || '';
+    if (pmId) pmId.value = data.pm_id || '';
+    if (binEmail) binEmail.value = data.binance_email || '';
+    if (binPhone) binPhone.value = data.binance_phone || '';
+    if (pmImage) { pmImage.value = data.pm_image_path || ''; syncDropdown(pmImage); }
+    if (binImage) { binImage.value = data.binance_image_path || ''; syncDropdown(binImage); }
+    if (binAutoEnabled) {
+      binAutoEnabled.checked = (data.binance_auto_enabled === '1' || data.binance_auto_enabled === 1 || data.binance_auto_enabled === true);
+      if (binAutoNote) binAutoNote.style.display = binAutoEnabled.checked ? '' : 'none';
+    }
+    if (pabiloAutoVerifyEnabled) pabiloAutoVerifyEnabled.checked = (data.pabilo_auto_verify_enabled === '1' || data.pabilo_auto_verify_enabled === 1 || data.pabilo_auto_verify_enabled === true);
+    if (pabiloMethod) pabiloMethod.value = (data.pabilo_method || 'pm').toLowerCase() === 'binance' ? 'binance' : 'pm';
+    if (pabiloApiKey) pabiloApiKey.value = data.pabilo_api_key || '';
+    if (pabiloUserBankId) pabiloUserBankId.value = data.pabilo_user_bank_id || '';
+    if (pabiloBaseUrl) pabiloBaseUrl.value = data.pabilo_base_url || '';
+    if (pabiloTimeoutSeconds) pabiloTimeoutSeconds.value = data.pabilo_timeout_seconds || '30';
+    if (pabiloEnforceMethod) pabiloEnforceMethod.checked = !(data.pabilo_enforce_method === '0' || data.pabilo_enforce_method === 0 || data.pabilo_enforce_method === false);
+    showPaySection((payMethodSelect && payMethodSelect.value) || activePayMethodView || 'pm');
   }
   // Ensure global symbol exists for any external references
   window.savePayments = savePayments;
@@ -2554,6 +2559,7 @@ window.fetchHero = fetchHero;
         btnSavePayments.disabled = true;
         const resp = await savePayments();
         if (resp && resp.ok) {
+          if (resp.saved) applyPaymentsData(resp.saved);
           toast('Métodos de pago guardados', 'success');
           showPaySection(activePayMethodView || 'pm');
         } else {
