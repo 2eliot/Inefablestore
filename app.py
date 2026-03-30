@@ -2684,6 +2684,7 @@ def _build_order_auto_recharge_units(order_obj, automation_state=None):
             "reference_no": str((previous or {}).get("reference_no") or ""),
             "remaining_balance": (previous or {}).get("remaining_balance"),
             "error": str((previous or {}).get("error") or ""),
+            "attempt_count": int((previous or {}).get("attempt_count") or 0),
             "last_attempt_at": str((previous or {}).get("last_attempt_at") or ""),
             "last_checked_at": str((previous or {}).get("last_checked_at") or ""),
         }
@@ -2722,6 +2723,8 @@ def _order_status_from_auto_summary(summary, fallback_status="approved"):
 
 
 def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
+    max_attempts = 3
+    retry_delay_seconds = 2
     state = _load_order_automation_state(order_obj)
     units = _build_order_auto_recharge_units(order_obj, state)
     summary = _summarize_order_auto_recharges(units)
@@ -2798,41 +2801,49 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
         }
         if (order_obj.customer_zone or "").strip():
             payload["player_id2"] = (order_obj.customer_zone or "").strip()
-        unit["last_attempt_at"] = datetime.utcnow().isoformat()
-        try:
-            api_resp = _requests_lib.post(
-                f"{webb_url}{recharge_path}",
-                json=payload,
-                headers={"X-API-Key": webb_api_key, "Content-Type": "application/json"},
-                timeout=60,
-            )
+        for attempt in range(1, max_attempts + 1):
+            unit["last_attempt_at"] = datetime.utcnow().isoformat()
+            unit["attempt_count"] = int(unit.get("attempt_count") or 0) + 1
             try:
-                api_data = api_resp.json()
-            except Exception:
-                api_data = {"ok": False, "error": f"Respuesta inválida HTTP {api_resp.status_code}"}
-            if api_data.get("ok"):
-                unit["status"] = "completed"
-                unit["player_name"] = str(api_data.get("player_name") or "")
-                unit["reference_no"] = str(api_data.get("reference_no") or "")
-                unit["remaining_balance"] = api_data.get("remaining_balance")
-                unit["error"] = ""
-                last_error = ""
-                continue
-            else:
+                api_resp = _requests_lib.post(
+                    f"{webb_url}{recharge_path}",
+                    json=payload,
+                    headers={"X-API-Key": webb_api_key, "Content-Type": "application/json"},
+                    timeout=60,
+                )
+                try:
+                    api_data = api_resp.json()
+                except Exception:
+                    api_data = {"ok": False, "error": f"Respuesta inválida HTTP {api_resp.status_code}"}
+                if api_data.get("ok"):
+                    unit["status"] = "completed"
+                    unit["player_name"] = str(api_data.get("player_name") or "")
+                    unit["reference_no"] = str(api_data.get("reference_no") or "")
+                    unit["remaining_balance"] = api_data.get("remaining_balance")
+                    unit["error"] = ""
+                    last_error = ""
+                    break
+
                 unit["status"] = "processing"
                 unit["error"] = str(api_data.get("error") or "Recarga no completada en Revendedores")
                 last_error = unit["error"]
+            except _requests_lib.exceptions.Timeout:
+                unit["status"] = "processing"
+                unit["error"] = "Revendedores no respondió en 60 segundos"
+                last_error = unit["error"]
+            except Exception as exc:
+                unit["status"] = "processing"
+                unit["error"] = str(exc)
+                last_error = unit["error"]
+
+            if unit.get("status") == "completed":
                 break
-        except _requests_lib.exceptions.Timeout:
-            unit["status"] = "processing"
-            unit["error"] = "Revendedores no respondió en 60 segundos"
-            last_error = unit["error"]
-            break
-        except Exception as exc:
-            unit["status"] = "processing"
-            unit["error"] = str(exc)
-            last_error = unit["error"]
-            break
+            if attempt < max_attempts:
+                time.sleep(retry_delay_seconds)
+
+        if unit.get("status") == "completed":
+            continue
+        break
 
     summary = _summarize_order_auto_recharges(units)
     state["units"] = units
