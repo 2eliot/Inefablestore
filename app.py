@@ -1040,19 +1040,21 @@ def _auto_approve_order(order, *, source_label: str = "AutoApprove", binance_aut
     except Exception:
         pass
 
-    # Notify buyer (HTML email)
-    try:
-        if order.email:
-            pkg = StorePackage.query.get(order.store_package_id)
-            it = GamePackageItem.query.get(order.item_id) if order.item_id else None
-            brand = _email_brand()
-            html, text = build_order_approved_email(order, pkg, it)
-            try:
-                send_email_html(order.email, f"Orden #{order.id} aprobada - {brand}", html, text)
-            except Exception:
-                send_email_async(order.email, f"Orden #{order.id} aprobada - {brand}", text)
-    except Exception:
-        pass
+    has_auto_recharges = _order_has_auto_recharges(order)
+
+    if not has_auto_recharges:
+        try:
+            if order.email:
+                pkg = StorePackage.query.get(order.store_package_id)
+                it = GamePackageItem.query.get(order.item_id) if order.item_id else None
+                brand = _email_brand()
+                html, text = build_order_approved_email(order, pkg, it)
+                try:
+                    send_email_html(order.email, f"Orden #{order.id} aprobada - {brand}", html, text)
+                except Exception:
+                    send_email_async(order.email, f"Orden #{order.id} aprobada - {brand}", text)
+        except Exception:
+            pass
 
     # Revendedores automation (only for auto_enabled items)
     try:
@@ -1062,6 +1064,9 @@ def _auto_approve_order(order, *, source_label: str = "AutoApprove", binance_aut
                 f"[{source_label}] Order #{order.id}: "
                 f"{result['summary'].get('completed_units', 0)}/{result['summary'].get('total_units', 0)} completadas"
             )
+        summary = result.get("summary") or {}
+        if has_auto_recharges and summary.get("total_units", 0) > 0 and summary.get("completed_units", 0) >= summary.get("total_units", 0):
+            _send_order_completed_email_if_needed(order)
     except Exception as exc:
         print(f"[{source_label}] Revendedores error for order #{order.id}: {exc}")
 
@@ -2443,6 +2448,31 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         "order_status": order_obj.status,
         "request_meta": result.get("request_meta") or {},
     }
+
+
+def _send_order_completed_email_if_needed(order_obj, state: dict | None = None) -> bool:
+    if not order_obj or not (order_obj.email or "").strip():
+        return False
+
+    auto_state = state if isinstance(state, dict) else _load_order_automation_state(order_obj)
+    if auto_state.get("completion_email_sent"):
+        return False
+
+    pkg = StorePackage.query.get(order_obj.store_package_id)
+    it = GamePackageItem.query.get(order_obj.item_id) if order_obj.item_id else None
+    brand = _email_brand()
+    html, text = build_order_approved_email(order_obj, pkg, it)
+
+    try:
+        send_email_html(order_obj.email, f"Orden #{order_obj.id} aprobada - {brand}", html, text)
+    except Exception:
+        send_email_async(order_obj.email, f"Orden #{order_obj.id} aprobada - {brand}", text)
+
+    auto_state["completion_email_sent"] = True
+    auto_state["completion_email_sent_at"] = datetime.utcnow().isoformat()
+    _save_order_automation_state(order_obj, auto_state)
+    db.session.commit()
+    return True
 
 
 def _thanks_progress_payload(order_obj):
@@ -4618,22 +4648,9 @@ def create_order():
             admin_html, admin_text = build_admin_new_order_email(o, pkg, it)
             brand = _email_brand()
             try:
-                send_email_html(to_addr, f"[{brand}] Nueva orden #{o.id}", admin_html, admin_text)
+                send_email_async(to_addr, f"[{brand}] Nueva orden #{o.id}", admin_text)
             except Exception:
                 send_email(to_addr, f"Nueva orden #{o.id} pendiente", admin_text)
-        except Exception:
-            pass
-        # Notify customer that order was received (HTML)
-        try:
-            if o.email:
-                pkg = pkg if 'pkg' in dir() else StorePackage.query.get(o.store_package_id)
-                it = it if 'it' in dir() else (GamePackageItem.query.get(o.item_id) if o.item_id else None)
-                cust_html, cust_text = build_order_created_email(o, pkg, it)
-                brand = _email_brand()
-                try:
-                    send_email_html(o.email, f"Orden #{o.id} recibida - {brand}", cust_html, cust_text)
-                except Exception:
-                    send_email_async(o.email, f"Orden #{o.id} recibida - {brand}", cust_text)
         except Exception:
             pass
         # Purge per-user beyond latest 30 (by email or customer_id)
@@ -4984,7 +5001,7 @@ def admin_orders_set_status(oid: int):
         pass
     # Notify buyer on approval (HTML email)
     try:
-        if status == "approved" and (o.email or o.name):
+        if status == "approved" and (o.email or o.name) and not _order_has_auto_recharges(o):
             pkg = StorePackage.query.get(o.store_package_id)
             it = GamePackageItem.query.get(o.item_id) if o.item_id else None
             to_addr = o.email or None
@@ -5017,6 +5034,9 @@ def admin_orders_set_status(oid: int):
     try:
         if status == "approved" and o.status in ("approved", "delivered") and _order_has_auto_recharges(o):
             auto_dispatch = _dispatch_order_auto_recharges(o)
+            auto_summary = auto_dispatch.get("summary") or {}
+            if auto_summary.get("total_units", 0) > 0 and auto_summary.get("completed_units", 0) >= auto_summary.get("total_units", 0):
+                _send_order_completed_email_if_needed(o)
     except Exception as exc:
         auto_dispatch = {
             "ok": False,
@@ -5161,6 +5181,7 @@ def admin_orders_verify_recharge(oid: int):
         queued_result = _dispatch_order_auto_recharges(o, binance_auto=bool(auto_resp.get("binance_auto")))
         queued_summary = queued_result.get("summary") or {}
         if queued_summary.get("completed_units", 0) >= queued_summary.get("total_units", 0) and queued_summary.get("total_units", 0) > 0:
+            _send_order_completed_email_if_needed(o)
             first_completed = next((unit for unit in (queued_result.get("units") or []) if (unit.get("status") or "") == "completed"), {})
             return jsonify({
                 "ok": True,
@@ -5180,6 +5201,7 @@ def admin_orders_verify_recharge(oid: int):
         })
 
     if summary.get("completed_units", 0) >= summary.get("total_units", 0):
+        _send_order_completed_email_if_needed(o)
         first_completed = next((unit for unit in units if (unit.get("status") or "") == "completed"), {})
         return jsonify({
             "ok": True,

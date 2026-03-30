@@ -227,10 +227,12 @@
 
       var steps = Array.isArray(payload.steps) ? payload.steps : [];
       if (titleEl) {
-        titleEl.textContent = payload.completed ? 'Recarga completada' : 'Estado de procesamiento';
+        titleEl.textContent = payload.completed ? '' : 'Estado de procesamiento';
+        titleEl.style.display = payload.completed ? 'none' : '';
       }
       if (subEl) {
-        subEl.textContent = payload.current_message || 'Procesando tu recarga...';
+        subEl.textContent = payload.completed ? '' : (payload.current_message || 'Procesando tu recarga...');
+        subEl.style.display = payload.completed ? 'none' : '';
       }
       if (!listEl) return;
 
