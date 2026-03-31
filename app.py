@@ -9,6 +9,7 @@ import urllib.error
 import html as _html
 import hashlib
 import hmac as _hmac_module
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory, current_app
 from flask_sqlalchemy import SQLAlchemy
@@ -1965,7 +1966,7 @@ def _pabilo_config():
         timeout = 30
     enforce_method = get_config_value("pabilo_enforce_method", "1") == "1"
     default_movement_type = (get_config_value("pabilo_default_movement_type", "") or "").strip().upper()
-    if default_movement_type not in ("MOVIL_PAY", "TRANSFER"):
+    if default_movement_type not in ("GENERIC", "MOVIL_PAY", "TRANSFER"):
         default_movement_type = ""
     user_bank_ids = {
         "pm": pm_user_bank_id,
@@ -2119,6 +2120,27 @@ def _reset_order_payment_verification_state(order_obj, *, message: str, source: 
     })
 
 
+def _pabilo_exact_amount_value(order_obj):
+    if not order_obj:
+        return None
+    try:
+        amount_decimal = Decimal(str(order_obj.amount or 0)).normalize()
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+    if amount_decimal <= 0:
+        return None
+    if amount_decimal != amount_decimal.to_integral_value():
+        return None
+    return int(amount_decimal.to_integral_value())
+
+
+def _pabilo_payload_movement_type(order_obj) -> str:
+    movement_type = str(order_obj.payer_movement_type or _pabilo_config().get("default_movement_type") or "").strip().upper()
+    if movement_type in ("GENERIC", "MOVIL_PAY", "TRANSFER"):
+        return movement_type
+    return ""
+
+
 def _is_pabilo_payment_method_enforced_for_order(order_obj) -> bool:
     cfg = _pabilo_config()
     if not cfg.get("enabled") or not cfg.get("enforce_method"):
@@ -2147,6 +2169,8 @@ def _pabilo_request_info(order_obj) -> dict:
         reasons.append(f"Falta UserBankId de Pabilo para {order_method.upper() or expected_method.upper()}")
     if not str(order_obj.reference or "").strip():
         reasons.append("La orden no tiene referencia")
+    if _pabilo_exact_amount_value(order_obj) is None:
+        reasons.append("La orden no tiene un monto exacto valido para consultar en Pabilo")
 
     return {
         "requestable": len(reasons) == 0,
@@ -2161,7 +2185,9 @@ def _pabilo_request_info(order_obj) -> dict:
 
 
 def _pabilo_build_payload(order_obj) -> dict:
+    exact_amount = _pabilo_exact_amount_value(order_obj)
     payload = {
+        "amount": exact_amount,
         "bank_reference": str(order_obj.reference or "").strip(),
     }
 
@@ -2180,8 +2206,8 @@ def _pabilo_build_payload(order_obj) -> dict:
         except Exception:
             payload["fecha_pago"] = str(order_obj.payer_payment_date)
 
-    movement_type = str(order_obj.payer_movement_type or "").strip().upper()
-    if movement_type in ("MOVIL_PAY", "TRANSFER"):
+    movement_type = _pabilo_payload_movement_type(order_obj)
+    if movement_type:
         payload["movement_type"] = movement_type
 
     return payload
@@ -3812,7 +3838,7 @@ def admin_config_payments_set():
     values["pabilo_timeout_seconds"] = timeout_val
     values["pabilo_enforce_method"] = "1" if data.get("pabilo_enforce_method", True) else "0"
     default_movement_type = (data.get("pabilo_default_movement_type") or "").strip().upper()
-    if default_movement_type not in ("", "MOVIL_PAY", "TRANSFER"):
+    if default_movement_type not in ("", "GENERIC", "MOVIL_PAY", "TRANSFER"):
         default_movement_type = ""
     values["pabilo_default_movement_type"] = default_movement_type
     try:
@@ -4551,7 +4577,7 @@ def create_order():
             payer_dni_type = ""
         if payer_payment_date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", payer_payment_date):
             return jsonify({"ok": False, "error": "La fecha de pago es inválida"}), 400
-        if payer_movement_type and payer_movement_type not in ("MOVIL_PAY", "TRANSFER"):
+        if payer_movement_type and payer_movement_type not in ("GENERIC", "MOVIL_PAY", "TRANSFER"):
             payer_movement_type = ""
 
         if not email:
