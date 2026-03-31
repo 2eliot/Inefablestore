@@ -56,34 +56,56 @@ document.addEventListener('DOMContentLoaded', () => {
   // =====================
   const secMobile = document.getElementById('pkgs-mobile');
   const secGift = document.getElementById('pkgs-gift');
+  const secOther = document.getElementById('pkgs-other');
   const secHero = document.getElementById('hero');
   const secBest = document.getElementById('best-sellers');
+  function getCategoryHash(cat) {
+    const c = (cat || '').toLowerCase();
+    if (c === 'gift') return '#pkgs-gift';
+    if (c === 'other') return '#pkgs-other';
+    return '#pkgs-mobile';
+  }
   function showCategory(cat) {
     const c = (cat || '').toLowerCase();
-    if (!secMobile && !secGift) return; // not on homepage
+    if (!secMobile && !secGift && !secOther) return; // not on homepage
     const railMobile = document.getElementById('rail-mobile');
     const railGift = document.getElementById('rail-gift');
+    const railOther = document.getElementById('rail-other');
     const resetRails = () => {
       try { if (railMobile) { railMobile.scrollLeft = 0; railMobile.style.scrollBehavior = 'auto'; } } catch(_){}
       try { if (railGift) { railGift.scrollLeft = 0; railGift.style.scrollBehavior = 'auto'; } } catch(_){}
+      try { if (railOther) { railOther.scrollLeft = 0; railOther.style.scrollBehavior = 'auto'; } } catch(_){}
       // Next frame restore smooth scroll for future interactions
       requestAnimationFrame(() => {
         try { if (railMobile) railMobile.style.scrollBehavior = ''; } catch(_){}
         try { if (railGift) railGift.style.scrollBehavior = ''; } catch(_){}
+        try { if (railOther) railOther.style.scrollBehavior = ''; } catch(_){}
       });
     };
     if (c === 'gift') {
       if (secGift) { secGift.hidden = false; secGift.style.display = ''; }
       if (secMobile) { secMobile.hidden = true; secMobile.style.display = 'none'; }
+      if (secOther) { secOther.hidden = true; secOther.style.display = 'none'; }
       if (secHero) { secHero.hidden = true; secHero.style.display = 'none'; }
       if (secBest) { secBest.hidden = true; secBest.style.display = 'none'; }
       document.body.classList.add('cat-filtered');
       const target = document.querySelector('#pkgs-gift');
       resetRails();
       if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (c === 'other') {
+      if (secOther) { secOther.hidden = false; secOther.style.display = ''; }
+      if (secMobile) { secMobile.hidden = true; secMobile.style.display = 'none'; }
+      if (secGift) { secGift.hidden = true; secGift.style.display = 'none'; }
+      if (secHero) { secHero.hidden = true; secHero.style.display = 'none'; }
+      if (secBest) { secBest.hidden = true; secBest.style.display = 'none'; }
+      document.body.classList.add('cat-filtered');
+      const target = document.querySelector('#pkgs-other');
+      resetRails();
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (c === 'mobile') {
       if (secMobile) { secMobile.hidden = false; secMobile.style.display = ''; }
       if (secGift) { secGift.hidden = true; secGift.style.display = 'none'; }
+      if (secOther) { secOther.hidden = true; secOther.style.display = 'none'; }
       if (secHero) { secHero.hidden = true; secHero.style.display = 'none'; }
       if (secBest) { secBest.hidden = true; secBest.style.display = 'none'; }
       document.body.classList.add('cat-filtered');
@@ -93,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       if (secMobile) { secMobile.hidden = false; secMobile.style.display = ''; }
       if (secGift) { secGift.hidden = false; secGift.style.display = ''; }
+      if (secOther) { secOther.hidden = false; secOther.style.display = ''; }
       if (secHero) { secHero.hidden = false; secHero.style.display = ''; }
       if (secBest) { secBest.hidden = false; secBest.style.display = ''; }
       document.body.classList.remove('cat-filtered');
@@ -104,6 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const url = new URL(window.location.href);
     const qcat = (url.searchParams.get('cat') || '').toLowerCase();
     if (hash === '#pkgs-gift' || qcat === 'gift') showCategory('gift');
+    else if (hash === '#pkgs-other' || qcat === 'other') showCategory('other');
     else if (hash === '#pkgs-mobile' || qcat === 'mobile') showCategory('mobile');
   })();
 
@@ -197,9 +221,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const cat = (a.getAttribute('data-cat') || '').toLowerCase();
       // Always filter by category when clicking
       e.preventDefault();
-      if (cat === 'gift' || cat === 'mobile') {
-        const onHome = !!(secMobile || secGift);
-        const targetHash = cat === 'gift' ? '#pkgs-gift' : '#pkgs-mobile';
+      if (cat === 'gift' || cat === 'mobile' || cat === 'other') {
+        const onHome = !!(secMobile || secGift || secOther);
+        const targetHash = getCategoryHash(cat);
         if (!onHome) {
           window.location.href = '/' + targetHash;
           return;
@@ -553,11 +577,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const btn = e.target.closest('.drawer-item[data-cat]');
       if (!btn) return;
       const cat = (btn.getAttribute('data-cat') || '').toLowerCase();
-      if (cat === 'gift' || cat === 'mobile') {
+      if (cat === 'gift' || cat === 'mobile' || cat === 'other') {
         showCategory(cat);
         closeDrawer(leftDrawer);
         // Ensure URL shows the selected category anchor
-        const targetHash = cat === 'gift' ? '#pkgs-gift' : '#pkgs-mobile';
+        const targetHash = getCategoryHash(cat);
         if (history && history.replaceState) history.replaceState(null, '', targetHash);
       }
     });

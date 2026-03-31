@@ -2066,6 +2066,59 @@ def _pabilo_set_payment_state(order_obj, payment_state: dict):
     _save_order_automation_state(order_obj, state)
 
 
+def _validate_order_reference_value(order_obj, reference: str, *, exclude_order_id: int | None = None):
+    ref = str(reference or "").strip()
+    if not ref:
+        return False, "Referencia requerida"
+
+    method = (order_obj.method or "").strip().lower()
+    is_binance_auto = (
+        method == "binance"
+        and get_config_value("binance_auto_enabled", "0") == "1"
+        and len(ref) == 6
+        and ref.isalnum()
+    )
+    if is_binance_auto:
+        if not ref.isalnum() or len(ref) != 6:
+            return False, "Código de verificación inválido"
+    else:
+        if not (ref.isdigit() and 1 <= len(ref) <= 21):
+            return False, "La referencia debe ser numérica (máximo 21 dígitos)"
+
+    existing_query = Order.query.filter(
+        Order.reference == ref,
+        Order.status == "pending",
+    )
+    if exclude_order_id:
+        existing_query = existing_query.filter(Order.id != int(exclude_order_id))
+    existing_pending = existing_query.first()
+    if existing_pending:
+        return False, "Esa referencia ya está asignada a otra orden pendiente"
+
+    return True, ref
+
+
+def _reset_order_payment_verification_state(order_obj, *, message: str, source: str = "admin_reference_edit"):
+    order_obj.payment_verification_id = ""
+    order_obj.payment_verified_at = None
+    order_obj.payment_verification_attempts = 0
+    order_obj.payment_last_verification_at = None
+    _pabilo_set_payment_state(order_obj, {
+        "provider": "pabilo",
+        "enabled": bool(_pabilo_config().get("enabled")),
+        "method": _pabilo_normalize_method(order_obj.method or ""),
+        "attempts": 0,
+        "verified": False,
+        "verification_id": "",
+        "last_checked_at": "",
+        "message": str(message or ""),
+        "source": str(source or "admin_reference_edit"),
+        "last_request_url": "",
+        "last_request_payload": {},
+        "last_response_status": 0,
+    })
+
+
 def _is_pabilo_payment_method_enforced_for_order(order_obj) -> bool:
     cfg = _pabilo_config()
     if not cfg.get("enabled") or not cfg.get("enforce_method"):
@@ -4114,10 +4167,13 @@ def store_packages():
         cat = category
         mobile_aliases = {"mobile", "movil", "móvil", "juegos", "games", "game"}
         gift_aliases = {"gift", "gif", "gifts", "giftcard", "giftcards", "card", "cards"}
+        other_aliases = {"other", "others", "otro", "otros", "service", "services", "servicio", "servicios"}
         if cat in mobile_aliases:
             q = q.filter(StorePackage.category.in_(["mobile", "movil", "juegos"]))
         elif cat in gift_aliases:
             q = q.filter(StorePackage.category.in_(["gift", "gif", "giftcards"]))
+        elif cat in other_aliases:
+            q = q.filter(StorePackage.category.in_(["other", "others", "otro", "otros", "services", "servicios"]))
     try:
         items = q.order_by(StorePackage.sort_order.asc(), StorePackage.created_at.desc()).all()
     except Exception:
@@ -4400,6 +4456,48 @@ def check_reference():
         })
     
     return jsonify({"ok": True, "exists": False})
+
+
+@app.route("/admin/orders/<int:oid>/reference", methods=["POST"])
+def admin_orders_update_reference(oid: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    o = Order.query.get(oid)
+    if not o:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    if (o.status or "").lower() != "pending":
+        return jsonify({"ok": False, "error": "Solo puedes editar la referencia de órdenes pendientes"}), 409
+
+    data = request.get_json(silent=True) or {}
+    new_reference = (data.get("reference") or "").strip()
+    ok, ref_or_error = _validate_order_reference_value(o, new_reference, exclude_order_id=o.id)
+    if not ok:
+        return jsonify({"ok": False, "error": ref_or_error}), 400
+
+    previous_reference = str(o.reference or "").strip()
+    if ref_or_error == previous_reference:
+        return jsonify({
+            "ok": True,
+            "reference": previous_reference,
+            "payment_verify": _pabilo_get_payment_state(o),
+            "changed": False,
+        })
+
+    o.reference = ref_or_error
+    _reset_order_payment_verification_state(
+        o,
+        message=f"Referencia actualizada por admin de {previous_reference or 'N/A'} a {ref_or_error}",
+        source="admin_reference_edit",
+    )
+    db.session.commit()
+    return jsonify({
+        "ok": True,
+        "reference": o.reference,
+        "payment_verify": _pabilo_get_payment_state(o),
+        "changed": True,
+    })
 
 @app.route("/orders", methods=["POST"])
 def create_order():
@@ -5766,7 +5864,7 @@ def admin_packages_update(pid: int):
         item.image_path = (image_path or '').strip()
     if category is not None:
         c = (category or 'mobile').strip().lower()
-        if c not in ("mobile", "gift"):
+        if c not in ("mobile", "gift", "other"):
             c = "mobile"
         item.category = c
     if description is not None:
@@ -5822,7 +5920,7 @@ def admin_packages_create():
     description = (data.get("description") or "").strip()
     special_description = (data.get("special_description") or "").strip()
     requires_zone_id = int(bool(data.get("requires_zone_id", False)))
-    if category not in ("mobile", "gift"):
+    if category not in ("mobile", "gift", "other"):
         category = "mobile"
     if not name or not image_path:
         return jsonify({"ok": False, "error": "Nombre e imagen requeridos"}), 400

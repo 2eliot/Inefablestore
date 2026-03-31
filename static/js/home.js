@@ -1,5 +1,11 @@
 // Home page carousels
 document.addEventListener('DOMContentLoaded', () => {
+  const categorySections = {
+    mobile: document.getElementById('pkgs-mobile'),
+    gift: document.getElementById('pkgs-gift'),
+    other: document.getElementById('pkgs-other')
+  };
+
   // Hero
   const hero = document.getElementById('hero');
   const track = hero ? hero.querySelector('.hero-track') : null;
@@ -97,6 +103,14 @@ document.addEventListener('DOMContentLoaded', () => {
     adjustRailAlignment(r);
   }
 
+  function toggleCategorySection(category, pkgs) {
+    const section = categorySections[category];
+    if (!section) return;
+    const hasItems = Array.isArray(pkgs) && pkgs.length > 0;
+    section.hidden = !hasItems;
+    section.style.display = hasItems ? '' : 'none';
+  }
+
   function adjustRailAlignment(rail) {
     if (!rail) return;
     // On desktop with grid layout, don't override justifyContent
@@ -111,17 +125,25 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch('/store/best_sellers').then(r => r.json()).catch(() => ({})),
     fetch('/store/packages?category=mobile').then(r => r.json()).catch(() => ({})),
     fetch('/store/packages?category=gift').then(r => r.json()).catch(() => ({})),
-  ]).then(([best, mobile, gift]) => {
+    fetch('/store/packages?category=other').then(r => r.json()).catch(() => ({})),
+  ]).then(([best, mobile, gift, other]) => {
+    const mobilePkgs = (mobile && mobile.packages) || [];
+    const giftPkgs = (gift && gift.packages) || [];
+    const otherPkgs = (other && other.packages) || [];
     renderInto('#rail-best', (best && best.packages) || []);
-    renderInto('#rail-mobile', (mobile && mobile.packages) || []);
-    renderInto('#rail-gift', (gift && gift.packages) || []);
+    renderInto('#rail-mobile', mobilePkgs);
+    renderInto('#rail-gift', giftPkgs);
+    renderInto('#rail-other', otherPkgs);
+    toggleCategorySection('mobile', mobilePkgs);
+    toggleCategorySection('gift', giftPkgs);
+    toggleCategorySection('other', otherPkgs);
     // Bind touch swipe after rails are populated
     document.querySelectorAll('.packages-rail').forEach(bindTouchSwipe);
   });
 
   // Re-check alignment on resize
   window.addEventListener('resize', () => {
-    ['#rail-best', '#rail-mobile', '#rail-gift'].forEach(sel => {
+    ['#rail-best', '#rail-mobile', '#rail-gift', '#rail-other'].forEach(sel => {
       const el = document.querySelector(sel);
       if (el) adjustRailAlignment(el);
     });

@@ -2116,6 +2116,7 @@ window.refreshGallery = refreshGallery;
       const gameName = fixMb(o.package_name || '');
       const playerNick = fixMb(o.customer_name || '');
       const isGift = (o.package_category || '').toLowerCase() === 'gift';
+      const canEditReference = o.status === 'pending';
       tile.innerHTML = `
         <div class="row-head">
           <div class="box-left">
@@ -2128,6 +2129,7 @@ window.refreshGallery = refreshGallery;
             <div class="ref-section">
               <div class="ref-label">REFERENCIA</div>
               <div class="ref-value">${txRef}</div>
+              ${canEditReference ? `<button class="btn btn-edit-reference" data-id="${o.id}" type="button" style="margin-top:6px;background:rgba(59,130,246,0.18);border:1px solid rgba(59,130,246,0.45);color:#bfdbfe;font-size:11px;padding:5px 10px;border-radius:8px;">Editar referencia</button>` : ''}
             </div>
           </div>
           ${(() => {
@@ -2164,7 +2166,6 @@ window.refreshGallery = refreshGallery;
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             ${pabiloRequestable && ['pending', 'approved', 'delivered'].includes(o.status) && !pabiloVerified ? `<button class="btn btn-verify-payment" data-id="${o.id}">Verificar pago</button>` : ''}
             <button class="btn btn-approve" data-id="${o.id}" ${approveDisabled ? 'disabled' : ''}>${approveLabel}</button>
-            ${isAutoMapped && o.status === 'pending' ? `<button class="btn btn-approve-manual" data-id="${o.id}" ${approveDisabled ? 'disabled' : ''} style="background:#b45309;">Procesar manual</button>` : ''}
             ${isAutoMapped && processingAutoUnits > 0 ? `<button class="btn btn-verify-recharge" data-id="${o.id}">Verificar ${processingAutoUnits}</button>` : ''}
           </div>
           <button class="btn btn-reject" data-id="${o.id}" ${rejectDisabled ? 'disabled' : ''} style="background:#dc2626;">Rechazar</button>
@@ -2279,15 +2280,41 @@ window.refreshGallery = refreshGallery;
         return;
       }
 
+      const btnEditRef = e.target.closest('.btn-edit-reference');
+      if (btnEditRef) {
+        const id = btnEditRef.getAttribute('data-id');
+        const tile = btnEditRef.closest('.order-tile');
+        const currentRef = tile ? ((tile.querySelector('.ref-value')?.textContent || '').trim()) : '';
+        const nextRef = window.prompt('Ingresa la referencia correcta para esta orden', currentRef === '-' ? '' : currentRef);
+        if (nextRef === null) return;
+        try {
+          btnEditRef.disabled = true;
+          btnEditRef.textContent = 'Guardando...';
+          const res = await fetch(`/admin/orders/${id}/reference`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reference: String(nextRef || '').trim() })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo actualizar la referencia');
+          toast(data.changed ? 'Referencia actualizada. Ya puedes verificar el pago.' : 'La referencia no cambió.', data.changed ? 'success' : 'warning');
+          await fetchOrders(ordersCurrentPage);
+        } catch (err) {
+          toast(err.message || 'Error actualizando referencia');
+        } finally {
+          btnEditRef.disabled = false;
+          btnEditRef.textContent = 'Editar referencia';
+        }
+        return;
+      }
+
       const btnA = e.target.closest('.btn-approve');
-      const btnAM = e.target.closest('.btn-approve-manual');
       const btnR = e.target.closest('.btn-reject');
-      const btn = btnA || btnAM || btnR;
+      const btn = btnA || btnR;
       if (!btn) return;
       const id = btn.getAttribute('data-id');
-      const status = (btnA || btnAM) ? 'approved' : 'rejected';
-      const manualOverride = !!btnAM;
-      if (btnA || btnAM) {
+      const status = btnA ? 'approved' : 'rejected';
+      if (btnA) {
         const tile = btn.closest('.order-tile');
         const isAutoTile = tile && tile.getAttribute('data-is-auto') === '1';
         if (isAutoTile) {
@@ -2295,12 +2322,12 @@ window.refreshGallery = refreshGallery;
           const _pid = tile ? (tile.querySelector('.hex')?.textContent || '').trim() : '';
           const _ref = tile ? (tile.querySelector('.ref-value')?.textContent || '').trim() : '';
           const _nick = tile ? (tile.getAttribute('data-customer-name') || '') : '';
-          const msg = `${manualOverride ? '⚠️ RECARGA MANUAL SIN VERIFICACION PABILO' : '⚠️ RECARGA AUTOMÁTICA E IRREVERSIBLE'}\n\n` +
+          const msg = `⚠️ RECARGA AUTOMÁTICA E IRREVERSIBLE\n\n` +
             `Juego: ${_game}\n` +
             `ID: ${_pid}\n` +
             (_nick ? `Nombre: ${_nick}\n` : '') +
             `Referencia: ${_ref}\n\n` +
-            `${manualOverride ? 'Esta acción enviará la recarga aunque el pago no esté verificado en Pabilo. Úsala solo si validaste el voucher manualmente.\n\n¿Confirmar envío manual?' : '¿Confirmar envío?'}`;
+            `¿Confirmar envío?`;
           if (!confirm(msg)) return;
         }
       }
@@ -2308,7 +2335,6 @@ window.refreshGallery = refreshGallery;
       try {
         btn.disabled = true;
         const payload = { status };
-        if (manualOverride) payload.skip_payment_verification = true;
         if (status === 'approved') {
           const codeInput = ordersList.querySelector(`.gift-code[data-id="${id}"]`);
           const codesArea = ordersList.querySelector(`.gift-codes[data-id="${id}"]`);
@@ -2682,12 +2708,19 @@ window.fetchHero = fetchHero;
 
     let specCount = 0;
     items.forEach(p => {
-      const isGift = (p.category || 'mobile') === 'gift';
+      const category = (p.category || 'mobile');
+      const isGift = category === 'gift';
       const card = document.createElement('div');
       card.className = 'pkg-card';
       card.dataset.id = String(p.id || '');
-      const catClass = isGift ? 'pkg-badge--gift' : 'pkg-badge--mobile';
-      const catLabel = isGift ? 'GIFT CARD' : 'MOBILE';
+      let catClass = 'pkg-badge--mobile';
+      let catLabel = 'MOBILE';
+      if (isGift) {
+        catClass = 'pkg-badge--gift';
+        catLabel = 'GIFT CARD';
+      } else if (category === 'other') {
+        catLabel = 'OTROS SERVICIOS';
+      }
       const activeClass = p.active ? 'pkg-badge--active' : 'pkg-badge--inactive';
       const activeTxt = p.active ? 'Activo' : 'Inactivo';
       card.innerHTML = `
@@ -2716,6 +2749,7 @@ window.fetchHero = fetchHero;
                 <select class="edit-category">
                   <option value="mobile" ${p.category === 'mobile' ? 'selected' : ''}>Juegos Mobile</option>
                   <option value="gift" ${p.category === 'gift' ? 'selected' : ''}>Gift Cards</option>
+                  <option value="other" ${p.category === 'other' ? 'selected' : ''}>Otros Servicios</option>
                 </select>
               </div>
             </div>

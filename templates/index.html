@@ -45,7 +45,7 @@
             </span>
             <span>Juegos Móviles</span>
           </a>
-          <a href="#" class="dd-item" data-cat="other" role="menuitem">
+          <a href="#pkgs-other" class="dd-item" data-cat="other" role="menuitem">
             <span class="dd-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="16" height="16">
                 <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.33 0-8 2.17-8 5v1h16v-1c0-2.83-3.67-5-8-5z"/>
@@ -144,6 +144,19 @@
   </div>
 </section>
 
+<section class="packages" id="pkgs-other" hidden>
+  <div class="packages-head">
+    <h2 class="packages-title">OTROS SERVICIOS</h2>
+    <div class="packages-nav">
+      <button class="pkg-prev" data-target="#rail-other" aria-label="Anterior">‹</button>
+      <button class="pkg-next" data-target="#rail-other" aria-label="Siguiente">›</button>
+    </div>
+  </div>
+  <div id="rail-other" class="packages-rail" aria-label="Carrusel de otros servicios">
+    <!-- Cards injected by home.js -->
+  </div>
+</section>
+
 <!-- Overlays and Drawers -->
 <div id="overlay" class="overlay" hidden></div>
 <!-- Left menu drawer -->
@@ -158,6 +171,7 @@
     <div class="drawer-list">
       <button class="drawer-item" type="button" data-cat="gift">Gift Cards</button>
       <button class="drawer-item" type="button" data-cat="mobile">Juegos Móviles</button>
+      <button class="drawer-item" type="button" data-cat="other">Otros Servicios</button>
     </div>
   </div>
 </aside>
@@ -294,5 +308,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/store.js', v='3') }}" defer></script>
-<script src="{{ url_for('static', filename='js/home.js', v='3') }}" defer></script>
+<script src="{{ url_for('static', filename='js/home.js', v='4') }}" defer></script>
 {% endblock %}
