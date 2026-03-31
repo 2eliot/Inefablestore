@@ -91,6 +91,7 @@ except Exception:
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # Disable static caching in debug
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+FAVICON_FILENAME = "561553627_18409264204136226_1099017029378111495_n.ico"
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@inefablestore.com")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "123456")
 # Email settings (use app password)
@@ -585,6 +586,15 @@ if prefix != "/static/uploads":
     @app.route("/static/uploads/<path:filename>")
     def serve_uploads_legacy_static_uploads(filename):
         return _serve_upload_file(filename)
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(
+        os.path.join(app.root_path, "static"),
+        FAVICON_FILENAME,
+        mimetype="image/x-icon",
+    )
 
 # Models
 class Order(db.Model):
