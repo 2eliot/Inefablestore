@@ -75,13 +75,15 @@
   }
   @media (max-width: 640px){
     .ty-wrap{padding:6px 4px 14px;max-width:100%}
-    .ty-card{padding:12px 8px 9px;gap:6px;flex-direction:column;border-radius:18px}
+    .ty-card{padding:16px 12px 14px;gap:10px;flex-direction:column;border-radius:18px}
     .ty-main{flex-direction:column;align-items:center;text-align:center;gap:4px}
+    .ty-main-left,.ty-main-right{width:100%}
+    .ty-main-left{max-width:100%}
     .ty-kicker{padding:5px 10px;font-size:9px;gap:7px}
     .ty-kicker-dot{width:6px;height:6px}
     .ty-title{font-size:17px;margin:6px 0 5px}
-    .ty-sub{gap:6px;justify-content:center;margin:0 0 8px}
-    .ty-chip{justify-content:center;padding:5px 9px;font-size:10px;border-radius:10px}
+    .ty-sub{gap:8px;justify-content:center;margin:0 0 12px}
+    .ty-chip{justify-content:center;padding:9px 14px;font-size:17px;border-radius:12px}
     .ty-note{font-size:9px;line-height:1.45;margin:0 0 8px;max-width:360px}
     .ty-social-block{gap:6px;margin-bottom:5px}
     .ty-social-label{font-size:9px}
@@ -89,20 +91,20 @@
     .ty-socials a{width:28px;height:28px;border-radius:9px}
     .ty-socials svg{width:12px;height:12px}
     .ty-cta-row{flex-direction:column;align-items:stretch;gap:12px;margin-top:14px}
-    .ty-btn{width:100%;min-height:31px;padding:0 12px;font-size:10px;border-radius:10px}
-    .ty-cta-note{text-align:center;font-size:9px}
-    .ty-ill{margin:-2px 0 -8px}
+    .ty-btn{width:100%;min-height:52px;padding:0 16px;font-size:17px;border-radius:14px}
+    .ty-cta-note{text-align:center;font-size:15px;line-height:1.4}
+    .ty-ill{margin:4px 0 -4px}
     .ty-ill{min-width:0}
-    .ty-ill::before{width:118px;height:118px;border-radius:16px}
-    .ty-ill::after{width:90px;height:90px}
-    .ty-ill img{max-width:93px}
-    .ty-progress{max-width:100%;margin:8px auto 0;padding:8px 9px;border-radius:14px}
-    .ty-progress-title{font-size:13px;margin-bottom:2px}
-    .ty-progress-sub{font-size:9px;margin:0 0 7px}
-    .ty-steps{gap:5px}
-    .ty-step{padding:6px 7px;border-radius:10px;gap:7px}
-    .ty-step-ico{width:16px;height:16px;border-radius:6px;font-size:9px}
-    .ty-step-label{font-size:9px}
+    .ty-ill::before{width:150px;height:150px;border-radius:18px}
+    .ty-ill::after{width:112px;height:112px}
+    .ty-ill img{max-width:140px}
+    .ty-progress{max-width:none;width:calc(100% + 8px);margin:10px -4px 0;padding:14px 15px;border-radius:18px}
+    .ty-progress-title{font-size:22px;margin-bottom:4px}
+    .ty-progress-sub{font-size:15px;margin:0 0 10px}
+    .ty-steps{gap:8px}
+    .ty-step{padding:10px 12px;border-radius:12px;gap:10px}
+    .ty-step-ico{width:24px;height:24px;border-radius:8px;font-size:14px}
+    .ty-step-label{font-size:15px}
   }
 </style>
 {% endblock %}
