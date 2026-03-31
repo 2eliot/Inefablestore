@@ -616,10 +616,6 @@ class Order(db.Model):
     # Special referral code support
     special_code = db.Column(db.String(80), default="")
     special_user_id = db.Column(db.Integer, nullable=True)
-    applied_discount_percent = db.Column(db.Float, default=0.0)
-    applied_affiliate_commission_percent = db.Column(db.Float, default=0.0)
-    applied_affiliate_name = db.Column(db.String(200), default="")
-    applied_affiliate_code = db.Column(db.String(80), default="")
     # Optional: JSON string with multiple items: [{"item_id": int, "qty": int, "title": str, "price": float}]
     items_json = db.Column(db.Text, default="")
     # Revendedores API automation state (pending_verification, success, etc.)
@@ -661,26 +657,8 @@ _ORDER_CLEANUP_DAYS = int(os.environ.get("ORDER_CLEANUP_DAYS", "7"))
 _ORDER_CLEANUP_INTERVAL_HOURS = float(os.environ.get("ORDER_CLEANUP_INTERVAL_HOURS", "6"))
 
 
-def _safe_float(value, default: float = 0.0) -> float:
-    try:
-        return float(value or 0.0)
-    except Exception:
-        return float(default)
-
-
-def _special_user_scope_matches_package(su: 'SpecialUser' | None, package_id: int | None) -> bool:
-    if not su or not su.active:
-        return False
-    scope = (su.scope or "all").strip().lower()
-    if scope != "package":
-        return True
-    try:
-        return int(su.scope_package_id or 0) == int(package_id or 0)
-    except Exception:
-        return False
-
-
-def _resolve_special_user_for_order(order: 'Order'):
+def _calculate_profit_components_for_order(order: 'Order', items_by_id: dict[int, 'GamePackageItem']) -> tuple[float, float]:
+    use_affiliate = False
     su = None
     if order.special_user_id:
         su = SpecialUser.query.get(order.special_user_id)
@@ -689,216 +667,76 @@ def _resolve_special_user_for_order(order: 'Order'):
             db.func.lower(SpecialUser.code) == (order.special_code or "").lower(),
             SpecialUser.active == True,
         ).first()
-    return su
+    if su and su.active:
+        scope_ok = True
+        sc = (su.scope or "all")
+        if sc == "package":
+            try:
+                scope_ok = (su.scope_package_id == order.store_package_id)
+            except Exception:
+                scope_ok = False
+        use_affiliate = scope_ok
 
-
-def _resolve_order_special_pricing(order: 'Order') -> dict:
-    discount_percent = _safe_float(getattr(order, "applied_discount_percent", 0.0))
-    commission_percent = _safe_float(getattr(order, "applied_affiliate_commission_percent", 0.0))
-    affiliate_name = (getattr(order, "applied_affiliate_name", "") or "").strip()
-    affiliate_code = (getattr(order, "applied_affiliate_code", "") or "").strip()
-    has_snapshot = any([
-        discount_percent > 0.0,
-        commission_percent > 0.0,
-        bool(affiliate_name),
-        bool(affiliate_code),
-    ])
-    if has_snapshot:
-        return {
-            "use_affiliate": bool(affiliate_name or affiliate_code or order.special_code or order.special_user_id),
-            "discount_percent": discount_percent,
-            "commission_percent": commission_percent,
-            "affiliate_name": affiliate_name,
-            "affiliate_code": affiliate_code,
-        }
-
-    su = _resolve_special_user_for_order(order)
-    use_affiliate = _special_user_scope_matches_package(su, order.store_package_id)
-    if not su or not use_affiliate:
-        return {
-            "use_affiliate": False,
-            "discount_percent": 0.0,
-            "commission_percent": 0.0,
-            "affiliate_name": "",
-            "affiliate_code": (order.special_code or "").strip(),
-        }
-
-    return {
-        "use_affiliate": True,
-        "discount_percent": _safe_float(su.discount_percent),
-        "commission_percent": _safe_float(su.commission_percent),
-        "affiliate_name": (su.name or "").strip(),
-        "affiliate_code": (order.special_code or su.code or "").strip(),
-    }
-
-
-def _build_order_profit_breakdown(
-    order: 'Order',
-    items_by_id: dict[int, 'GamePackageItem'],
-    packages_by_id: dict[int, 'StorePackage'] | None = None,
-) -> dict:
-    pricing = _resolve_order_special_pricing(order)
-    lines = []
+    items_map = {}
     try:
         if (order.items_json or "").strip():
             payload = json.loads(order.items_json or "[]")
             if isinstance(payload, list):
                 for ent in payload:
                     try:
-                        item_id = int(ent.get("item_id") or 0)
+                        iid = int(ent.get("item_id") or 0)
                     except Exception:
-                        item_id = 0
-                    if item_id <= 0:
+                        iid = 0
+                    if iid <= 0:
                         continue
-                    qty = max(int(ent.get("qty") or 1), 1)
-                    item = items_by_id.get(item_id)
-                    sale_unit_price = _safe_float(ent.get("price") or ent.get("sale_price_usd") or 0.0)
-                    base_unit_price = _safe_float(
-                        ent.get("base_price_usd")
-                        or ent.get("base_unit_price_usd")
-                        or (item.price if item else sale_unit_price)
-                        or sale_unit_price
-                    )
-                    cost_unit_price = _safe_float(ent.get("cost_unit_usd") or (item.profit_net_usd if item else 0.0) or 0.0)
-                    lines.append({
-                        "item_id": item_id,
-                        "title": (ent.get("title") or (item.title if item else "") or "").strip(),
-                        "qty": qty,
-                        "base_unit_price_usd": round(base_unit_price, 2),
-                        "sale_unit_price_usd": round(sale_unit_price, 2),
-                        "cost_unit_usd": round(cost_unit_price, 2),
-                    })
+                    q = max(int(ent.get("qty") or 1), 1)
+                    p = float(ent.get("price") or 0.0)
+                    it = items_by_id.get(iid)
+                    cost_unit = float(ent.get("cost_unit_usd") or (it.profit_net_usd if it else 0.0) or 0.0)
+                    cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
+                    cur["qty"] += q
+                    cur["revenue"] += (p * q)
+                    cur["cost_total"] += (cost_unit * q)
+                    items_map[iid] = cur
     except Exception:
-        lines = []
+        items_map = {}
 
-    if not lines and order.item_id:
+    if not items_map and order.item_id:
         try:
-            item_id = int(order.item_id or 0)
+            iid = int(order.item_id)
+            if iid > 0:
+                it = items_by_id.get(iid)
+                if it:
+                    cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
+                    cur["qty"] += 1
+                    cur["revenue"] += float(order.price or it.price or 0.0)
+                    cur["cost_total"] += float(it.profit_net_usd or 0.0)
+                    items_map[iid] = cur
         except Exception:
-            item_id = 0
-        if item_id > 0:
-            item = items_by_id.get(item_id)
-            sale_unit_price = _safe_float(order.price or (item.price if item else 0.0) or 0.0)
-            base_unit_price = _safe_float(item.price if item else sale_unit_price)
-            cost_unit_price = _safe_float(item.profit_net_usd if item else 0.0)
-            lines.append({
-                "item_id": item_id,
-                "title": (item.title if item else "").strip(),
-                "qty": 1,
-                "base_unit_price_usd": round(base_unit_price, 2),
-                "sale_unit_price_usd": round(sale_unit_price, 2),
-                "cost_unit_usd": round(cost_unit_price, 2),
-            })
+            pass
 
-    totals = {
-        "qty_total": 0,
-        "base_price_usd": 0.0,
-        "sale_price_usd": 0.0,
-        "cost_usd": 0.0,
-        "discount_usd": 0.0,
-        "commission_usd": 0.0,
-        "profit_before_affiliate_usd": 0.0,
-        "profit_net_usd": 0.0,
-    }
-    detailed_lines = []
-    item_labels = []
-    discount_percent = _safe_float(pricing.get("discount_percent"))
-    commission_percent = _safe_float(pricing.get("commission_percent"))
-    for line in lines:
-        qty = max(int(line.get("qty") or 1), 1)
-        base_total = _safe_float(line.get("base_unit_price_usd")) * qty
-        sale_total = _safe_float(line.get("sale_unit_price_usd")) * qty
-        cost_total = _safe_float(line.get("cost_unit_usd")) * qty
-        discount_total = round(base_total * (discount_percent / 100.0), 2) if pricing.get("use_affiliate") and discount_percent > 0.0 else (base_total - sale_total)
-        if discount_total < 0.0:
-            discount_total = 0.0
-        profit_before_affiliate = base_total - cost_total
-        if profit_before_affiliate < 0.0:
-            profit_before_affiliate = 0.0
-        commission_total = 0.0
-        if pricing.get("use_affiliate") and commission_percent > 0.0:
-            commission_total = round(base_total * (commission_percent / 100.0), 2)
-        profit_net = profit_before_affiliate - discount_total - commission_total
-        if profit_net < 0.0:
-            profit_net = 0.0
-
-        totals["qty_total"] += qty
-        totals["base_price_usd"] += base_total
-        totals["sale_price_usd"] += sale_total
-        totals["cost_usd"] += cost_total
-        totals["discount_usd"] += discount_total
-        totals["commission_usd"] += commission_total
-        totals["profit_before_affiliate_usd"] += profit_before_affiliate
-        totals["profit_net_usd"] += profit_net
-
-        title = (line.get("title") or "").strip()
-        if title:
-            item_labels.append(f"{qty}x {title}" if qty > 1 else title)
-
-        detailed_lines.append({
-            "item_id": int(line.get("item_id") or 0),
-            "title": title,
-            "qty": qty,
-            "base_unit_price_usd": round(_safe_float(line.get("base_unit_price_usd")), 2),
-            "sale_unit_price_usd": round(_safe_float(line.get("sale_unit_price_usd")), 2),
-            "cost_unit_usd": round(_safe_float(line.get("cost_unit_usd")), 2),
-            "base_total_usd": round(base_total, 2),
-            "sale_total_usd": round(sale_total, 2),
-            "cost_total_usd": round(cost_total, 2),
-            "discount_percent": round(discount_percent, 2),
-            "discount_usd": round(discount_total, 2),
-            "commission_percent": round(commission_percent, 2),
-            "commission_usd": round(commission_total, 2),
-            "affiliate_total_percent": round(discount_percent + commission_percent, 2),
-            "affiliate_total_usd": round(discount_total + commission_total, 2),
-            "profit_before_affiliate_usd": round(profit_before_affiliate, 2),
-            "profit_net_usd": round(profit_net, 2),
-            "affiliate_name": pricing.get("affiliate_name") or "",
-            "affiliate_code": pricing.get("affiliate_code") or "",
-            "has_affiliate": bool(pricing.get("use_affiliate")),
-        })
-
-    package = (packages_by_id or {}).get(order.store_package_id)
-    package_name = (package.name if package else "").strip()
-    if not package_name:
-        try:
-            pkg = StorePackage.query.get(order.store_package_id)
-            package_name = (pkg.name if pkg else "").strip()
-        except Exception:
-            package_name = ""
-
-    return {
-        "order_id": order.id,
-        "created_at": order.created_at,
-        "package_id": order.store_package_id,
-        "package_name": package_name,
-        "customer_name": (order.customer_name or order.name or order.email or "").strip(),
-        "customer_id": (order.customer_id or "").strip(),
-        "affiliate_name": pricing.get("affiliate_name") or "",
-        "affiliate_code": pricing.get("affiliate_code") or "",
-        "discount_percent": round(discount_percent, 2),
-        "commission_percent": round(commission_percent, 2),
-        "affiliate_total_percent": round(discount_percent + commission_percent, 2),
-        "use_affiliate": bool(pricing.get("use_affiliate")),
-        "item_summary": ", ".join(item_labels),
-        "lines": detailed_lines,
-        "qty_total": int(totals["qty_total"] or 0),
-        "base_price_usd": round(totals["base_price_usd"], 2),
-        "sale_price_usd": round(totals["sale_price_usd"], 2),
-        "cost_usd": round(totals["cost_usd"], 2),
-        "discount_usd": round(totals["discount_usd"], 2),
-        "commission_usd": round(totals["commission_usd"], 2),
-        "profit_before_affiliate_usd": round(totals["profit_before_affiliate_usd"], 2),
-        "profit_net_usd": round(totals["profit_net_usd"], 2),
-    }
-
-
-def _calculate_profit_components_for_order(order: 'Order', items_by_id: dict[int, 'GamePackageItem']) -> tuple[float, float]:
-    breakdown = _build_order_profit_breakdown(order, items_by_id)
-    return (
-        round(_safe_float(breakdown.get("profit_net_usd")), 2),
-        round(_safe_float(breakdown.get("commission_usd")), 2),
-    )
+    comm_pct = float(su.commission_percent or 0.0) if use_affiliate and su else 0.0
+    profit_total = 0.0
+    commission_total = 0.0
+    for iid, agg in items_map.items():
+        it = items_by_id.get(iid)
+        if not it:
+            continue
+        qty = int(agg.get("qty") or 0)
+        revenue = float(agg.get("revenue") or 0.0)
+        cost_total = float(agg.get("cost_total") or 0.0)
+        if qty <= 0 or cost_total <= 0.0:
+            continue
+        if use_affiliate and comm_pct > 0:
+            commission_item = round(revenue * (comm_pct / 100.0), 2)
+            commission_total += commission_item
+            profit_val = revenue - cost_total - commission_item
+        else:
+            profit_val = revenue - cost_total
+        if profit_val < 0.0:
+            profit_val = 0.0
+        profit_total += profit_val
+    return profit_total, commission_total
 
 
 def _snapshot_closed_periods_from_orders(orders: list['Order']) -> None:
@@ -3232,10 +3070,6 @@ with app.app_context():
             add_order_col('delivery_codes_json', "delivery_codes_json TEXT DEFAULT ''")
             add_order_col('special_code', "special_code TEXT DEFAULT ''")
             add_order_col('special_user_id', "special_user_id INTEGER")
-            add_order_col('applied_discount_percent', "applied_discount_percent REAL DEFAULT 0")
-            add_order_col('applied_affiliate_commission_percent', "applied_affiliate_commission_percent REAL DEFAULT 0")
-            add_order_col('applied_affiliate_name', "applied_affiliate_name TEXT DEFAULT ''")
-            add_order_col('applied_affiliate_code', "applied_affiliate_code TEXT DEFAULT ''")
             add_order_col('items_json', "items_json TEXT DEFAULT ''")
             add_order_col('automation_json', "automation_json TEXT DEFAULT ''")
             add_order_col('payment_capture', "payment_capture TEXT DEFAULT ''")
@@ -4829,20 +4663,10 @@ def create_order():
         discount_fraction = 0.0
         used_secondary_code = False
         normalized_secondary_code = ""
-        applied_discount_percent = 0.0
-        applied_commission_percent = 0.0
-        applied_affiliate_name = ""
-        applied_affiliate_code = ""
         if special_code:
             try:
                 su, is_secondary_code = resolve_special_user_for_code(special_code)
                 if su:
-                    if not _special_user_scope_matches_package(su, gid):
-                        return jsonify({"ok": False, "error": "El código no aplica a este juego"}), 400
-                    o.special_user_id = su.id
-                    applied_affiliate_name = (su.name or "").strip()
-                    applied_affiliate_code = special_code.strip()
-                    applied_commission_percent = _safe_float(su.commission_percent)
                     if is_secondary_code:
                         if not customer_id:
                             return jsonify({"ok": False, "error": "El código adicional requiere ID de jugador"}), 400
@@ -4853,12 +4677,10 @@ def create_order():
                         if already_used:
                             return jsonify({"ok": False, "error": "Este código adicional ya fue usado por este ID de jugador"}), 400
                         discount_fraction = 0.10
-                        applied_discount_percent = 10.0
                         used_secondary_code = True
                         normalized_secondary_code = special_code.lower()
                     else:
-                        applied_discount_percent = _safe_float(su.discount_percent)
-                        discount_fraction = applied_discount_percent / 100.0
+                        discount_fraction = float(su.discount_percent or 0.0) / 100.0
             except Exception:
                 pass
         
@@ -4894,7 +4716,6 @@ def create_order():
                         "item_id": gi.id,
                         "qty": qty,
                         "title": gi.title,
-                        "base_price_usd": round(base_price, 2),
                         "price": round(actual_price, 2),  # Guardar precio con descuento aplicado
                         "cost_unit_usd": float(gi.profit_net_usd or 0.0),
                     })
@@ -4908,7 +4729,6 @@ def create_order():
                         "item_id": gi.id,
                         "qty": qty,
                         "title": gi.title,
-                        "base_price_usd": round(base_price, 2),
                         "price": round(actual_price, 2),
                         "cost_unit_usd": float(gi.profit_net_usd or 0.0),
                     })
@@ -4918,10 +4738,6 @@ def create_order():
         except Exception:
             pass
         o.price = round(float(order_total_usd or 0.0), 2)
-        o.applied_discount_percent = round(applied_discount_percent, 2)
-        o.applied_affiliate_commission_percent = round(applied_commission_percent, 2)
-        o.applied_affiliate_name = applied_affiliate_name
-        o.applied_affiliate_code = applied_affiliate_code
 
         # Optional enforcement: mapped auto-recharge orders must use selected Pabilo method.
         if _is_pabilo_payment_method_enforced_for_order(o):
@@ -4932,6 +4748,14 @@ def create_order():
                     "error": f"Este juego solo acepta pagos por {required_method.upper()} para recarga automática.",
                 }), 400
 
+        # Try to resolve special user id now for convenience
+        try:
+            if special_code:
+                su, _ = resolve_special_user_for_code(special_code)
+                if su:
+                    o.special_user_id = su.id
+        except Exception:
+            pass
         db.session.add(o)
         db.session.flush()
         if used_secondary_code and o.special_user_id and customer_id:
@@ -6202,8 +6026,6 @@ def admin_stats_summary():
 
     total_profit_net = 0.0
     total_commission_affiliates = 0.0
-    total_profit_before_affiliates = 0.0
-    total_discount_usd = 0.0
 
     # Optional period filter
     period = (request.args.get("period") or "").strip().lower()
@@ -6218,11 +6040,100 @@ def admin_stats_summary():
         approved_orders = Order.query.filter(Order.status.in_(["approved", "delivered"])).all()
     for o in approved_orders:
         try:
-            breakdown = _build_order_profit_breakdown(o, items_by_id)
-            total_profit_net += _safe_float(breakdown.get("profit_net_usd"))
-            total_commission_affiliates += _safe_float(breakdown.get("commission_usd"))
-            total_profit_before_affiliates += _safe_float(breakdown.get("profit_before_affiliate_usd"))
-            total_discount_usd += _safe_float(breakdown.get("discount_usd"))
+            use_affiliate = False
+            su = None
+            if o.special_user_id:
+                su = SpecialUser.query.get(o.special_user_id)
+            if (not su) and (o.special_code or ""):
+                su = SpecialUser.query.filter(
+                    db.func.lower(SpecialUser.code) == (o.special_code or "").lower(),
+                    SpecialUser.active == True,
+                ).first()
+            if su and su.active:
+                scope_ok = True
+                sc = (su.scope or "all")
+                if sc == "package":
+                    try:
+                        scope_ok = (su.scope_package_id == o.store_package_id)
+                    except Exception:
+                        scope_ok = False
+                use_affiliate = scope_ok
+
+            # items_map: iid -> {qty, revenue, cost_total}
+            items_map = {}
+            try:
+                if (o.items_json or "").strip():
+                    payload = json.loads(o.items_json or "[]")
+                    if isinstance(payload, list):
+                        for ent in payload:
+                            try:
+                                iid = int(ent.get("item_id") or 0)
+                            except Exception:
+                                iid = 0
+                            if iid <= 0:
+                                continue
+                            q = int(ent.get("qty") or 1)
+                            if q <= 0:
+                                q = 1
+                            try:
+                                p = float(ent.get("price") or 0.0)
+                            except Exception:
+                                p = 0.0
+                            # Usar costo guardado en la orden, o costo actual si no existe
+                            it = items_by_id.get(iid)
+                            cost_unit = float(ent.get("cost_unit_usd") or (it.profit_net_usd if it else 0.0) or 0.0)
+                            
+                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
+                            cur["qty"] += q
+                            cur["revenue"] += (p * q)
+                            cur["cost_total"] += (cost_unit * q)
+                            items_map[iid] = cur
+            except Exception:
+                items_map = {}
+            if not items_map and o.item_id:
+                # Legacy: single item orders without items_json
+                try:
+                    iid = int(o.item_id)
+                    if iid > 0:
+                        it = items_by_id.get(iid)
+                        if it:
+                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
+                            cur["qty"] += 1
+                            cur["revenue"] += float(it.price or 0.0)
+                            cur["cost_total"] += float(it.profit_net_usd or 0.0)
+                            items_map[iid] = cur
+                except Exception:
+                    pass
+
+            # Determinar comisión del influencer una vez por orden (solo para registro)
+            comm_pct = 0.0
+            if use_affiliate and su:
+                comm_pct = float(su.commission_percent or 0.0)
+
+            # Calcular ganancia por cada ítem
+            for iid, agg in items_map.items():
+                it = items_by_id.get(iid)
+                if not it:
+                    continue
+                qty = int(agg.get("qty") or 0)
+                revenue = float(agg.get("revenue") or 0.0)
+                cost_total = float(agg.get("cost_total") or 0.0)
+                
+                if qty <= 0 or cost_total <= 0.0:
+                    continue
+                
+                # Registrar comisión del influencer (solo informativo)
+                if use_affiliate and comm_pct > 0:
+                    commission_item = round(revenue * (comm_pct / 100.0), 2)
+                    total_commission_affiliates += commission_item
+                    # Restar comisión del influencer de la ganancia
+                    profit_val = revenue - cost_total - commission_item
+                else:
+                    # Ganancia = precio pagado por cliente - costo guardado en la orden
+                    profit_val = revenue - cost_total
+                if profit_val < 0.0:
+                    profit_val = 0.0
+                total_profit_net += profit_val
         except Exception:
             continue
 
@@ -6231,8 +6142,6 @@ def admin_stats_summary():
         "summary": {
             "total_profit_net_usd": round(total_profit_net, 2),
             "total_affiliate_commission_usd": round(total_commission_affiliates, 2),
-            "total_profit_before_affiliates_usd": round(total_profit_before_affiliates, 2),
-            "total_discount_usd": round(total_discount_usd, 2),
             "total_profit_after_affiliates_usd": round(total_profit_net, 2),
         },
     })
@@ -6261,9 +6170,54 @@ def _maybe_snapshot_previous_period():
         commission = 0.0
         for o in prev_orders:
             try:
-                order_profit, order_commission = _calculate_profit_components_for_order(o, items_by_id)
-                profit += order_profit
-                commission += order_commission
+                su = None
+                use_affiliate = False
+                if o.special_user_id:
+                    su = SpecialUser.query.get(o.special_user_id)
+                if (not su) and (o.special_code or ""):
+                    su = SpecialUser.query.filter(
+                        db.func.lower(SpecialUser.code) == (o.special_code or "").lower(),
+                        SpecialUser.active == True,
+                    ).first()
+                if su and su.active:
+                    sc = (su.scope or "all")
+                    scope_ok = True
+                    if sc == "package":
+                        try:
+                            scope_ok = (su.scope_package_id == o.store_package_id)
+                        except Exception:
+                            scope_ok = False
+                    use_affiliate = scope_ok
+                items_map = {}
+                if (o.items_json or "").strip():
+                    payload = json.loads(o.items_json or "[]")
+                    if isinstance(payload, list):
+                        for ent in payload:
+                            iid = int(ent.get("item_id") or 0)
+                            if iid <= 0:
+                                continue
+                            q = max(int(ent.get("qty") or 1), 1)
+                            p = float(ent.get("price") or 0.0)
+                            it = items_by_id.get(iid)
+                            cu = float(ent.get("cost_unit_usd") or (it.profit_net_usd if it else 0.0) or 0.0)
+                            cur = items_map.get(iid, {"rev": 0.0, "cost": 0.0})
+                            cur["rev"] += p * q
+                            cur["cost"] += cu * q
+                            items_map[iid] = cur
+                comm_pct = float(su.commission_percent or 0.0) if use_affiliate and su else 0.0
+                for iid, agg in items_map.items():
+                    rev = agg["rev"]
+                    cost = agg["cost"]
+                    if cost <= 0.0:
+                        continue
+                    if comm_pct > 0:
+                        ci = round(rev * (comm_pct / 100.0), 2)
+                        commission += ci
+                        pv = rev - cost - ci
+                    else:
+                        pv = rev - cost
+                    if pv > 0:
+                        profit += pv
             except Exception:
                 continue
         snap = ProfitSnapshot(
@@ -6310,86 +6264,6 @@ def admin_stats_history_delete(snap_id):
     return jsonify({"ok": True})
 
 
-@app.route("/admin/stats/purchases", methods=["GET"])
-def admin_stats_purchases():
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
-
-    period = (request.args.get("period") or "").strip().lower()
-    pkg_id_raw = (request.args.get("package_id") or "").strip()
-    try:
-        pkg_id = int(pkg_id_raw) if pkg_id_raw else None
-    except Exception:
-        pkg_id = None
-
-    q = Order.query.filter(Order.status.in_(["approved", "delivered"]))
-    if pkg_id:
-        q = q.filter(Order.store_package_id == pkg_id)
-    if period == "weekly":
-        q = q.filter(Order.created_at >= get_stats_reset_cutoff())
-    approved_orders = q.order_by(Order.created_at.desc()).all()
-
-    item_ids = set()
-    package_ids = set()
-    for order in approved_orders:
-        if order.store_package_id:
-            package_ids.add(order.store_package_id)
-        try:
-            payload = json.loads(order.items_json or "[]") if (order.items_json or "").strip() else []
-        except Exception:
-            payload = []
-        if isinstance(payload, list):
-            for ent in payload:
-                try:
-                    item_id = int(ent.get("item_id") or 0)
-                except Exception:
-                    item_id = 0
-                if item_id > 0:
-                    item_ids.add(item_id)
-        elif order.item_id:
-            item_ids.add(order.item_id)
-
-    items_by_id = {}
-    if item_ids:
-        items_by_id = {it.id: it for it in GamePackageItem.query.filter(GamePackageItem.id.in_(item_ids)).all()}
-    packages_by_id = {}
-    if package_ids:
-        packages_by_id = {pkg.id: pkg for pkg in StorePackage.query.filter(StorePackage.id.in_(package_ids)).all()}
-
-    purchases = []
-    for order in approved_orders:
-        try:
-            breakdown = _build_order_profit_breakdown(order, items_by_id, packages_by_id)
-            created_at = breakdown.get("created_at")
-            purchases.append({
-                "id": order.id,
-                "created_at": created_at.strftime("%d/%m/%Y %H:%M") if created_at else "",
-                "package_name": breakdown.get("package_name") or "",
-                "item_summary": breakdown.get("item_summary") or "",
-                "customer_name": breakdown.get("customer_name") or "",
-                "customer_id": breakdown.get("customer_id") or "",
-                "qty_total": int(breakdown.get("qty_total") or 0),
-                "affiliate_name": breakdown.get("affiliate_name") or "",
-                "affiliate_code": breakdown.get("affiliate_code") or "",
-                "discount_percent": round(_safe_float(breakdown.get("discount_percent")), 2),
-                "discount_usd": round(_safe_float(breakdown.get("discount_usd")), 2),
-                "commission_percent": round(_safe_float(breakdown.get("commission_percent")), 2),
-                "commission_usd": round(_safe_float(breakdown.get("commission_usd")), 2),
-                "affiliate_total_percent": round(_safe_float(breakdown.get("affiliate_total_percent")), 2),
-                "base_price_usd": round(_safe_float(breakdown.get("base_price_usd")), 2),
-                "sale_price_usd": round(_safe_float(breakdown.get("sale_price_usd")), 2),
-                "cost_usd": round(_safe_float(breakdown.get("cost_usd")), 2),
-                "profit_before_affiliate_usd": round(_safe_float(breakdown.get("profit_before_affiliate_usd")), 2),
-                "profit_net_usd": round(_safe_float(breakdown.get("profit_net_usd")), 2),
-                "lines": breakdown.get("lines") or [],
-            })
-        except Exception:
-            continue
-
-    return jsonify({"ok": True, "purchases": purchases})
-
-
 @app.route("/admin/stats/package/<int:pkg_id>", methods=["GET"])
 def admin_stats_package(pkg_id: int):
     """Return per-item and aggregate profit stats for a given package.
@@ -6412,8 +6286,6 @@ def admin_stats_package(pkg_id: int):
     stats = {}
     total_profit_net = 0.0
     total_commission_affiliates = 0.0
-    total_profit_before_affiliates = 0.0
-    total_discount_usd = 0.0
 
     # Optional period filter per package
     period = (request.args.get("period") or "").strip().lower()
@@ -6432,29 +6304,105 @@ def admin_stats_package(pkg_id: int):
         ).all()
     for o in approved_orders:
         try:
-            breakdown = _build_order_profit_breakdown(o, items_by_id, {pkg.id: pkg})
-            total_profit_net += _safe_float(breakdown.get("profit_net_usd"))
-            total_commission_affiliates += _safe_float(breakdown.get("commission_usd"))
-            total_profit_before_affiliates += _safe_float(breakdown.get("profit_before_affiliate_usd"))
-            total_discount_usd += _safe_float(breakdown.get("discount_usd"))
+            use_affiliate = False
+            su = None
+            if o.special_user_id:
+                su = SpecialUser.query.get(o.special_user_id)
+            if (not su) and (o.special_code or ""):
+                su = SpecialUser.query.filter(
+                    db.func.lower(SpecialUser.code) == (o.special_code or "").lower(),
+                    SpecialUser.active == True,
+                ).first()
+            if su and su.active:
+                scope_ok = True
+                sc = (su.scope or "all")
+                if sc == "package":
+                    try:
+                        scope_ok = (su.scope_package_id == o.store_package_id)
+                    except Exception:
+                        scope_ok = False
+                use_affiliate = scope_ok
 
-            for line in breakdown.get("lines") or []:
-                iid = int(line.get("item_id") or 0)
+            # items_map: iid -> {qty, revenue, cost_total}
+            items_map = {}
+            try:
+                if (o.items_json or "").strip():
+                    payload = json.loads(o.items_json or "[]")
+                    if isinstance(payload, list):
+                        for ent in payload:
+                            try:
+                                iid = int(ent.get("item_id") or 0)
+                            except Exception:
+                                iid = 0
+                            if iid <= 0:
+                                continue
+                            q = int(ent.get("qty") or 1)
+                            if q <= 0:
+                                q = 1
+                            try:
+                                p = float(ent.get("price") or 0.0)
+                            except Exception:
+                                p = 0.0
+                            # Usar costo guardado en la orden, o costo actual si no existe
+                            it = items_by_id.get(iid)
+                            cost_unit = float(ent.get("cost_unit_usd") or (it.profit_net_usd if it else 0.0) or 0.0)
+                            
+                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
+                            cur["qty"] += q
+                            cur["revenue"] += (p * q)
+                            cur["cost_total"] += (cost_unit * q)
+                            items_map[iid] = cur
+            except Exception:
+                items_map = {}
+            if not items_map and o.item_id:
+                # Legacy: single item orders without items_json
+                try:
+                    iid = int(o.item_id)
+                    if iid > 0:
+                        it = items_by_id.get(iid)
+                        if it:
+                            cur = items_map.get(iid) or {"qty": 0, "revenue": 0.0, "cost_total": 0.0}
+                            cur["qty"] += 1
+                            cur["revenue"] += float(it.price or 0.0)
+                            cur["cost_total"] += float(it.profit_net_usd or 0.0)
+                            items_map[iid] = cur
+                except Exception:
+                    pass
+
+            # Determinar comisión del influencer una vez por orden (solo para registro)
+            comm_pct = 0.0
+            if use_affiliate and su:
+                comm_pct = float(su.commission_percent or 0.0)
+
+            # Calcular ganancia por cada ítem
+            for iid, agg in items_map.items():
                 it = items_by_id.get(iid)
                 if not it:
                     continue
-                qty = max(int(line.get("qty") or 1), 1)
-                revenue = _safe_float(line.get("sale_total_usd"))
-                discount_amount = _safe_float(line.get("discount_usd"))
-                commission_amount = _safe_float(line.get("commission_usd"))
-                profit_before_affiliate = _safe_float(line.get("profit_before_affiliate_usd"))
-                profit_val = _safe_float(line.get("profit_net_usd"))
+                
+                qty = int(agg.get("qty") or 0)
+                revenue = float(agg.get("revenue") or 0.0)
+                cost_total = float(agg.get("cost_total") or 0.0)
+                
+                if qty <= 0 or cost_total <= 0.0:
+                    continue
+                
+                # Costo actual del ítem (para mostrar en UI)
                 cost_unit = float(it.profit_net_usd or 0.0)
+                # Precio estándar y ganancia estándar por unidad (informativa)
                 price_std = float(it.price or 0.0)
                 profit_unit_std = price_std - cost_unit
                 if profit_unit_std < 0.0:
                     profit_unit_std = 0.0
-
+                
+                # Registrar comisión del influencer (solo informativo)
+                if use_affiliate and comm_pct > 0:
+                    commission_item = round(revenue * (comm_pct / 100.0), 2)
+                    total_commission_affiliates += commission_item
+                    # Restar comisión del influencer de la ganancia
+                    profit_val = revenue - cost_total - commission_item
+                else:
+                    profit_val = revenue - cost_total
                 rec = stats.setdefault(
                     iid,
                     {
@@ -6465,9 +6413,6 @@ def admin_stats_package(pkg_id: int):
                         "profit_unit_std_usd": profit_unit_std,
                         "revenue_total_usd": 0.0,
                         "revenue_affiliate_usd": 0.0,
-                        "discount_total_usd": 0.0,
-                        "commission_total_usd": 0.0,
-                        "profit_before_affiliate_total_usd": 0.0,
                         "qty_total": 0,
                         "qty_normal": 0,
                         "qty_with_affiliate": 0,
@@ -6475,16 +6420,17 @@ def admin_stats_package(pkg_id: int):
                     },
                 )
                 rec["qty_total"] += qty
-                if line.get("has_affiliate"):
+                if use_affiliate:
                     rec["qty_with_affiliate"] += qty
-                    rec["revenue_affiliate_usd"] += revenue
+                    rec["revenue_affiliate_usd"] = rec.get("revenue_affiliate_usd", 0.0) + revenue
                 else:
                     rec["qty_normal"] += qty
-                rec["revenue_total_usd"] += revenue
-                rec["discount_total_usd"] += discount_amount
-                rec["commission_total_usd"] += commission_amount
-                rec["profit_before_affiliate_total_usd"] += profit_before_affiliate
-                rec["profit_total_usd"] += profit_val
+                # acumular revenue para poder calcular promedio real
+                rec["revenue_total_usd"] = rec.get("revenue_total_usd", 0.0) + revenue
+                if profit_val < 0.0:
+                    profit_val = 0.0
+                rec["profit_total_usd"] = rec.get("profit_total_usd", 0.0) + profit_val
+                total_profit_net += profit_val
         except Exception:
             continue
 
@@ -6513,18 +6459,26 @@ def admin_stats_package(pkg_id: int):
             },
         )
         rec_out = dict(base)
-        qty_total = int(rec_out.get("qty_total") or 0)
-        profit_before_affiliate_total = float(rec_out.get("profit_before_affiliate_total_usd") or 0.0)
-        profit_net_total = float(rec_out.get("profit_total_usd") or 0.0)
-        if qty_total > 0:
-            rec_out["profit_unit_real_avg_usd"] = round(profit_before_affiliate_total / qty_total, 2)
-            rec_out["profit_unit_after_affiliate_avg_usd"] = round(profit_net_total / qty_total, 2)
+        # Calcular ganancia "Con descuento" usando datos reales de órdenes con afiliado
+        qty_aff = int(rec_out.get("qty_with_affiliate") or 0)
+        rev_aff = float(rec_out.get("revenue_affiliate_usd") or 0.0)
+        if qty_aff > 0 and rev_aff > 0:
+            avg_price_disc = rev_aff / qty_aff
+            profit_with_disc = avg_price_disc - cost_unit
         else:
-            rec_out["profit_unit_real_avg_usd"] = 0.0
-            rec_out["profit_unit_after_affiliate_avg_usd"] = 0.0
+            # Sin datos reales: estimar con descuento promedio de afiliados activos
+            avg_disc = 0.0
+            try:
+                active_affs = SpecialUser.query.filter_by(active=True).all()
+                if active_affs:
+                    avg_disc = sum(float(a.discount_percent or 0) for a in active_affs) / len(active_affs) / 100.0
+            except Exception:
+                pass
+            profit_with_disc = (price_std * (1.0 - avg_disc)) - cost_unit
+        if profit_with_disc < 0.0:
+            profit_with_disc = 0.0
+        rec_out["profit_unit_real_avg_usd"] = round(profit_with_disc, 2)
         rec_out["total_profit_net_usd"] = round(float(base.get("profit_total_usd") or 0.0), 2)
-        rec_out["discount_total_usd"] = round(float(base.get("discount_total_usd") or 0.0), 2)
-        rec_out["commission_total_usd"] = round(float(base.get("commission_total_usd") or 0.0), 2)
         items_out.append(rec_out)
 
     return jsonify({
@@ -6538,8 +6492,6 @@ def admin_stats_package(pkg_id: int):
         "summary": {
             "total_profit_net_usd": round(total_profit_net, 2),
             "total_affiliate_commission_usd": round(total_commission_affiliates, 2),
-            "total_profit_before_affiliates_usd": round(total_profit_before_affiliates, 2),
-            "total_discount_usd": round(total_discount_usd, 2),
             # total_profit_net ya tiene las comisiones descontadas por ítem
             "total_profit_after_affiliates_usd": round(total_profit_net, 2),
         },

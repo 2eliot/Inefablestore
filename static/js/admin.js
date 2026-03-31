@@ -281,17 +281,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const statsPkgSelect = document.getElementById('stats-pkg-select');
   const statsItems = document.getElementById('stats-items');
   const statsSummary = document.getElementById('stats-summary');
-  const statsTotalBefore = document.getElementById('stats-total-before');
   const statsTotalAfter = document.getElementById('stats-total-after');
-  const statsTotalDiscount = document.getElementById('stats-total-discount');
   const statsSummaryTitle = document.getElementById('stats-summary-title');
   const statsSummaryScope = document.getElementById('stats-summary-scope');
   const btnStatsSaveAll = document.getElementById('btn-stats-save-all');
-  const statsHistoryList = document.getElementById('stats-history-list');
-  const statsPurchasesList = document.getElementById('stats-purchases-list');
-  const btnStatsViewProfit = document.getElementById('btn-stats-view-profit');
-  const btnStatsViewPurchases = document.getElementById('btn-stats-view-purchases');
-  let statsHistoryMode = 'profit';
   // Orders elements
   const btnOrdersRefresh = document.getElementById('btn-orders-refresh');
   const ordersList = document.getElementById('orders-list');
@@ -1021,24 +1014,8 @@ window.fetchPayments = fetchPayments;
     statsSummary.style.display = 'block';
     if (statsSummaryTitle) statsSummaryTitle.textContent = titleLabel || 'Ganancias semanales';
     if (statsSummaryScope) statsSummaryScope.textContent = scopeLabel || 'Resumen global de la semana actual';
-    if (statsTotalBefore) statsTotalBefore.textContent = fmtUSD(s.total_profit_before_affiliates_usd || 0);
     statsTotalAfter.textContent = fmtUSD(s.total_profit_after_affiliates_usd || 0);
     if (statsCommEl) statsCommEl.textContent = fmtUSD(s.total_affiliate_commission_usd || 0);
-    if (statsTotalDiscount) statsTotalDiscount.textContent = fmtUSD(s.total_discount_usd || 0);
-  }
-
-  function renderStatsHistoryMode() {
-    if (statsHistoryList) statsHistoryList.hidden = statsHistoryMode !== 'profit';
-    if (statsPurchasesList) statsPurchasesList.hidden = statsHistoryMode !== 'purchases';
-    if (btnStatsViewProfit) btnStatsViewProfit.classList.toggle('primary', statsHistoryMode === 'profit');
-    if (btnStatsViewPurchases) btnStatsViewPurchases.classList.toggle('primary', statsHistoryMode === 'purchases');
-  }
-
-  function getStatsPurchaseQuery() {
-    const params = new URLSearchParams();
-    params.set('period', 'weekly');
-    if (statsPkgSelect && statsPkgSelect.value) params.set('package_id', statsPkgSelect.value);
-    return params.toString();
   }
 
   async function fetchGlobalStatsSummary() {
@@ -1052,12 +1029,11 @@ window.fetchPayments = fetchPayments;
       renderStatsSummary({}, 'Resumen global de la semana actual', 'Ganancias semanales');
     }
     fetchProfitHistory();
-    fetchStatsPurchases();
   }
 
   // ---------- Profit History ----------
   async function fetchProfitHistory() {
-    const container = statsHistoryList;
+    const container = document.getElementById('stats-history-list');
     if (!container) return;
     try {
       const res = await fetch('/admin/stats/history');
@@ -1090,97 +1066,6 @@ window.fetchPayments = fetchPayments;
       });
     } catch (e) {
       container.innerHTML = '<div class="empty-state"><p>Error cargando historial.</p></div>';
-    }
-  }
-
-  async function fetchStatsPurchases() {
-    const container = statsPurchasesList;
-    if (!container) return;
-    container.innerHTML = '<div class="empty-state"><p>Cargando compras...</p></div>';
-    try {
-      const res = await fetch(`/admin/stats/purchases?${getStatsPurchaseQuery()}`);
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Error');
-      const purchases = data.purchases || [];
-      if (!purchases.length) {
-        container.innerHTML = '<div class="empty-state"><p>Sin compras aprobadas en este periodo.</p></div>';
-        return;
-      }
-      container.innerHTML = '';
-      purchases.forEach(p => {
-        const card = document.createElement('div');
-        const affiliateLabel = (p.affiliate_name || p.affiliate_code || '').trim() || 'Sin afiliado';
-        const customerBits = [p.customer_name || '', p.customer_id ? `ID ${p.customer_id}` : ''].filter(Boolean).join(' · ');
-        const lines = Array.isArray(p.lines) ? p.lines : [];
-        const detailHtml = lines.map(line => `
-          <div style="padding:8px 10px; border:1px solid #1e293b; border-radius:8px; background:#0f172a;">
-            <div style="font-size:12px; font-weight:600; color:#e2e8f0; margin-bottom:4px;">${line.qty || 1}x ${line.title || 'Item'}</div>
-            <div style="font-size:11px; color:#94a3b8; display:flex; flex-wrap:wrap; gap:10px;">
-              <span>Base: <strong>${fmtUSD(line.base_total_usd || 0)}</strong></span>
-              <span>Venta: <strong>${fmtUSD(line.sale_total_usd || 0)}</strong></span>
-              <span>Costo: <strong>${fmtUSD(line.cost_total_usd || 0)}</strong></span>
-              <span>Desc.: <strong>${Number(line.discount_percent || 0).toFixed(2)}%</strong> (${fmtUSD(line.discount_usd || 0)})</span>
-              <span>Comisión: <strong>${Number(line.commission_percent || 0).toFixed(2)}%</strong> (${fmtUSD(line.commission_usd || 0)})</span>
-              <span>Total afiliado: <strong>${Number(line.affiliate_total_percent || 0).toFixed(2)}%</strong> (${fmtUSD(line.affiliate_total_usd || 0)})</span>
-              <span>Ganancia base: <strong style="color:#38bdf8;">${fmtUSD(line.profit_before_affiliate_usd || 0)}</strong></span>
-              <span>Ganancia final: <strong style="color:#10b981;">${fmtUSD(line.profit_net_usd || 0)}</strong></span>
-            </div>
-          </div>
-        `).join('');
-        card.className = 'order-card';
-        card.style.marginBottom = '8px';
-        card.innerHTML = `
-          <div class="order-head" style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
-            <div style="flex:1; min-width:0;">
-              <div class="order-id" style="font-size:13px;">Compra #${p.id} · ${p.created_at || ''}</div>
-              <div class="order-meta" style="display:flex; flex-wrap:wrap; gap:10px; margin-top:4px;">
-                <span>${p.package_name || 'Paquete sin nombre'}</span>
-                <span>${p.item_summary || 'Sin detalle de ítems'}</span>
-                <span>${customerBits || 'Cliente sin datos'}</span>
-                <span>Afiliado: <strong>${affiliateLabel}</strong></span>
-              </div>
-              <div style="margin-top:10px; display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:8px;">
-                <div style="padding:8px 10px; border-radius:8px; background:#111827; border:1px solid #1e293b;">
-                  <div style="font-size:11px; color:#94a3b8;">Precio base</div>
-                  <div style="font-size:15px; font-weight:700; color:#f8fafc;">${fmtUSD(p.base_price_usd || 0)}</div>
-                </div>
-                <div style="padding:8px 10px; border-radius:8px; background:#111827; border:1px solid #1e293b;">
-                  <div style="font-size:11px; color:#94a3b8;">Precio de venta</div>
-                  <div style="font-size:15px; font-weight:700; color:#f8fafc;">${fmtUSD(p.sale_price_usd || 0)}</div>
-                </div>
-                <div style="padding:8px 10px; border-radius:8px; background:#111827; border:1px solid #1e293b;">
-                  <div style="font-size:11px; color:#94a3b8;">Costo</div>
-                  <div style="font-size:15px; font-weight:700; color:#f8fafc;">${fmtUSD(p.cost_usd || 0)}</div>
-                </div>
-                <div style="padding:8px 10px; border-radius:8px; background:#111827; border:1px solid #1e293b;">
-                  <div style="font-size:11px; color:#94a3b8;">Descuento cliente</div>
-                  <div style="font-size:15px; font-weight:700; color:#38bdf8;">${Number(p.discount_percent || 0).toFixed(2)}% · ${fmtUSD(p.discount_usd || 0)}</div>
-                </div>
-                <div style="padding:8px 10px; border-radius:8px; background:#111827; border:1px solid #1e293b;">
-                  <div style="font-size:11px; color:#94a3b8;">Comisión influencer</div>
-                  <div style="font-size:15px; font-weight:700; color:#f59e0b;">${Number(p.commission_percent || 0).toFixed(2)}% · ${fmtUSD(p.commission_usd || 0)}</div>
-                </div>
-                <div style="padding:8px 10px; border-radius:8px; background:#111827; border:1px solid #1e293b;">
-                  <div style="font-size:11px; color:#94a3b8;">Impacto total afiliado</div>
-                  <div style="font-size:15px; font-weight:700; color:#f59e0b;">${Number(p.affiliate_total_percent || 0).toFixed(2)}%</div>
-                </div>
-                <div style="padding:8px 10px; border-radius:8px; background:#111827; border:1px solid #1e293b;">
-                  <div style="font-size:11px; color:#94a3b8;">Ganancia base</div>
-                  <div style="font-size:15px; font-weight:700; color:#38bdf8;">${fmtUSD(p.profit_before_affiliate_usd || 0)}</div>
-                </div>
-                <div style="padding:8px 10px; border-radius:8px; background:#111827; border:1px solid #1e293b;">
-                  <div style="font-size:11px; color:#94a3b8;">Ganancia final registrada</div>
-                  <div style="font-size:15px; font-weight:700; color:#10b981;">${fmtUSD(p.profit_net_usd || 0)}</div>
-                </div>
-              </div>
-              ${detailHtml ? `<div style="display:grid; gap:8px; margin-top:10px;">${detailHtml}</div>` : ''}
-            </div>
-          </div>
-        `;
-        container.appendChild(card);
-      });
-    } catch (e) {
-      container.innerHTML = '<div class="empty-state"><p>Error cargando compras.</p></div>';
     }
   }
 
@@ -1253,8 +1138,7 @@ window.fetchPayments = fetchPayments;
               <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; min-width:190px;">
                 <label style="font-size:12px; color:#475569;">Costo por unidad (USD)</label>
                 <input type="number" step="0.01" min="0" class="stats-profit-input" value="${Number(it.cost_unit_usd || 0).toFixed(2)}" style="width:120px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:4px;" />
-                <div style="font-size:11px; color:#ffffff;">Ganancia/unidad: <strong>Base: ${fmtUSD(it.profit_unit_real_avg_usd || 0)}</strong> · <strong>Neta final: ${fmtUSD(it.profit_unit_after_affiliate_avg_usd || 0)}</strong></div>
-                <div style="font-size:11px; color:#cbd5e1;">Descuentos: <strong>${fmtUSD(it.discount_total_usd || 0)}</strong> · Comisiones: <strong>${fmtUSD(it.commission_total_usd || 0)}</strong></div>
+                <div style="font-size:11px; color:#ffffff;">Ganancia estándar/unidad: <strong>Con descuento: ${fmtUSD(it.profit_unit_real_avg_usd || 0)}</strong> · <strong>Sin descuento: ${fmtUSD(it.profit_unit_std_usd || 0)}</strong></div>
                 <div style="font-size:12px; color:#ffffff;">Ganancia total (semana actual): <strong>${fmtUSD(it.total_profit_net_usd || 0)}</strong></div>
               </div>
             </div>
@@ -1265,11 +1149,9 @@ window.fetchPayments = fetchPayments;
       const pkgName = ((data.package || {}).name || '').trim();
       const scope = pkgName ? `Resumen semanal de ${pkgName}` : 'Resumen del paquete en la semana actual';
       renderStatsSummary(data.summary || {}, scope, 'Ganancias del paquete');
-      fetchStatsPurchases();
     } catch (e) {
       statsItems.innerHTML = `<div class="empty-state"><p>${e.message || 'Error'}</p></div>`;
       renderStatsSummary({}, 'Resumen del paquete en la semana actual', 'Ganancias del paquete');
-      fetchStatsPurchases();
     }
   }
 
@@ -1340,23 +1222,6 @@ window.fetchPayments = fetchPayments;
       }
     });
   }
-
-  if (btnStatsViewProfit) {
-    btnStatsViewProfit.addEventListener('click', () => {
-      statsHistoryMode = 'profit';
-      renderStatsHistoryMode();
-    });
-  }
-
-  if (btnStatsViewPurchases) {
-    btnStatsViewPurchases.addEventListener('click', () => {
-      statsHistoryMode = 'purchases';
-      renderStatsHistoryMode();
-      fetchStatsPurchases();
-    });
-  }
-
-  renderStatsHistoryMode();
 
   // =====================
   // Config: site name get/set
