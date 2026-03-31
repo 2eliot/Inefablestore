@@ -3,32 +3,60 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='4') }}">
 <style>
-  .ty-wrap{max-width:980px;margin:24px auto;padding:16px 12px 40px}
-  .ty-card{background:#1f2329;border:1px solid #30363d;border-radius:16px;padding:36px 22px 30px;box-shadow:0 16px 40px rgba(0,0,0,.35);display:flex;flex-direction:row;align-items:center;justify-content:center;gap:24px}
-  .ty-main{display:flex;flex-direction:row;align-items:center;text-align:center;gap:12px;flex:0 0 auto}
-  .ty-main-left{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center}
-  .ty-main-right{flex:0 0 auto;display:flex;justify-content:center;align-items:center}
-  .ty-title{font-size:40px;font-weight:900;color:#f8fafc;margin:0 0 10px}
-  .ty-sub{color:#cbd5e1;font-weight:800;margin:0 0 16px}
-  .ty-note{color:#e5e7eb;font-size:16px;line-height:1.6;margin:10px 0 0}
-  .ty-note.ty-note-secondary{margin-top:0;margin-bottom:10px}
-  .ty-socials{display:flex;gap:14px;margin:0 0 6px;justify-content:center}
-  .ty-socials a{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:0;background:transparent;border:none;color:inherit;text-decoration:none;font-weight:900}
-  .ty-btn{display:inline-block;margin-top:8px;background:#22c55e;color:#062a1d;padding:12px 16px;border-radius:10px;text-decoration:none;font-weight:900;border:1px solid #16a34a}
-  .ty-ill{display:flex;justify-content:center;margin:0 0 -10px}
-  .ty-ill img{max-width:260px;width:100%;filter:drop-shadow(0 10px 30px rgba(0,0,0,.35))}
-  .ty-progress{display:none;max-width:620px;width:100%;margin:14px auto 0;padding:16px 14px;border-radius:14px;background:#091423;border:1px solid rgba(34,197,94,.22)}
+  .ty-wrap{position:relative;max-width:1240px;margin:0 auto;padding:28px 18px 52px}
+  .ty-wrap::before,.ty-wrap::after{content:'';position:absolute;pointer-events:none;filter:blur(22px);opacity:.95}
+  .ty-wrap::before{width:260px;height:260px;top:36px;left:-40px;background:radial-gradient(circle,rgba(16,185,129,.28) 0%,rgba(16,185,129,0) 72%)}
+  .ty-wrap::after{width:320px;height:320px;right:-80px;top:88px;background:radial-gradient(circle,rgba(29,78,216,.22) 0%,rgba(29,78,216,0) 74%)}
+  .ty-card{position:relative;overflow:hidden;background:linear-gradient(145deg,rgba(10,10,10,.96) 0%,rgba(18,24,33,.94) 55%,rgba(9,15,24,.98) 100%);border:1px solid rgba(148,163,184,.14);border-radius:28px;padding:26px;box-shadow:0 28px 90px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04)}
+  .ty-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at top left,rgba(16,185,129,.12),transparent 30%),radial-gradient(circle at bottom right,rgba(59,130,246,.12),transparent 34%);pointer-events:none}
+  .ty-main{position:relative;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(320px,.9fr);gap:26px;align-items:stretch}
+  .ty-main-left{display:flex;flex-direction:column;gap:18px;min-width:0}
+  .ty-main-right{position:relative;display:flex;align-items:stretch;justify-content:center}
+  .ty-panel{position:relative;background:linear-gradient(180deg,rgba(9,12,16,.9),rgba(12,18,24,.82));border:1px solid rgba(148,163,184,.12);border-radius:24px;padding:26px;backdrop-filter:blur(10px)}
+  .ty-kicker{display:inline-flex;align-items:center;gap:10px;padding:8px 14px;border-radius:999px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.24);color:#bbf7d0;font-weight:900;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  .ty-kicker-dot{width:8px;height:8px;border-radius:999px;background:#22c55e;box-shadow:0 0 0 6px rgba(34,197,94,.12)}
+  .ty-title{font-size:clamp(36px,4vw,58px);line-height:.96;font-weight:1000;letter-spacing:-.04em;color:#f8fafc;margin:0}
+  .ty-title-accent{display:block;background:linear-gradient(90deg,#f8fafc 0%,#86efac 48%,#60a5fa 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .ty-sub{display:flex;flex-wrap:wrap;gap:10px;margin:0}
+  .ty-chip{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:14px;background:rgba(15,23,42,.72);border:1px solid rgba(148,163,184,.14);font-weight:900;color:#e2e8f0}
+  .ty-chip strong{color:#86efac}
+  .ty-note{max-width:620px;color:#cbd5e1;font-size:17px;line-height:1.65;margin:0;font-weight:600}
+  .ty-note strong{color:#f8fafc}
+  .ty-social-block{display:grid;gap:12px}
+  .ty-social-label{color:#94a3b8;font-size:12px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
+  .ty-socials{display:flex;flex-wrap:wrap;gap:12px;margin:0;justify-content:flex-start}
+  .ty-socials a{display:inline-flex;align-items:center;gap:10px;min-height:48px;padding:0 16px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(148,163,184,.14);color:#e5e7eb;text-decoration:none;font-weight:900;transition:transform .22s ease,background-color .22s ease,border-color .22s ease,box-shadow .22s ease}
+  .ty-socials a:hover{transform:translateY(-2px);background:rgba(255,255,255,.06);border-color:rgba(16,185,129,.28);box-shadow:0 14px 26px rgba(0,0,0,.28)}
+  .ty-socials svg{width:18px;height:18px;flex:0 0 auto}
+  .ty-cta-row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .ty-btn{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:0 20px;border-radius:14px;text-decoration:none;font-weight:1000;border:1px solid #16a34a;background:linear-gradient(180deg,#22c55e,#16a34a);color:#04150e;box-shadow:0 14px 30px rgba(22,163,74,.28);transition:transform .22s ease,box-shadow .22s ease,filter .22s ease}
+  .ty-btn:hover{transform:translateY(-2px);filter:brightness(1.03);box-shadow:0 18px 36px rgba(22,163,74,.34)}
+  .ty-cta-note{color:#93c5fd;font-weight:800;font-size:14px}
+  .ty-side-card{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:18px;width:100%;min-height:100%;padding:22px;border-radius:24px;background:linear-gradient(180deg,rgba(8,12,18,.94),rgba(12,18,26,.84));border:1px solid rgba(148,163,184,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+  .ty-side-card::before{content:'';position:absolute;inset:16px 18px auto auto;width:88px;height:88px;border-radius:20px;background:radial-gradient(circle,rgba(16,185,129,.2),rgba(16,185,129,0) 72%);pointer-events:none}
+  .ty-side-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .ty-side-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.24);color:#bfdbfe;font-weight:900;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+  .ty-side-meta{display:grid;gap:8px;text-align:right;color:#94a3b8;font-size:13px;font-weight:800}
+  .ty-side-meta strong{display:block;color:#f8fafc;font-size:18px}
+  .ty-ill{position:relative;display:flex;justify-content:center;align-items:center;min-height:300px;margin:0}
+  .ty-ill::before{content:'';position:absolute;width:100%;max-width:310px;aspect-ratio:1;border-radius:32px;background:linear-gradient(180deg,rgba(15,23,42,.94),rgba(10,14,20,.65));border:1px solid rgba(148,163,184,.12);box-shadow:0 20px 50px rgba(0,0,0,.34)}
+  .ty-ill::after{content:'';position:absolute;width:230px;height:230px;border-radius:999px;background:radial-gradient(circle,rgba(16,185,129,.18) 0%,rgba(16,185,129,0) 70%)}
+  .ty-ill img{position:relative;z-index:1;max-width:260px;width:100%;filter:drop-shadow(0 18px 34px rgba(0,0,0,.44));animation:ty-float 4.6s ease-in-out infinite}
+  .ty-side-points{display:grid;gap:10px}
+  .ty-side-point{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(148,163,184,.12);color:#e2e8f0;font-weight:800}
+  .ty-side-point span{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:10px;background:rgba(16,185,129,.14);color:#86efac;font-weight:1000}
+  .ty-progress{display:none;width:100%;padding:18px;border-radius:22px;background:linear-gradient(180deg,rgba(7,13,19,.96),rgba(8,18,26,.88));border:1px solid rgba(34,197,94,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
   .ty-progress.visible{display:block;animation:ty-fade-in .35s ease-out both}
-  .ty-progress-title{margin:0 0 8px;color:#93c5fd;font-size:22px;font-weight:900}
-  .ty-progress-sub{margin:0 0 12px;color:#cbd5e1;font-weight:700}
-  .ty-steps{display:grid;gap:8px;margin:0;padding:0;list-style:none}
-  .ty-step{display:flex;align-items:center;gap:10px;padding:8px 6px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(2,6,23,.45);transition:background-color .25s ease,border-color .25s ease,transform .25s ease,box-shadow .25s ease}
-  .ty-step-ico{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#ef4444;border:1px solid rgba(239,68,68,.5);background:rgba(127,29,29,.35);transition:color .25s ease,border-color .25s ease,background-color .25s ease,transform .25s ease}
-  .ty-step.done .ty-step-ico{color:#22c55e;border-color:rgba(34,197,94,.55);background:rgba(6,78,59,.45)}
-  .ty-step-label{color:#e2e8f0;font-weight:800}
-  .ty-step.done .ty-step-label{color:#86efac}
-  .ty-step.done{background:rgba(6,78,59,.28);border-color:rgba(34,197,94,.35)}
-  .ty-step.just-completed{box-shadow:0 0 0 1px rgba(34,197,94,.4), 0 0 20px rgba(34,197,94,.18);transform:translateY(-1px)}
+  .ty-progress-title{margin:0 0 6px;color:#f8fafc;font-size:24px;font-weight:1000;letter-spacing:-.02em}
+  .ty-progress-sub{margin:0 0 14px;color:#86efac;font-weight:800}
+  .ty-steps{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+  .ty-step{display:flex;align-items:center;gap:12px;padding:12px 13px;border-radius:16px;border:1px solid rgba(148,163,184,.15);background:linear-gradient(180deg,rgba(10,18,26,.88),rgba(9,14,20,.78));transition:background-color .25s ease,border-color .25s ease,transform .25s ease,box-shadow .25s ease}
+  .ty-step-ico{width:28px;height:28px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-weight:1000;font-size:14px;color:#fca5a5;border:1px solid rgba(239,68,68,.34);background:rgba(127,29,29,.28);transition:color .25s ease,border-color .25s ease,background-color .25s ease,transform .25s ease;flex:0 0 auto}
+  .ty-step.done .ty-step-ico{color:#062e22;border-color:rgba(34,197,94,.48);background:linear-gradient(180deg,#4ade80,#22c55e)}
+  .ty-step-label{color:#e2e8f0;font-weight:900;letter-spacing:.01em}
+  .ty-step.done .ty-step-label{color:#dcfce7}
+  .ty-step.done{background:linear-gradient(180deg,rgba(6,78,59,.36),rgba(7,45,35,.42));border-color:rgba(34,197,94,.3)}
+  .ty-step.just-completed{box-shadow:0 0 0 1px rgba(34,197,94,.38),0 0 26px rgba(34,197,94,.16);transform:translateY(-1px)}
   .ty-step.just-completed .ty-step-ico{animation:ty-check-pop .35s ease-out both}
   @keyframes ty-check-pop{
     0%{transform:scale(.72)}
@@ -39,30 +67,36 @@
     0%{opacity:0;transform:translateY(4px)}
     100%{opacity:1;transform:translateY(0)}
   }
+  @keyframes ty-float{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-8px)}
+  }
+  @media (max-width: 980px){
+    .ty-main{grid-template-columns:1fr}
+    .ty-main-right{order:-1}
+    .ty-side-card{min-height:auto}
+    .ty-side-top{align-items:center}
+    .ty-side-meta{text-align:left}
+    .ty-ill{min-height:240px}
+  }
   @media (max-width: 640px){
-    .ty-wrap{padding:8px 4px 20px}
-    .ty-card{
-      padding:36px 10px 14px;
-      gap:8px;
-      max-width:100%;
-      flex-direction:column;
-    }
-    .ty-main{
-      flex-direction:column;
-      align-items:center;
-      text-align:center;
-      gap:0;
-    }
-    .ty-title{font-size:24px;margin-bottom:4px}
-    .ty-sub{font-size:12px;margin-bottom:6px}
-    .ty-note{font-size:12px;margin:8px 0 10px}
-    .ty-socials{gap:8px;margin-bottom:6px}
-    .ty-btn{margin-top:2px;padding:8px 12px;font-size:13px}
-    .ty-ill{margin:-2px 0 -8px}
-    .ty-ill img{max-width:140px}
-    .ty-progress{padding:12px 10px}
-    .ty-progress-title{font-size:18px}
-    .ty-step{padding:7px 5px}
+    .ty-wrap{padding:14px 10px 28px}
+    .ty-card{padding:14px;border-radius:22px}
+    .ty-panel,.ty-side-card{padding:18px}
+    .ty-title{font-size:34px}
+    .ty-note{font-size:15px}
+    .ty-sub{gap:8px}
+    .ty-chip{width:100%;justify-content:center}
+    .ty-socials a{flex:1 1 calc(50% - 6px);justify-content:center;padding:0 12px}
+    .ty-cta-row{flex-direction:column;align-items:stretch}
+    .ty-btn{width:100%}
+    .ty-cta-note{text-align:center}
+    .ty-ill{min-height:210px}
+    .ty-ill::before{max-width:240px;border-radius:24px}
+    .ty-ill img{max-width:180px}
+    .ty-progress{padding:14px}
+    .ty-progress-title{font-size:20px}
+    .ty-step{padding:10px 11px}
   }
 </style>
 {% endblock %}
@@ -90,39 +124,71 @@
   <div class="ty-card">
     <div class="ty-main">
       <div class="ty-main-left">
-        <h1 class="ty-title">¡Gracias por tu compra!</h1>
-        <p class="ty-sub">Orden Nº {{ order_id }}</p>
-        <p class="ty-note">Tu recarga estará lista dentro de <strong>3 a 10 minutos</strong>.<br>
-          Mientras esperas, puedes seguirnos en nuestras redes sociales.</p>
-        <div class="ty-socials">
-          {% set fb = get_config_value('social_facebook', '') %}
-          {% set ig = get_config_value('social_instagram', '') %}
-          {% set tk = get_config_value('social_tiktok', '') %}
-          <a class="social-icon facebook" href="{{ fb or 'https://www.facebook.com/InefablestoreR/' }}" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 12.06C22 6.51 17.52 2 12 2S2 6.51 2 12.06c0 5.01 3.66 9.16 8.44 9.94v-7.03H7.9v-2.9h2.54V9.41c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.23.2 2.23.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.77l-.44 2.9h-2.33v7.03C18.34 21.22 22 17.07 22 12.06z"/></svg>
-          </a>
-          <a class="social-icon instagram" href="{{ ig or 'https://www.instagram.com/inefable_store_12/' }}" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zm5.25-3a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25z"/></svg>
-          </a>
-          <a class="social-icon tiktok" href="{{ tk or 'https://www.tiktok.com/@inefablestore' }}" target="_blank" rel="noopener" aria-label="TikTok" title="TikTok">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg>
-          </a>
+        {% set fb = get_config_value('social_facebook', '') %}
+        {% set ig = get_config_value('social_instagram', '') %}
+        {% set tk = get_config_value('social_tiktok', '') %}
+        <div class="ty-panel">
+          <span class="ty-kicker"><span class="ty-kicker-dot"></span> Compra confirmada</span>
+          <h1 class="ty-title">Tu pedido ya entro en cola <span class="ty-title-accent">y lo estamos moviendo.</span></h1>
+          <div class="ty-sub">
+            <span class="ty-chip">Orden <strong>#{{ order_id }}</strong></span>
+            <span class="ty-chip">Tiempo estimado <strong>3 a 10 min</strong></span>
+            <span class="ty-chip">Seguimiento <strong>en vivo</strong></span>
+          </div>
+          <p class="ty-note">La logica de entrega sigue trabajando igual. Aqui solo te mostramos un estado mas claro, con una vibra mas fresca y alineada al look oscuro del index.</p>
+
+          <div id="ty-progress" class="ty-progress" data-order-id="{{ order_id }}" aria-live="polite">
+            <h3 id="ty-progress-title" class="ty-progress-title">Procesando recarga</h3>
+            <p id="ty-progress-sub" class="ty-progress-sub">Iniciando seguimiento...</p>
+            <ul id="ty-steps" class="ty-steps"></ul>
+          </div>
+
+          <div class="ty-social-block">
+            <div class="ty-social-label">Mientras esperas</div>
+            <div class="ty-socials">
+              <a class="social-icon facebook" href="{{ fb or 'https://www.facebook.com/InefablestoreR/' }}" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 12.06C22 6.51 17.52 2 12 2S2 6.51 2 12.06c0 5.01 3.66 9.16 8.44 9.94v-7.03H7.9v-2.9h2.54V9.41c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.23.2 2.23.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.77l-.44 2.9h-2.33v7.03C18.34 21.22 22 17.07 22 12.06z"/></svg>
+                <span>Facebook</span>
+              </a>
+              <a class="social-icon instagram" href="{{ ig or 'https://www.instagram.com/inefable_store_12/' }}" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zm5.25-3a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25z"/></svg>
+                <span>Instagram</span>
+              </a>
+              <a class="social-icon tiktok" href="{{ tk or 'https://www.tiktok.com/@inefablestore' }}" target="_blank" rel="noopener" aria-label="TikTok" title="TikTok">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg>
+                <span>TikTok</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="ty-cta-row">
+            <a class="ty-btn" href="/">Seguir comprando</a>
+            <span class="ty-cta-note">Te avisamos apenas la orden quede lista.</span>
+          </div>
         </div>
-        <div id="ty-progress" class="ty-progress" data-order-id="{{ order_id }}" aria-live="polite">
-          <h3 id="ty-progress-title" class="ty-progress-title">Procesando recarga</h3>
-          <p id="ty-progress-sub" class="ty-progress-sub">Iniciando seguimiento...</p>
-          <ul id="ty-steps" class="ty-steps"></ul>
-        </div>
-        <a class="ty-btn" href="/">Regresar a comprar</a>
       </div>
       <div class="ty-main-right">
-        <div class="ty-ill">
-          {% set ty_img = get_config_value('thanks_image_path', '') %}
-          {% if ty_img %}
-            <img src="{{ ty_img }}" alt="Gracias">
-          {% else %}
-            <img src="{{ url_for('static', filename='img/thanks-mascot.png') }}" alt="Gracias">
-          {% endif %}
+        <div class="ty-side-card">
+          <div class="ty-side-top">
+            <span class="ty-side-badge">Estado gamer</span>
+            <div class="ty-side-meta">
+              <span>Compra segura</span>
+              <strong>Entrega automatica</strong>
+            </div>
+          </div>
+          <div class="ty-ill">
+            {% set ty_img = get_config_value('thanks_image_path', '') %}
+            {% if ty_img %}
+              <img src="{{ ty_img }}" alt="Gracias">
+            {% else %}
+              <img src="{{ url_for('static', filename='img/thanks-mascot.png') }}" alt="Gracias">
+            {% endif %}
+          </div>
+          <div class="ty-side-points">
+            <div class="ty-side-point"><span>1</span> Tu pago ya entro al flujo de validacion.</div>
+            <div class="ty-side-point"><span>2</span> El tracker se actualiza solo sin recargar la pagina.</div>
+            <div class="ty-side-point"><span>3</span> Cuando cierre la cola, la recarga queda completada.</div>
+          </div>
         </div>
       </div>
     </div>
