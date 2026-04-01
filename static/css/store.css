@@ -397,7 +397,7 @@ html { overflow-x: hidden; width: 100%; }
 /* WebKit browsers: hide scrollbar track */
 .packages-rail::-webkit-scrollbar { display: none; }
 
-.pkg-card { min-width: 190px; max-width: 220px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 12px 14px; color: #fff; box-shadow: 0 8px 20px rgba(0,0,0,0.35); flex: 0 0 auto; transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition); overflow:hidden; }
+.pkg-card { min-width: 190px; max-width: 220px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 12px 14px; color: #fff; box-shadow: 0 8px 20px rgba(0,0,0,0.35); flex: 0 0 auto; transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition); overflow:hidden; touch-action: pan-y; -webkit-user-drag: none; }
 .pkg-card:hover { transform: translateY(-3px); border-color: var(--border-hover); box-shadow: 0 12px 28px rgba(0,0,0,0.5); }
 /* Desktop: show exactly 5 cards per row using grid */
 @media (min-width: 768px) {
@@ -469,6 +469,7 @@ html { overflow-x: hidden; width: 100%; }
     overflow: visible !important;
     justify-content: center;
     flex-wrap: unset;
+    touch-action: pan-y pinch-zoom !important;
   }
   .packages-rail .pkg-card {
     min-width: 0 !important;
@@ -617,7 +618,7 @@ html { overflow-x: hidden; width: 100%; }
   /* Packages: 3 cards per row grid on phones */
   .packages { padding-left: 12px; padding-right: 12px; overflow: visible; }
   .featured { padding-left: 12px; padding-right: 12px; }
-  .packages-rail { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; overflow: visible !important; padding-left: 0; padding-right: 0; touch-action: auto; }
+  .packages-rail { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; overflow: visible !important; padding-left: 0; padding-right: 0; touch-action: pan-y pinch-zoom !important; }
   .pkg-card { min-width: 0 !important; max-width: none !important; width: 100% !important; flex: none !important; padding: 6px 6px 8px; margin: 0; }
   .pkg-thumb { width: 100%; aspect-ratio: 1 / 1; }
   .pkg-name { font-size: 11px; margin-top: 4px; }

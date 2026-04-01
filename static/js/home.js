@@ -92,7 +92,18 @@ document.addEventListener('DOMContentLoaded', () => {
       card.innerHTML = `${thumb}
         <h3 class="pkg-name">${p.name || ''}</h3>`;
       card.style.cursor = 'pointer';
-      card.addEventListener('click', () => {
+      // Track touch to distinguish taps from scrolls
+      let _touchStartY = 0;
+      let _touchMoved = false;
+      card.addEventListener('touchstart', (e) => {
+        _touchStartY = e.touches[0].clientY;
+        _touchMoved = false;
+      }, { passive: true });
+      card.addEventListener('touchmove', (e) => {
+        if (Math.abs(e.touches[0].clientY - _touchStartY) > 10) _touchMoved = true;
+      }, { passive: true });
+      card.addEventListener('click', (e) => {
+        if (_touchMoved) { e.preventDefault(); return; }
         if (p && typeof p.id !== 'undefined') {
           window.location.href = `/store/package/${p.id}`;
         }
