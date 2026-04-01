@@ -184,6 +184,8 @@ def _extract_ffmania_nick(raw_html: str) -> str:
     direct_patterns = [
         r'"nick"\s*:\s*"([^"\\]+(?:\\.[^"\\]*)*)"',
         r'"nickname"\s*:\s*"([^"\\]+(?:\\.[^"\\]*)*)"',
+        r'class="nome"[^>]*>\s*([^<]+?)\s*</',
+        r'<strong>[^<]*(?:Nombre|Nome|Nick)\s*:?\s*</strong>\s*([^<]+?)\s*</',
         r'(?is)<[^>]*>\s*(?:Nombre|Nome|Nick)\s*:?\s*</[^>]*>\s*<[^>]*>\s*([^<]+?)\s*</',
         r'(?im)\b(?:Nombre|Nome|Nick)\s*:\s*([^\n<]+)',
     ]
@@ -235,6 +237,52 @@ def _scrape_ffmania_nick(uid: str) -> str:
         return ""
     resp.raise_for_status()
     return _extract_ffmania_nick(resp.text or "")
+
+
+def _smileone_is_valid_username(value: str) -> bool:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text:
+        return False
+    lower = text.lower()
+    invalid_fragments = [
+        "id inválido",
+        "id invalido",
+        "user id",
+        "não existe",
+        "nao existe",
+        "not found",
+        "network",
+        "conexión de la red",
+        "conexao de rede",
+        "inténtalo de nuevo",
+        "tente novamente",
+        "try again",
+        "problem with the network",
+        "erro",
+        "error",
+        "inválido",
+        "invalido",
+    ]
+    return not any(fragment in lower for fragment in invalid_fragments)
+
+
+def _smileone_extract_username(resp_json: dict) -> str:
+    candidates = [
+        (resp_json.get("data") or {}).get("username"),
+        (resp_json.get("data") or {}).get("nickname"),
+        (resp_json.get("data") or {}).get("name"),
+        resp_json.get("username"),
+        resp_json.get("nickname"),
+        resp_json.get("name"),
+    ]
+    for candidate in candidates:
+        text = re.sub(r"\s+", " ", str(candidate or "")).strip()
+        if _smileone_is_valid_username(text):
+            return text
+    info_text = re.sub(r"\s+", " ", str(resp_json.get("info") or "")).strip()
+    if _smileone_is_valid_username(info_text):
+        return info_text
+    return ""
 
 
 def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
@@ -312,24 +360,15 @@ def _scrape_smileone_bloodstrike_nick(role_id: str) -> str:
                 data = json.loads(txt)
             else:
                 return ""
-        # Handle error codes
+        # Extract username from various possible structures
+        username = _smileone_extract_username(data)
+        if username:
+            return username
+        # Handle error codes only after checking whether the API still returned a nickname.
         if int(data.get("code") or 0) != 200:
             # 201 = USER ID não existe, 404 = not found, etc.
             print(f"[BS] API error: {data.get('info', '')}")
             return ""
-        # Extract username from various possible structures
-        username = (
-            (data.get("data") or {}).get("username")
-            or (data.get("data") or {}).get("nickname")
-            or (data.get("data") or {}).get("name")
-            or data.get("username")
-            or data.get("nickname")
-            or data.get("name")
-            or data.get("info")  # some APIs return username in info field
-            or ""
-        )
-        if username:
-            return username.strip()
         print(f"[BS] JSON completo: {data}")
         return ""
     except Exception as e:
@@ -394,19 +433,6 @@ def _scrape_smileone_mobilelegends_nick(role_id: str, zone_id: str) -> str:
             "https://www.smile.one/merchant/checkrole",
         ]
 
-        def _extract_username(resp_json: dict) -> str:
-            username = (
-                (resp_json.get("data") or {}).get("username")
-                or (resp_json.get("data") or {}).get("nickname")
-                or (resp_json.get("data") or {}).get("name")
-                or resp_json.get("username")
-                or resp_json.get("nickname")
-                or resp_json.get("name")
-                or resp_json.get("info")
-                or ""
-            )
-            return username.strip() if username else ""
-
         for endpoint in endpoints:
             for payload in payload_variants:
                 # Exact payload matching Smile.One's real checkrole form
@@ -439,11 +465,10 @@ def _scrape_smileone_mobilelegends_nick(role_id: str, zone_id: str) -> str:
                             pass
 
                 if data_json is not None:
+                    username = _smileone_extract_username(data_json)
+                    if username:
+                        return username
                     code = int(data_json.get("code") or 0)
-                    if code == 200:
-                        username = _extract_username(data_json)
-                        if username:
-                            return username
                     print(f"[ML] JSON code={code} info={data_json.get('info','')}")
                     # code 200 with username found → already returned above
                     # code != 200 with this payload → try next variant
@@ -518,6 +543,164 @@ def store_player_verify_mobilelegends():
         return jsonify({"ok": False, "error": "ID no encontrado"}), 404
     _player_cache_set(cache_key, nick, ttl_seconds=600)
     return jsonify({"ok": True, "uid": uid, "zid": zid, "nick": nick, "cached": False})
+
+
+# ==============================
+# Generic Smile.One verification (dynamic connections)
+# ==============================
+def _scrape_smileone_generic(conn, uid: str, zid: str = "") -> str:
+    """Generic Smile.One checkrole using a SmileOneConnection config."""
+    try:
+        sess = _requests_lib.Session()
+        sess.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+        })
+        page_url = conn.page_url
+        page = sess.get(page_url, timeout=8)
+        print(f"[SO:{conn.name}] page status={page.status_code}")
+
+        csrf = ""
+        raw_csrf_cookie = sess.cookies.get("_csrf", "")
+        try:
+            import urllib.parse as _urlparse
+            decoded = _urlparse.unquote(raw_csrf_cookie)
+            m = re.search(r'i:1;s:\d+:"([^"]+)"', decoded)
+            if m:
+                csrf = m.group(1)
+        except Exception:
+            pass
+        if not csrf:
+            for pat in [r'name="_csrf"\s+value="([^"]+)"', r'"csrf"\s*:\s*"([^"]+)"']:
+                m = re.search(pat, page.text)
+                if m:
+                    csrf = m.group(1)
+                    break
+
+        post_headers = {
+            "Referer": page_url,
+            "Origin": "https://www.smile.one",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        if csrf:
+            post_headers["X-CSRF-Token"] = csrf
+
+        slug = (conn.product_slug or "").strip()
+        pid = (conn.smile_pid or "").strip()
+        sid = (conn.server_id or "-1").strip()
+
+        # Build payload variants depending on whether zone is needed
+        if conn.requires_zone and zid:
+            payload_variants = [
+                {"user_id": uid, "zone_id": zid},
+                {"uid": uid, "sid": zid},
+                {"uid": uid, "zoneid": zid},
+            ]
+        else:
+            payload_variants = [
+                {"uid": uid, "sid": sid},
+            ]
+
+        # Derive checkrole endpoints from page_url
+        # e.g. https://www.smile.one/br/merchant/game/bloodstrike -> checkrole
+        base = page_url.split("?")[0].rstrip("/")
+        endpoints = []
+        if slug:
+            endpoints.append(f"https://www.smile.one/merchant/{slug}/checkrole")
+            # Try with /br/ prefix too
+            endpoints.append(f"https://www.smile.one/br/merchant/game/checkrole?product={slug}")
+        endpoints.append(base.rsplit("/", 1)[0] + "/checkrole")
+        endpoints.append("https://www.smile.one/merchant/checkrole")
+        # Deduplicate while preserving order
+        seen = set()
+        unique_endpoints = []
+        for ep in endpoints:
+            if ep not in seen:
+                seen.add(ep)
+                unique_endpoints.append(ep)
+
+        for endpoint in unique_endpoints:
+            for payload in payload_variants:
+                post_data = {
+                    "checkrole": "1",
+                    "pid": pid,
+                    **payload,
+                }
+                if slug:
+                    post_data["product"] = slug
+                if csrf:
+                    post_data["_csrf"] = csrf
+                resp = sess.post(endpoint, data=post_data, headers=post_headers, timeout=8)
+                print(f"[SO:{conn.name}] {endpoint} -> {resp.status_code} {resp.text[:150]}")
+                if resp.status_code != 200:
+                    continue
+                try:
+                    data = resp.json()
+                except Exception:
+                    body = resp.text.strip()
+                    if body.startswith("{"):
+                        try:
+                            data = json.loads(body)
+                        except Exception:
+                            continue
+                    else:
+                        if body and len(body) < 200 and "<" not in body:
+                            return body.strip('" \t\r\n')
+                        continue
+                username = _smileone_extract_username(data)
+                if username:
+                    return username
+                code = int(data.get("code") or 0)
+                print(f"[SO:{conn.name}] code={code} info={data.get('info','')}")
+        return ""
+    except Exception as e:
+        print(f"[SO:{conn.name}] Error: {e}")
+        return ""
+
+
+@app.route("/store/player/verify/smileone")
+def store_player_verify_smileone():
+    """Dynamic Smile.One verification using admin-configured connections."""
+    scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
+    if not scrape_enabled:
+        return jsonify({"ok": False, "error": "Verificación deshabilitada"}), 403
+
+    uid = (request.args.get("uid") or "").strip()
+    zid = (request.args.get("zid") or request.args.get("zone") or "").strip()
+    gid_raw = (request.args.get("gid") or "").strip()
+    if not uid or not uid.isdigit():
+        return jsonify({"ok": False, "error": "ID inválido"}), 400
+    if not gid_raw or not gid_raw.isdigit():
+        return jsonify({"ok": False, "error": "Juego inválido"}), 400
+
+    conn = SmileOneConnection.query.filter_by(
+        store_package_id=int(gid_raw), active=True
+    ).first()
+    if not conn:
+        return jsonify({"ok": False, "error": "Verificación no disponible para este juego"}), 403
+
+    if conn.requires_zone and (not zid or not zid.isdigit()):
+        return jsonify({"ok": False, "error": "Zona ID inválida"}), 400
+
+    cache_key = f"so_{conn.id}:{uid}" + (f":{zid}" if conn.requires_zone else "")
+    cached = _player_cache_get(cache_key)
+    if cached:
+        result = {"ok": True, "uid": uid, "nick": cached, "cached": True}
+        if conn.requires_zone:
+            result["zid"] = zid
+        return jsonify(result)
+
+    nick = _scrape_smileone_generic(conn, uid, zid)
+
+    if not nick:
+        return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+    _player_cache_set(cache_key, nick, ttl_seconds=600)
+    result = {"ok": True, "uid": uid, "nick": nick, "cached": False}
+    if conn.requires_zone:
+        result["zid"] = zid
+    return jsonify(result)
 
 
 @app.route("/store/player/verify")
@@ -1819,6 +2002,20 @@ class ProfitSnapshot(db.Model):
     period_end = db.Column(db.DateTime, nullable=False)
     profit_usd = db.Column(db.Float, default=0.0)
     commission_usd = db.Column(db.Float, default=0.0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class SmileOneConnection(db.Model):
+    __tablename__ = "smileone_connections"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    page_url = db.Column(db.String(400), nullable=False)
+    store_package_id = db.Column(db.Integer, nullable=False)
+    smile_pid = db.Column(db.String(60), default="")
+    server_id = db.Column(db.String(60), default="-1")
+    product_slug = db.Column(db.String(120), default="")
+    requires_zone = db.Column(db.Boolean, default=False)
+    active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -4068,6 +4265,121 @@ def admin_config_ml_smile_pid_set():
     return jsonify({"ok": True, "ml_smile_pid": val})
 
 
+# ==============================
+# Admin: Smile.One Connections CRUD
+# ==============================
+@app.route("/admin/smileone/connections", methods=["GET"])
+def admin_smileone_connections_list():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    conns = SmileOneConnection.query.order_by(SmileOneConnection.id.asc()).all()
+    return jsonify({"ok": True, "connections": [{
+        "id": c.id,
+        "name": c.name,
+        "page_url": c.page_url,
+        "store_package_id": c.store_package_id,
+        "smile_pid": c.smile_pid or "",
+        "server_id": c.server_id or "-1",
+        "product_slug": c.product_slug or "",
+        "requires_zone": bool(c.requires_zone),
+        "active": bool(c.active),
+    } for c in conns]})
+
+
+@app.route("/admin/smileone/connections", methods=["POST"])
+def admin_smileone_connections_create():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    page_url = (data.get("page_url") or "").strip()
+    store_pkg = data.get("store_package_id")
+    smile_pid = (data.get("smile_pid") or "").strip()
+    server_id = (data.get("server_id") or "-1").strip()
+    product_slug = (data.get("product_slug") or "").strip()
+    requires_zone = bool(data.get("requires_zone", False))
+    if not name or not page_url or not store_pkg:
+        return jsonify({"ok": False, "error": "Nombre, URL y Paquete son requeridos"}), 400
+    try:
+        store_pkg = int(store_pkg)
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "Paquete ID inválido"}), 400
+    # Auto-derive product_slug from page_url if not given
+    if not product_slug:
+        # e.g. https://www.smile.one/br/merchant/game/bloodstrike?... -> bloodstrike
+        try:
+            slug_part = page_url.split("?")[0].rstrip("/").rsplit("/", 1)[-1]
+            if slug_part and slug_part.isalpha():
+                product_slug = slug_part
+        except Exception:
+            pass
+    conn = SmileOneConnection(
+        name=name, page_url=page_url, store_package_id=store_pkg,
+        smile_pid=smile_pid, server_id=server_id, product_slug=product_slug,
+        requires_zone=requires_zone, active=True,
+    )
+    db.session.add(conn)
+    db.session.commit()
+    return jsonify({"ok": True, "id": conn.id})
+
+
+@app.route("/admin/smileone/connections/<int:cid>", methods=["PUT", "PATCH"])
+def admin_smileone_connections_update(cid: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    conn = SmileOneConnection.query.get(cid)
+    if not conn:
+        return jsonify({"ok": False, "error": "Conexión no encontrada"}), 404
+    data = request.get_json(silent=True) or {}
+    if "name" in data:
+        conn.name = (data["name"] or "").strip()
+    if "page_url" in data:
+        conn.page_url = (data["page_url"] or "").strip()
+    if "store_package_id" in data:
+        try:
+            conn.store_package_id = int(data["store_package_id"])
+        except (ValueError, TypeError):
+            pass
+    if "smile_pid" in data:
+        conn.smile_pid = (data["smile_pid"] or "").strip()
+    if "server_id" in data:
+        conn.server_id = (data["server_id"] or "-1").strip()
+    if "product_slug" in data:
+        conn.product_slug = (data["product_slug"] or "").strip()
+    if "requires_zone" in data:
+        conn.requires_zone = bool(data["requires_zone"])
+    if "active" in data:
+        conn.active = bool(data["active"])
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/smileone/connections/<int:cid>", methods=["DELETE"])
+def admin_smileone_connections_delete(cid: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    conn = SmileOneConnection.query.get(cid)
+    if not conn:
+        return jsonify({"ok": False, "error": "Conexión no encontrada"}), 404
+    db.session.delete(conn)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/store/smileone/connections", methods=["GET"])
+def store_smileone_connections_public():
+    """Public endpoint: returns active SmileOne connection package IDs for the details page."""
+    conns = SmileOneConnection.query.filter_by(active=True).all()
+    return jsonify({"ok": True, "connections": [{
+        "store_package_id": c.store_package_id,
+        "requires_zone": bool(c.requires_zone),
+    } for c in conns]})
+
+
 def _allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -4308,6 +4620,15 @@ def store_game_detail(gid: int):
     player_lookup_region = get_config_value("player_lookup_default_region", "US")
     player_lookup_regions = get_config_value("player_lookup_regions_default", "US,BR,ME,PK,CIS,ID,LATAM,MX")
     scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
+    # SmileOne dynamic connections
+    so_connections = []
+    so_connections_json = "[]"
+    try:
+        so_conns = SmileOneConnection.query.filter_by(active=True).all()
+        so_connections = [{"store_package_id": c.store_package_id, "requires_zone": bool(c.requires_zone)} for c in so_conns]
+        so_connections_json = json.dumps(so_connections)
+    except Exception:
+        pass
     # Related packages by same category
     try:
         rel_q = StorePackage.query.filter(
@@ -4334,6 +4655,8 @@ def store_game_detail(gid: int):
         player_lookup_region=player_lookup_region,
         player_lookup_regions=player_lookup_regions,
         scrape_enabled=scrape_enabled,
+        so_connections=so_connections,
+        so_connections_json=so_connections_json,
         related_packages=[{"id": p.id, "name": p.name, "image_path": p.image_path, "category": (p.category or 'mobile')} for p in related],
     )
 
@@ -4601,6 +4924,12 @@ def create_order():
 
         ml_package_id = (get_config_value("ml_package_id", "") or "").strip()
         if ml_package_id and str(gid) == ml_package_id and not customer_zone:
+            return jsonify({"ok": False, "error": "La Zona ID es requerida para este juego"}), 400
+        try:
+            so_conn = SmileOneConnection.query.filter_by(store_package_id=gid, active=True).first()
+        except Exception:
+            so_conn = None
+        if so_conn and bool(getattr(so_conn, "requires_zone", False)) and not customer_zone:
             return jsonify({"ok": False, "error": "La Zona ID es requerida para este juego"}), 400
 
         # Blocklist check for player IDs

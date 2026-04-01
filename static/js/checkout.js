@@ -29,6 +29,46 @@ document.addEventListener('DOMContentLoaded', () => {
   let isBinanceAuto = false;
   let binanceAutoCode = '';
 
+  function isValidVerifiedNick(nick) {
+    const text = String(nick || '').trim();
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    const invalidParts = [
+      'id inválido',
+      'id invalido',
+      'não existe',
+      'nao existe',
+      'network',
+      'conexión de la red',
+      'conexao de rede',
+      'inténtalo de nuevo',
+      'tente novamente',
+      'try again',
+      'error'
+    ];
+    return !invalidParts.some(part => lower.includes(part));
+  }
+
+  function getStoredVerifiedNick(uid, zid) {
+    const safeUid = String(uid || '').trim();
+    const safeZid = String(zid || '').trim();
+    if (!safeUid) return '';
+    try {
+      if (safeZid) {
+        const soZoneVal = (localStorage.getItem(`sonick:${gid}:${safeUid}:${safeZid}`) || '').toString().trim();
+        if (isValidVerifiedNick(soZoneVal)) return soZoneVal;
+        const mlVal = (localStorage.getItem(`mlnick:${safeUid}:${safeZid}`) || '').toString().trim();
+        if (isValidVerifiedNick(mlVal)) return mlVal;
+      }
+      const soVal = (localStorage.getItem(`sonick:${gid}:${safeUid}`) || '').toString().trim();
+      if (isValidVerifiedNick(soVal)) return soVal;
+      const ffVal = (localStorage.getItem(`ffnick:${safeUid}`) || '').toString().trim();
+      return isValidVerifiedNick(ffVal) ? ffVal : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
   // Render basic game block immediately to avoid waiting for fetches
   (function initialHeader(){
     if (!coTotal) return;
@@ -44,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const titleLine = gname ? `<div class="co-summary-game">${gname}</div>` : '';
     let nn0 = qNick0;
     if (!nn0) {
-      try { nn0 = (localStorage.getItem(`ffnick:${qCid0}`) || '').toString().trim(); } catch (_) { nn0 = ''; }
+      nn0 = getStoredVerifiedNick(qCid0, qZid0);
     }
     const idLabel0 = qZid0 ? 'ID/Zona ID' : 'ID';
     const idValue0 = qZid0 ? `${qCid0}/${qZid0}` : qCid0;
@@ -215,11 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let nn = (qNick || '').trim();
       const zid = (qZid || '').trim();
       if (!nn && uid) {
-        try {
-          nn = (localStorage.getItem(`ffnick:${uid}`) || '').toString().trim();
-        } catch (_) {
-          nn = '';
-        }
+        nn = getStoredVerifiedNick(uid, zid);
       }
       if (!uid) return '';
       const safeName = nn || '';
@@ -651,15 +687,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (qNick) return qNick;
           const uid = customer_id;
           if (!uid) return '';
-          try {
-            const zid = customer_zone || '';
-            if (zid) {
-              const mlKey = `mlnick:${uid}:${zid}`;
-              const mlVal = (localStorage.getItem(mlKey) || '').toString().trim();
-              if (mlVal) return mlVal;
-            }
-            return (localStorage.getItem(`ffnick:${uid}`) || '').toString().trim();
-          } catch (_) { return ''; }
+          return getStoredVerifiedNick(uid, customer_zone || '');
         })();
         // JSON body (no file needed)
         const payload = {
@@ -746,15 +774,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (qNick) return qNick;
         const uid = customer_id;
         if (!uid) return '';
-        try {
-          const zid = customer_zone || '';
-          if (zid) {
-            const mlKey = `mlnick:${uid}:${zid}`;
-            const mlVal = (localStorage.getItem(mlKey) || '').toString().trim();
-            if (mlVal) return mlVal;
-          }
-          return (localStorage.getItem(`ffnick:${uid}`) || '').toString().trim();
-        } catch (_) { return ''; }
+        return getStoredVerifiedNick(uid, customer_zone || '');
       })();
       // Build FormData to include the capture file
       const fd = new FormData();

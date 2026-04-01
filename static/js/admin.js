@@ -2937,6 +2937,149 @@ if (btnSaveHero) {
 
   fetchMlPackageId();
 
+  // =====================
+  // Smile.One Connections CRUD
+  // =====================
+  const soName = document.getElementById('so-name');
+  const soPageUrl = document.getElementById('so-page-url');
+  const soStorePkg = document.getElementById('so-store-pkg');
+  const soSmilePid = document.getElementById('so-smile-pid');
+  const soServerId = document.getElementById('so-server-id');
+  const soProductSlug = document.getElementById('so-product-slug');
+  const soRequiresZone = document.getElementById('so-requires-zone');
+  const btnSoCreate = document.getElementById('btn-so-create');
+  const btnSoRefresh = document.getElementById('btn-so-refresh');
+  const soList = document.getElementById('so-list');
+
+  let _soConnections = [];
+
+  async function fetchSmileOneConnections() {
+    try {
+      const res = await fetch('/admin/smileone/connections');
+      const data = await res.json();
+      if (!res.ok || !data.ok) return;
+      _soConnections = data.connections || [];
+      renderSmileOneConnections();
+    } catch (_) { /* ignore */ }
+  }
+
+  function renderSmileOneConnections() {
+    if (!soList) return;
+    if (!_soConnections.length) {
+      soList.innerHTML = '<div class="empty-state"><h3>Sin conexiones</h3><p>Agrega conexiones a Smile.One para verificar IDs de jugadores automáticamente.</p></div>';
+      return;
+    }
+    soList.innerHTML = _soConnections.map(c => {
+      const badge = c.active
+        ? '<span style="color:#22c55e; font-weight:700;">Activa</span>'
+        : '<span style="color:#ef4444; font-weight:700;">Inactiva</span>';
+      const zoneBadge = c.requires_zone
+        ? '<span style="background:rgba(59,130,246,0.15); color:#93c5fd; padding:2px 8px; border-radius:4px; font-size:11px;">Zona ID</span>'
+        : '';
+      return `
+        <div class="order-tile" data-so-id="${c.id}" style="margin-bottom:10px;">
+          <div class="row-head" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('open')">
+            <div>
+              <div class="order-id" style="font-size:15px;">${c.name} ${zoneBadge}</div>
+              <div class="order-meta">
+                <span>Paquete tienda: <strong>#${c.store_package_id}</strong></span>
+                <span style="margin-left:12px;">PID: <strong>${c.smile_pid || '—'}</strong></span>
+                <span style="margin-left:12px;">Slug: <strong>${c.product_slug || '—'}</strong></span>
+                <span style="margin-left:12px;">${badge}</span>
+              </div>
+            </div>
+          </div>
+          <div class="row-body" style="display:none; padding:12px 16px; border-top:1px solid rgba(255,255,255,0.06);">
+            <div style="font-size:13px; color:#94a3b8; margin-bottom:10px; word-break:break-all;">
+              URL: <code>${c.page_url}</code><br>
+              Server ID: <code>${c.server_id || '-1'}</code>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn" type="button" onclick="toggleSmileOneActive(${c.id}, ${!c.active})">${c.active ? 'Desactivar' : 'Activar'}</button>
+              <button class="btn" type="button" style="border-color:rgba(239,68,68,0.5); color:#fca5a5;" onclick="deleteSmileOneConn(${c.id})">Eliminar</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+    // Toggle open/close
+    soList.querySelectorAll('.order-tile').forEach(tile => {
+      const head = tile.querySelector('.row-head');
+      const body = tile.querySelector('.row-body');
+      if (head && body) {
+        head.addEventListener('click', () => {
+          const open = body.style.display !== 'none';
+          body.style.display = open ? 'none' : 'block';
+        });
+      }
+    });
+  }
+
+  window.toggleSmileOneActive = async function(id, active) {
+    try {
+      await fetch(`/admin/smileone/connections/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+      toast(active ? 'Conexión activada' : 'Conexión desactivada');
+      fetchSmileOneConnections();
+    } catch (e) { toast(e.message || 'Error'); }
+  };
+
+  window.deleteSmileOneConn = async function(id) {
+    if (!confirm('¿Eliminar esta conexión?')) return;
+    try {
+      await fetch(`/admin/smileone/connections/${id}`, { method: 'DELETE' });
+      toast('Conexión eliminada');
+      fetchSmileOneConnections();
+    } catch (e) { toast(e.message || 'Error'); }
+  };
+
+  if (btnSoCreate) {
+    btnSoCreate.addEventListener('click', async () => {
+      const name = soName ? soName.value.trim() : '';
+      const pageUrl = soPageUrl ? soPageUrl.value.trim() : '';
+      const storePkg = soStorePkg ? soStorePkg.value.trim() : '';
+      const smilePid = soSmilePid ? soSmilePid.value.trim() : '';
+      const serverId = soServerId ? soServerId.value.trim() : '-1';
+      const productSlug = soProductSlug ? soProductSlug.value.trim() : '';
+      const requiresZone = soRequiresZone ? soRequiresZone.checked : false;
+      if (!name || !pageUrl || !storePkg) {
+        toast('Nombre, URL y Paquete son requeridos');
+        return;
+      }
+      try {
+        btnSoCreate.disabled = true;
+        const res = await fetch('/admin/smileone/connections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, page_url: pageUrl, store_package_id: storePkg, smile_pid: smilePid, server_id: serverId, product_slug: productSlug, requires_zone: requiresZone })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          toast(data.error || 'Error al crear');
+          return;
+        }
+        toast('Conexión creada');
+        if (soName) soName.value = '';
+        if (soPageUrl) soPageUrl.value = '';
+        if (soStorePkg) soStorePkg.value = '';
+        if (soSmilePid) soSmilePid.value = '';
+        if (soServerId) soServerId.value = '-1';
+        if (soProductSlug) soProductSlug.value = '';
+        if (soRequiresZone) soRequiresZone.checked = false;
+        fetchSmileOneConnections();
+      } catch (e) {
+        toast(e.message || 'Error');
+      } finally {
+        btnSoCreate.disabled = false;
+      }
+    });
+  }
+
+  if (btnSoRefresh) btnSoRefresh.addEventListener('click', fetchSmileOneConnections);
+  fetchSmileOneConnections();
+
   function filterPackagesBySelect() {
     const sel = pkgSelect ? String(pkgSelect.value || '') : '';
     const items = pkgList ? pkgList.querySelectorAll('.pkg-card') : [];

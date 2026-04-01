@@ -41,7 +41,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const mlPackageId = (root.getAttribute('data-ml-package-id') || '').trim();
   const isBsPackage = bsPackageId && String(gid) === String(bsPackageId);
   const isMlPackage = mlPackageId && String(gid) === String(mlPackageId);
-  const zoneRequiredForCheckout = requiresZone || isMlPackage;
+  // SmileOne dynamic connections (loaded from data attribute or fetched)
+  let _soConnectionsRaw = [];
+  try { _soConnectionsRaw = JSON.parse(root.getAttribute('data-so-connections') || '[]'); } catch(_){}
+  const soConn = _soConnectionsRaw.find(c => String(c.store_package_id) === String(gid));
+  const isSoPackage = !!soConn;
+  const soRequiresZone = soConn ? !!soConn.requires_zone : false;
+  const zoneRequiredForCheckout = requiresZone || isMlPackage || soRequiresZone;
   let verifiedNick = '';
   // Hide Step 1 (player ID) for gift category and renumber badges/texts
   if (isGift && inputCustomerId) {
@@ -367,31 +373,72 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (inputCustomerId && playerNickname && scrapeEnabled && (activeLogin || isBsPackage || isMlPackage)) {
+  if (inputCustomerId && playerNickname && scrapeEnabled && (activeLogin || isBsPackage || isMlPackage || isSoPackage)) {
     let verifying = false;
     let verifyTimer = null;
     let lastVerifyRequested = '';
     let lastVerifySuccess = '';
     let inflightController = null;
-    const VERIFY_RETRY_MS = 700;
+    const VERIFY_RETRY_MS = 1200;
     const verifyBtnDefaultText = btnVerifyPlayer ? (btnVerifyPlayer.textContent || 'Verificar') : 'Verificar';
 
     function verificationKey(uid, zid) {
-      if (isMlPackage) return `${String(uid || '').trim()}:${String(zid || '').trim()}`;
+      if (isMlPackage || soRequiresZone) return `${String(uid || '').trim()}:${String(zid || '').trim()}`;
       return String(uid || '').trim();
     }
 
     function cacheKey(uid, zid) {
+      if (isSoPackage) return `sonick:${gid}:${verificationKey(uid, zid)}`;
       if (isMlPackage) return `mlnick:${verificationKey(uid, zid)}`;
       return `ffnick:${verificationKey(uid, zid)}`;
     }
 
+    function isValidVerifiedNick(nick) {
+      const text = String(nick || '').trim();
+      if (!text) return false;
+      const lower = text.toLowerCase();
+      const invalidParts = [
+        'id inválido',
+        'id invalido',
+        'não existe',
+        'nao existe',
+        'network',
+        'conexión de la red',
+        'conexao de rede',
+        'inténtalo de nuevo',
+        'tente novamente',
+        'try again',
+        'error'
+      ];
+      return !invalidParts.some(part => lower.includes(part));
+    }
+
     function getCachedNick(uid, zid) {
-      try { return (localStorage.getItem(cacheKey(uid, zid)) || '').toString().trim(); } catch (_) { return ''; }
+      try {
+        const key = cacheKey(uid, zid);
+        const value = (localStorage.getItem(key) || '').toString().trim();
+        if (!isValidVerifiedNick(value)) {
+          if (value) localStorage.removeItem(key);
+          return '';
+        }
+        return value;
+      } catch (_) { return ''; }
     }
 
     function setCachedNick(uid, nick, zid) {
-      try { localStorage.setItem(cacheKey(uid, zid), (nick || '').toString()); } catch (_) {}
+      try {
+        const key = cacheKey(uid, zid);
+        const value = String(nick || '').trim();
+        if (!value) {
+          localStorage.setItem(key, '');
+          return;
+        }
+        if (!isValidVerifiedNick(value)) {
+          localStorage.removeItem(key);
+          return;
+        }
+        localStorage.setItem(key, value);
+      } catch (_) {}
     }
 
     function setNickUIOk(nick) {
@@ -459,6 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const msg = String(message || '').trim();
       if (!msg) return true;
       if (msg === 'No se pudo verificar el ID') return true;
+      if (msg === 'ID no encontrado' && (isSoPackage || activeLogin || isBsPackage || isMlPackage)) return true;
       if (statusCode >= 500) return true;
       return false;
     }
@@ -476,11 +524,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!silent) setNickUIErr('El ID debe ser numérico');
         return;
       }
-      if (isMlPackage && !zid) {
+      if ((isMlPackage || soRequiresZone) && !zid) {
         if (!silent) setNickUIErr('Ingresa tu Zona ID');
         return;
       }
-      if (isMlPackage && !/^\d+$/.test(zid)) {
+      if ((isMlPackage || soRequiresZone) && !/^\d+$/.test(zid)) {
         if (!silent) setNickUIErr('La Zona ID debe ser numérica');
         return;
       }
@@ -512,11 +560,13 @@ document.addEventListener('DOMContentLoaded', () => {
       let keepPolling = false;
       let responseStatus = 0;
       try {
-        const verifyPath = isMlPackage
-          ? '/store/player/verify/mobilelegends'
-          : (isBsPackage ? '/store/player/verify/bloodstrike' : '/store/player/verify');
+        const verifyPath = isSoPackage
+          ? '/store/player/verify/smileone'
+          : (isMlPackage
+            ? '/store/player/verify/mobilelegends'
+            : (isBsPackage ? '/store/player/verify/bloodstrike' : '/store/player/verify'));
         const qp = new URLSearchParams({ gid: String(gid || ''), uid: String(uid || '') });
-        if (isMlPackage) qp.set('zid', String(zid || ''));
+        if (isMlPackage || soRequiresZone) qp.set('zid', String(zid || ''));
         const url = `${verifyPath}?${qp.toString()}`;
         const res = await fetch(url, { signal: inflightController.signal });
         responseStatus = Number(res.status || 0);
@@ -605,7 +655,7 @@ document.addEventListener('DOMContentLoaded', () => {
         verifiedNick = '';
         try { root.dataset.verifiedNick = ''; } catch (_) {}
         if (playerNickname) playerNickname.textContent = '';
-        if (!isMlPackage) return;
+        if (!isMlPackage && !soRequiresZone) return;
         const uid = (inputCustomerId.value || '').trim();
         if (!uid) return;
         scheduleSilentVerify();
@@ -1206,7 +1256,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // If user clicks fast, try to verify quietly for a short time so checkout can show nick.
       try {
-        if (!isGift && inputCustomerId && scrapeEnabled && (activeLogin || isBsPackage || isMlPackage)) {
+        if (!isGift && inputCustomerId && scrapeEnabled && (activeLogin || isBsPackage || isMlPackage || isSoPackage)) {
           const uid = (inputCustomerId.value || '').trim();
           const nn = (root && root.dataset) ? String(root.dataset.verifiedNick || '').trim() : '';
           if (uid && !nn && root.__doVerifyPlayer) {

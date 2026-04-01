@@ -87,7 +87,7 @@
   <div class="modal-backdrop"></div>
 </div>
 
-<section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}" data-active-login="{{ 1 if (active_login_game_id|int) == game.id else 0 }}" data-bs-package-id="{{ bs_package_id|default('') }}" data-ml-package-id="{{ ml_package_id|default('') }}" data-default-region="{{ player_lookup_region }}" data-scrape-enabled="{{ 1 if scrape_enabled else 0 }}">
+<section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}" data-active-login="{{ 1 if (active_login_game_id|int) == game.id else 0 }}" data-bs-package-id="{{ bs_package_id|default('') }}" data-ml-package-id="{{ ml_package_id|default('') }}" data-default-region="{{ player_lookup_region }}" data-scrape-enabled="{{ 1 if scrape_enabled else 0 }}" data-so-connections="{{ so_connections_json|default('[]') }}">
   <div class="details-left">
     <div class="game-content">
       <div class="game-header">
@@ -125,9 +125,12 @@
     
     <div class="step-card">
       <div class="step-title" data-step="1">Ingrese su ID</div>
-      {% set is_verify_game = scrape_enabled and ((active_login_game_id and (active_login_game_id|int) == game.id) or (bs_package_id and (bs_package_id|int) == game.id) or (ml_package_id and (ml_package_id|int) == game.id)) %}
+      {% set so_conn = so_connections|default([])|selectattr('store_package_id', 'equalto', game.id)|first %}
+      {% set is_so_game = so_conn is defined and so_conn %}
+      {% set is_so_zone = is_so_game and so_conn.requires_zone %}
+      {% set is_verify_game = scrape_enabled and ((active_login_game_id and (active_login_game_id|int) == game.id) or (bs_package_id and (bs_package_id|int) == game.id) or (ml_package_id and (ml_package_id|int) == game.id) or is_so_game) %}
       {% set is_ml_game = ml_package_id and (ml_package_id|int) == game.id %}
-      {% if is_verify_game and not is_ml_game %}
+      {% if is_verify_game and not is_ml_game and not is_so_zone %}
       <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;">
         <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
         <button id="btn-verify-player" class="btn" type="button">Verificar</button>
@@ -135,8 +138,8 @@
       {% else %}
       <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
       {% endif %}
-      {% if game.requires_zone_id or is_ml_game %}
-      {% if is_ml_game %}
+      {% if game.requires_zone_id or is_ml_game or is_so_zone %}
+      {% if is_ml_game or is_so_zone %}
       <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; margin-top:8px;">
         <input id="customer-zone" class="input" type="text" placeholder="Ingresa tu Zona ID" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
         <button id="btn-verify-player" class="btn" type="button">Verificar</button>

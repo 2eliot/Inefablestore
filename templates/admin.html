@@ -32,6 +32,7 @@
       <button class="tab" data-target="#tab-stats" aria-selected="false">Estadísticas</button>
       <button class="tab" data-target="#tab-images" aria-selected="false">Imágenes</button>
       <button class="tab" data-target="#tab-config" aria-selected="false">Configuración</button>
+      <button class="tab" data-target="#tab-smileone" aria-selected="false">Smile.One</button>
       <button class="tab" data-target="#tab-affiliates" aria-selected="false">Afiliados</button>
       <button class="tab" data-target="#tab-blocked" aria-selected="false">IDs Bloqueados</button>
     </nav>
@@ -608,6 +609,66 @@
             <input id="sess-role" type="text" readonly placeholder="-">
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Smile.One Connections -->
+    <div id="tab-smileone" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Smile.One – Conexiones</h2>
+        <div class="actions">
+          <button id="btn-so-refresh" class="btn" type="button">Refrescar</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div style="border:1px solid rgba(34,197,94,0.25); background:rgba(34,197,94,0.06); border-radius:10px; padding:16px; margin-bottom:20px;">
+          <h3 style="margin:0 0 12px; color:#86efac;">Nueva conexión Smile.One</h3>
+          <form id="so-form" class="config-form" onsubmit="return false;">
+            <div class="form-row">
+              <label for="so-name">Nombre del juego</label>
+              <input id="so-name" type="text" placeholder="Ej: Blood Strike, Mobile Legends">
+            </div>
+            <div class="form-row">
+              <label for="so-page-url">URL de la página Smile.One</label>
+              <input id="so-page-url" type="text" placeholder="https://www.smile.one/br/merchant/game/bloodstrike?source=other">
+            </div>
+            <div class="form-row">
+              <label for="so-store-pkg">ID del paquete en tu tienda</label>
+              <input id="so-store-pkg" type="number" placeholder="Ej: 5">
+            </div>
+            <div class="form-row">
+              <label for="so-smile-pid">PID de Smile.One</label>
+              <input id="so-smile-pid" type="text" placeholder="PID del producto en Smile.One (opcional)">
+            </div>
+            <div class="form-row">
+              <label for="so-server-id">Server ID</label>
+              <input id="so-server-id" type="text" value="-1" placeholder="-1">
+            </div>
+            <div class="form-row">
+              <label for="so-product-slug">Slug del producto</label>
+              <input id="so-product-slug" type="text" placeholder="bloodstrike (se auto-detecta de la URL)">
+            </div>
+            <div class="form-row">
+              <label>Requiere Zona ID</label>
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input id="so-requires-zone" type="checkbox">
+                <span>Este juego requiere Zona ID (ej: Mobile Legends)</span>
+              </label>
+            </div>
+            <div class="form-row">
+              <label>&nbsp;</label>
+              <div>
+                <button id="btn-so-create" class="btn primary" type="button">Crear conexión</button>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div id="so-list" class="orders-list">
+          <div class="empty-state">
+            <h3>Sin conexiones</h3>
+            <p>Agrega conexiones a Smile.One para verificar IDs de jugadores automáticamente.</p>
+          </div>
+        </div>
       </div>
     </div>
 
