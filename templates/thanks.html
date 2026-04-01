@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block styles %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='4') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='5') }}">
 <style>
   .ty-wrap{position:relative;max-width:1180px;margin:18px auto;padding:10px 12px 28px}
   .ty-wrap::before,.ty-wrap::after{content:'';position:absolute;pointer-events:none;filter:blur(22px);opacity:.95}
@@ -253,6 +253,45 @@
     var listEl = document.getElementById('ty-steps');
     var timer = null;
     var prevDoneMap = {};
+    var pendingQueue = [];
+    var animating = false;
+
+    function buildStepHTML(st, idx, done, justDone) {
+      return '<li class="ty-step' + (done ? ' done' : '') + (justDone ? ' just-completed' : '') + '">'
+        + '<span class="ty-step-ico">' + (done ? '✓' : 'x') + '</span>'
+        + '<span class="ty-step-label">' + (st.label || '') + '</span>'
+        + '</li>';
+    }
+
+    function applyNextInQueue() {
+      if (pendingQueue.length === 0) { animating = false; return; }
+      animating = true;
+      var key = pendingQueue.shift();
+      prevDoneMap[key] = true;
+      // Re-render with updated prevDoneMap
+      if (lastPayload) renderImmediate(lastPayload, key);
+      setTimeout(applyNextInQueue, 900 + Math.random() * 600);
+    }
+
+    var lastPayload = null;
+
+    function renderImmediate(payload, justDoneKey) {
+      if (!listEl) return;
+      var steps = Array.isArray(payload.steps) ? payload.steps : [];
+      listEl.innerHTML = steps.map(function (st, idx) {
+        var key = (st.id || ('step_' + idx)).toString();
+        var done = !!prevDoneMap[key];
+        var justDone = (key === justDoneKey);
+        return buildStepHTML(st, idx, done, justDone);
+      }).join('');
+      // Remove just-completed highlight after animation
+      if (justDoneKey) {
+        var highlighted = listEl.querySelectorAll('.ty-step.just-completed');
+        highlighted.forEach(function (el) {
+          setTimeout(function () { el.classList.remove('just-completed'); }, 500);
+        });
+      }
+    }
 
     function renderSteps(payload) {
       if (!payload || !payload.visible) {
@@ -260,6 +299,7 @@
         return;
       }
       root.classList.add('visible');
+      lastPayload = payload;
 
       var steps = Array.isArray(payload.steps) ? payload.steps : [];
       if (titleEl) {
@@ -270,30 +310,26 @@
         subEl.textContent = payload.completed ? '' : (payload.current_message || 'Procesando tu recarga...');
         subEl.style.display = payload.completed ? 'none' : '';
       }
-      if (!listEl) return;
 
-      listEl.innerHTML = steps.map(function (st, idx) {
-        var done = !!st.done;
-        var key = (st.id || ('step_' + idx)).toString();
-        var wasDone = !!prevDoneMap[key];
-        var justDone = done && !wasDone;
-        return '<li class="ty-step' + (done ? ' done' : '') + (justDone ? ' just-completed' : '') + '">'
-          + '<span class="ty-step-ico">' + (done ? '✓' : 'x') + '</span>'
-          + '<span class="ty-step-label">' + (st.label || '') + '</span>'
-          + '</li>';
-      }).join('');
-
-      var nextMap = {};
+      // Find newly done steps and queue them for staggered animation
+      var newlyDone = [];
       steps.forEach(function (st, idx) {
         var key = (st.id || ('step_' + idx)).toString();
-        nextMap[key] = !!st.done;
+        if (st.done && !prevDoneMap[key] && pendingQueue.indexOf(key) === -1) {
+          newlyDone.push(key);
+        }
       });
-      prevDoneMap = nextMap;
 
-      var highlighted = listEl.querySelectorAll('.ty-step.just-completed');
-      highlighted.forEach(function (el) {
-        setTimeout(function () { el.classList.remove('just-completed'); }, 420);
-      });
+      // Queue new ones
+      newlyDone.forEach(function (k) { pendingQueue.push(k); });
+
+      // Render current state (without new ones yet)
+      renderImmediate(payload, null);
+
+      // Start draining queue if not already
+      if (!animating && pendingQueue.length > 0) {
+        setTimeout(applyNextInQueue, 800 + Math.random() * 400);
+      }
     }
 
     function stopPolling() {

@@ -387,7 +387,7 @@ html { overflow-x: hidden; width: 100%; }
 #related-packages .packages-title { text-align: center; }
 .packages-nav button { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--border-color); background: rgba(10,10,20,.9); color: var(--text-primary); cursor: pointer; display:flex; align-items:center; justify-content:center; font-size:20px; transition: background var(--transition), border-color var(--transition); }
 .packages-nav button:hover { background: rgba(29,78,216,.2); border-color: var(--price-accent); }
-.packages-rail { display:flex; gap: 22px; overflow-x: auto; scroll-behavior: smooth; padding-bottom: 8px; justify-content: center; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; touch-action: pan-y pinch-zoom;
+.packages-rail { display:flex; gap: 22px; overflow-x: auto; scroll-behavior: smooth; padding-bottom: 8px; justify-content: center; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; touch-action: auto;
   /* Hide scrollbar line while keeping scroll */
   -ms-overflow-style: none; /* IE/Edge */
   scrollbar-width: none;    /* Firefox */
@@ -460,11 +460,37 @@ html { overflow-x: hidden; width: 100%; }
 /* Hide mid-banner when a category is active */
 .cat-filtered .mid-banner { display: none !important; margin: 0 !important; padding: 0 !important; }
 
-/* Tablet: keep horizontal scroll behavior */
-@media (min-width: 600px) and (max-width: 900px) {
-  .packages-rail { display: flex; gap: 22px; overflow-x: auto; justify-content: center; }
-  .pkg-card { min-width: 190px; max-width: 220px; }
+/* Phone: 3 cards per row grid with smaller images */
+@media (max-width: 767px) {
+  .packages-rail {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+    overflow: visible !important;
+    justify-content: center;
+    flex-wrap: unset;
+  }
+  .packages-rail .pkg-card {
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    flex: none !important;
+    padding: 6px 6px 8px;
+  }
+  .packages-rail .pkg-thumb {
+    aspect-ratio: 1 / 1;
+    width: 100%;
+  }
+  .packages-rail .pkg-name {
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  /* Hide cards beyond 6th on phone to keep one tidy row-pair */
+  .packages-rail > .pkg-card:nth-child(n+7) {
+    display: none;
+  }
 }
+
 
 /* ==============================
    Categories as vertical grids (only when filtering a category)
@@ -588,17 +614,18 @@ html { overflow-x: hidden; width: 100%; }
   /* Hide game description on mobile */
   .game-desc { display: none; }
 
-  /* Packages: carousel with 2 cards visible on phones */
-  .packages { padding-left: 12px; padding-right: 12px; overflow: hidden; }
+  /* Packages: 3 cards per row grid on phones */
+  .packages { padding-left: 12px; padding-right: 12px; overflow: visible; }
   .featured { padding-left: 12px; padding-right: 12px; }
-  .packages-rail { --rail-gap: 12px; display: flex; gap: var(--rail-gap); overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; touch-action: pan-x; flex-wrap: nowrap; justify-content: flex-start; padding-left: 0; padding-right: 0; }
-  /* Two cards per view filling exactly 100% */
-  .pkg-card { flex: 0 0 calc(50% - 6px); min-width: calc(50% - 6px); max-width: calc(50% - 6px); scroll-snap-align: start; margin: 0; }
-  /* Best Sellers: smaller cards, ~3.5 visible on phones */
-  #best-sellers .packages-rail { --rail-gap: 8px; gap: var(--rail-gap); justify-content: flex-start; padding-left: 6px; padding-right: 6px; }
-  #best-sellers .pkg-card { flex: 0 0 calc(28% - 6px); min-width: calc(28% - 6px); max-width: calc(28% - 6px); padding: 5px 5px 6px; border-radius: 10px; }
+  .packages-rail { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; overflow: visible !important; padding-left: 0; padding-right: 0; touch-action: auto; }
+  .pkg-card { min-width: 0 !important; max-width: none !important; width: 100% !important; flex: none !important; padding: 6px 6px 8px; margin: 0; }
+  .pkg-thumb { width: 100%; aspect-ratio: 1 / 1; }
+  .pkg-name { font-size: 11px; margin-top: 4px; }
+  /* Best Sellers: 3 per row grid on phones */
+  #best-sellers .packages-rail { gap: 6px !important; }
+  #best-sellers .pkg-card { padding: 5px 5px 6px; border-radius: 10px; }
   #best-sellers .pkg-thumb { border-radius: 8px; }
-  #best-sellers .pkg-name { font-size: 11px; margin-top: 3px; }
+  #best-sellers .pkg-name { font-size: 10px; margin-top: 3px; }
   /* Hide scroll indicator on mobile */
   .packages-rail { -ms-overflow-style: none; scrollbar-width: none; }
   .packages-rail::-webkit-scrollbar { display: none; }

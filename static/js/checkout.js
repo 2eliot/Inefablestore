@@ -333,29 +333,57 @@ document.addEventListener('DOMContentLoaded', () => {
     const addItem = (iconName, value) => {
       const row = document.createElement('div');
       row.className = 'co-item';
+      row.style.gridTemplateColumns = '28px 1fr';
       const ico = document.createElement('div');
       ico.className = 'co-ico';
       ico.innerHTML = svg(iconName);
       const val = document.createElement('div');
       val.className = 'co-val';
       val.textContent = value || '-';
+      row.appendChild(ico);
+      row.appendChild(val);
+      coInfo.appendChild(row);
+    };
+    const addCopyAllBtn = (values) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'copy-btn';
-      btn.setAttribute('data-copy', value || '');
-      btn.textContent = 'Copiar';
-      row.appendChild(ico);
-      row.appendChild(val);
-      row.appendChild(btn);
-      coInfo.appendChild(row);
+      btn.style.cssText = 'width:100%; margin-top:10px; padding:10px 14px; font-size:13px; font-weight:800;';
+      btn.textContent = 'Copiar todo';
+      btn.addEventListener('click', async () => {
+        const text = values.filter(v => v).join('\n');
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.textContent = '¡Copiado!';
+          setTimeout(() => { btn.textContent = 'Copiar todo'; }, 1200);
+        } catch (_) {
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.cssText = 'position:fixed;opacity:0;';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            btn.textContent = '¡Copiado!';
+            setTimeout(() => { btn.textContent = 'Copiar todo'; }, 1200);
+          } catch (_) { /* ignore */ }
+        }
+      });
+      coInfo.appendChild(btn);
     };
     // Optional player info lines (kept at top if present)
     // Player ID (qCid) intentionally hidden from checkout UI, but still used internally
     if (currency === 'BSD') {
-      // Show only the payment data required in checkout
-      addItem('bank', (paymentsCfg && paymentsCfg.pm_bank) || '');
-      addItem('id', (paymentsCfg && paymentsCfg.pm_id) || '');
-      addItem('user', (paymentsCfg && paymentsCfg.pm_phone) || '');
+      const bank = (paymentsCfg && paymentsCfg.pm_bank) || '';
+      const cedula = (paymentsCfg && paymentsCfg.pm_id) || '';
+      const phone = (paymentsCfg && paymentsCfg.pm_phone) || '';
+      const t = computeTotals();
+      const monto = String(Math.round(Number(t.amount || 0)));
+      addItem('bank', bank);
+      addItem('id', cedula);
+      addItem('user', phone);
+      addCopyAllBtn([bank, cedula, phone, monto]);
     } else {
       // Binance: show provider name, email and Pay ID
       addItem('bank', 'Binance');

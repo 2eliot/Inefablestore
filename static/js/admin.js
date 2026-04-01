@@ -2351,7 +2351,48 @@ window.refreshGallery = refreshGallery;
           body: JSON.stringify(payload)
         });
         const data = await res.json();
-        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo actualizar');
+        if (!res.ok || !data.ok) {
+          // If Pabilo verification failed (409), offer manual override
+          if (res.status === 409 && data.payment_verify && !data.payment_verify.verified) {
+            const pvMsg = data.payment_verify.message || data.error || 'Pago no verificado';
+            const override = confirm(
+              `⚠️ Verificación Pabilo falló:\n${pvMsg}\n\n¿Deseas aprobar esta orden manualmente sin verificación de Pabilo?`
+            );
+            if (override) {
+              payload.skip_payment_verification = true;
+              const res2 = await fetch(`/admin/orders/${id}/status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+              const data2 = await res2.json();
+              if (!res2.ok || !data2.ok) throw new Error(data2.error || 'No se pudo aprobar manualmente');
+              // Handle auto-recharge response same as normal flow
+              if (data2.webb_recarga) {
+                if (data2.webb_recarga.ok) {
+                  const summary = data2.webb_recarga.summary || {};
+                  const done = summary.total_units ? `${summary.completed_units}/${summary.total_units}` : '1/1';
+                  toast(`✅ Cola completada al instante: ${done}`, 'success');
+                } else if (data2.webb_recarga.pending_verification) {
+                  const summary = data2.webb_recarga.summary || {};
+                  const processing = summary.processing_units || 0;
+                  toast(`⚠️ Cola iniciada: ${processing} recarga(s) en proceso.`, 'error');
+                  keepDisabled = true;
+                  btn.disabled = true;
+                  btn.textContent = 'Verificando...';
+                  _pollVerifyRecharge(data2.webb_recarga.order_id, btn);
+                  await fetchOrders();
+                  return;
+                }
+              }
+              toast('Orden aprobada manualmente', 'success');
+              await fetchOrders();
+              return;
+            }
+            return;
+          }
+          throw new Error(data.error || 'No se pudo actualizar');
+        }
         if (data.webb_recarga) {
           if (data.webb_recarga.ok) {
             const summary = data.webb_recarga.summary || {};

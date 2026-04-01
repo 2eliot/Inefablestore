@@ -162,9 +162,12 @@ document.addEventListener('DOMContentLoaded', () => {
     return delta;
   }
 
-  // Touch swipe for infinite scroll on mobile
+  // Touch swipe for infinite scroll on mobile (only for flex/carousel rails)
   function bindTouchSwipe(rail) {
     if (!rail || rail._touchBound) return;
+    // Skip swipe binding when rail is displayed as grid (phones use grid now)
+    const style = window.getComputedStyle(rail);
+    if (style.display === 'grid') return;
     rail._touchBound = true;
     let touchStartX = 0;
     let touchStartY = 0;

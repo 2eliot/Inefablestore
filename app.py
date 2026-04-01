@@ -2648,6 +2648,24 @@ def _pabilo_verify_payment(order_obj):
                 continue
             return last_result
         if resp.status_code >= 400:
+            error_msg = str(data.get("message") or data.get("error") or f"Error HTTP {resp.status_code} en Pabilo").lower()
+            bank_failure_keywords = [
+                "banco", "bank", "timeout", "tiempo", "temporalmente",
+                "temporarily", "unavailable", "no disponible", "intente",
+                "try again", "reintentar", "service", "servicio",
+                "fallo", "failed", "error de conexión", "connection",
+            ]
+            is_bank_failure = any(kw in error_msg for kw in bank_failure_keywords)
+            if is_bank_failure and attempt < max_attempts:
+                last_result = {
+                    "ok": False,
+                    "verified": False,
+                    "message": str(data.get("message") or data.get("error") or f"Error HTTP {resp.status_code} en Pabilo"),
+                    "response": data,
+                    "request_meta": request_meta,
+                }
+                time.sleep(retry_delay_seconds)
+                continue
             return {
                 "ok": False,
                 "verified": False,
@@ -2826,7 +2844,7 @@ def _thanks_progress_payload(order_obj):
         },
         {
             "id": "dispatch",
-            "label": "Conectando con servidor de recargas",
+            "label": "Conectando con servidor",
             "done": recharge_connected,
         },
         {
