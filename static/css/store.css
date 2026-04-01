@@ -462,7 +462,7 @@ html { overflow-x: hidden; width: 100%; }
 
 /* Phone: 3 cards per row grid with smaller images */
 @media (max-width: 767px) {
-  .packages-rail {
+  .packages-rail:not(#rail-best) {
     display: grid !important;
     grid-template-columns: repeat(3, 1fr) !important;
     gap: 8px !important;
@@ -471,24 +471,31 @@ html { overflow-x: hidden; width: 100%; }
     flex-wrap: unset;
     touch-action: pan-y pinch-zoom !important;
   }
-  .packages-rail .pkg-card {
+  .packages-rail:not(#rail-best) .pkg-card {
     min-width: 0 !important;
     max-width: none !important;
     width: 100% !important;
     flex: none !important;
     padding: 6px 6px 8px;
   }
-  .packages-rail .pkg-thumb {
+  .packages-rail:not(#rail-best) .pkg-thumb {
     aspect-ratio: 1 / 1;
     width: 100%;
   }
-  .packages-rail .pkg-name {
+  .packages-rail:not(#rail-best) .pkg-name {
     font-size: 11px;
     margin-top: 4px;
   }
   /* Hide cards beyond 6th on phone to keep one tidy row-pair */
-  .packages-rail > .pkg-card:nth-child(n+7) {
+  .packages-rail:not(#rail-best) > .pkg-card:nth-child(n+7) {
     display: none;
+  }
+  /* Best sellers: keep flex carousel on mobile */
+  #rail-best {
+    display: flex !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    touch-action: auto !important;
   }
 }
 
@@ -615,18 +622,15 @@ html { overflow-x: hidden; width: 100%; }
   /* Hide game description on mobile */
   .game-desc { display: none; }
 
-  /* Packages: 3 cards per row grid on phones */
+  /* Packages: 3 cards per row grid on phones (except best sellers) */
   .packages { padding-left: 12px; padding-right: 12px; overflow: visible; }
   .featured { padding-left: 12px; padding-right: 12px; }
-  .packages-rail { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; overflow: visible !important; padding-left: 0; padding-right: 0; touch-action: pan-y pinch-zoom !important; }
-  .pkg-card { min-width: 0 !important; max-width: none !important; width: 100% !important; flex: none !important; padding: 6px 6px 8px; margin: 0; }
-  .pkg-thumb { width: 100%; aspect-ratio: 1 / 1; }
-  .pkg-name { font-size: 11px; margin-top: 4px; }
-  /* Best Sellers: 3 per row grid on phones */
-  #best-sellers .packages-rail { gap: 6px !important; }
-  #best-sellers .pkg-card { padding: 5px 5px 6px; border-radius: 10px; }
-  #best-sellers .pkg-thumb { border-radius: 8px; }
-  #best-sellers .pkg-name { font-size: 10px; margin-top: 3px; }
+  .packages-rail:not(#rail-best) { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; overflow: visible !important; padding-left: 0; padding-right: 0; touch-action: pan-y pinch-zoom !important; }
+  .packages:not(#best-sellers) .pkg-card { min-width: 0 !important; max-width: none !important; width: 100% !important; flex: none !important; padding: 6px 6px 8px; margin: 0; }
+  .packages:not(#best-sellers) .pkg-thumb { width: 100%; aspect-ratio: 1 / 1; }
+  .packages:not(#best-sellers) .pkg-name { font-size: 11px; margin-top: 4px; }
+  /* Best sellers: keep flex carousel on mobile */
+  #rail-best { display: flex !important; overflow-x: auto !important; flex-wrap: nowrap !important; touch-action: auto !important; }
   /* Hide scroll indicator on mobile */
   .packages-rail { -ms-overflow-style: none; scrollbar-width: none; }
   .packages-rail::-webkit-scrollbar { display: none; }

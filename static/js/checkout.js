@@ -344,13 +344,14 @@ document.addEventListener('DOMContentLoaded', () => {
       row.appendChild(val);
       coInfo.appendChild(row);
     };
-    const addCopyAllBtn = (values) => {
+    const addCopyAllBtn = (getValues) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'copy-btn';
       btn.style.cssText = 'width:100%; margin-top:10px; padding:10px 14px; font-size:13px; font-weight:800;';
       btn.textContent = 'Copiar todo';
       btn.addEventListener('click', async () => {
+        const values = typeof getValues === 'function' ? getValues() : getValues;
         const text = values.filter(v => v).join('\n');
         try {
           await navigator.clipboard.writeText(text);
@@ -378,12 +379,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const bank = (paymentsCfg && paymentsCfg.pm_bank) || '';
       const cedula = (paymentsCfg && paymentsCfg.pm_id) || '';
       const phone = (paymentsCfg && paymentsCfg.pm_phone) || '';
-      const t = computeTotals();
-      const monto = String(Math.round(Number(t.amount || 0)));
       addItem('bank', bank);
       addItem('id', cedula);
       addItem('user', phone);
-      addCopyAllBtn([bank, cedula, phone, monto]);
+      addCopyAllBtn(() => {
+        const t = computeTotals();
+        const monto = String(Math.round(Number(t.amount || 0)));
+        return [bank, cedula, phone, monto];
+      });
     } else {
       // Binance: show provider name, email and Pay ID
       addItem('bank', 'Binance');
