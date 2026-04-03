@@ -28,6 +28,25 @@ document.addEventListener('DOMContentLoaded', () => {
   let hasCapture = false;
   let isBinanceAuto = false;
   let binanceAutoCode = '';
+  let checkoutRequestInFlight = false;
+  let checkoutAttemptKey = '';
+
+  function getCheckoutAttemptKey() {
+    if (checkoutAttemptKey) return checkoutAttemptKey;
+    try {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        checkoutAttemptKey = `checkout:${gid}:${window.crypto.randomUUID()}`;
+        return checkoutAttemptKey;
+      }
+    } catch (_) {}
+    checkoutAttemptKey = `checkout:${gid}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
+    return checkoutAttemptKey;
+  }
+
+  function releaseCheckoutRequest() {
+    checkoutRequestInFlight = false;
+    updateSubmitState();
+  }
 
   function isValidVerifiedNick(nick) {
     const text = String(nick || '').trim();
@@ -457,6 +476,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Proof dropzone / file input handling
   function updateSubmitState() {
     if (btnConfirm) {
+      if (checkoutRequestInFlight) {
+        btnConfirm.disabled = true;
+        return;
+      }
       if (isBinanceAuto) {
         // In auto mode only need the generated code (always present once fetched)
         btnConfirm.disabled = !binanceAutoCode;
@@ -701,9 +724,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (btnConfirm) {
     btnConfirm.addEventListener('click', async () => {
+      if (checkoutRequestInFlight) return;
+      checkoutRequestInFlight = true;
+      btnConfirm.disabled = true;
+      const idempotencyKey = getCheckoutAttemptKey();
+
       // ── Binance Auto Mode: simplified flow ──
       if (isBinanceAuto) {
-        if (!binanceAutoCode) { alert('Código de verificación no disponible'); return; }
+        if (!binanceAutoCode) {
+          alert('Código de verificación no disponible');
+          releaseCheckoutRequest();
+          return;
+        }
         const item = (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) ? allItems[selectedIndex] : null;
         const totals = computeTotals();
         let st = null;
@@ -711,7 +743,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const name = qName || (st && st.name) || '';
         const email = qEmail || (st && st.email) || '';
         const phone = qPhone || (st && st.phone) || '';
-        if (!phone) { alert('Ingresa tu número de teléfono'); return; }
+        if (!phone) {
+          alert('Ingresa tu número de teléfono');
+          releaseCheckoutRequest();
+          return;
+        }
         const customer_id = qs.get('cid') || '';
         const customer_zone = qs.get('zid') || '';
         const nn = (function() {
@@ -735,7 +771,8 @@ document.addEventListener('DOMContentLoaded', () => {
           customer_id: customer_id,
           customer_zone: customer_zone,
           special_code: qRefCode || '',
-          nn: nn
+          nn: nn,
+          idempotency_key: idempotencyKey
         };
         const originalText = btnConfirm.textContent;
         btnConfirm.textContent = 'Procesando...';
@@ -745,7 +782,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           const res = await fetch('/orders', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Idempotency-Key': idempotencyKey
+            },
             body: JSON.stringify(payload),
             signal: controller.signal
           });
@@ -768,23 +808,29 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
           clearTimeout(tid);
           btnConfirm.textContent = originalText;
-          updateSubmitState();
+          releaseCheckoutRequest();
         }
         return;
       }
 
       // ── Normal flow (Pago Móvil / Binance manual) ──
       const ref = coRef ? coRef.value.trim() : '';
-      if (!ref) { alert('Ingrese la referencia'); return; }
+      if (!ref) {
+        alert('Ingrese la referencia');
+        releaseCheckoutRequest();
+        return;
+      }
       // Validate numeric with máximo 21 (1..21)
       if (!(ref.length >= 1 && ref.length <= 21 && /^\d+$/.test(ref))) {
         alert('La referencia debe ser numérica y tener máximo 21 dígitos');
+        releaseCheckoutRequest();
         return;
       }
       // Require capture file
       if (!proofInput || !proofInput.files || proofInput.files.length === 0) {
         alert('Por favor adjunta el comprobante de pago');
         if (proofDropzone) proofDropzone.classList.add('proof-dropzone--error');
+        releaseCheckoutRequest();
         return;
       }
       // Prepare order payload
@@ -798,7 +844,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const name = qName || (state && state.name) || '';
       const email = qEmail || (state && state.email) || '';
       const phone = qPhone || (state && state.phone) || '';
-      if (!phone) { alert('Ingresa tu número de teléfono'); return; }
+      if (!phone) {
+        alert('Ingresa tu número de teléfono');
+        releaseCheckoutRequest();
+        return;
+      }
       const customer_id = qs.get('cid') || '';
       const customer_zone = qs.get('zid') || '';
       const nn = (function() {
@@ -823,6 +873,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fd.append('customer_zone', customer_zone);
       fd.append('special_code', qRefCode || '');
       fd.append('nn', nn);
+      fd.append('idempotency_key', idempotencyKey);
       fd.append('payment_capture', proofInput.files[0]);
       // UI loading state
       const originalText = btnConfirm.textContent;
@@ -834,6 +885,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const res = await fetch('/orders', {
           method: 'POST',
+          headers: { 'X-Idempotency-Key': idempotencyKey },
           body: fd,
           signal: controller.signal
         });
@@ -857,7 +909,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } finally {
         clearTimeout(tid);
         btnConfirm.textContent = originalText;
-        updateSubmitState();
+        releaseCheckoutRequest();
       }
     });
   }

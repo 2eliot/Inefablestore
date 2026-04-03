@@ -808,6 +808,7 @@ class Order(db.Model):
     delivery_codes_json = db.Column(db.Text, default="")
     # Special referral code support
     special_code = db.Column(db.String(80), default="")
+    idempotency_key = db.Column(db.String(120), nullable=True, default=None)
     special_user_id = db.Column(db.Integer, nullable=True)
     # Optional: JSON string with multiple items: [{"item_id": int, "qty": int, "title": str, "price": float}]
     items_json = db.Column(db.Text, default="")
@@ -2306,6 +2307,17 @@ def _validate_order_reference_value(order_obj, reference: str, *, exclude_order_
     return True, ref
 
 
+def _normalize_order_idempotency_key(raw_value) -> str:
+    return str(raw_value or "").strip()[:120]
+
+
+def _find_order_by_idempotency_key(key: str):
+    safe_key = _normalize_order_idempotency_key(key)
+    if not safe_key:
+        return None
+    return Order.query.filter(Order.idempotency_key == safe_key).order_by(Order.id.desc()).first()
+
+
 def _reset_order_payment_verification_state(order_obj, *, message: str, source: str = "admin_reference_edit"):
     order_obj.payment_verification_id = ""
     order_obj.payment_verified_at = None
@@ -3294,6 +3306,7 @@ with app.app_context():
             add_order_col('delivery_code', "delivery_code TEXT DEFAULT ''")
             add_order_col('delivery_codes_json', "delivery_codes_json TEXT DEFAULT ''")
             add_order_col('special_code', "special_code TEXT DEFAULT ''")
+            add_order_col('idempotency_key', "idempotency_key TEXT")
             add_order_col('special_user_id', "special_user_id INTEGER")
             add_order_col('items_json', "items_json TEXT DEFAULT ''")
             add_order_col('automation_json', "automation_json TEXT DEFAULT ''")
@@ -3309,6 +3322,11 @@ with app.app_context():
             add_order_col('payment_verification_attempts', "payment_verification_attempts INTEGER DEFAULT 0")
             add_order_col('payment_last_verification_at', f"payment_last_verification_at {'TIMESTAMP' if _is_pg else 'TEXT'}")
             db.session.commit()
+            try:
+                db.session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_idempotency_key ON orders (idempotency_key)"))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
         # Special users table migration: ensure new columns
         try:
             aff_cols = _get_table_cols("special_users")
@@ -4923,6 +4941,14 @@ def create_order():
         payer_phone = (_get("payer_phone") or "").strip()
         payer_payment_date = (_get("payer_payment_date") or "").strip()
         payer_movement_type = (_get("payer_movement_type") or "").strip().upper()
+        idempotency_key = _normalize_order_idempotency_key(
+            request.headers.get("X-Idempotency-Key") or _get("idempotency_key")
+        )
+
+        if idempotency_key:
+            existing_idempotent_order = _find_order_by_idempotency_key(idempotency_key)
+            if existing_idempotent_order:
+                return jsonify({"ok": True, "order_id": existing_idempotent_order.id, "idempotent": True})
 
         if payer_dni_type and payer_dni_type not in ("V", "E", "J", "P", "G"):
             payer_dni_type = ""
@@ -5008,6 +5034,7 @@ def create_order():
             customer_name=verified_nick or name or email or customer_id,
             status="pending",
             special_code=special_code,
+            idempotency_key=idempotency_key or None,
             payer_dni_type=payer_dni_type,
             payer_dni_number=payer_dni_number,
             payer_bank_origin=payer_bank_origin,
@@ -5113,25 +5140,33 @@ def create_order():
                     o.special_user_id = su.id
         except Exception:
             pass
-        db.session.add(o)
-        db.session.flush()
-        if used_secondary_code and o.special_user_id and customer_id:
-            db.session.add(SpecialCodeUsage(
-                special_user_id=o.special_user_id,
-                code=normalized_secondary_code,
-                customer_id=customer_id,
-                order_id=o.id,
-            ))
-        # Save payment capture image if provided
         try:
-            capture_file = request.files.get("payment_capture")
-            if capture_file and capture_file.filename:
-                capture_path = _save_capture(capture_file)
-                if capture_path:
-                    o.payment_capture = capture_path
-        except Exception:
-            pass
-        db.session.commit()
+            db.session.add(o)
+            db.session.flush()
+            if used_secondary_code and o.special_user_id and customer_id:
+                db.session.add(SpecialCodeUsage(
+                    special_user_id=o.special_user_id,
+                    code=normalized_secondary_code,
+                    customer_id=customer_id,
+                    order_id=o.id,
+                ))
+            # Save payment capture image if provided
+            try:
+                capture_file = request.files.get("payment_capture")
+                if capture_file and capture_file.filename:
+                    capture_path = _save_capture(capture_file)
+                    if capture_path:
+                        o.payment_capture = capture_path
+            except Exception:
+                pass
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            if idempotency_key:
+                existing_idempotent_order = _find_order_by_idempotency_key(idempotency_key)
+                if existing_idempotent_order:
+                    return jsonify({"ok": True, "order_id": existing_idempotent_order.id, "idempotent": True})
+            raise
         try:
             _start_checkout_automation(o.id, current_app._get_current_object())
         except Exception:
