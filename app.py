@@ -1840,6 +1840,25 @@ def amount_to_usd(amount: float, currency: str) -> float:
     return round(amt / rate, 2)
 
 
+def amount_from_usd(amount_usd: float, currency: str) -> float:
+    """Convert a USD amount into the order currency using the configured rate."""
+    try:
+        usd_amount = float(amount_usd or 0.0)
+    except Exception:
+        usd_amount = 0.0
+    cur = (currency or "USD").upper()
+    if cur == "USD":
+        return round(usd_amount, 2)
+    try:
+        rate_str = get_config_value("exchange_rate_bsd_per_usd", "0")
+        rate = float(rate_str or 0.0)
+    except Exception:
+        rate = 0.0
+    if rate <= 0:
+        return 0.0
+    return int(round(usd_amount * rate))
+
+
 def get_stats_period_bounds(for_dt: datetime | None = None) -> tuple[datetime, datetime]:
     """Return the weekly stats window [start, end) in naive UTC."""
     if for_dt is None:
@@ -5249,6 +5268,10 @@ def create_order():
                 order_total_usd = round(sum(float(ent.get("price") or 0.0) * max(int(ent.get("qty") or 1), 1) for ent in items_list), 2)
         except Exception:
             pass
+        canonical_amount = amount_from_usd(order_total_usd, currency)
+        if canonical_amount <= 0:
+            return jsonify({"ok": False, "error": "No se pudo calcular un monto válido para la orden"}), 400
+        o.amount = canonical_amount
         o.price = round(float(order_total_usd or 0.0), 2)
 
         # Optional enforcement: mapped auto-recharge orders must use selected Pabilo method.
