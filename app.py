@@ -2353,6 +2353,112 @@ def _pabilo_exact_amount_value(order_obj):
     return int(amount_decimal.to_integral_value())
 
 
+def _pabilo_normalize_reference_value(value) -> str:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return ""
+    return re.sub(r"[^a-z0-9]", "", raw_value.lower())
+
+
+def _pabilo_integral_amount_value(value):
+    if value in (None, ""):
+        return None
+    try:
+        amount_decimal = Decimal(str(value)).normalize()
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+    if amount_decimal <= 0:
+        return None
+    if amount_decimal != amount_decimal.to_integral_value():
+        return None
+    return int(amount_decimal.to_integral_value())
+
+
+def _pabilo_extract_response_values(payload: dict, candidate_keys) -> list:
+    normalized_keys = {re.sub(r"[^a-z0-9]", "", str(key).lower()) for key in candidate_keys}
+    collected = []
+
+    def _walk(node):
+        if len(collected) >= 30:
+            return
+        if isinstance(node, dict):
+            for key, value in node.items():
+                normalized_key = re.sub(r"[^a-z0-9]", "", str(key).lower())
+                if normalized_key in normalized_keys and not isinstance(value, (dict, list, tuple, set)):
+                    collected.append(value)
+                if isinstance(value, (dict, list, tuple)):
+                    _walk(value)
+        elif isinstance(node, (list, tuple)):
+            for item in node:
+                _walk(item)
+
+    _walk(payload or {})
+    return collected
+
+
+def _pabilo_response_match_info(response_data: dict, order_obj) -> dict:
+    expected_amount = _pabilo_exact_amount_value(order_obj)
+    expected_reference = _pabilo_normalize_reference_value(order_obj.reference or "")
+
+    amount_candidates_raw = _pabilo_extract_response_values(
+        response_data,
+        (
+            "amount",
+            "monto",
+            "payment_amount",
+            "amount_payment",
+            "amount_paid",
+            "paid_amount",
+            "transaction_amount",
+            "transfer_amount",
+        ),
+    )
+    reference_candidates_raw = _pabilo_extract_response_values(
+        response_data,
+        (
+            "bank_reference",
+            "bankreference",
+            "reference",
+            "payment_reference",
+            "reference_payment",
+            "operation_reference",
+            "transfer_reference",
+            "transaction_reference",
+            "nro_referencia",
+            "numero_referencia",
+        ),
+    )
+
+    amount_candidates = []
+    for candidate in amount_candidates_raw:
+        normalized_amount = _pabilo_integral_amount_value(candidate)
+        if normalized_amount is not None and normalized_amount not in amount_candidates:
+            amount_candidates.append(normalized_amount)
+
+    reference_candidates = []
+    for candidate in reference_candidates_raw:
+        normalized_reference = _pabilo_normalize_reference_value(candidate)
+        if normalized_reference and normalized_reference not in reference_candidates:
+            reference_candidates.append(normalized_reference)
+
+    amount_present = len(amount_candidates) > 0
+    reference_present = len(reference_candidates) > 0
+    amount_matches = expected_amount is not None and expected_amount in amount_candidates
+    reference_matches = bool(expected_reference) and expected_reference in reference_candidates
+
+    return {
+        "expected_amount": expected_amount,
+        "expected_reference": expected_reference,
+        "amount_present": amount_present,
+        "reference_present": reference_present,
+        "amount_matches": amount_matches,
+        "reference_matches": reference_matches,
+        "amount_candidates": amount_candidates,
+        "reference_candidates": reference_candidates,
+        "matched": amount_matches and reference_matches,
+    }
+
+
 def _pabilo_payload_movement_type(order_obj) -> str:
     movement_type = str(order_obj.payer_movement_type or _pabilo_config().get("default_movement_type") or "").strip().upper()
     if movement_type in ("GENERIC", "MOVIL_PAY", "TRANSFER"):
@@ -2699,6 +2805,27 @@ def _pabilo_verify_payment(order_obj):
                 continue
             return last_result
 
+        match_info = _pabilo_response_match_info(data, order_obj)
+        if not match_info.get("matched"):
+            mismatch_reasons = []
+            if not match_info.get("reference_present"):
+                mismatch_reasons.append("Pabilo no devolvió una referencia verificable")
+            elif not match_info.get("reference_matches"):
+                mismatch_reasons.append("la referencia devuelta por Pabilo no coincide con la orden")
+            if not match_info.get("amount_present"):
+                mismatch_reasons.append("Pabilo no devolvió un monto verificable")
+            elif not match_info.get("amount_matches"):
+                mismatch_reasons.append("el monto devuelto por Pabilo no coincide con la orden")
+
+            return {
+                "ok": True,
+                "verified": False,
+                "message": "; ".join(mismatch_reasons) or "La respuesta de Pabilo no coincide con la orden",
+                "response": data,
+                "request_meta": request_meta,
+                "validation": match_info,
+            }
+
         if not verification_id:
             verification_id = f"fallback:{order_method}:{str(order_obj.reference or '').strip()}"
 
@@ -2709,6 +2836,7 @@ def _pabilo_verify_payment(order_obj):
             "message": "Pago verificado en Pabilo",
             "response": data,
             "request_meta": request_meta,
+            "validation": match_info,
         }
 
     return last_result or {
