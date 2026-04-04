@@ -3454,8 +3454,17 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
                     last_error = ""
                     break
 
-                unit["status"] = "processing"
-                unit["error"] = str(api_data.get("error") or "Recarga no completada en Revendedores")
+                unit_status = str(api_data.get("purchase_status") or api_data.get("status") or "").strip().lower()
+                unit_error = str(api_data.get("error") or api_data.get("message") or "Recarga no completada en Revendedores")
+                if unit_status in {"processing", "procesando", "pending", "pendiente", "queued", "en_cola", "en cola"}:
+                    unit["status"] = "processing"
+                elif unit_status in {"not_found", "no_encontrada", "no encontrada"}:
+                    unit["status"] = "not_found"
+                elif api_resp.status_code == 404:
+                    unit["status"] = "not_found"
+                else:
+                    unit["status"] = "failed"
+                unit["error"] = unit_error
                 last_error = unit["error"]
             except _requests_lib.exceptions.Timeout:
                 unit["status"] = "processing"
@@ -5989,8 +5998,17 @@ def admin_orders_verify_recharge(oid: int):
         except Exception as e:
             return jsonify({"ok": False, "error": f"No se pudo verificar: {e}", "can_approve": False})
 
+        if resp.status_code in (404, 405):
+            unit["last_checked_at"] = datetime.utcnow().isoformat()
+            unit["status"] = "failed"
+            unit["error"] = "El proveedor no expone order-status para esta recarga. Puedes reenviarla manualmente."
+            continue
+
         if not data.get("ok"):
-            return jsonify({"ok": False, "error": data.get("error", "Error consultando Revendedores"), "can_approve": False})
+            unit["last_checked_at"] = datetime.utcnow().isoformat()
+            unit["status"] = "failed"
+            unit["error"] = str(data.get("error") or "Error consultando Revendedores")
+            continue
 
         found = data.get("found", False)
         rev_status = str(data.get("status") or "").strip().lower()
