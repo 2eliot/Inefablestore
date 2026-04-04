@@ -2062,9 +2062,45 @@ def resolve_special_user_for_code(raw_code: str):
 def _revendedores_env():
     base_url = (os.environ.get("REVENDEDORES_BASE_URL") or os.environ.get("WEBB_URL") or "").strip().rstrip("/")
     api_key = (os.environ.get("REVENDEDORES_API_KEY") or os.environ.get("WEBB_API_KEY") or "").strip()
-    catalog_path = "/api/v1/products"
-    recharge_path = "/api/v1/recharge"
+    catalog_path = (os.environ.get("REVENDEDORES_CATALOG_PATH") or os.environ.get("WEBB_CATALOG_PATH") or "/api/catalog/active").strip()
+    recharge_path = (os.environ.get("REVENDEDORES_RECHARGE_PATH") or os.environ.get("WEBB_RECHARGE_PATH") or "/api/recharge/dynamic").strip()
     return base_url, api_key, catalog_path, recharge_path
+
+
+def _revendedores_catalog_paths():
+    configured = (os.environ.get("REVENDEDORES_CATALOG_PATH") or os.environ.get("WEBB_CATALOG_PATH") or "").strip()
+    paths = []
+    for path in (configured, "/api/catalog/active", "/api/v1/products"):
+        path = str(path or "").strip()
+        if path and path not in paths:
+            paths.append(path)
+    return paths
+
+
+def _revendedores_recharge_paths():
+    configured = (os.environ.get("REVENDEDORES_RECHARGE_PATH") or os.environ.get("WEBB_RECHARGE_PATH") or "").strip()
+    paths = []
+    for path in (configured, "/api/recharge/dynamic", "/api/v1/recharge"):
+        path = str(path or "").strip()
+        if path and path not in paths:
+            paths.append(path)
+    return paths
+
+
+def _revendedores_catalog_meta(remote_product_id, remote_package_id):
+    try:
+        query = RevendedoresCatalogItem.query.filter_by(remote_package_id=remote_package_id)
+        if remote_product_id is None:
+            query = query.filter(RevendedoresCatalogItem.remote_product_id.is_(None))
+        else:
+            query = query.filter_by(remote_product_id=remote_product_id)
+        row = query.order_by(RevendedoresCatalogItem.id.desc()).first()
+        if not row:
+            return {}
+        payload = json.loads(row.raw_json or "{}")
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
 
 
 def _synthetic_product_id(label):
@@ -2075,9 +2111,9 @@ def _synthetic_product_id(label):
 
 
 def _normalize_rev_catalog_payload(payload):
-    """Normaliza la respuesta de /api/v1/products (API marca blanca).
+    """Normaliza el catálogo remoto en formato legado o moderno.
 
-    Formato esperado:
+    Formato legado esperado:
     {
       "ok": true,
       "games": [
@@ -2089,9 +2125,63 @@ def _normalize_rev_catalog_payload(payload):
         }
       ]
     }
+
+    Formato moderno esperado:
+    {
+      "ok": true,
+      "items": [
+        {
+          "package_id": 17,
+          "name": "86 Diamonds",
+          "product_id": 3,
+          "product_name": "Mobile Legends",
+          "provider_package_id": 112,
+          "provider_package_key": null
+        }
+      ]
+    }
     """
     if not isinstance(payload, dict):
         return []
+
+    items = payload.get("items")
+    if isinstance(items, list):
+        out = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+
+            local_package_id = item.get("package_id") or item.get("id")
+            provider_package_id = item.get("provider_package_id") or item.get("gamepoint_package_id")
+            remote_package_id_raw = provider_package_id if provider_package_id not in (None, "", 0, "0") else local_package_id
+            try:
+                remote_package_id = int(remote_package_id_raw)
+            except (ValueError, TypeError):
+                continue
+
+            product_id_raw = item.get("product_id")
+            remote_product_id = None
+            if product_id_raw not in (None, ""):
+                try:
+                    remote_product_id = int(product_id_raw)
+                except (ValueError, TypeError):
+                    remote_product_id = None
+
+            product_name = item.get("product_name") or item.get("game_name") or ""
+            package_name = item.get("name") or item.get("title") or f"Paquete {remote_package_id}"
+            raw_obj = dict(item)
+            raw_obj["remote_local_package_id"] = local_package_id
+            raw_obj["remote_lookup_package_id"] = remote_package_id
+
+            out.append({
+                "remote_product_id": remote_product_id,
+                "remote_product_name": str(product_name or "").strip(),
+                "remote_package_id": remote_package_id,
+                "remote_package_name": str(package_name or "").strip(),
+                "active": bool(item.get("active", True)),
+                "raw_json": json.dumps(raw_obj, ensure_ascii=False),
+            })
+        return out
 
     games = payload.get("games")
     if not isinstance(games, list):
@@ -3286,28 +3376,75 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
         if not units_to_send:
             break
         unit = units_to_send[0]
-        payload = {
+        legacy_payload = {
             "product_id": unit.get("remote_product_id"),
             "package_id": unit.get("remote_package_id"),
             "player_id": player_id,
             "external_order_id": unit.get("external_order_id"),
         }
         if (order_obj.customer_zone or "").strip():
-            payload["player_id2"] = (order_obj.customer_zone or "").strip()
+            legacy_payload["player_id2"] = (order_obj.customer_zone or "").strip()
+
+        remote_meta = _revendedores_catalog_meta(unit.get("remote_product_id"), unit.get("remote_package_id"))
+        modern_payload = {
+            "api_key": webb_api_key,
+            "package_id": str(remote_meta.get("package_id") or remote_meta.get("remote_local_package_id") or unit.get("remote_package_id") or ""),
+            "player_id": player_id,
+            "request_id": str(unit.get("external_order_id") or ""),
+            "external_order_id": str(unit.get("external_order_id") or ""),
+        }
+        if unit.get("remote_product_id") is not None:
+            modern_payload["product_id"] = str(unit.get("remote_product_id"))
+        provider_package_id = remote_meta.get("provider_package_id") or remote_meta.get("gamepoint_package_id")
+        if provider_package_id not in (None, "", 0, "0"):
+            modern_payload["provider_package_id"] = str(provider_package_id)
+        provider_package_key = (remote_meta.get("provider_package_key") or remote_meta.get("script_package_key") or "").strip()
+        if provider_package_key:
+            modern_payload["provider_package_key"] = provider_package_key
+        if (order_obj.customer_zone or "").strip():
+            modern_payload["player_id2"] = (order_obj.customer_zone or "").strip()
+
         for attempt in range(1, max_attempts + 1):
             unit["last_attempt_at"] = datetime.utcnow().isoformat()
             unit["attempt_count"] = int(unit.get("attempt_count") or 0) + 1
             try:
-                api_resp = _requests_lib.post(
-                    f"{webb_url}{recharge_path}",
-                    json=payload,
-                    headers={"X-API-Key": webb_api_key, "Content-Type": "application/json"},
-                    timeout=60,
-                )
-                try:
-                    api_data = api_resp.json()
-                except Exception:
-                    api_data = {"ok": False, "error": f"Respuesta inválida HTTP {api_resp.status_code}"}
+                api_data = None
+                response_error = ""
+                for path in _revendedores_recharge_paths():
+                    use_legacy_api = path.strip().startswith("/api/v1/")
+                    headers = {
+                        "X-API-Key": webb_api_key,
+                        "X-Request-ID": str(unit.get("external_order_id") or ""),
+                    }
+                    req_kwargs = {"headers": headers, "timeout": 60}
+                    if use_legacy_api:
+                        headers["Content-Type"] = "application/json"
+                        req_kwargs["json"] = legacy_payload
+                    else:
+                        req_kwargs["data"] = modern_payload
+
+                    api_resp = _requests_lib.post(f"{webb_url}{path}", **req_kwargs)
+                    try:
+                        api_data = api_resp.json()
+                    except Exception:
+                        api_data = None
+
+                    if api_resp.status_code in (404, 405) and not use_legacy_api:
+                        response_error = f"HTTP {api_resp.status_code} en {path}"
+                        api_data = None
+                        continue
+
+                    if api_data is None:
+                        response_error = f"Respuesta inválida HTTP {api_resp.status_code} en {path}"
+                        if not use_legacy_api:
+                            continue
+                        api_data = {"ok": False, "error": response_error}
+
+                    recharge_path = path
+                    break
+
+                if api_data is None:
+                    api_data = {"ok": False, "error": response_error or "No se pudo conectar con Revendedores"}
                 if api_data.get("ok"):
                     unit["status"] = "completed"
                     unit["player_name"] = str(api_data.get("player_name") or "")
@@ -5976,30 +6113,36 @@ def admin_revendedores_sync_catalog():
     normalized = []
     remote_error = ""
 
-    try:
-        resp = _requests_lib.get(
-            f"{base_url}{catalog_path}",
-            headers={"X-API-Key": api_key},
-            timeout=30,
-        )
-        if not resp.ok:
-            key_preview = (api_key[:12] + "...") if len(api_key) > 12 else "(vacía)"
-            remote_error = f"HTTP {resp.status_code} en {catalog_path} (url={base_url}, key={key_preview}, len={len(api_key)})"
-        else:
+    attempted_paths = []
+    key_preview = (api_key[:12] + "...") if len(api_key) > 12 else "(vacía)"
+    for path in _revendedores_catalog_paths():
+        attempted_paths.append(path)
+        try:
+            resp = _requests_lib.get(
+                f"{base_url}{path}",
+                headers={"X-API-Key": api_key},
+                timeout=30,
+            )
+            if not resp.ok:
+                remote_error = f"HTTP {resp.status_code} en {path} (url={base_url}, key={key_preview}, len={len(api_key)})"
+                continue
             try:
                 payload = resp.json()
             except Exception:
                 snippet = (resp.text or "").strip().replace("\n", " ")[:180]
-                remote_error = f"Respuesta no JSON: {snippet or 'vacía'}"
-            else:
-                normalized = _normalize_rev_catalog_payload(payload)
-                if not normalized:
-                    remote_error = "Catálogo API sin paquetes válidos"
-    except Exception as exc:
-        remote_error = f"No se pudo consultar catálogo API: {str(exc)}"
+                remote_error = f"Respuesta no JSON en {path}: {snippet or 'vacía'}"
+                continue
+            normalized = _normalize_rev_catalog_payload(payload)
+            if normalized:
+                catalog_path = path
+                break
+            remote_error = f"Catálogo API sin paquetes válidos en {path}"
+        except Exception as exc:
+            remote_error = f"No se pudo consultar catálogo API en {path}: {str(exc)}"
 
     if not normalized:
-        return jsonify({"ok": False, "error": f"No se pudo sincronizar catálogo de Revendedores: {remote_error}"}), 502
+        tried_paths = ", ".join(attempted_paths) or catalog_path
+        return jsonify({"ok": False, "error": f"No se pudo sincronizar catálogo de Revendedores: {remote_error}. Rutas probadas: {tried_paths}"}), 502
 
     # Per-game breakdown for debugging
     games_summary = {}
