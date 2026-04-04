@@ -2464,6 +2464,8 @@ def _pabilo_response_match_info(response_data: dict, order_obj) -> dict:
     reference_present = len(reference_candidates) > 0
     amount_matches = expected_amount is not None and expected_amount in amount_candidates
     reference_matches = bool(expected_reference) and expected_reference in reference_candidates
+    amount_valid = (not amount_present) or amount_matches
+    reference_valid = (not reference_present) or reference_matches
 
     return {
         "expected_amount": expected_amount,
@@ -2472,9 +2474,11 @@ def _pabilo_response_match_info(response_data: dict, order_obj) -> dict:
         "reference_present": reference_present,
         "amount_matches": amount_matches,
         "reference_matches": reference_matches,
+        "amount_valid": amount_valid,
+        "reference_valid": reference_valid,
         "amount_candidates": amount_candidates,
         "reference_candidates": reference_candidates,
-        "matched": amount_matches and reference_matches,
+        "matched": amount_valid and reference_valid,
     }
 
 
@@ -2827,13 +2831,9 @@ def _pabilo_verify_payment(order_obj):
         match_info = _pabilo_response_match_info(data, order_obj)
         if not match_info.get("matched"):
             mismatch_reasons = []
-            if not match_info.get("reference_present"):
-                mismatch_reasons.append("Pabilo no devolvió una referencia verificable")
-            elif not match_info.get("reference_matches"):
+            if match_info.get("reference_present") and not match_info.get("reference_matches"):
                 mismatch_reasons.append("la referencia devuelta por Pabilo no coincide con la orden")
-            if not match_info.get("amount_present"):
-                mismatch_reasons.append("Pabilo no devolvió un monto verificable")
-            elif not match_info.get("amount_matches"):
+            if match_info.get("amount_present") and not match_info.get("amount_matches"):
                 mismatch_reasons.append("el monto devuelto por Pabilo no coincide con la orden")
 
             return {
