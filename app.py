@@ -9,7 +9,7 @@ import urllib.error
 import html as _html
 import hashlib
 import hmac as _hmac_module
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory, current_app
 from flask_sqlalchemy import SQLAlchemy
@@ -1843,20 +1843,19 @@ def amount_to_usd(amount: float, currency: str) -> float:
 def amount_from_usd(amount_usd: float, currency: str) -> float:
     """Convert a USD amount into the order currency using the configured rate."""
     try:
-        usd_amount = float(amount_usd or 0.0)
+        usd_amount = Decimal(str(amount_usd or 0.0))
     except Exception:
-        usd_amount = 0.0
+        usd_amount = Decimal("0")
     cur = (currency or "USD").upper()
     if cur == "USD":
-        return round(usd_amount, 2)
+        return float(usd_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
     try:
-        rate_str = get_config_value("exchange_rate_bsd_per_usd", "0")
-        rate = float(rate_str or 0.0)
+        rate = Decimal(str(get_config_value("exchange_rate_bsd_per_usd", "0") or "0"))
     except Exception:
-        rate = 0.0
+        rate = Decimal("0")
     if rate <= 0:
         return 0.0
-    return int(round(usd_amount * rate))
+    return int((usd_amount * rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def get_stats_period_bounds(for_dt: datetime | None = None) -> tuple[datetime, datetime]:
@@ -5362,6 +5361,41 @@ def create_order():
                 pass
         
         order_total_usd = amount_to_usd(amount, currency)
+        order_total_usd_raw = float(order_total_usd or 0.0)
+
+        def _append_order_item(target_items, game_item, qty_value, *, apply_single_discount=False):
+            qty_value = max(int(qty_value or 1), 1)
+            base_price = round(float(game_item.price or 0.0), 2)
+            discounted_price = round(base_price * (1.0 - discount_fraction), 2)
+            base_price_raw = float(game_item.price or 0.0)
+            discounted_price_raw = base_price_raw * (1.0 - discount_fraction)
+
+            if apply_single_discount and discount_fraction > 0:
+                target_items.append({
+                    "item_id": game_item.id,
+                    "qty": 1,
+                    "title": game_item.title,
+                    "price": discounted_price,
+                    "cost_unit_usd": float(game_item.profit_net_usd or 0.0),
+                })
+                if qty_value > 1:
+                    target_items.append({
+                        "item_id": game_item.id,
+                        "qty": qty_value - 1,
+                        "title": game_item.title,
+                        "price": base_price,
+                        "cost_unit_usd": float(game_item.profit_net_usd or 0.0),
+                    })
+                return True, discounted_price_raw + (base_price_raw * max(qty_value - 1, 0))
+
+            target_items.append({
+                "item_id": game_item.id,
+                "qty": qty_value,
+                "title": game_item.title,
+                "price": base_price,
+                "cost_unit_usd": float(game_item.profit_net_usd or 0.0),
+            })
+            return False, base_price_raw * qty_value
 
         try:
             raw_items = data.get("items")
@@ -5372,6 +5406,8 @@ def create_order():
                 except Exception:
                     raw_items = []
             items_list = []
+            discount_already_applied = False
+            order_total_usd_raw = 0.0
             if isinstance(raw_items, list) and raw_items:
                 for it_entry in raw_items:
                     try:
@@ -5384,37 +5420,30 @@ def create_order():
                     gi = GamePackageItem.query.get(iid)
                     if not gi:
                         continue
-                    
-                    # Calculate actual price with discount if applicable
-                    base_price = float(gi.price or 0.0)
-                    actual_price = base_price * (1.0 - discount_fraction)
-                    
-                    items_list.append({
-                        "item_id": gi.id,
-                        "qty": qty,
-                        "title": gi.title,
-                        "price": round(actual_price, 2),  # Guardar precio con descuento aplicado
-                        "cost_unit_usd": float(gi.profit_net_usd or 0.0),
-                    })
+                    discount_used_now, line_total_raw = _append_order_item(
+                        items_list,
+                        gi,
+                        qty,
+                        apply_single_discount=bool(discount_fraction and not discount_already_applied),
+                    )
+                    order_total_usd_raw += float(line_total_raw or 0.0)
+                    discount_already_applied = discount_already_applied or discount_used_now
             if (not items_list) and item_id:
                 gi = GamePackageItem.query.get(item_id)
                 if gi:
                     qty = 1
-                    base_price = float(gi.price or 0.0)
-                    actual_price = base_price * (1.0 - discount_fraction)
-                    items_list.append({
-                        "item_id": gi.id,
-                        "qty": qty,
-                        "title": gi.title,
-                        "price": round(actual_price, 2),
-                        "cost_unit_usd": float(gi.profit_net_usd or 0.0),
-                    })
+                    _, order_total_usd_raw = _append_order_item(
+                        items_list,
+                        gi,
+                        qty,
+                        apply_single_discount=bool(discount_fraction and not discount_already_applied),
+                    )
             if items_list:
                 o.items_json = json.dumps(items_list)
                 order_total_usd = round(sum(float(ent.get("price") or 0.0) * max(int(ent.get("qty") or 1), 1) for ent in items_list), 2)
         except Exception:
             pass
-        canonical_amount = amount_from_usd(order_total_usd, currency)
+        canonical_amount = amount_from_usd(order_total_usd_raw, currency)
         if canonical_amount <= 0:
             return jsonify({"ok": False, "error": "No se pudo calcular un monto válido para la orden"}), 400
         o.amount = canonical_amount
