@@ -3237,20 +3237,29 @@ def _send_order_completed_email_if_needed(order_obj, state: dict | None = None) 
 def _thanks_progress_payload(order_obj):
     """Build dynamic progress state for the thank-you page.
 
-    Only returns tracker visibility for orders mapped to auto-recharge + Pabilo flow.
+    Returns tracker visibility for orders mapped to auto-recharge + active
+    payment verification provider flow.
     """
     auto_mapped = _order_has_auto_recharges(order_obj)
     pay_state = _pabilo_get_payment_state(order_obj)
-    cfg = _pabilo_config()
+    active_provider = _payment_verification_provider()
+    provider = str(pay_state.get("provider") or active_provider or "").strip().lower()
+    pabilo_cfg = _pabilo_config()
+    ubii_cfg = _ubii_config()
     method = (order_obj.method or "").strip().lower()
     pabilo_like = bool(
         _order_is_pabilo_eligible(order_obj)
         or pay_state.get("provider") == "pabilo"
         or int(pay_state.get("attempts") or 0) > 0
     )
-    is_pabilo_auto = bool(auto_mapped and pabilo_like)
+    ubii_like = bool(
+        auto_mapped
+        and active_provider == "ubii"
+        and _pabilo_normalize_method(order_obj.method or "") == _pabilo_normalize_method(ubii_cfg.get("method") or "pm")
+    )
+    is_provider_auto = bool(auto_mapped and (ubii_like or pabilo_like))
 
-    if not is_pabilo_auto:
+    if not is_provider_auto:
         return {
             "ok": True,
             "visible": False,
@@ -3281,15 +3290,19 @@ def _thanks_progress_payload(order_obj):
         and summary.get("completed_units", 0) >= summary.get("total_units", 0)
     )
 
+    is_ubii_flow = provider == "ubii" or ubii_like
+    search_label = "Esperando notificación de Ubii" if is_ubii_flow else "Buscando pago en el sistema"
+    payment_label = "Pago confirmado en Ubii" if is_ubii_flow else "Pago confirmado"
+
     steps = [
         {
             "id": "search",
-            "label": "Buscando pago en el sistema",
-            "done": payment_checked,
+            "label": search_label,
+            "done": payment_checked if not is_ubii_flow else payment_verified,
         },
         {
             "id": "payment",
-            "label": "Pago confirmado",
+            "label": payment_label,
             "done": payment_verified,
         },
         {
@@ -3317,9 +3330,11 @@ def _thanks_progress_payload(order_obj):
     elif order_validated:
         current_message = "Orden validada, enviando recarga"
     elif payment_verified:
-        current_message = "Pago confirmado, validando orden"
+        current_message = "Pago confirmado en Ubii, validando orden" if is_ubii_flow else "Pago confirmado, validando orden"
     elif payment_checked:
         current_message = "Pago en revisión"
+    elif is_ubii_flow:
+        current_message = "Esperando confirmación de pago por Ubii"
 
     return {
         "ok": True,
@@ -3327,7 +3342,8 @@ def _thanks_progress_payload(order_obj):
         "order_id": order_obj.id,
         "status": (order_obj.status or "").lower(),
         "method": method,
-        "configured_method": cfg.get("method"),
+        "provider": provider,
+        "configured_method": ubii_cfg.get("method") if is_ubii_flow else pabilo_cfg.get("method"),
         "steps": steps,
         "summary": summary,
         "payment": {
