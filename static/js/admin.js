@@ -2221,6 +2221,7 @@ window.refreshGallery = refreshGallery;
         <div class="row-actions" style="justify-content:space-between;">
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             ${payProvider !== 'ubii' && pabiloRequestable && ['pending', 'approved', 'delivered'].includes(o.status) && !pabiloVerified ? `<button class="btn btn-verify-payment" data-id="${o.id}">Verificar pago</button>` : ''}
+            ${activeVerifyProvider === 'ubii' && ['pending', 'approved', 'delivered'].includes(o.status) && !pabiloVerified ? `<button class="btn btn-verify-ubii" data-id="${o.id}">Verificar Ubii</button>` : ''}
             <button class="btn btn-approve" data-id="${o.id}" ${approveDisabled ? 'disabled' : ''}>${approveLabel}</button>
             ${isAutoMapped && processingAutoUnits > 0 ? `<button class="btn btn-verify-recharge" data-id="${o.id}">Verificar ${processingAutoUnits}</button>` : ''}
           </div>
@@ -2332,6 +2333,44 @@ window.refreshGallery = refreshGallery;
         } finally {
           btnP.disabled = false;
           btnP.textContent = 'Verificar pago';
+        }
+        return;
+      }
+
+      const btnUbii = e.target.closest('.btn-verify-ubii');
+      if (btnUbii) {
+        const id = btnUbii.getAttribute('data-id');
+        if (!id) return;
+        const pastedText = window.prompt('Pega el texto completo de la notificación de Ubii para verificar esta orden');
+        if (pastedText === null) return;
+        if (!String(pastedText || '').trim()) {
+          toast('Debes pegar el texto de la notificación');
+          return;
+        }
+        try {
+          btnUbii.disabled = true;
+          btnUbii.textContent = 'Verificando Ubii...';
+          const res = await fetch(`/admin/orders/${id}/verify-ubii`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: String(pastedText || '').trim() })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            throw new Error(data.error || (data.payment_verify && data.payment_verify.message) || 'No se pudo verificar con Ubii');
+          }
+          const pv = data.payment_verify || {};
+          if (pv.verified) {
+            toast(`✅ Pago verificado en Ubii${pv.verification_id ? ` · ${pv.verification_id}` : ''}`, 'success');
+          } else {
+            toast(pv.message || 'Pago no verificado todavía', 'warning');
+          }
+          await fetchOrders();
+        } catch (err) {
+          toast(err.message || 'Error verificando Ubii');
+        } finally {
+          btnUbii.disabled = false;
+          btnUbii.textContent = 'Verificar Ubii';
         }
         return;
       }

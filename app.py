@@ -6274,6 +6274,76 @@ def admin_orders_verify_payment(oid: int):
     return jsonify({"ok": True, "payment_verify": result, "order_status": o.status})
 
 
+@app.route("/admin/orders/<int:oid>/verify-ubii", methods=["POST"])
+def admin_orders_verify_ubii(oid: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    o = Order.query.get(oid)
+    if not o:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    if (o.status or "").lower() not in ("pending", "approved", "delivered"):
+        return jsonify({"ok": False, "error": "La orden no permite verificación"}), 400
+
+    cfg = _ubii_config()
+    if _payment_verification_provider() != "ubii":
+        return jsonify({"ok": False, "error": "Ubii no es el proveedor activo"}), 400
+
+    data = request.get_json(silent=True) or {}
+    text_field = str(cfg.get("text_field") or "texto").strip() or "texto"
+    notification_text = str(data.get("text") or data.get(text_field) or data.get("texto") or "").strip()
+    if not notification_text:
+        return jsonify({"ok": False, "error": "Debes pegar el texto de la notificación"}), 400
+
+    extracted = _ubii_extract_notification_data({text_field: notification_text}, cfg)
+    if extracted.get("amount") is None or not extracted.get("reference"):
+        return jsonify({"ok": False, "error": "Formato no reconocido"}), 400
+
+    expected_reference = _pabilo_normalize_reference_value(o.reference or "")
+    received_reference = _pabilo_normalize_reference_value(extracted.get("reference") or "")
+    if not expected_reference or expected_reference != received_reference:
+        return jsonify({
+            "ok": False,
+            "error": "La referencia de Ubii no coincide con la orden",
+            "payment_verify": {
+                "provider": "ubii",
+                "verified": False,
+                "message": "La referencia de Ubii no coincide con la orden",
+            },
+        }), 400
+
+    if _pabilo_normalize_method(o.method or "") != _pabilo_normalize_method(cfg.get("method") or "pm"):
+        return jsonify({
+            "ok": False,
+            "error": "El método de pago de la orden no coincide con la configuración de Ubii",
+            "payment_verify": {
+                "provider": "ubii",
+                "verified": False,
+                "message": "El método de pago de la orden no coincide con la configuración de Ubii",
+            },
+        }), 400
+
+    if not _ubii_order_amount_matches(o, extracted.get("amount")):
+        return jsonify({
+            "ok": False,
+            "error": "El monto recibido en Ubii es menor al monto de la orden",
+            "payment_verify": {
+                "provider": "ubii",
+                "verified": False,
+                "message": "El monto recibido en Ubii es menor al monto de la orden",
+            },
+        }), 400
+
+    result = _ubii_verify_and_update_order(
+        o,
+        extracted,
+        payload={text_field: notification_text},
+        source="admin_manual_ubii",
+    )
+    return jsonify({"ok": True, "payment_verify": result, "order_status": o.status})
+
+
 @app.route("/admin/orders/<int:oid>/verify-recharge", methods=["POST"])
 def admin_orders_verify_recharge(oid: int):
     """Verifica en Revendedores51 si la recarga realmente se completó."""
