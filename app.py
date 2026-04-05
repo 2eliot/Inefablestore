@@ -2258,8 +2258,31 @@ def _save_order_automation_state(order_obj, state):
         order_obj.automation_json = ""
 
 
+def _payment_verification_provider() -> str:
+    provider = (get_config_value("payment_verification_provider", "") or "").strip().lower()
+    if provider in ("pabilo", "ubii"):
+        return provider
+    if get_config_value("ubii_auto_verify_enabled", "0") == "1":
+        return "ubii"
+    if get_config_value("pabilo_auto_verify_enabled", "0") == "1":
+        return "pabilo"
+    return ""
+
+
+def _payment_verification_provider_label(provider: str) -> str:
+    normalized = (provider or "").strip().lower()
+    if normalized == "ubii":
+        return "Ubii"
+    if normalized == "pabilo":
+        return "Pabilo"
+    return ""
+
+
 def _pabilo_config():
-    enabled = get_config_value("pabilo_auto_verify_enabled", "0") == "1"
+    enabled = (
+        get_config_value("pabilo_auto_verify_enabled", "0") == "1"
+        and _payment_verification_provider() == "pabilo"
+    )
     method = (get_config_value("pabilo_method", "pm") or "pm").strip().lower()
     if method not in ("pm", "binance"):
         method = "pm"
@@ -2302,6 +2325,32 @@ def _pabilo_config():
         "timeout": timeout,
         "enforce_method": enforce_method,
         "default_movement_type": default_movement_type,
+    }
+
+
+def _ubii_config():
+    method = (get_config_value("ubii_method", "pm") or "pm").strip().lower()
+    if method not in ("pm", "binance"):
+        method = "pm"
+    text_field = (get_config_value("ubii_text_field", "texto") or "texto").strip()
+    if not text_field:
+        text_field = "texto"
+    amount_regex = (
+        get_config_value("ubii_amount_regex", r"Bs\.\s*([\d\.,]+)")
+        or r"Bs\.\s*([\d\.,]+)"
+    ).strip()
+    reference_regex = (
+        get_config_value("ubii_reference_regex", r"referencia\s+(\d+)")
+        or r"referencia\s+(\d+)"
+    ).strip()
+    webhook_secret = (get_config_value("ubii_webhook_secret", "") or "").strip()
+    return {
+        "enabled": _payment_verification_provider() == "ubii",
+        "method": method,
+        "text_field": text_field,
+        "amount_regex": amount_regex,
+        "reference_regex": reference_regex,
+        "webhook_secret": webhook_secret,
     }
 
 
@@ -2383,6 +2432,163 @@ def _pabilo_set_payment_state(order_obj, payment_state: dict):
     _save_order_automation_state(order_obj, state)
 
 
+def _ubii_parse_amount(raw_value):
+    cleaned = str(raw_value or "").strip()
+    if not cleaned:
+        return None
+    cleaned = cleaned.replace(" ", "")
+    if "," in cleaned and "." in cleaned:
+        if cleaned.rfind(",") > cleaned.rfind("."):
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        else:
+            cleaned = cleaned.replace(",", "")
+    elif "," in cleaned:
+        cleaned = cleaned.replace(".", "").replace(",", ".")
+    try:
+        return Decimal(cleaned).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def _ubii_extract_notification_data(payload: dict, cfg: dict | None = None):
+    config = cfg or _ubii_config()
+    text_field = str(config.get("text_field") or "texto").strip() or "texto"
+    source_text = ""
+    if isinstance(payload, dict):
+        source_text = str(payload.get(text_field) or payload.get("texto") or payload.get("message") or payload.get("text") or "").strip()
+
+    amount_match = None
+    reference_match = None
+    amount_pattern = str(config.get("amount_regex") or "").strip()
+    reference_pattern = str(config.get("reference_regex") or "").strip()
+    try:
+        if amount_pattern and source_text:
+            amount_match = re.search(amount_pattern, source_text, re.IGNORECASE)
+    except re.error:
+        amount_match = None
+    try:
+        if reference_pattern and source_text:
+            reference_match = re.search(reference_pattern, source_text, re.IGNORECASE)
+    except re.error:
+        reference_match = None
+
+    amount_raw = (amount_match.group(1) if amount_match else "") or ""
+    reference_raw = (reference_match.group(1) if reference_match else "") or ""
+    return {
+        "text": source_text,
+        "amount_raw": amount_raw.strip(),
+        "amount": _ubii_parse_amount(amount_raw),
+        "reference": reference_raw.strip(),
+    }
+
+
+def _ubii_order_amount_matches(order_obj, expected_amount: Decimal | None) -> bool:
+    if expected_amount is None:
+        return False
+    try:
+        order_amount = Decimal(str(order_obj.amount or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError, TypeError):
+        return False
+    return expected_amount >= order_amount
+
+
+def _ubii_find_matching_order(reference: str, amount: Decimal | None, method: str):
+    normalized_reference = _pabilo_normalize_reference_value(reference)
+    if not normalized_reference:
+        return None, "Referencia no encontrada en la notificación", False
+
+    normalized_method = _pabilo_normalize_method(method or "pm")
+    pending_rows = Order.query.filter(Order.status == "pending").order_by(Order.created_at.desc()).all()
+    candidates = [
+        row for row in pending_rows
+        if _pabilo_normalize_reference_value(row.reference or "") == normalized_reference
+        and _pabilo_normalize_method(row.method or "") == normalized_method
+    ]
+
+    if amount is not None:
+        amount_candidates = [row for row in candidates if _ubii_order_amount_matches(row, amount)]
+        if amount_candidates:
+            candidates = amount_candidates
+        elif candidates:
+            return None, "La referencia existe pero el monto no coincide con ninguna orden pendiente", False
+
+    if len(candidates) > 1:
+        return None, "Hay varias órdenes pendientes con esa referencia; incluye el monto exacto para decidir", False
+    if len(candidates) == 1:
+        return candidates[0], "", False
+
+    processed_rows = Order.query.filter(Order.status.in_(["approved", "delivered"]))\
+        .order_by(Order.created_at.desc()).all()
+    processed = [
+        row for row in processed_rows
+        if _pabilo_normalize_reference_value(row.reference or "") == normalized_reference
+        and _pabilo_normalize_method(row.method or "") == normalized_method
+        and _ubii_order_amount_matches(row, amount)
+    ]
+    if processed:
+        return processed[0], "La orden ya estaba procesada anteriormente", True
+
+    return None, "No existe una orden pendiente que coincida con la referencia recibida", False
+
+
+def _ubii_verify_and_update_order(order_obj, extracted: dict, *, payload: dict | None = None, source: str = "ubii_webhook"):
+    current = _pabilo_get_payment_state(order_obj)
+    attempts = 0
+    try:
+        attempts = int(order_obj.payment_verification_attempts or current.get("attempts") or 0)
+    except Exception:
+        attempts = 0
+
+    checked_at = datetime.utcnow()
+    now_iso = checked_at.isoformat()
+    verification_id = str(extracted.get("reference") or order_obj.reference or order_obj.payment_verification_id or "")
+    message = "Pago verificado desde webhook Ubii"
+
+    order_obj.payment_verification_attempts = attempts + 1
+    order_obj.payment_last_verification_at = checked_at
+    order_obj.payment_verified_at = checked_at
+    order_obj.payment_verification_id = verification_id
+
+    state = {
+        "provider": "ubii",
+        "enabled": bool(_ubii_config().get("enabled")),
+        "method": _pabilo_normalize_method(order_obj.method or ""),
+        "attempts": attempts + 1,
+        "last_checked_at": now_iso,
+        "verified": True,
+        "verification_id": verification_id,
+        "message": message,
+        "source": source,
+        "last_request_url": "/webhook-ubii",
+        "last_request_payload": {
+            "text": str(extracted.get("text") or ""),
+            "amount": str(extracted.get("amount") or ""),
+            "amount_raw": str(extracted.get("amount_raw") or ""),
+            "reference": verification_id,
+            "payload": payload or {},
+        },
+        "last_response_status": 200,
+    }
+    _pabilo_set_payment_state(order_obj, state)
+    db.session.commit()
+
+    if (order_obj.status or "").lower() == "pending":
+        _auto_approve_order(order_obj, source_label="UbiiAuto", binance_auto=False)
+
+    return {
+        "ok": True,
+        "verified": True,
+        "verification_id": verification_id,
+        "message": message,
+        "order_status": order_obj.status,
+        "request_meta": {
+            "url": "/webhook-ubii",
+            "payload": state.get("last_request_payload") or {},
+            "status_code": 200,
+        },
+    }
+
+
 def _validate_order_reference_value(order_obj, reference: str, *, exclude_order_id: int | None = None):
     ref = str(reference or "").strip()
     if not ref:
@@ -2431,9 +2637,10 @@ def _reset_order_payment_verification_state(order_obj, *, message: str, source: 
     order_obj.payment_verified_at = None
     order_obj.payment_verification_attempts = 0
     order_obj.payment_last_verification_at = None
+    active_provider = _payment_verification_provider() or "pabilo"
     _pabilo_set_payment_state(order_obj, {
-        "provider": "pabilo",
-        "enabled": bool(_pabilo_config().get("enabled")),
+        "provider": active_provider,
+        "enabled": bool(_pabilo_config().get("enabled")) if active_provider == "pabilo" else bool(_ubii_config().get("enabled")),
         "method": _pabilo_normalize_method(order_obj.method or ""),
         "attempts": 0,
         "verified": False,
@@ -4165,10 +4372,12 @@ def store_payments():
         "pm_image_path": get_config_value("pm_image_path", ""),
         "binance_image_path": get_config_value("binance_image_path", ""),
         "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
+        "payment_verification_provider": _payment_verification_provider(),
         "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
         "pabilo_method": get_config_value("pabilo_method", "pm"),
         "pabilo_enforce_method": get_config_value("pabilo_enforce_method", "1"),
         "pabilo_default_movement_type": get_config_value("pabilo_default_movement_type", ""),
+        "ubii_method": get_config_value("ubii_method", "pm"),
     }
     return jsonify({"ok": True, "payments": data})
 
@@ -4192,6 +4401,68 @@ def store_item_automation_check(item_id: int):
         "pabilo_method": configured_method,
         "collect_payer_data": collect_payer_data,
     })
+
+
+@app.route("/webhook-ubii", methods=["POST"])
+def webhook_ubii():
+    cfg = _ubii_config()
+    if not cfg.get("enabled"):
+        return jsonify({"status": "error", "message": "La verificación Ubii no está activa"}), 503
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = request.form.to_dict(flat=True) if request.form else {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    configured_secret = str(cfg.get("webhook_secret") or "").strip()
+    if configured_secret:
+        provided_secret = (request.headers.get("X-Webhook-Secret") or request.args.get("secret") or "").strip()
+        if provided_secret != configured_secret:
+            return jsonify({"status": "error", "message": "Secret de webhook inválido"}), 401
+
+    extracted = _ubii_extract_notification_data(payload, cfg)
+    if not extracted.get("text"):
+        return jsonify({"status": "error", "message": "No data received"}), 400
+    if extracted.get("amount") is None or not extracted.get("reference"):
+        return jsonify({"status": "error", "message": "Formato no reconocido"}), 400
+
+    order_obj, match_message, already_processed = _ubii_find_matching_order(
+        extracted.get("reference") or "",
+        extracted.get("amount"),
+        cfg.get("method") or "pm",
+    )
+    if not order_obj:
+        return jsonify({
+            "status": "ignored",
+            "message": match_message,
+            "data": {
+                "monto": extracted.get("amount_raw") or "No encontrado",
+                "referencia": extracted.get("reference") or "No encontrada",
+            },
+        }), 200
+
+    if already_processed:
+        return jsonify({
+            "status": "success",
+            "message": match_message,
+            "order_id": order_obj.id,
+            "data": {
+                "monto": extracted.get("amount_raw") or "No encontrado",
+                "referencia": extracted.get("reference") or "No encontrada",
+            },
+        }), 200
+
+    result = _ubii_verify_and_update_order(order_obj, extracted, payload=payload)
+    return jsonify({
+        "status": "success",
+        "message": result.get("message") or "Pago verificado",
+        "order_id": order_obj.id,
+        "data": {
+            "monto": extracted.get("amount_raw") or "No encontrado",
+            "referencia": extracted.get("reference") or "No encontrada",
+        },
+    }), 200
 
 
  
@@ -4323,6 +4594,7 @@ def admin_config_payments_get():
         "pm_image_path": get_config_value("pm_image_path", ""),
         "binance_image_path": get_config_value("binance_image_path", ""),
         "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
+        "payment_verification_provider": _payment_verification_provider(),
         "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
         "pabilo_api_key": get_config_value("pabilo_api_key", ""),
         "pabilo_user_bank_id": get_config_value("pabilo_user_bank_id", ""),
@@ -4333,6 +4605,12 @@ def admin_config_payments_get():
         "pabilo_timeout_seconds": get_config_value("pabilo_timeout_seconds", os.environ.get("PABILO_TIMEOUT", "30")),
         "pabilo_enforce_method": get_config_value("pabilo_enforce_method", "1"),
         "pabilo_default_movement_type": get_config_value("pabilo_default_movement_type", ""),
+        "ubii_method": get_config_value("ubii_method", "pm"),
+        "ubii_text_field": get_config_value("ubii_text_field", "texto"),
+        "ubii_amount_regex": get_config_value("ubii_amount_regex", r"Bs\.\s*([\d\.,]+)"),
+        "ubii_reference_regex": get_config_value("ubii_reference_regex", r"referencia\s+(\d+)"),
+        "ubii_webhook_secret": get_config_value("ubii_webhook_secret", ""),
+        "ubii_webhook_path": "/webhook-ubii",
     })
 
 
@@ -4357,7 +4635,16 @@ def admin_config_payments_set():
         "pabilo_user_bank_id": (data.get("pabilo_user_bank_id") or "").strip(),
         "pabilo_pm_user_bank_id": (data.get("pabilo_pm_user_bank_id") or "").strip(),
         "pabilo_binance_user_bank_id": (data.get("pabilo_binance_user_bank_id") or "").strip(),
+        "ubii_text_field": (data.get("ubii_text_field") or "texto").strip() or "texto",
+        "ubii_amount_regex": (data.get("ubii_amount_regex") or r"Bs\.\s*([\d\.,]+)").strip() or r"Bs\.\s*([\d\.,]+)",
+        "ubii_reference_regex": (data.get("ubii_reference_regex") or r"referencia\s+(\d+)").strip() or r"referencia\s+(\d+)",
+        "ubii_webhook_secret": (data.get("ubii_webhook_secret") or "").strip(),
     }
+    provider = (data.get("payment_verification_provider") or "").strip().lower()
+    if provider not in ("", "pabilo", "ubii"):
+        provider = ""
+    values["payment_verification_provider"] = provider
+    values["ubii_auto_verify_enabled"] = "1" if provider == "ubii" else "0"
     pabilo_method = (data.get("pabilo_method") or "pm").strip().lower()
     if pabilo_method not in ("pm", "binance"):
         pabilo_method = "pm"
@@ -4376,6 +4663,10 @@ def admin_config_payments_set():
     if default_movement_type not in ("", "GENERIC", "MOVIL_PAY", "TRANSFER"):
         default_movement_type = ""
     values["pabilo_default_movement_type"] = default_movement_type
+    ubii_method = (data.get("ubii_method") or "pm").strip().lower()
+    if ubii_method not in ("pm", "binance"):
+        ubii_method = "pm"
+    values["ubii_method"] = ubii_method
     try:
         set_config_values(values)
     except Exception as exc:
@@ -4392,6 +4683,7 @@ def admin_config_payments_set():
             "pm_image_path": values.get("pm_image_path", ""),
             "binance_image_path": values.get("binance_image_path", ""),
             "binance_auto_enabled": values.get("binance_auto_enabled", "0"),
+            "payment_verification_provider": values.get("payment_verification_provider", ""),
             "pabilo_auto_verify_enabled": values.get("pabilo_auto_verify_enabled", "0"),
             "pabilo_api_key": values.get("pabilo_api_key", ""),
             "pabilo_user_bank_id": values.get("pabilo_user_bank_id", ""),
@@ -4402,6 +4694,12 @@ def admin_config_payments_set():
             "pabilo_timeout_seconds": values.get("pabilo_timeout_seconds", "30"),
             "pabilo_enforce_method": values.get("pabilo_enforce_method", "1"),
             "pabilo_default_movement_type": values.get("pabilo_default_movement_type", ""),
+            "ubii_method": values.get("ubii_method", "pm"),
+            "ubii_text_field": values.get("ubii_text_field", "texto"),
+            "ubii_amount_regex": values.get("ubii_amount_regex", r"Bs\.\s*([\d\.,]+)"),
+            "ubii_reference_regex": values.get("ubii_reference_regex", r"referencia\s+(\d+)"),
+            "ubii_webhook_secret": values.get("ubii_webhook_secret", ""),
+            "ubii_webhook_path": "/webhook-ubii",
         }
     })
 

@@ -509,6 +509,21 @@
             </div>
           </div>
           <div style="margin-top:18px; border:1px solid rgba(59,130,246,0.35); background:rgba(59,130,246,0.08); border-radius:10px; padding:12px;">
+            <h4 style="margin:0 0 10px; color:#bfdbfe;">Proveedor de verificación automática</h4>
+            <div class="form-row">
+              <label for="payment-verification-provider">Proveedor activo</label>
+              <select id="payment-verification-provider">
+                <option value="">Desactivado</option>
+                <option value="pabilo">Pabilo</option>
+                <option value="ubii">Ubii Webhook</option>
+              </select>
+            </div>
+            <div style="margin:0 0 14px 200px; color:#94a3b8; font-size:12px;">
+              Selecciona qué integración valida automáticamente los pagos de las recargas. Solo el proveedor activo participa en la verificación automática.
+            </div>
+          </div>
+
+          <div id="pabilo-verify-box" style="margin-top:18px; border:1px solid rgba(59,130,246,0.35); background:rgba(59,130,246,0.08); border-radius:10px; padding:12px;">
             <h4 style="margin:0 0 10px; color:#bfdbfe;">Pabilo - Verificación automática de pago</h4>
             <div class="form-row" style="margin-bottom:10px;">
               <label style="margin-bottom:0;">Activar verificación Pabilo</label>
@@ -562,6 +577,39 @@
                   <span>Solo aceptar ese método en juegos con mapeo automático</span>
                 </label>
               </div>
+            </div>
+          </div>
+          <div id="ubii-verify-box" style="margin-top:18px; border:1px solid rgba(16,185,129,0.35); background:rgba(16,185,129,0.08); border-radius:10px; padding:12px; display:none;">
+            <h4 style="margin:0 0 10px; color:#bbf7d0;">Ubii - Verificación por webhook</h4>
+            <div class="form-row">
+              <label for="ubii-method">Método de pago esperado</label>
+              <select id="ubii-method">
+                <option value="pm">Pago Móvil</option>
+                <option value="binance">Binance</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="ubii-text-field">Campo del texto</label>
+              <input id="ubii-text-field" type="text" placeholder="texto">
+            </div>
+            <div class="form-row">
+              <label for="ubii-amount-regex">Regex de monto</label>
+              <input id="ubii-amount-regex" type="text" placeholder="(\d+[\.,]\d{2})">
+            </div>
+            <div class="form-row">
+              <label for="ubii-reference-regex">Regex de referencia</label>
+              <input id="ubii-reference-regex" type="text" placeholder="(?:Ref|Referencia|#)[:\s]*(\d+)">
+            </div>
+            <div class="form-row">
+              <label for="ubii-webhook-secret">Secret del webhook</label>
+              <input id="ubii-webhook-secret" type="text" placeholder="Opcional">
+            </div>
+            <div class="form-row">
+              <label for="ubii-webhook-path">Ruta del webhook</label>
+              <input id="ubii-webhook-path" type="text" value="/webhook-ubii" readonly>
+            </div>
+            <div style="margin:0 0 0 200px; color:#94a3b8; font-size:12px;">
+              Envía a esta ruta el texto de la notificación en el campo configurado. Si defines un secret, debes mandarlo en el header <b>X-Webhook-Secret</b>.
             </div>
           </div>
           <div class="form-row">

@@ -216,6 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const binImage = document.getElementById('binance-image');
   const binAutoEnabled = document.getElementById('binance-auto-enabled');
   const binAutoNote = document.getElementById('binance-auto-note');
+  const paymentVerificationProvider = document.getElementById('payment-verification-provider');
   const pabiloAutoVerifyEnabled = document.getElementById('pabilo-auto-verify-enabled');
   const pabiloMethod = document.getElementById('pabilo-method');
   const pabiloApiKey = document.getElementById('pabilo-api-key');
@@ -225,6 +226,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const pabiloDefaultMovementType = document.getElementById('pabilo-default-movement-type');
   const pabiloTimeoutSeconds = document.getElementById('pabilo-timeout-seconds');
   const pabiloEnforceMethod = document.getElementById('pabilo-enforce-method');
+  const pabiloVerifyBox = document.getElementById('pabilo-verify-box');
+  const ubiiVerifyBox = document.getElementById('ubii-verify-box');
+  const ubiiMethod = document.getElementById('ubii-method');
+  const ubiiTextField = document.getElementById('ubii-text-field');
+  const ubiiAmountRegex = document.getElementById('ubii-amount-regex');
+  const ubiiReferenceRegex = document.getElementById('ubii-reference-regex');
+  const ubiiWebhookSecret = document.getElementById('ubii-webhook-secret');
+  const ubiiWebhookPath = document.getElementById('ubii-webhook-path');
   const payMethodSelect = document.getElementById('pay-method-select');
   const pmSection = document.getElementById('pm-section');
   const binSection = document.getElementById('binance-section');
@@ -254,6 +263,19 @@ document.addEventListener('DOMContentLoaded', () => {
   if (binAutoEnabled) {
     binAutoEnabled.addEventListener('change', () => {
       if (binAutoNote) binAutoNote.style.display = binAutoEnabled.checked ? '' : 'none';
+    });
+  }
+  function showPaymentVerificationProvider(provider) {
+    const value = (provider || '').toLowerCase();
+    if (paymentVerificationProvider && paymentVerificationProvider.value !== value) {
+      paymentVerificationProvider.value = value;
+    }
+    if (pabiloVerifyBox) pabiloVerifyBox.style.display = (value === 'pabilo') ? '' : 'none';
+    if (ubiiVerifyBox) ubiiVerifyBox.style.display = (value === 'ubii') ? '' : 'none';
+  }
+  if (paymentVerificationProvider) {
+    paymentVerificationProvider.addEventListener('change', () => {
+      showPaymentVerificationProvider(paymentVerificationProvider.value || '');
     });
   }
   const inputActiveLoginGame = document.getElementById('active-login-game');
@@ -826,6 +848,7 @@ window.fetchPayments = fetchPayments;
       pm_image_path: pmImage ? pmImage.value.trim() : '',
       binance_image_path: binImage ? binImage.value.trim() : '',
       binance_auto_enabled: binAutoEnabled ? binAutoEnabled.checked : false,
+      payment_verification_provider: paymentVerificationProvider ? paymentVerificationProvider.value : '',
       pabilo_auto_verify_enabled: pabiloAutoVerifyEnabled ? pabiloAutoVerifyEnabled.checked : false,
       pabilo_method: pabiloMethod ? pabiloMethod.value : 'pm',
       pabilo_api_key: pabiloApiKey ? pabiloApiKey.value.trim() : '',
@@ -834,7 +857,12 @@ window.fetchPayments = fetchPayments;
       pabilo_base_url: pabiloBaseUrl ? pabiloBaseUrl.value.trim() : '',
       pabilo_default_movement_type: pabiloDefaultMovementType ? pabiloDefaultMovementType.value : '',
       pabilo_timeout_seconds: pabiloTimeoutSeconds ? pabiloTimeoutSeconds.value.trim() : '30',
-      pabilo_enforce_method: pabiloEnforceMethod ? pabiloEnforceMethod.checked : true
+      pabilo_enforce_method: pabiloEnforceMethod ? pabiloEnforceMethod.checked : true,
+      ubii_method: ubiiMethod ? ubiiMethod.value : 'pm',
+      ubii_text_field: ubiiTextField ? ubiiTextField.value.trim() : 'texto',
+      ubii_amount_regex: ubiiAmountRegex ? ubiiAmountRegex.value.trim() : 'Bs\\.\\s*([\\d\\.,]+)',
+      ubii_reference_regex: ubiiReferenceRegex ? ubiiReferenceRegex.value.trim() : 'referencia\\s+(\\d+)',
+      ubii_webhook_secret: ubiiWebhookSecret ? ubiiWebhookSecret.value.trim() : ''
     };
     const res = await fetch('/admin/config/payments', {
       method: 'POST',
@@ -862,6 +890,7 @@ window.fetchPayments = fetchPayments;
       binAutoEnabled.checked = (data.binance_auto_enabled === '1' || data.binance_auto_enabled === 1 || data.binance_auto_enabled === true);
       if (binAutoNote) binAutoNote.style.display = binAutoEnabled.checked ? '' : 'none';
     }
+    if (paymentVerificationProvider) paymentVerificationProvider.value = (data.payment_verification_provider || '').toLowerCase();
     if (pabiloAutoVerifyEnabled) pabiloAutoVerifyEnabled.checked = (data.pabilo_auto_verify_enabled === '1' || data.pabilo_auto_verify_enabled === 1 || data.pabilo_auto_verify_enabled === true);
     if (pabiloMethod) pabiloMethod.value = (data.pabilo_method || 'pm').toLowerCase() === 'binance' ? 'binance' : 'pm';
     if (pabiloApiKey) pabiloApiKey.value = data.pabilo_api_key || '';
@@ -871,6 +900,13 @@ window.fetchPayments = fetchPayments;
     if (pabiloDefaultMovementType) pabiloDefaultMovementType.value = data.pabilo_default_movement_type || '';
     if (pabiloTimeoutSeconds) pabiloTimeoutSeconds.value = data.pabilo_timeout_seconds || '30';
     if (pabiloEnforceMethod) pabiloEnforceMethod.checked = !(data.pabilo_enforce_method === '0' || data.pabilo_enforce_method === 0 || data.pabilo_enforce_method === false);
+    if (ubiiMethod) ubiiMethod.value = (data.ubii_method || 'pm').toLowerCase() === 'binance' ? 'binance' : 'pm';
+    if (ubiiTextField) ubiiTextField.value = data.ubii_text_field || 'texto';
+    if (ubiiAmountRegex) ubiiAmountRegex.value = data.ubii_amount_regex || 'Bs\\.\\s*([\\d\\.,]+)';
+    if (ubiiReferenceRegex) ubiiReferenceRegex.value = data.ubii_reference_regex || 'referencia\\s+(\\d+)';
+    if (ubiiWebhookSecret) ubiiWebhookSecret.value = data.ubii_webhook_secret || '';
+    if (ubiiWebhookPath) ubiiWebhookPath.value = data.ubii_webhook_path || '/webhook-ubii';
+    showPaymentVerificationProvider((data.payment_verification_provider || '').toLowerCase());
     showPaySection((payMethodSelect && payMethodSelect.value) || activePayMethodView || 'pm');
   }
   // Ensure global symbol exists for any external references
@@ -2087,16 +2123,30 @@ window.refreshGallery = refreshGallery;
         ? !!pabiloEligibility.eligible
         : !!o.pabilo_eligible;
       const pabiloVerified = !!payVerify.verified;
+      const payProvider = String(payVerify.provider || '').toLowerCase();
+      const payProviderLabel = payProvider === 'ubii' ? 'Ubii' : 'Pabilo';
       const pabiloRequestable = (typeof pabiloRequest.requestable === 'boolean')
         ? !!pabiloRequest.requestable
         : pabiloEligible;
-      const pabiloStateText = pabiloEligible
-        ? (pabiloVerified
-            ? `Pago verificado en Pabilo${payVerify.verification_id ? ` · ID ${payVerify.verification_id}` : ''}`
-            : `Pago no verificado en Pabilo${payVerify.message ? ` · ${payVerify.message}` : ''}`)
-        : (pabiloRequestable
-            ? `Solicitud Pabilo permitida${payVerify.message ? ` · ${payVerify.message}` : ''}`
-            : (pabiloRequest.reason ? `Pabilo no consulta: ${pabiloRequest.reason}` : (pabiloEligibility.reason ? `Pabilo no aplica: ${pabiloEligibility.reason}` : '')));
+      let pabiloStateText = '';
+      let pabiloStateColor = '#cbd5e1';
+      if (payProvider === 'ubii') {
+        pabiloStateText = pabiloVerified
+          ? `Pago verificado en ${payProviderLabel}${payVerify.verification_id ? ` · Ref ${payVerify.verification_id}` : ''}`
+          : (payVerify.message ? `${payProviderLabel}: ${payVerify.message}` : '');
+        pabiloStateColor = pabiloVerified ? '#6ee7b7' : '#fca5a5';
+      } else if (pabiloEligible) {
+        pabiloStateText = pabiloVerified
+          ? `Pago verificado en Pabilo${payVerify.verification_id ? ` · ID ${payVerify.verification_id}` : ''}`
+          : `Pago no verificado en Pabilo${payVerify.message ? ` · ${payVerify.message}` : ''}`;
+        pabiloStateColor = pabiloVerified ? '#6ee7b7' : '#fca5a5';
+      } else if (pabiloRequestable) {
+        pabiloStateText = `Solicitud Pabilo permitida${payVerify.message ? ` · ${payVerify.message}` : ''}`;
+      } else if (pabiloRequest.reason && pabiloRequest.reason !== 'Pabilo esta desactivado') {
+        pabiloStateText = `Pabilo no consulta: ${pabiloRequest.reason}`;
+      } else if (pabiloEligibility.reason && pabiloEligibility.reason !== 'Pabilo esta desactivado') {
+        pabiloStateText = `Pabilo no aplica: ${pabiloEligibility.reason}`;
+      }
       tile.setAttribute('data-is-auto', isAutoMapped ? '1' : '0');
       const when = new Date(o.created_at).toLocaleString();
       const itemsArr = Array.isArray(o.items) ? o.items : [];
@@ -2124,7 +2174,7 @@ window.refreshGallery = refreshGallery;
             <div class="package-name">${diam || ''}</div>
             ${playerNick && playerNick !== (o.name||'').trim() && playerNick !== (o.email||'').trim() ? `<div class="package-name" style="color:#86efac;font-size:12px;">👤 ${playerNick}</div>` : ''}
             ${autoSummaryText ? `<div class="package-name" style="color:#93c5fd;font-size:12px;">${autoSummaryText}</div>` : ''}
-            ${pabiloStateText ? `<div class="package-name" style="color:${pabiloEligible ? (pabiloVerified ? '#6ee7b7' : '#fca5a5') : '#cbd5e1'};font-size:12px;">${pabiloStateText}</div>` : ''}
+            ${pabiloStateText ? `<div class="package-name" style="color:${pabiloStateColor};font-size:12px;">${pabiloStateText}</div>` : ''}
             <div class="quantity-label">Cantidad: <span class="quantity-value">${itemsArr.length ? qtyTotal : 1}</span></div>
             <div class="ref-section">
               <div class="ref-label">REFERENCIA</div>
@@ -2164,7 +2214,7 @@ window.refreshGallery = refreshGallery;
         </div>` : ''}
         <div class="row-actions" style="justify-content:space-between;">
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            ${pabiloRequestable && ['pending', 'approved', 'delivered'].includes(o.status) && !pabiloVerified ? `<button class="btn btn-verify-payment" data-id="${o.id}">Verificar pago</button>` : ''}
+            ${payProvider !== 'ubii' && pabiloRequestable && ['pending', 'approved', 'delivered'].includes(o.status) && !pabiloVerified ? `<button class="btn btn-verify-payment" data-id="${o.id}">Verificar pago</button>` : ''}
             <button class="btn btn-approve" data-id="${o.id}" ${approveDisabled ? 'disabled' : ''}>${approveLabel}</button>
             ${isAutoMapped && processingAutoUnits > 0 ? `<button class="btn btn-verify-recharge" data-id="${o.id}">Verificar ${processingAutoUnits}</button>` : ''}
           </div>
