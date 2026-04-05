@@ -5851,6 +5851,7 @@ def admin_orders_list():
     )
 
     out = []
+    active_payment_provider = _payment_verification_provider()
     for x in orders:
         pkg = StorePackage.query.get(x.store_package_id)
         it = GamePackageItem.query.get(x.item_id) if x.item_id else None
@@ -5888,6 +5889,7 @@ def admin_orders_list():
             "item_price_usd": (it.price if it else 0.0),
             "is_auto_mapped": bool(auto_summary.get("total_units")),
             "auto_recharge_summary": auto_summary,
+            "payment_verification_provider_active": active_payment_provider,
             "payment_verify": payment_state,
             "pabilo_request": pabilo_request,
             "pabilo_eligible": bool(pabilo_eligibility.get("eligible")),

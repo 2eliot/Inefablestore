@@ -445,87 +445,117 @@
 
           <hr style="margin:24px 0; opacity:0.5;">
           <h3 style="margin:0 0 12px;">Métodos de pago</h3>
-          <div class="form-row">
-            <label for="pay-method-select">Seleccionar método</label>
-            <select id="pay-method-select">
-              <option value="" disabled selected hidden>— Selecciona un método —</option>
-              <option value="pm">Pago Móvil</option>
-              <option value="binance">Binance</option>
-            </select>
-          </div>
-          <div id="pm-section">
-            <div class="form-row">
-              <label>Pago Móvil - Banco</label>
-              <input id="pm-bank" type="text" placeholder="Nombre del banco">
-            </div>
-            <div class="form-row">
-              <label>Pago Móvil - Nombre</label>
-              <input id="pm-name" type="text" placeholder="Titular">
-            </div>
-            <div class="form-row">
-              <label>Pago Móvil - Teléfono</label>
-              <input id="pm-phone" type="text" placeholder="04XXXXXXXXX">
-            </div>
-            <div class="form-row">
-              <label>Pago Móvil - Cédula/RIF</label>
-              <input id="pm-id" type="text" placeholder="V-00000000">
-            </div>
-            <div class="form-row">
-              <label>Pago Móvil - Imagen (PNG)</label>
-              <div>
-                <div id="slot-pm-image"></div>
-                <input id="pm-image" type="hidden">
+          <div class="pay-config-shell">
+            <div class="pay-config-card pay-config-card--neutral">
+              <div class="pay-config-head">
+                <h4>Método visible para el cliente</h4>
+                <p>Configura los datos que verá el usuario según el método de pago que seleccione en checkout.</p>
               </div>
-            </div>
-          </div>
-          <div id="binance-section">
-            <div class="form-row">
-              <label>Binance - Email</label>
-              <input id="binance-email" type="email" placeholder="correo@binance.com">
-            </div>
-            <div class="form-row">
-              <label>Binance - Teléfono</label>
-              <input id="binance-phone" type="text" placeholder="Teléfono registrado">
-            </div>
-            <div class="form-row">
-              <label>Binance - Imagen (PNG)</label>
-              <div>
-                <div id="slot-binance-image"></div>
-                <input id="binance-image" type="hidden">
+              <div class="form-row">
+                <label for="pay-method-select">Método a editar</label>
+                <select id="pay-method-select">
+                  <option value="" disabled selected hidden>— Selecciona un método —</option>
+                  <option value="pm">Pago Móvil</option>
+                  <option value="binance">Binance</option>
+                </select>
               </div>
-            </div>
-            <div class="form-row" style="margin-top:12px;">
-              <label>Verificación automática Binance</label>
-              <div style="display:flex; align-items:center; gap:10px;">
-                <label class="toggle-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                  <input id="binance-auto-enabled" type="checkbox">
-                  <span>Activar auto-aprobación por API de Binance</span>
-                </label>
-              </div>
-            </div>
-            <div id="binance-auto-note" style="margin-top:6px; padding:10px 12px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); border-radius:8px; font-size:12px; color:#94a3b8; display:none;">
-              ⚠️ Requiere variables de entorno: <b>BINANCE_API_KEY</b>, <b>BINANCE_API_SECRET</b>. Opcional: <b>BINANCE_PROXY</b>.<br>
-              Las órdenes con pago Binance cuyo artículo tenga <b>auto habilitado</b> en el mapeo de Revendedores serán verificadas y aprobadas automáticamente cuando la API de Binance confirme el pago exacto con el código de referencia en la nota del beneficiario.
-            </div>
-          </div>
-          <div style="margin-top:18px; border:1px solid rgba(59,130,246,0.35); background:rgba(59,130,246,0.08); border-radius:10px; padding:12px;">
-            <h4 style="margin:0 0 10px; color:#bfdbfe;">Proveedor de verificación automática</h4>
-            <div class="form-row">
-              <label for="payment-verification-provider">Proveedor activo</label>
-              <select id="payment-verification-provider">
-                <option value="">Desactivado</option>
-                <option value="pabilo">Pabilo</option>
-                <option value="ubii">Ubii Webhook</option>
-              </select>
-            </div>
-            <div style="margin:0 0 14px 200px; color:#94a3b8; font-size:12px;">
-              Selecciona qué integración valida automáticamente los pagos de las recargas. Solo el proveedor activo participa en la verificación automática.
-            </div>
-          </div>
 
-          <div id="pabilo-verify-box" style="margin-top:18px; border:1px solid rgba(59,130,246,0.35); background:rgba(59,130,246,0.08); border-radius:10px; padding:12px;">
-            <h4 style="margin:0 0 10px; color:#bfdbfe;">Pabilo - Verificación automática de pago</h4>
-            <div class="form-row" style="margin-bottom:10px;">
+              <div class="pay-method-sections">
+                <div id="pm-section" class="pay-method-card">
+                  <div class="pay-method-card__head">
+                    <h5>Pago Móvil</h5>
+                    <p>Datos bancarios e imagen que se muestran al cliente.</p>
+                  </div>
+                  <div class="pay-config-grid">
+                    <div class="form-row">
+                      <label>Banco</label>
+                      <input id="pm-bank" type="text" placeholder="Nombre del banco">
+                    </div>
+                    <div class="form-row">
+                      <label>Nombre</label>
+                      <input id="pm-name" type="text" placeholder="Titular">
+                    </div>
+                    <div class="form-row">
+                      <label>Teléfono</label>
+                      <input id="pm-phone" type="text" placeholder="04XXXXXXXXX">
+                    </div>
+                    <div class="form-row">
+                      <label>Cédula o RIF</label>
+                      <input id="pm-id" type="text" placeholder="V-00000000">
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <label>Imagen (PNG)</label>
+                    <div>
+                      <div id="slot-pm-image"></div>
+                      <input id="pm-image" type="hidden">
+                    </div>
+                  </div>
+                </div>
+
+                <div id="binance-section" class="pay-method-card">
+                  <div class="pay-method-card__head">
+                    <h5>Binance</h5>
+                    <p>Datos visibles para el cliente y opción de autoaprobación por API.</p>
+                  </div>
+                  <div class="pay-config-grid">
+                    <div class="form-row">
+                      <label>Email</label>
+                      <input id="binance-email" type="email" placeholder="correo@binance.com">
+                    </div>
+                    <div class="form-row">
+                      <label>Teléfono</label>
+                      <input id="binance-phone" type="text" placeholder="Teléfono registrado">
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <label>Imagen (PNG)</label>
+                    <div>
+                      <div id="slot-binance-image"></div>
+                      <input id="binance-image" type="hidden">
+                    </div>
+                  </div>
+                  <div class="form-row" style="margin-top:12px;">
+                    <label>Autoaprobación Binance</label>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <label class="toggle-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input id="binance-auto-enabled" type="checkbox">
+                        <span>Activar auto-aprobación por API de Binance</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div id="binance-auto-note" class="pay-config-note pay-config-note--green" style="display:none;">
+                    ⚠️ Requiere variables de entorno: <b>BINANCE_API_KEY</b>, <b>BINANCE_API_SECRET</b>. Opcional: <b>BINANCE_PROXY</b>.<br>
+                    Las órdenes con pago Binance cuyo artículo tenga <b>auto habilitado</b> en el mapeo de Revendedores serán verificadas y aprobadas automáticamente cuando la API de Binance confirme el pago exacto con el código de referencia en la nota del beneficiario.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="pay-config-card pay-config-card--blue">
+              <div class="pay-config-head">
+                <h4>Proveedor de verificación automática</h4>
+                <p>Elige qué integración valida automáticamente el pago de las recargas.</p>
+              </div>
+              <div class="form-row">
+                <label for="payment-verification-provider">Proveedor activo</label>
+                <select id="payment-verification-provider">
+                  <option value="">Desactivado</option>
+                  <option value="pabilo">Pabilo</option>
+                  <option value="ubii">Ubii Webhook</option>
+                </select>
+              </div>
+              <div class="pay-config-note">
+                Solo el proveedor activo participa en la verificación automática. Los datos del proveedor que no uses se conservan guardados.
+              </div>
+            </div>
+
+            <div id="pabilo-verify-box" class="pay-config-card pay-config-card--blue">
+              <div class="pay-config-head">
+                <h4>Pabilo</h4>
+                <p>Conexión API para validar pagos automáticamente en órdenes compatibles.</p>
+              </div>
+              <div class="form-row" style="margin-bottom:10px;">
               <label style="margin-bottom:0;">Activar verificación Pabilo</label>
               <div style="display:flex; align-items:center; gap:10px;">
                 <label class="toggle-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
@@ -533,88 +563,95 @@
                   <span>Encender verificación de pago en Pabilo</span>
                 </label>
               </div>
-            </div>
-            <div class="form-row">
-              <label for="pabilo-method">Método de pago permitido</label>
-              <select id="pabilo-method">
-                <option value="pm">Pago Móvil</option>
-                <option value="binance">Binance</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label for="pabilo-api-key">API Key de Pabilo</label>
-              <input id="pabilo-api-key" type="text" placeholder="pk_...">
-            </div>
-            <div class="form-row">
-              <label for="pabilo-pm-user-bank-id">UserBankId Pabilo para Pago Móvil</label>
-              <input id="pabilo-pm-user-bank-id" type="text" placeholder="ub_...">
-            </div>
-            <div class="form-row">
-              <label for="pabilo-binance-user-bank-id">UserBankId Pabilo para Binance</label>
-              <input id="pabilo-binance-user-bank-id" type="text" placeholder="ub_...">
-            </div>
-            <div class="form-row">
-              <label for="pabilo-base-url">URL base Pabilo</label>
-              <input id="pabilo-base-url" type="text" placeholder="https://api.pabilo.app">
-            </div>
-            <div class="form-row">
-              <label for="pabilo-default-movement-type">Tipo de movimiento por defecto</label>
-              <select id="pabilo-default-movement-type">
-                <option value="">Detectar desde la orden</option>
-                <option value="MOVIL_PAY">MOVIL_PAY</option>
-                <option value="TRANSFER">TRANSFER</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label for="pabilo-timeout-seconds">Timeout (segundos)</label>
-              <input id="pabilo-timeout-seconds" type="number" min="5" step="1" placeholder="30">
-            </div>
-            <div class="form-row" style="margin-bottom:0;">
-              <label style="margin-bottom:0;">Restringir juegos mapeados al método elegido</label>
-              <div style="display:flex; align-items:center; gap:10px;">
-                <label class="toggle-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                  <input id="pabilo-enforce-method" type="checkbox" checked>
-                  <span>Solo aceptar ese método en juegos con mapeo automático</span>
-                </label>
+              </div>
+              <div class="pay-config-grid">
+                <div class="form-row">
+                  <label for="pabilo-method">Método de pago permitido</label>
+                  <select id="pabilo-method">
+                    <option value="pm">Pago Móvil</option>
+                    <option value="binance">Binance</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label for="pabilo-api-key">API Key de Pabilo</label>
+                  <input id="pabilo-api-key" type="text" placeholder="pk_...">
+                </div>
+                <div class="form-row">
+                  <label for="pabilo-pm-user-bank-id">UserBankId para Pago Móvil</label>
+                  <input id="pabilo-pm-user-bank-id" type="text" placeholder="ub_...">
+                </div>
+                <div class="form-row">
+                  <label for="pabilo-binance-user-bank-id">UserBankId para Binance</label>
+                  <input id="pabilo-binance-user-bank-id" type="text" placeholder="ub_...">
+                </div>
+                <div class="form-row">
+                  <label for="pabilo-base-url">URL base</label>
+                  <input id="pabilo-base-url" type="text" placeholder="https://api.pabilo.app">
+                </div>
+                <div class="form-row">
+                  <label for="pabilo-default-movement-type">Tipo de movimiento por defecto</label>
+                  <select id="pabilo-default-movement-type">
+                    <option value="">Detectar desde la orden</option>
+                    <option value="MOVIL_PAY">MOVIL_PAY</option>
+                    <option value="TRANSFER">TRANSFER</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label for="pabilo-timeout-seconds">Timeout (segundos)</label>
+                  <input id="pabilo-timeout-seconds" type="number" min="5" step="1" placeholder="30">
+                </div>
+              </div>
+              <div class="form-row" style="margin-bottom:0;">
+                <label style="margin-bottom:0;">Restringir juegos mapeados al método elegido</label>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <label class="toggle-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input id="pabilo-enforce-method" type="checkbox" checked>
+                    <span>Solo aceptar ese método en juegos con mapeo automático</span>
+                  </label>
+                </div>
               </div>
             </div>
-          </div>
-          <div id="ubii-verify-box" style="margin-top:18px; border:1px solid rgba(16,185,129,0.35); background:rgba(16,185,129,0.08); border-radius:10px; padding:12px; display:none;">
-            <h4 style="margin:0 0 10px; color:#bbf7d0;">Ubii - Verificación por webhook</h4>
-            <div class="form-row">
-              <label for="ubii-method">Método de pago esperado</label>
-              <select id="ubii-method">
-                <option value="pm">Pago Móvil</option>
-                <option value="binance">Binance</option>
-              </select>
+
+            <div id="ubii-verify-box" class="pay-config-card pay-config-card--green" style="display:none;">
+              <div class="pay-config-head">
+                <h4>Ubii Webhook</h4>
+                <p>Validación por texto de notificación, referencia exacta y monto mayor o igual a la orden.</p>
+              </div>
+              <div class="pay-config-grid">
+                <div class="form-row">
+                  <label for="ubii-method">Método de pago esperado</label>
+                  <select id="ubii-method">
+                    <option value="pm">Pago Móvil</option>
+                    <option value="binance">Binance</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label for="ubii-text-field">Campo del texto</label>
+                  <input id="ubii-text-field" type="text" placeholder="texto">
+                </div>
+                <div class="form-row">
+                  <label for="ubii-amount-regex">Regex de monto</label>
+                  <input id="ubii-amount-regex" type="text" placeholder="Bs\.\s*([\d\.,]+)">
+                </div>
+                <div class="form-row">
+                  <label for="ubii-reference-regex">Regex de referencia</label>
+                  <input id="ubii-reference-regex" type="text" placeholder="referencia\s+(\d+)">
+                </div>
+                <div class="form-row">
+                  <label for="ubii-webhook-secret">Secret del webhook</label>
+                  <input id="ubii-webhook-secret" type="text" placeholder="Opcional">
+                </div>
+                <div class="form-row">
+                  <label for="ubii-webhook-path">Ruta del webhook</label>
+                  <input id="ubii-webhook-path" type="text" value="/webhook-ubii" readonly>
+                </div>
+              </div>
+              <div class="pay-config-note pay-config-note--green">
+                Envía a esta ruta el texto de la notificación en el campo configurado. Si defines un secret, debes mandarlo en el header <b>X-Webhook-Secret</b>.
+              </div>
             </div>
-            <div class="form-row">
-              <label for="ubii-text-field">Campo del texto</label>
-              <input id="ubii-text-field" type="text" placeholder="texto">
-            </div>
-            <div class="form-row">
-              <label for="ubii-amount-regex">Regex de monto</label>
-              <input id="ubii-amount-regex" type="text" placeholder="(\d+[\.,]\d{2})">
-            </div>
-            <div class="form-row">
-              <label for="ubii-reference-regex">Regex de referencia</label>
-              <input id="ubii-reference-regex" type="text" placeholder="(?:Ref|Referencia|#)[:\s]*(\d+)">
-            </div>
-            <div class="form-row">
-              <label for="ubii-webhook-secret">Secret del webhook</label>
-              <input id="ubii-webhook-secret" type="text" placeholder="Opcional">
-            </div>
-            <div class="form-row">
-              <label for="ubii-webhook-path">Ruta del webhook</label>
-              <input id="ubii-webhook-path" type="text" value="/webhook-ubii" readonly>
-            </div>
-            <div style="margin:0 0 0 200px; color:#94a3b8; font-size:12px;">
-              Envía a esta ruta el texto de la notificación en el campo configurado. Si defines un secret, debes mandarlo en el header <b>X-Webhook-Secret</b>.
-            </div>
-          </div>
-          <div class="form-row">
-            <label>&nbsp;</label>
-            <div>
+
+            <div class="pay-config-actions">
               <button id="btn-save-payments" class="btn primary" type="button">Guardar métodos de pago</button>
             </div>
           </div>

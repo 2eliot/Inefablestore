@@ -2124,6 +2124,7 @@ window.refreshGallery = refreshGallery;
         : !!o.pabilo_eligible;
       const pabiloVerified = !!payVerify.verified;
       const payProvider = String(payVerify.provider || '').toLowerCase();
+      const activeVerifyProvider = String(o.payment_verification_provider_active || '').toLowerCase();
       const payProviderLabel = payProvider === 'ubii' ? 'Ubii' : 'Pabilo';
       const pabiloRequestable = (typeof pabiloRequest.requestable === 'boolean')
         ? !!pabiloRequest.requestable
@@ -2135,6 +2136,11 @@ window.refreshGallery = refreshGallery;
           ? `Pago verificado en ${payProviderLabel}${payVerify.verification_id ? ` · Ref ${payVerify.verification_id}` : ''}`
           : (payVerify.message ? `${payProviderLabel}: ${payVerify.message}` : '');
         pabiloStateColor = pabiloVerified ? '#6ee7b7' : '#fca5a5';
+      } else if (activeVerifyProvider === 'ubii') {
+        pabiloStateText = pabiloVerified
+          ? `Pago verificado en Ubii${payVerify.verification_id ? ` · Ref ${payVerify.verification_id}` : ''}`
+          : 'Ubii activo: esperando webhook con referencia exacta y monto mayor o igual a la orden';
+        pabiloStateColor = pabiloVerified ? '#6ee7b7' : '#86efac';
       } else if (pabiloEligible) {
         pabiloStateText = pabiloVerified
           ? `Pago verificado en Pabilo${payVerify.verification_id ? ` · ID ${payVerify.verification_id}` : ''}`
