@@ -5474,6 +5474,9 @@ def _receipt_reference_prompt() -> str:
         "Reglas estrictas:\n\n"
         "Responde UNICAMENTE con los digitos del numero de referencia.\n"
         "No incluyas palabras como Referencia o Confirmacion.\n"
+        "El numero buscado puede aparecer con etiquetas como: Referencia, Numero de referencia, Nro. de referencia, Operacion, Numero de operacion, Nro. de operacion, Codigo de operacion, Transaccion, Comprobante o Confirmacion.\n"
+        "Prioriza el numero de la operacion bancaria o de la transaccion del comprobante, aunque el banco use un nombre distinto para ese campo.\n"
+        "Ignora montos, fechas, telefonos, cedulas, cuentas origen/destino y cualquier otro numero que no identifique la operacion.\n"
         "Si hay varios numeros, prioriza el asociado a la transaccion.\n"
         "Si la imagen no es un comprobante de pago o no tiene una referencia clara, responde exactamente ERROR_NO_DETECTADO.\n"
         "No inventes numeros; si no estas seguro al 100%, responde ERROR_NO_DETECTADO."
@@ -5498,6 +5501,9 @@ def _normalize_extracted_capture_reference(raw_value) -> str:
         return ""
     if text.isdigit() and 1 <= len(text) <= 21:
         return text
+    digit_groups = re.findall(r"\d+", text)
+    if len(digit_groups) == 1 and 1 <= len(digit_groups[0]) <= 21:
+        return digit_groups[0]
     return ""
 
 
