@@ -4488,11 +4488,14 @@ def webhook_ubii():
         return jsonify({"status": "error", "message": "La verificación Ubii no está activa"}), 503
 
     raw_body = request.get_data(cache=True, as_text=True) or ""
-    payload = request.get_json(silent=True)
+    debug_enabled = (request.args.get("debug") or request.headers.get("X-Ubii-Debug") or "").strip().lower() in {"1", "true", "yes", "on"}
+    request_json = request.get_json(silent=True)
+    payload = request_json
     if not isinstance(payload, dict):
         payload = request.form.to_dict(flat=True) if request.form else {}
     if not isinstance(payload, dict):
         payload = {}
+    initial_payload = dict(payload)
 
     configured_secret = str(cfg.get("webhook_secret") or "").strip()
     if configured_secret:
@@ -4501,8 +4504,8 @@ def webhook_ubii():
             return jsonify({"status": "error", "message": "Secret de webhook inválido"}), 401
 
     extracted = _ubii_extract_notification_data(payload, cfg)
+    fallback_payload = {}
     if extracted.get("amount") is None or not extracted.get("reference"):
-        fallback_payload = {}
         stripped_body = str(raw_body or "").strip()
         if stripped_body:
             parsed_form = urllib.parse.parse_qs(stripped_body, keep_blank_values=True)
@@ -4520,6 +4523,37 @@ def webhook_ubii():
             fallback_extracted = _ubii_extract_notification_data({**payload, **fallback_payload}, cfg)
             if fallback_extracted.get("text"):
                 extracted = fallback_extracted
+
+    if debug_enabled:
+        return jsonify({
+            "status": "debug",
+            "request": {
+                "content_type": request.content_type,
+                "mimetype": request.mimetype,
+                "raw_body": raw_body,
+                "json": request_json if isinstance(request_json, dict) else request_json,
+                "form": request.form.to_dict(flat=True) if request.form else {},
+                "args": request.args.to_dict(flat=True) if request.args else {},
+            },
+            "config": {
+                "enabled": bool(cfg.get("enabled")),
+                "method": cfg.get("method"),
+                "text_field": cfg.get("text_field"),
+                "amount_regex": cfg.get("amount_regex"),
+                "reference_regex": cfg.get("reference_regex"),
+            },
+            "payload": {
+                "initial": initial_payload,
+                "fallback": fallback_payload,
+                "final": {**initial_payload, **fallback_payload} if fallback_payload else initial_payload,
+            },
+            "extracted": {
+                "text": extracted.get("text") or "",
+                "amount_raw": extracted.get("amount_raw") or "",
+                "amount": str(extracted.get("amount") or ""),
+                "reference": extracted.get("reference") or "",
+            },
+        }), 200
 
     if not extracted.get("text") and extracted.get("amount") is None and not extracted.get("reference"):
         return jsonify({"status": "error", "message": "No data received"}), 400
