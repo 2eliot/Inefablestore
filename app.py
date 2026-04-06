@@ -1946,6 +1946,7 @@ class RevendedoresItemMapping(db.Model):
     remote_package_id = db.Column(db.Integer, nullable=False)
     remote_label = db.Column(db.String(250), default="")
     auto_enabled = db.Column(db.Boolean, default=False)
+    direct_to_script = db.Column(db.Boolean, default=False)
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -2065,6 +2066,181 @@ def _revendedores_env():
     catalog_path = (os.environ.get("REVENDEDORES_CATALOG_PATH") or os.environ.get("WEBB_CATALOG_PATH") or "/api/catalog/active").strip()
     recharge_path = (os.environ.get("REVENDEDORES_RECHARGE_PATH") or os.environ.get("WEBB_RECHARGE_PATH") or "/api/recharge/dynamic").strip()
     return base_url, api_key, catalog_path, recharge_path
+
+
+def _game_script_env():
+    base_url = (os.environ.get("GAME_SCRIPT_BASE_URL") or "").strip().rstrip("/")
+    secret = (os.environ.get("GAME_SCRIPT_SECRET") or "").strip()
+    raw_timeout = (os.environ.get("GAME_SCRIPT_TIMEOUT") or "60").strip()
+    try:
+        timeout = max(5, int(raw_timeout))
+    except Exception:
+        timeout = 60
+    return base_url, secret, timeout
+
+
+def _game_script_headers():
+    _, secret, _ = _game_script_env()
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if secret:
+        headers["X-Game-Script-Secret"] = secret
+    return headers
+
+
+def _game_script_request(method: str, endpoint_path: str, payload=None, timeout=None):
+    base_url, _, default_timeout = _game_script_env()
+    if not base_url:
+        return None, {"success": False, "error": "Falta configurar GAME_SCRIPT_BASE_URL"}
+    request_timeout = timeout if timeout is not None else default_timeout
+    url = f"{base_url}/{str(endpoint_path or '').lstrip('/')}"
+    try:
+        response = _requests_lib.request(
+            method=str(method or "GET").upper(),
+            url=url,
+            json=payload,
+            headers=_game_script_headers(),
+            timeout=request_timeout,
+        )
+        try:
+            data = response.json()
+        except Exception:
+            data = {
+                "success": bool(response.ok),
+                "error": (response.text or "").strip() or f"HTTP {response.status_code}",
+            }
+        return response, data
+    except Exception as exc:
+        return None, {"success": False, "error": f"Error conectando al Game Script: {str(exc)}"}
+
+
+def _unit_delivery_source(unit):
+    if bool(unit.get("direct_to_script")):
+        return "game_script_direct"
+    return "revendedores_api"
+
+
+def _automation_source_from_units(units):
+    sources = {str(_unit_delivery_source(unit)) for unit in (units or [])}
+    if not sources:
+        return "revendedores_api"
+    if len(sources) == 1:
+        return next(iter(sources))
+    return "mixed_auto"
+
+
+def _apply_dispatch_result_to_unit(unit, result):
+    unit["status"] = str(result.get("status") or unit.get("status") or "pending").strip().lower()
+    if unit["status"] not in {"pending", "processing", "completed", "failed", "not_found"}:
+        unit["status"] = "failed"
+    unit["player_name"] = str(result.get("player_name") or unit.get("player_name") or "")
+    unit["reference_no"] = str(result.get("reference_no") or unit.get("reference_no") or "")
+    unit["remaining_balance"] = result.get("remaining_balance", unit.get("remaining_balance"))
+    unit["error"] = str(result.get("error") or "")
+    unit["last_provider"] = str(result.get("provider") or _unit_delivery_source(unit))
+    return unit
+
+
+def _dispatch_game_script_unit(unit, order_obj, remote_meta):
+    package_key = str(remote_meta.get("provider_package_key") or remote_meta.get("script_package_key") or "").strip()
+    if not package_key:
+        return {
+            "status": "failed",
+            "error": "El paquete remoto no tiene provider_package_key para envío directo al script",
+            "provider": "game_script_direct",
+        }
+
+    payload = {
+        "roleId": str(order_obj.customer_id or "").strip(),
+        "packageKey": package_key,
+        "requestId": str(unit.get("external_order_id") or "").strip(),
+    }
+    response, data = _game_script_request("POST", "comprar", payload=payload)
+    if response is None:
+        return {
+            "status": "failed",
+            "error": str(data.get("error") or "No se pudo conectar al Game Script"),
+            "provider": "game_script_direct",
+        }
+
+    raw_status = str(data.get("status") or "").strip().lower()
+    if int(response.status_code or 0) == 202 or raw_status in {"queued", "processing"}:
+        return {
+            "status": "processing",
+            "error": str(data.get("message") or data.get("error") or "Solicitud en cola en Game Script"),
+            "reference_no": str(data.get("requestId") or payload["requestId"]),
+            "provider": "game_script_direct",
+        }
+
+    if bool(data.get("success")) and int(response.status_code or 0) < 400:
+        return {
+            "status": "completed",
+            "player_name": str(data.get("jugador") or ""),
+            "reference_no": str(data.get("orden") or data.get("requestId") or payload["requestId"]),
+            "error": "",
+            "provider": "game_script_direct",
+        }
+
+    error_text = str(data.get("error") or data.get("message") or "Recarga no completada en Game Script")
+    return {
+        "status": "failed",
+        "error": error_text,
+        "reference_no": str(data.get("requestId") or payload["requestId"]),
+        "provider": "game_script_direct",
+    }
+
+
+def _verify_game_script_unit(unit):
+    request_id = str(unit.get("external_order_id") or "").strip()
+    if not request_id:
+        return {
+            "status": "failed",
+            "error": "La recarga directa no tiene requestId para verificar",
+            "provider": "game_script_direct",
+        }
+
+    response, data = _game_script_request("GET", f"requests/{request_id}", payload=None, timeout=20)
+    if response is None:
+        return {
+            "status": "failed",
+            "error": str(data.get("error") or "No se pudo consultar el Game Script"),
+            "provider": "game_script_direct",
+        }
+
+    if int(response.status_code or 0) == 404:
+        return {
+            "status": "not_found",
+            "error": str(data.get("error") or "requestId no encontrado en Game Script"),
+            "provider": "game_script_direct",
+        }
+
+    request_status = str(data.get("status") or "").strip().lower()
+    result = data.get("result") if isinstance(data.get("result"), dict) else {}
+    if request_status == "completed" and bool(result.get("success", True)):
+        return {
+            "status": "completed",
+            "player_name": str(result.get("jugador") or unit.get("player_name") or ""),
+            "reference_no": str(result.get("orden") or data.get("requestId") or request_id),
+            "error": "",
+            "provider": "game_script_direct",
+        }
+    if request_status in {"queued", "processing"}:
+        return {
+            "status": "processing",
+            "error": str((result or {}).get("message") or data.get("message") or "Solicitud aún en proceso en Game Script"),
+            "reference_no": str(data.get("requestId") or request_id),
+            "provider": "game_script_direct",
+        }
+
+    error_text = str((result or {}).get("error") or data.get("error") or data.get("message") or "Recarga falló en Game Script")
+    return {
+        "status": "failed",
+        "error": error_text,
+        "reference_no": str(data.get("requestId") or request_id),
+        "provider": "game_script_direct",
+    }
 
 
 def _revendedores_catalog_paths():
@@ -3516,6 +3692,7 @@ def _build_order_auto_recharge_units(order_obj, automation_state=None):
                 "remote_product_id": mapping.remote_product_id,
                 "remote_package_id": mapping.remote_package_id,
                 "remote_label": (mapping.remote_label or "").strip(),
+                "direct_to_script": bool(getattr(mapping, "direct_to_script", False)),
             })
     existing_units = {}
     for raw_unit in state.get("units") or []:
@@ -3545,6 +3722,7 @@ def _build_order_auto_recharge_units(order_obj, automation_state=None):
             "remote_product_id": planned["remote_product_id"],
             "remote_package_id": planned["remote_package_id"],
             "remote_label": planned["remote_label"],
+            "direct_to_script": bool(planned.get("direct_to_script")),
             "external_order_id": str((previous or {}).get("external_order_id") or default_external_order_id),
             "status": status,
             "player_name": str((previous or {}).get("player_name") or ""),
@@ -3554,6 +3732,7 @@ def _build_order_auto_recharge_units(order_obj, automation_state=None):
             "attempt_count": int((previous or {}).get("attempt_count") or 0),
             "last_attempt_at": str((previous or {}).get("last_attempt_at") or ""),
             "last_checked_at": str((previous or {}).get("last_checked_at") or ""),
+            "last_provider": str((previous or {}).get("last_provider") or _unit_delivery_source(planned)),
         }
         units.append(unit)
     return units
@@ -3596,7 +3775,7 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
     units = _build_order_auto_recharge_units(order_obj, state)
     summary = _summarize_order_auto_recharges(units)
     state.update({
-        "source": "revendedores_api",
+        "source": _automation_source_from_units(units),
         "binance_auto": bool(binance_auto or state.get("binance_auto")),
         "units": units,
         "summary": summary,
@@ -3605,9 +3784,10 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
         _save_order_automation_state(order_obj, state)
         return {"ok": True, "summary": summary, "units": units}
 
-    webb_url, webb_api_key, _, recharge_path = _revendedores_env()
+    needs_revendedores = any(_unit_delivery_source(unit) == "revendedores_api" for unit in units)
+    webb_url, webb_api_key, _, _ = _revendedores_env()
     player_id = (order_obj.customer_id or "").strip()
-    if not webb_url or not webb_api_key:
+    if needs_revendedores and (not webb_url or not webb_api_key):
         state["error"] = "Falta configurar REVENDEDORES_BASE_URL y REVENDEDORES_API_KEY"
         state["pending_verification"] = False
         order_obj.status = "pending"
@@ -3660,6 +3840,7 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
         if not units_to_send:
             break
         unit = units_to_send[0]
+        unit["last_provider"] = _unit_delivery_source(unit)
         legacy_payload = {
             "product_id": unit.get("remote_product_id"),
             "package_id": unit.get("remote_package_id"),
@@ -3692,67 +3873,80 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
             unit["last_attempt_at"] = datetime.utcnow().isoformat()
             unit["attempt_count"] = int(unit.get("attempt_count") or 0) + 1
             try:
-                api_data = None
-                response_error = ""
-                for path in _revendedores_recharge_paths():
-                    use_legacy_api = path.strip().startswith("/api/v1/")
-                    headers = {
-                        "X-API-Key": webb_api_key,
-                        "X-Request-ID": str(unit.get("external_order_id") or ""),
-                    }
-                    req_kwargs = {"headers": headers, "timeout": 60}
-                    if use_legacy_api:
-                        headers["Content-Type"] = "application/json"
-                        req_kwargs["json"] = legacy_payload
-                    else:
-                        req_kwargs["data"] = modern_payload
+                if _unit_delivery_source(unit) == "game_script_direct":
+                    script_result = _dispatch_game_script_unit(unit, order_obj, remote_meta)
+                    _apply_dispatch_result_to_unit(unit, script_result)
+                else:
+                    api_data = None
+                    response_error = ""
+                    api_resp = None
+                    for path in _revendedores_recharge_paths():
+                        use_legacy_api = path.strip().startswith("/api/v1/")
+                        headers = {
+                            "X-API-Key": webb_api_key,
+                            "X-Request-ID": str(unit.get("external_order_id") or ""),
+                        }
+                        req_kwargs = {"headers": headers, "timeout": 60}
+                        if use_legacy_api:
+                            headers["Content-Type"] = "application/json"
+                            req_kwargs["json"] = legacy_payload
+                        else:
+                            req_kwargs["data"] = modern_payload
 
-                    api_resp = _requests_lib.post(f"{webb_url}{path}", **req_kwargs)
-                    try:
-                        api_data = api_resp.json()
-                    except Exception:
-                        api_data = None
+                        api_resp = _requests_lib.post(f"{webb_url}{path}", **req_kwargs)
+                        try:
+                            api_data = api_resp.json()
+                        except Exception:
+                            api_data = None
 
-                    if api_resp.status_code in (404, 405) and not use_legacy_api:
-                        response_error = f"HTTP {api_resp.status_code} en {path}"
-                        api_data = None
-                        continue
+                        if api_resp.status_code in (404, 405) and not use_legacy_api:
+                            response_error = f"HTTP {api_resp.status_code} en {path}"
+                            api_data = None
+                            continue
+
+                        if api_data is None:
+                            response_error = f"Respuesta inválida HTTP {api_resp.status_code} en {path}"
+                            if not use_legacy_api:
+                                continue
+                            api_data = {"ok": False, "error": response_error}
+
+                        break
 
                     if api_data is None:
-                        response_error = f"Respuesta inválida HTTP {api_resp.status_code} en {path}"
-                        if not use_legacy_api:
-                            continue
-                        api_data = {"ok": False, "error": response_error}
+                        api_data = {"ok": False, "error": response_error or "No se pudo conectar con Revendedores"}
+                    if api_data.get("ok"):
+                        _apply_dispatch_result_to_unit(unit, {
+                            "status": "completed",
+                            "player_name": api_data.get("player_name"),
+                            "reference_no": api_data.get("reference_no"),
+                            "remaining_balance": api_data.get("remaining_balance"),
+                            "provider": "revendedores_api",
+                        })
+                    else:
+                        unit_status = str(api_data.get("purchase_status") or api_data.get("status") or "").strip().lower()
+                        unit_error = str(api_data.get("error") or api_data.get("message") or "Recarga no completada en Revendedores")
+                        if unit_status in {"processing", "procesando", "pending", "pendiente", "queued", "en_cola", "en cola"}:
+                            mapped_status = "processing"
+                        elif unit_status in {"not_found", "no_encontrada", "no encontrada"}:
+                            mapped_status = "not_found"
+                        elif api_resp is not None and api_resp.status_code == 404:
+                            mapped_status = "not_found"
+                        else:
+                            mapped_status = "failed"
+                        _apply_dispatch_result_to_unit(unit, {
+                            "status": mapped_status,
+                            "error": unit_error,
+                            "provider": "revendedores_api",
+                        })
 
-                    recharge_path = path
-                    break
-
-                if api_data is None:
-                    api_data = {"ok": False, "error": response_error or "No se pudo conectar con Revendedores"}
-                if api_data.get("ok"):
-                    unit["status"] = "completed"
-                    unit["player_name"] = str(api_data.get("player_name") or "")
-                    unit["reference_no"] = str(api_data.get("reference_no") or "")
-                    unit["remaining_balance"] = api_data.get("remaining_balance")
-                    unit["error"] = ""
+                if unit.get("status") == "completed":
                     last_error = ""
                     break
-
-                unit_status = str(api_data.get("purchase_status") or api_data.get("status") or "").strip().lower()
-                unit_error = str(api_data.get("error") or api_data.get("message") or "Recarga no completada en Revendedores")
-                if unit_status in {"processing", "procesando", "pending", "pendiente", "queued", "en_cola", "en cola"}:
-                    unit["status"] = "processing"
-                elif unit_status in {"not_found", "no_encontrada", "no encontrada"}:
-                    unit["status"] = "not_found"
-                elif api_resp.status_code == 404:
-                    unit["status"] = "not_found"
-                else:
-                    unit["status"] = "failed"
-                unit["error"] = unit_error
-                last_error = unit["error"]
+                last_error = str(unit.get("error") or last_error)
             except _requests_lib.exceptions.Timeout:
+                provider_name = "Game Script" if _unit_delivery_source(unit) == "game_script_direct" else "Revendedores"
                 unit["status"] = "processing"
-                unit["error"] = "Revendedores no respondió en 60 segundos"
+                unit["error"] = f"{provider_name} no respondió en 60 segundos"
                 last_error = unit["error"]
             except Exception as exc:
                 unit["status"] = "processing"
@@ -3904,6 +4098,16 @@ with app.app_context():
                 db.session.commit()
             except Exception:
                 db.session.rollback()
+        try:
+            rev_map_cols = _get_table_cols("rev_item_mappings")
+            if "direct_to_script" not in rev_map_cols:
+                if _is_pg:
+                    db.session.execute(text("ALTER TABLE rev_item_mappings ADD COLUMN direct_to_script BOOLEAN DEFAULT FALSE"))
+                else:
+                    db.session.execute(text("ALTER TABLE rev_item_mappings ADD COLUMN direct_to_script INTEGER DEFAULT 0"))
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
         # Special users table migration: ensure new columns
         try:
             aff_cols = _get_table_cols("special_users")
@@ -6487,7 +6691,7 @@ def admin_orders_verify_ubii(oid: int):
 
 @app.route("/admin/orders/<int:oid>/verify-recharge", methods=["POST"])
 def admin_orders_verify_recharge(oid: int):
-    """Verifica en Revendedores51 si la recarga realmente se completó."""
+    """Verifica si la recarga automática realmente se completó."""
     user = session.get("user")
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
@@ -6519,13 +6723,20 @@ def admin_orders_verify_recharge(oid: int):
             "summary": summary,
         })
 
+    processing_units = [unit for unit in units if (unit.get("status") or "") == "processing"]
     webb_url, webb_api_key, _, _ = _revendedores_env()
+    needs_revendedores = any(_unit_delivery_source(unit) == "revendedores_api" for unit in processing_units)
 
-    if not webb_url or not webb_api_key:
+    if needs_revendedores and (not webb_url or not webb_api_key):
         return jsonify({"ok": False, "error": "Revendedores API no configurada"})
 
-    processing_units = [unit for unit in units if (unit.get("status") or "") == "processing"]
     for unit in processing_units:
+        unit["last_checked_at"] = datetime.utcnow().isoformat()
+        if _unit_delivery_source(unit) == "game_script_direct":
+            verify_result = _verify_game_script_unit(unit)
+            _apply_dispatch_result_to_unit(unit, verify_result)
+            continue
+
         ext_order_id = unit.get("external_order_id") or f"INE-{o.id}"
         try:
             resp = _requests_lib.get(
@@ -6570,7 +6781,7 @@ def admin_orders_verify_recharge(oid: int):
 
     summary = _summarize_order_auto_recharges(units)
     auto_resp.update({
-        "source": "revendedores_api",
+        "source": _automation_source_from_units(units),
         "units": units,
         "summary": summary,
         "pending_verification": summary.get("processing_units", 0) > 0,
@@ -6624,7 +6835,7 @@ def admin_orders_verify_recharge(oid: int):
             "result": "processing",
             "order_status": "pending",
             "can_approve": False,
-            "message": f"Hay {summary.get('processing_units', 0)} recarga(s) aún procesándose en Revendedores.",
+            "message": f"Hay {summary.get('processing_units', 0)} recarga(s) aún procesándose en el proveedor automático.",
             "summary": summary,
         })
     return jsonify({
@@ -6829,6 +7040,7 @@ def admin_revendedores_mapping_data():
                     "remote_package_id": mappings_by_item[it.id].remote_package_id,
                     "remote_label": mappings_by_item[it.id].remote_label or "",
                     "auto_enabled": bool(mappings_by_item[it.id].auto_enabled),
+                    "direct_to_script": bool(getattr(mappings_by_item[it.id], "direct_to_script", False)),
                 } if it.id in mappings_by_item else None,
             }
             for it in store_items
@@ -6876,6 +7088,7 @@ def admin_revendedores_mappings_bulk_save():
 
             catalog_id_raw = ent.get("catalog_id")
             auto_enabled = bool(ent.get("auto_enabled"))
+            direct_to_script = bool(ent.get("direct_to_script"))
 
             row = RevendedoresItemMapping.query.filter_by(store_item_id=store_item_id).first()
 
@@ -6883,6 +7096,7 @@ def admin_revendedores_mappings_bulk_save():
                 if row:
                     row.active = False
                     row.auto_enabled = False
+                    row.direct_to_script = False
                     disabled += 1
                 continue
 
@@ -6907,6 +7121,7 @@ def admin_revendedores_mappings_bulk_save():
                     remote_package_id=catalog.remote_package_id,
                     remote_label=remote_label,
                     auto_enabled=auto_enabled,
+                    direct_to_script=direct_to_script,
                     active=True,
                 )
                 db.session.add(row)
@@ -6916,6 +7131,7 @@ def admin_revendedores_mappings_bulk_save():
                 row.remote_package_id = catalog.remote_package_id
                 row.remote_label = remote_label
                 row.auto_enabled = auto_enabled
+                row.direct_to_script = direct_to_script
                 row.active = True
             saved += 1
 

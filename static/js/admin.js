@@ -410,6 +410,10 @@ document.addEventListener('DOMContentLoaded', () => {
               <input type="checkbox" class="rev-auto-enabled" data-store-item-id="${it.id}" ${(mapping && mapping.auto_enabled) ? 'checked' : ''}>
               Activar recarga automática para este ítem
             </label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#cbd5e1;">
+              <input type="checkbox" class="rev-direct-script" data-store-item-id="${it.id}" ${(mapping && mapping.direct_to_script) ? 'checked' : ''}>
+              Enviar directo a Game Script para este ítem
+            </label>
           </div>
         </div>
       `;
@@ -431,10 +435,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const storeItemId = parseInt(row.getAttribute('data-store-item-id') || '0', 10);
       const sel = row.querySelector('.rev-catalog-select');
       const chk = row.querySelector('.rev-auto-enabled');
+      const directChk = row.querySelector('.rev-direct-script');
       return {
         store_item_id: storeItemId,
         catalog_id: sel ? (sel.value || '') : '',
         auto_enabled: !!(chk && chk.checked),
+        direct_to_script: !!(directChk && directChk.checked),
       };
     }).filter((x) => x.store_item_id > 0);
 
