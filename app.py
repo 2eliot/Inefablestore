@@ -2339,10 +2339,7 @@ def _ubii_config():
         get_config_value("ubii_amount_regex", r"Bs\.\s*([\d\.,]+)")
         or r"Bs\.\s*([\d\.,]+)"
     ).strip()
-    reference_regex = (
-        get_config_value("ubii_reference_regex", r"referencia\s+(\d+)")
-        or r"referencia\s+(\d+)"
-    ).strip()
+    reference_regex = _ubii_normalize_reference_regex(get_config_value("ubii_reference_regex", r"referencia\s*(\d+)"))
     webhook_secret = (get_config_value("ubii_webhook_secret", "") or "").strip()
     return {
         "enabled": _payment_verification_provider() == "ubii",
@@ -2450,12 +2447,66 @@ def _ubii_parse_amount(raw_value):
         return None
 
 
-def _ubii_extract_notification_data(payload: dict, cfg: dict | None = None):
+def _ubii_normalize_reference_regex(raw_value) -> str:
+    regex = str(raw_value or "").strip()
+    if not regex or regex == r"referencia\s+(\d+)":
+        return r"referencia\s*(\d+)"
+    return regex
+
+
+def _ubii_collect_payload_text(payload: dict, cfg: dict | None = None) -> str:
+    if not isinstance(payload, dict):
+        return ""
+
     config = cfg or _ubii_config()
     text_field = str(config.get("text_field") or "texto").strip() or "texto"
-    source_text = ""
+    preferred_keys = [
+        text_field,
+        "texto",
+        "text",
+        "message",
+        "body",
+        "cuerpo",
+        "notification_text",
+        "notification_body",
+        "title",
+        "titulo",
+        "notification_title",
+        "subject",
+    ]
+    seen = set()
+    parts = []
+    for key in preferred_keys:
+        raw_value = payload.get(key)
+        if raw_value is None or isinstance(raw_value, (dict, list, tuple, set)):
+            continue
+        text = str(raw_value).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        parts.append(text)
+    return "\n".join(parts).strip()
+
+
+def _ubii_extract_notification_data(payload: dict, cfg: dict | None = None):
+    config = cfg or _ubii_config()
+    source_text = _ubii_collect_payload_text(payload, config)
+
+    amount_raw = ""
+    reference_raw = ""
     if isinstance(payload, dict):
-        source_text = str(payload.get(text_field) or payload.get("texto") or payload.get("message") or payload.get("text") or "").strip()
+        amount_raw = str(
+            payload.get("monto")
+            or payload.get("amount")
+            or payload.get("amount_raw")
+            or ""
+        ).strip()
+        reference_raw = str(
+            payload.get("referencia")
+            or payload.get("reference")
+            or payload.get("ref")
+            or ""
+        ).strip()
 
     amount_match = None
     reference_match = None
@@ -2472,13 +2523,15 @@ def _ubii_extract_notification_data(payload: dict, cfg: dict | None = None):
     except re.error:
         reference_match = None
 
-    amount_raw = (amount_match.group(1) if amount_match else "") or ""
-    reference_raw = (reference_match.group(1) if reference_match else "") or ""
+    if not amount_raw:
+        amount_raw = (amount_match.group(1) if amount_match else "") or ""
+    if not reference_raw:
+        reference_raw = (reference_match.group(1) if reference_match else "") or ""
     return {
         "text": source_text,
         "amount_raw": amount_raw.strip(),
         "amount": _ubii_parse_amount(amount_raw),
-        "reference": reference_raw.strip(),
+        "reference": _pabilo_normalize_reference_value(reference_raw),
     }
 
 
@@ -4438,7 +4491,7 @@ def webhook_ubii():
             return jsonify({"status": "error", "message": "Secret de webhook inválido"}), 401
 
     extracted = _ubii_extract_notification_data(payload, cfg)
-    if not extracted.get("text"):
+    if not extracted.get("text") and extracted.get("amount") is None and not extracted.get("reference"):
         return jsonify({"status": "error", "message": "No data received"}), 400
     if extracted.get("amount") is None or not extracted.get("reference"):
         return jsonify({"status": "error", "message": "Formato no reconocido"}), 400
@@ -4624,7 +4677,7 @@ def admin_config_payments_get():
         "ubii_method": get_config_value("ubii_method", "pm"),
         "ubii_text_field": get_config_value("ubii_text_field", "texto"),
         "ubii_amount_regex": get_config_value("ubii_amount_regex", r"Bs\.\s*([\d\.,]+)"),
-        "ubii_reference_regex": get_config_value("ubii_reference_regex", r"referencia\s+(\d+)"),
+        "ubii_reference_regex": _ubii_normalize_reference_regex(get_config_value("ubii_reference_regex", r"referencia\s*(\d+)")),
         "ubii_webhook_secret": get_config_value("ubii_webhook_secret", ""),
         "ubii_webhook_path": "/webhook-ubii",
     })
@@ -4653,7 +4706,7 @@ def admin_config_payments_set():
         "pabilo_binance_user_bank_id": (data.get("pabilo_binance_user_bank_id") or "").strip(),
         "ubii_text_field": (data.get("ubii_text_field") or "texto").strip() or "texto",
         "ubii_amount_regex": (data.get("ubii_amount_regex") or r"Bs\.\s*([\d\.,]+)").strip() or r"Bs\.\s*([\d\.,]+)",
-        "ubii_reference_regex": (data.get("ubii_reference_regex") or r"referencia\s+(\d+)").strip() or r"referencia\s+(\d+)",
+        "ubii_reference_regex": _ubii_normalize_reference_regex((data.get("ubii_reference_regex") or r"referencia\s*(\d+)").strip() or r"referencia\s*(\d+)"),
         "ubii_webhook_secret": (data.get("ubii_webhook_secret") or "").strip(),
     }
     provider = (data.get("payment_verification_provider") or "").strip().lower()
@@ -4713,7 +4766,7 @@ def admin_config_payments_set():
             "ubii_method": values.get("ubii_method", "pm"),
             "ubii_text_field": values.get("ubii_text_field", "texto"),
             "ubii_amount_regex": values.get("ubii_amount_regex", r"Bs\.\s*([\d\.,]+)"),
-            "ubii_reference_regex": values.get("ubii_reference_regex", r"referencia\s+(\d+)"),
+            "ubii_reference_regex": _ubii_normalize_reference_regex(values.get("ubii_reference_regex", r"referencia\s*(\d+)")),
             "ubii_webhook_secret": values.get("ubii_webhook_secret", ""),
             "ubii_webhook_path": "/webhook-ubii",
         }
@@ -6308,13 +6361,17 @@ def admin_orders_verify_ubii(oid: int):
 
     data = request.get_json(silent=True) or {}
     text_field = str(cfg.get("text_field") or "texto").strip() or "texto"
-    notification_text = str(data.get("text") or data.get(text_field) or data.get("texto") or "").strip()
-    if not notification_text:
-        return jsonify({"ok": False, "error": "Debes pegar el texto de la notificación"}), 400
-
-    extracted = _ubii_extract_notification_data({text_field: notification_text}, cfg)
+    notification_text = _ubii_collect_payload_text(data, cfg)
+    extracted = _ubii_extract_notification_data(data, cfg)
+    if extracted.get("amount") is None and notification_text:
+        extracted = _ubii_extract_notification_data({text_field: notification_text}, cfg)
+    if notification_text and not extracted.get("text"):
+        extracted["text"] = notification_text
     if extracted.get("amount") is None or not extracted.get("reference"):
-        return jsonify({"ok": False, "error": "Formato no reconocido"}), 400
+        return jsonify({
+            "ok": False,
+            "error": "Debes indicar una referencia y un monto validos, o pegar una notificación reconocible",
+        }), 400
 
     expected_reference = _pabilo_normalize_reference_value(o.reference or "")
     received_reference = _pabilo_normalize_reference_value(extracted.get("reference") or "")
@@ -6354,7 +6411,7 @@ def admin_orders_verify_ubii(oid: int):
     result = _ubii_verify_and_update_order(
         o,
         extracted,
-        payload={text_field: notification_text},
+        payload=data,
         source="admin_manual_ubii",
     )
     return jsonify({"ok": True, "payment_verify": result, "order_status": o.status})

@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('admin.js loaded v7');
+  console.log('admin.js loaded v20');
   const tabs = document.querySelectorAll('#adminTabs .tab');
   const panels = document.querySelectorAll('.tab-panel');
   // Elements used across handlers (declare early)
@@ -861,7 +861,7 @@ window.fetchPayments = fetchPayments;
       ubii_method: ubiiMethod ? ubiiMethod.value : 'pm',
       ubii_text_field: ubiiTextField ? ubiiTextField.value.trim() : 'texto',
       ubii_amount_regex: ubiiAmountRegex ? ubiiAmountRegex.value.trim() : 'Bs\\.\\s*([\\d\\.,]+)',
-      ubii_reference_regex: ubiiReferenceRegex ? ubiiReferenceRegex.value.trim() : 'referencia\\s+(\\d+)',
+      ubii_reference_regex: ubiiReferenceRegex ? ubiiReferenceRegex.value.trim() : 'referencia\\s*(\\d+)',
       ubii_webhook_secret: ubiiWebhookSecret ? ubiiWebhookSecret.value.trim() : ''
     };
     const res = await fetch('/admin/config/payments', {
@@ -903,7 +903,7 @@ window.fetchPayments = fetchPayments;
     if (ubiiMethod) ubiiMethod.value = (data.ubii_method || 'pm').toLowerCase() === 'binance' ? 'binance' : 'pm';
     if (ubiiTextField) ubiiTextField.value = data.ubii_text_field || 'texto';
     if (ubiiAmountRegex) ubiiAmountRegex.value = data.ubii_amount_regex || 'Bs\\.\\s*([\\d\\.,]+)';
-    if (ubiiReferenceRegex) ubiiReferenceRegex.value = data.ubii_reference_regex || 'referencia\\s+(\\d+)';
+    if (ubiiReferenceRegex) ubiiReferenceRegex.value = data.ubii_reference_regex || 'referencia\\s*(\\d+)';
     if (ubiiWebhookSecret) ubiiWebhookSecret.value = data.ubii_webhook_secret || '';
     if (ubiiWebhookPath) ubiiWebhookPath.value = data.ubii_webhook_path || '/webhook-ubii';
     showPaymentVerificationProvider((data.payment_verification_provider || '').toLowerCase());
@@ -2341,10 +2341,19 @@ window.refreshGallery = refreshGallery;
       if (btnUbii) {
         const id = btnUbii.getAttribute('data-id');
         if (!id) return;
-        const pastedText = window.prompt('Pega el texto completo de la notificación de Ubii para verificar esta orden');
-        if (pastedText === null) return;
-        if (!String(pastedText || '').trim()) {
-          toast('Debes pegar el texto de la notificación');
+        const tile = btnUbii.closest('.order-tile');
+        const currentRef = tile ? ((tile.querySelector('.ref-value')?.textContent || '').trim()) : '';
+        const currentAmountText = tile ? ((tile.querySelector('.amount')?.textContent || '').trim()) : '';
+        const suggestedAmount = (() => {
+          const match = currentAmountText.match(/\d+(?:[\.,]\d+)?/);
+          return match ? match[0] : '';
+        })();
+        const referenceValue = window.prompt('Referencia Ubii para verificar esta orden', currentRef && currentRef !== '-' ? currentRef : '');
+        if (referenceValue === null) return;
+        const amountValue = window.prompt('Monto recibido en Ubii', suggestedAmount);
+        if (amountValue === null) return;
+        if (!String(referenceValue || '').trim() || !String(amountValue || '').trim()) {
+          toast('Debes indicar referencia y monto');
           return;
         }
         try {
@@ -2353,7 +2362,10 @@ window.refreshGallery = refreshGallery;
           const res = await fetch(`/admin/orders/${id}/verify-ubii`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: String(pastedText || '').trim() })
+            body: JSON.stringify({
+              reference: String(referenceValue || '').trim(),
+              amount: String(amountValue || '').trim()
+            })
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || !data.ok) {
