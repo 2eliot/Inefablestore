@@ -127,7 +127,7 @@ GENAI_API_KEY = (
     or os.environ.get("GEMINI_API_KEY", "")
     or os.environ.get("GOOGLE_API_KEY", "")
 ).strip()
-GENAI_MODEL_NAME = (os.environ.get("GENAI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash").strip()
+GENAI_MODEL_NAME = (os.environ.get("GENAI_MODEL", "gemini-2.5-flash") or "gemini-2.5-flash").strip()
 _GENAI_MODEL = None
 _GENAI_MODEL_READY = False
 
@@ -5490,9 +5490,30 @@ def _genai_model():
     if not GENAI_API_KEY:
         raise RuntimeError("GENAI_API_KEY no configurada")
     genai.configure(api_key=GENAI_API_KEY)
-    _GENAI_MODEL = genai.GenerativeModel(GENAI_MODEL_NAME)
-    _GENAI_MODEL_READY = True
-    return _GENAI_MODEL
+    return None
+
+
+def _genai_candidate_model_names() -> list[str]:
+    candidates = []
+    for raw_name in (
+        GENAI_MODEL_NAME,
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-flash-latest",
+    ):
+        model_name = str(raw_name or "").strip()
+        if model_name and model_name not in candidates:
+            candidates.append(model_name)
+    return candidates
+
+
+def _is_genai_model_not_found_error(exc: Exception) -> bool:
+    detail = str(exc or "").strip().lower()
+    return bool(
+        "404 models/" in detail
+        or "is not found for api version" in detail
+        or "not supported for generatecontent" in detail
+    )
 
 
 def _normalize_extracted_capture_reference(raw_value) -> str:
@@ -5508,17 +5529,36 @@ def _normalize_extracted_capture_reference(raw_value) -> str:
 
 
 def _extract_capture_reference(relative_path: str):
+    global _GENAI_MODEL, _GENAI_MODEL_READY
     capture_path = _capture_absolute_path(relative_path)
     if not capture_path or not os.path.exists(capture_path):
         return "", "capture_not_found"
     uploaded_file = None
     try:
-        model = _genai_model()
+        _genai_model()
         uploaded_file = genai.upload_file(path=capture_path)
-        response = model.generate_content([_receipt_reference_prompt(), uploaded_file])
-        extracted_reference = _normalize_extracted_capture_reference(getattr(response, "text", ""))
-        if extracted_reference:
-            return extracted_reference, "ok"
+        last_model_error = None
+        for model_name in _genai_candidate_model_names():
+            model = genai.GenerativeModel(model_name)
+            try:
+                response = model.generate_content([_receipt_reference_prompt(), uploaded_file])
+            except Exception as exc:
+                if _is_genai_model_not_found_error(exc):
+                    last_model_error = exc
+                    continue
+                raise
+            _GENAI_MODEL = model
+            _GENAI_MODEL_READY = True
+            extracted_reference = _normalize_extracted_capture_reference(getattr(response, "text", ""))
+            if extracted_reference:
+                return extracted_reference, "ok"
+            return "", "not_detected"
+        if last_model_error is not None:
+            raise RuntimeError(
+                "Ningun modelo Gemini compatible estuvo disponible. "
+                "Configura GENAI_MODEL con un nombre vigente, por ejemplo gemini-2.5-flash. "
+                f"Detalle: {last_model_error}"
+            )
         return "", "not_detected"
     except Exception as exc:
         return "", f"error:{exc}"
