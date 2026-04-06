@@ -615,7 +615,7 @@
             <div id="ubii-verify-box" class="pay-config-card pay-config-card--green" style="display:none;">
               <div class="pay-config-head">
                 <h4>Ubii Webhook</h4>
-                <p>Validación por texto de notificación, referencia exacta y monto mayor o igual a la orden.</p>
+                <p>Validación por texto de notificación, últimos 4 dígitos de referencia y monto mayor o igual a la orden.</p>
               </div>
               <div class="pay-config-grid">
                 <div class="form-row">
@@ -635,7 +635,7 @@
                 </div>
                 <div class="form-row">
                   <label for="ubii-reference-regex">Regex de referencia</label>
-                  <input id="ubii-reference-regex" type="text" placeholder="referencia\s+(\d+)">
+                  <input id="ubii-reference-regex" type="text" placeholder="referencia\D*(\d+)">
                 </div>
                 <div class="form-row">
                   <label for="ubii-webhook-secret">Secret del webhook</label>

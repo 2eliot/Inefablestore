@@ -2339,7 +2339,7 @@ def _ubii_config():
         get_config_value("ubii_amount_regex", r"Bs\.\s*([\d\.,]+)")
         or r"Bs\.\s*([\d\.,]+)"
     ).strip()
-    reference_regex = _ubii_normalize_reference_regex(get_config_value("ubii_reference_regex", r"referencia\s*(\d+)"))
+    reference_regex = _ubii_normalize_reference_regex(get_config_value("ubii_reference_regex", r"referencia\D*(\d+)"))
     webhook_secret = (get_config_value("ubii_webhook_secret", "") or "").strip()
     return {
         "enabled": _payment_verification_provider() == "ubii",
@@ -2449,8 +2449,8 @@ def _ubii_parse_amount(raw_value):
 
 def _ubii_normalize_reference_regex(raw_value) -> str:
     regex = str(raw_value or "").strip()
-    if not regex or regex == r"referencia\s+(\d+)":
-        return r"referencia\s*(\d+)"
+    if not regex or regex in (r"referencia\s+(\d+)", r"referencia\s*(\d+)"):
+        return r"referencia\D*(\d+)"
     return regex
 
 
@@ -4701,7 +4701,7 @@ def admin_config_payments_get():
         "ubii_method": get_config_value("ubii_method", "pm"),
         "ubii_text_field": get_config_value("ubii_text_field", "texto"),
         "ubii_amount_regex": get_config_value("ubii_amount_regex", r"Bs\.\s*([\d\.,]+)"),
-        "ubii_reference_regex": _ubii_normalize_reference_regex(get_config_value("ubii_reference_regex", r"referencia\s*(\d+)")),
+        "ubii_reference_regex": _ubii_normalize_reference_regex(get_config_value("ubii_reference_regex", r"referencia\D*(\d+)")),
         "ubii_webhook_secret": get_config_value("ubii_webhook_secret", ""),
         "ubii_webhook_path": "/webhook-ubii",
     })
@@ -4730,7 +4730,7 @@ def admin_config_payments_set():
         "pabilo_binance_user_bank_id": (data.get("pabilo_binance_user_bank_id") or "").strip(),
         "ubii_text_field": (data.get("ubii_text_field") or "texto").strip() or "texto",
         "ubii_amount_regex": (data.get("ubii_amount_regex") or r"Bs\.\s*([\d\.,]+)").strip() or r"Bs\.\s*([\d\.,]+)",
-        "ubii_reference_regex": _ubii_normalize_reference_regex((data.get("ubii_reference_regex") or r"referencia\s*(\d+)").strip() or r"referencia\s*(\d+)"),
+        "ubii_reference_regex": _ubii_normalize_reference_regex((data.get("ubii_reference_regex") or r"referencia\D*(\d+)").strip() or r"referencia\D*(\d+)"),
         "ubii_webhook_secret": (data.get("ubii_webhook_secret") or "").strip(),
     }
     provider = (data.get("payment_verification_provider") or "").strip().lower()
@@ -4790,7 +4790,7 @@ def admin_config_payments_set():
             "ubii_method": values.get("ubii_method", "pm"),
             "ubii_text_field": values.get("ubii_text_field", "texto"),
             "ubii_amount_regex": values.get("ubii_amount_regex", r"Bs\.\s*([\d\.,]+)"),
-            "ubii_reference_regex": _ubii_normalize_reference_regex(values.get("ubii_reference_regex", r"referencia\s*(\d+)")),
+            "ubii_reference_regex": _ubii_normalize_reference_regex(values.get("ubii_reference_regex", r"referencia\D*(\d+)")),
             "ubii_webhook_secret": values.get("ubii_webhook_secret", ""),
             "ubii_webhook_path": "/webhook-ubii",
         }
