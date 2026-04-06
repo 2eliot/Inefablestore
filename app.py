@@ -80,6 +80,19 @@ def _make_session_permanent():
     except Exception:
         pass
 
+
+@app.after_request
+def _disable_admin_cache(response):
+    try:
+        req_path = (request.path or "").strip()
+        if req_path == "/admin" or req_path.endswith("/admin") or req_path == "/static/js/admin.js":
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+    except Exception:
+        pass
+    return response
+
 DEFAULT_UPLOAD = os.path.join(app.root_path, "static", "uploads")
 app.config["UPLOAD_FOLDER"] = os.environ.get("UPLOAD_FOLDER", DEFAULT_UPLOAD)
 # Public URL prefix that points to where images are served from.

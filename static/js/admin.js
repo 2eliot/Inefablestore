@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('admin.js loaded v22');
+  console.log('admin.js loaded v31');
   const tabs = document.querySelectorAll('#adminTabs .tab');
   const panels = document.querySelectorAll('.tab-panel');
   // Elements used across handlers (declare early)
