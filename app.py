@@ -2475,18 +2475,15 @@ def _ubii_collect_payload_text(payload: dict, cfg: dict | None = None) -> str:
         "notification_title",
         "subject",
     ]
-    seen = set()
-    parts = []
     for key in preferred_keys:
         raw_value = payload.get(key)
         if raw_value is None or isinstance(raw_value, (dict, list, tuple, set)):
             continue
         text = str(raw_value).strip()
-        if not text or text in seen:
+        if not text:
             continue
-        seen.add(text)
-        parts.append(text)
-    return "\n".join(parts).strip()
+        return text
+    return ""
 
 
 def _ubii_extract_notification_data(payload: dict, cfg: dict | None = None):
@@ -2495,19 +2492,6 @@ def _ubii_extract_notification_data(payload: dict, cfg: dict | None = None):
 
     amount_raw = ""
     reference_raw = ""
-    if isinstance(payload, dict):
-        amount_raw = str(
-            payload.get("monto")
-            or payload.get("amount")
-            or payload.get("amount_raw")
-            or ""
-        ).strip()
-        reference_raw = str(
-            payload.get("referencia")
-            or payload.get("reference")
-            or payload.get("ref")
-            or ""
-        ).strip()
 
     amount_match = None
     reference_match = None
