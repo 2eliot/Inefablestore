@@ -2434,10 +2434,13 @@ def _get_order_auto_mapping(order_obj):
     if not units:
         return None
     try:
-        return RevendedoresItemMapping.query.filter_by(
-            store_item_id=int(units[0].get("store_item_id") or 0),
-            active=True,
-            auto_enabled=True,
+        return RevendedoresItemMapping.query.filter(
+            RevendedoresItemMapping.store_item_id == int(units[0].get("store_item_id") or 0),
+            RevendedoresItemMapping.active == True,
+            (
+                (RevendedoresItemMapping.auto_enabled == True)
+                | (RevendedoresItemMapping.direct_to_script == True)
+            ),
         ).first()
     except Exception:
         return None
@@ -3756,7 +3759,10 @@ def _get_auto_mappings_for_item_ids(item_ids):
         rows = RevendedoresItemMapping.query.filter(
             RevendedoresItemMapping.store_item_id.in_(ids),
             RevendedoresItemMapping.active == True,
-            RevendedoresItemMapping.auto_enabled == True,
+            (
+                (RevendedoresItemMapping.auto_enabled == True)
+                | (RevendedoresItemMapping.direct_to_script == True)
+            ),
         ).all()
         return {int(row.store_item_id): row for row in rows}
     except Exception:
@@ -4780,10 +4786,13 @@ def store_payments():
 @app.route("/store/item/<int:item_id>/automation-check", methods=["GET"])
 def store_item_automation_check(item_id: int):
     method = _pabilo_normalize_method(request.args.get("method") or "pm")
-    mapping = RevendedoresItemMapping.query.filter_by(
-        store_item_id=item_id,
-        active=True,
-        auto_enabled=True,
+    mapping = RevendedoresItemMapping.query.filter(
+        RevendedoresItemMapping.store_item_id == item_id,
+        RevendedoresItemMapping.active == True,
+        (
+            (RevendedoresItemMapping.auto_enabled == True)
+            | (RevendedoresItemMapping.direct_to_script == True)
+        ),
     ).first()
     auto_recharge = mapping is not None
     pabilo_cfg = _pabilo_config()
@@ -5977,8 +5986,13 @@ def store_item_auto_check(item_id):
     enabled = get_config_value("binance_auto_enabled", "0")
     if enabled != "1":
         return jsonify({"ok": True, "auto": False})
-    mapping = RevendedoresItemMapping.query.filter_by(
-        store_item_id=item_id, active=True, auto_enabled=True
+    mapping = RevendedoresItemMapping.query.filter(
+        RevendedoresItemMapping.store_item_id == item_id,
+        RevendedoresItemMapping.active == True,
+        (
+            (RevendedoresItemMapping.auto_enabled == True)
+            | (RevendedoresItemMapping.direct_to_script == True)
+        ),
     ).first()
     return jsonify({"ok": True, "auto": mapping is not None})
 
@@ -7377,8 +7391,8 @@ def admin_revendedores_mappings_bulk_save():
                 continue
 
             catalog_id_raw = ent.get("catalog_id")
-            auto_enabled = bool(ent.get("auto_enabled"))
             direct_to_script = bool(ent.get("direct_to_script"))
+            auto_enabled = bool(ent.get("auto_enabled")) or direct_to_script
 
             row = RevendedoresItemMapping.query.filter_by(store_item_id=store_item_id).first()
 

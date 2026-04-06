@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('admin.js loaded v31');
+  console.log('admin.js loaded v32');
   const tabs = document.querySelectorAll('#adminTabs .tab');
   const panels = document.querySelectorAll('.tab-panel');
   // Elements used across handlers (declare early)
@@ -436,11 +436,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const sel = row.querySelector('.rev-catalog-select');
       const chk = row.querySelector('.rev-auto-enabled');
       const directChk = row.querySelector('.rev-direct-script');
+      const directToScript = !!(directChk && directChk.checked);
       return {
         store_item_id: storeItemId,
         catalog_id: sel ? (sel.value || '') : '',
-        auto_enabled: !!(chk && chk.checked),
-        direct_to_script: !!(directChk && directChk.checked),
+        auto_enabled: !!(chk && chk.checked) || directToScript,
+        direct_to_script: directToScript,
       };
     }).filter((x) => x.store_item_id > 0);
 
@@ -1001,6 +1002,21 @@ window.fetchPayments = fetchPayments;
   if (revStorePackage) {
     revStorePackage.addEventListener('change', () => {
       fetchRevMappingData(revStorePackage.value || '');
+    });
+  }
+
+  if (revMapList) {
+    revMapList.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      if (!target.classList.contains('rev-direct-script')) return;
+      if (!target.checked) return;
+      const row = target.closest('.rev-map-row');
+      if (!row) return;
+      const autoChk = row.querySelector('.rev-auto-enabled');
+      if (autoChk && autoChk instanceof HTMLInputElement) {
+        autoChk.checked = true;
+      }
     });
   }
 
