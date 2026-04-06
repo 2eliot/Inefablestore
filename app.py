@@ -2616,6 +2616,10 @@ def _ubii_verify_and_update_order(order_obj, extracted: dict, *, payload: dict |
     now_iso = checked_at.isoformat()
     verification_id = str(extracted.get("reference") or order_obj.reference or order_obj.payment_verification_id or "")
     message = "Pago verificado desde webhook Ubii"
+    request_url = "/webhook-ubii"
+    if source == "admin_manual_ubii":
+        message = "Coincidencia manual basada en texto de notificacion Ubii; no se consulto una API externa"
+        request_url = f"/admin/orders/{order_obj.id}/verify-ubii"
 
     order_obj.payment_verification_attempts = attempts + 1
     order_obj.payment_last_verification_at = checked_at
@@ -2632,7 +2636,7 @@ def _ubii_verify_and_update_order(order_obj, extracted: dict, *, payload: dict |
         "verification_id": verification_id,
         "message": message,
         "source": source,
-        "last_request_url": "/webhook-ubii",
+        "last_request_url": request_url,
         "last_request_payload": {
             "text": str(extracted.get("text") or ""),
             "amount": str(extracted.get("amount") or ""),
@@ -2655,7 +2659,7 @@ def _ubii_verify_and_update_order(order_obj, extracted: dict, *, payload: dict |
         "message": message,
         "order_status": order_obj.status,
         "request_meta": {
-            "url": "/webhook-ubii",
+            "url": request_url,
             "payload": state.get("last_request_payload") or {},
             "status_code": 200,
         },
@@ -6382,15 +6386,19 @@ def admin_orders_verify_ubii(oid: int):
     data = request.get_json(silent=True) or {}
     text_field = str(cfg.get("text_field") or "texto").strip() or "texto"
     notification_text = _ubii_collect_payload_text(data, cfg)
-    extracted = _ubii_extract_notification_data(data, cfg)
-    if extracted.get("amount") is None and notification_text:
-        extracted = _ubii_extract_notification_data({text_field: notification_text}, cfg)
+    if not notification_text:
+        return jsonify({
+            "ok": False,
+            "error": "Debes pegar el texto real de la notificacion de Ubii para verificar manualmente",
+        }), 400
+
+    extracted = _ubii_extract_notification_data({text_field: notification_text}, cfg)
     if notification_text and not extracted.get("text"):
         extracted["text"] = notification_text
     if extracted.get("amount") is None or not extracted.get("reference"):
         return jsonify({
             "ok": False,
-            "error": "Debes indicar una referencia y un monto validos, o pegar una notificación reconocible",
+            "error": "No se pudo extraer una referencia y un monto validos desde el texto de la notificacion de Ubii",
         }), 400
 
     expected_reference = _ubii_reference_match_key(o.reference or "")

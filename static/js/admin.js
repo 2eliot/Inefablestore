@@ -2341,19 +2341,10 @@ window.refreshGallery = refreshGallery;
       if (btnUbii) {
         const id = btnUbii.getAttribute('data-id');
         if (!id) return;
-        const tile = btnUbii.closest('.order-tile');
-        const currentRef = tile ? ((tile.querySelector('.ref-value')?.textContent || '').trim()) : '';
-        const currentAmountText = tile ? ((tile.querySelector('.amount')?.textContent || '').trim()) : '';
-        const suggestedAmount = (() => {
-          const match = currentAmountText.match(/\d+(?:[\.,]\d+)?/);
-          return match ? match[0] : '';
-        })();
-        const referenceValue = window.prompt('Referencia Ubii para verificar esta orden', currentRef && currentRef !== '-' ? currentRef : '');
-        if (referenceValue === null) return;
-        const amountValue = window.prompt('Monto recibido en Ubii', suggestedAmount);
-        if (amountValue === null) return;
-        if (!String(referenceValue || '').trim() || !String(amountValue || '').trim()) {
-          toast('Debes indicar referencia y monto');
+        const notificationText = window.prompt('Pega el texto real de la notificacion de Ubii para verificar esta orden', '');
+        if (notificationText === null) return;
+        if (!String(notificationText || '').trim()) {
+          toast('Debes pegar el texto de la notificacion de Ubii');
           return;
         }
         try {
@@ -2363,8 +2354,7 @@ window.refreshGallery = refreshGallery;
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              reference: String(referenceValue || '').trim(),
-              amount: String(amountValue || '').trim()
+              texto: String(notificationText || '').trim()
             })
           });
           const data = await res.json().catch(() => ({}));
@@ -2373,7 +2363,7 @@ window.refreshGallery = refreshGallery;
           }
           const pv = data.payment_verify || {};
           if (pv.verified) {
-            toast(`✅ Pago verificado en Ubii${pv.verification_id ? ` · ${pv.verification_id}` : ''}`, 'success');
+            toast(pv.message || `✅ Verificacion manual Ubii${pv.verification_id ? ` · ${pv.verification_id}` : ''}`, 'success');
           } else {
             toast(pv.message || 'Pago no verificado todavía', 'warning');
           }
