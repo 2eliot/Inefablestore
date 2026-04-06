@@ -2545,16 +2545,36 @@ def _ubii_order_amount_matches(order_obj, expected_amount: Decimal | None) -> bo
     return expected_amount >= order_amount
 
 
+def _ubii_normalize_reference_value(value) -> str:
+    normalized = _pabilo_normalize_reference_value(value)
+    if not normalized:
+        return ""
+    if normalized.isdigit():
+        stripped = normalized.lstrip("0")
+        return stripped or "0"
+    return normalized
+
+
+def _ubii_reference_match_key(value) -> str:
+    normalized = _pabilo_normalize_reference_value(value)
+    if not normalized:
+        return ""
+    if normalized.isdigit():
+        return normalized[-4:]
+    return normalized
+
+
 def _ubii_find_matching_order(reference: str, amount: Decimal | None, method: str):
-    normalized_reference = _pabilo_normalize_reference_value(reference)
-    if not normalized_reference:
+    normalized_reference = _ubii_normalize_reference_value(reference)
+    reference_match_key = _ubii_reference_match_key(reference)
+    if not normalized_reference or not reference_match_key:
         return None, "Referencia no encontrada en la notificación", False
 
     normalized_method = _pabilo_normalize_method(method or "pm")
     pending_rows = Order.query.filter(Order.status == "pending").order_by(Order.created_at.desc()).all()
     candidates = [
         row for row in pending_rows
-        if _pabilo_normalize_reference_value(row.reference or "") == normalized_reference
+        if _ubii_reference_match_key(row.reference or "") == reference_match_key
         and _pabilo_normalize_method(row.method or "") == normalized_method
     ]
 
@@ -2574,7 +2594,7 @@ def _ubii_find_matching_order(reference: str, amount: Decimal | None, method: st
         .order_by(Order.created_at.desc()).all()
     processed = [
         row for row in processed_rows
-        if _pabilo_normalize_reference_value(row.reference or "") == normalized_reference
+        if _ubii_reference_match_key(row.reference or "") == reference_match_key
         and _pabilo_normalize_method(row.method or "") == normalized_method
         and _ubii_order_amount_matches(row, amount)
     ]
@@ -6373,16 +6393,16 @@ def admin_orders_verify_ubii(oid: int):
             "error": "Debes indicar una referencia y un monto validos, o pegar una notificación reconocible",
         }), 400
 
-    expected_reference = _pabilo_normalize_reference_value(o.reference or "")
-    received_reference = _pabilo_normalize_reference_value(extracted.get("reference") or "")
+    expected_reference = _ubii_reference_match_key(o.reference or "")
+    received_reference = _ubii_reference_match_key(extracted.get("reference") or "")
     if not expected_reference or expected_reference != received_reference:
         return jsonify({
             "ok": False,
-            "error": "La referencia de Ubii no coincide con la orden",
+            "error": "Los ultimos 4 digitos de la referencia de Ubii no coinciden con la orden",
             "payment_verify": {
                 "provider": "ubii",
                 "verified": False,
-                "message": "La referencia de Ubii no coincide con la orden",
+                "message": "Los ultimos 4 digitos de la referencia de Ubii no coinciden con la orden",
             },
         }), 400
 
