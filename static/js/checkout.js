@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const captureRefHint = document.getElementById('captureRefHint');
   let proofPreviewUrl = '';
   let captureReferenceLookupId = 0;
+  let latestCaptureReferencePreview = '';
   let isReferenceValid = false;
   let hasCapture = false;
   let isBinanceAuto = false;
@@ -59,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     captureRefBox.classList.remove('capture-ref-box--loading', 'capture-ref-box--error');
 
     if (mode === 'loading') {
+      latestCaptureReferencePreview = '';
       captureRefBox.classList.add('capture-ref-box--loading');
       captureRefLabel.textContent = 'Analizando comprobante';
       captureRefValue.textContent = 'Buscando referencia...';
@@ -66,12 +68,14 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (mode === 'success') {
+      latestCaptureReferencePreview = String(value || '').trim();
       captureRefLabel.textContent = 'Referencia extraída';
       captureRefValue.textContent = value || '-';
       captureRefHint.textContent = hint || 'Usa este número si quieres compararlo con la referencia que escribiste.';
       return;
     }
     if (mode === 'error') {
+      latestCaptureReferencePreview = '';
       captureRefBox.classList.add('capture-ref-box--error');
       captureRefLabel.textContent = 'Referencia extraída';
       captureRefValue.textContent = value || 'No detectada';
@@ -79,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     captureRefBox.hidden = true;
+    latestCaptureReferencePreview = '';
     captureRefLabel.textContent = 'Analizando comprobante';
     captureRefValue.textContent = '...';
     captureRefHint.textContent = '';
@@ -942,6 +947,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fd.append('special_code', qRefCode || '');
       fd.append('nn', nn);
       fd.append('idempotency_key', idempotencyKey);
+      if (latestCaptureReferencePreview) fd.append('capture_reference_preview', latestCaptureReferencePreview);
       fd.append('payment_capture', proofInput.files[0]);
       // UI loading state
       const originalText = btnConfirm.textContent;

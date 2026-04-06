@@ -3447,12 +3447,28 @@ def _pabilo_verify_payment_once(order_obj, *, reference_override: str = "", refe
 
 def _pabilo_should_try_capture_reference_fallback(result: dict) -> bool:
     validation = result.get("validation") or {}
-    if not isinstance(validation, dict):
-        return False
-    return bool(
+    if isinstance(validation, dict) and bool(
         validation.get("reference_present")
         and not validation.get("reference_matches")
         and validation.get("amount_valid")
+    ):
+        return True
+
+    request_meta = result.get("request_meta") or {}
+    status_code = int((request_meta.get("status_code") or 0)) if isinstance(request_meta, dict) else 0
+    message = str(result.get("message") or "").strip().lower()
+    not_found_hints = (
+        "todavía no aparece",
+        "todavia no aparece",
+        "no aparece en pabilo",
+        "no se encontró",
+        "no se encontro",
+        "not found",
+        "payment not found",
+    )
+    return bool(
+        status_code == 404
+        or any(hint in message for hint in not_found_hints)
     )
 
 
@@ -6123,6 +6139,7 @@ def create_order():
         payer_phone = (_get("payer_phone") or "").strip()
         payer_payment_date = (_get("payer_payment_date") or "").strip()
         payer_movement_type = (_get("payer_movement_type") or "").strip().upper()
+        capture_reference_preview = _normalize_extracted_capture_reference(_get("capture_reference_preview"))
         idempotency_key = _normalize_order_idempotency_key(
             request.headers.get("X-Idempotency-Key") or _get("idempotency_key")
         )
@@ -6375,13 +6392,19 @@ def create_order():
                     if capture_path:
                         o.payment_capture = capture_path
                         extracted_reference, extraction_status = _extract_capture_reference(capture_path)
-                        if extracted_reference:
+                        resolved_capture_reference = extracted_reference or capture_reference_preview
+                        if resolved_capture_reference:
+                            o.capture_reference = resolved_capture_reference
+                        elif extracted_reference:
                             o.capture_reference = extracted_reference
                         current_payment_state = _pabilo_get_payment_state(o)
                         _pabilo_set_payment_state(o, {
                             **current_payment_state,
-                            "capture_reference": str(extracted_reference or ""),
+                            "capture_reference": str(o.capture_reference or ""),
                             "capture_reference_status": extraction_status,
+                            "capture_reference_source": (
+                                "server_extract" if extracted_reference else ("preview_extract" if capture_reference_preview else "")
+                            ),
                         })
             except Exception:
                 pass
