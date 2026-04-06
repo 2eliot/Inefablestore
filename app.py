@@ -6,6 +6,7 @@ import zlib
 import sqlite3
 import urllib.request
 import urllib.error
+import urllib.parse
 import html as _html
 import hashlib
 import hmac as _hmac_module
@@ -4502,6 +4503,7 @@ def webhook_ubii():
     if not cfg.get("enabled"):
         return jsonify({"status": "error", "message": "La verificación Ubii no está activa"}), 503
 
+    raw_body = request.get_data(cache=True, as_text=True) or ""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         payload = request.form.to_dict(flat=True) if request.form else {}
@@ -4515,6 +4517,26 @@ def webhook_ubii():
             return jsonify({"status": "error", "message": "Secret de webhook inválido"}), 401
 
     extracted = _ubii_extract_notification_data(payload, cfg)
+    if extracted.get("amount") is None or not extracted.get("reference"):
+        fallback_payload = {}
+        stripped_body = str(raw_body or "").strip()
+        if stripped_body:
+            parsed_form = urllib.parse.parse_qs(stripped_body, keep_blank_values=True)
+            for key, values in parsed_form.items():
+                if not values:
+                    continue
+                fallback_payload[str(key)] = str(values[-1])
+            if not fallback_payload:
+                text_field = str(cfg.get("text_field") or "texto").strip() or "texto"
+                fallback_payload[text_field] = stripped_body
+                if text_field != "texto":
+                    fallback_payload["texto"] = stripped_body
+
+        if fallback_payload:
+            fallback_extracted = _ubii_extract_notification_data({**payload, **fallback_payload}, cfg)
+            if fallback_extracted.get("text"):
+                extracted = fallback_extracted
+
     if not extracted.get("text") and extracted.get("amount") is None and not extracted.get("reference"):
         return jsonify({"status": "error", "message": "No data received"}), 400
     if extracted.get("amount") is None or not extracted.get("reference"):
