@@ -23,6 +23,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import secrets
 import requests as _requests_lib
+import google.generativeai as genai
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -121,6 +122,14 @@ BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET", "").strip()
 BINANCE_PROXY = os.environ.get("BINANCE_PROXY", "").strip()
 BINANCE_REQUEST_TIMEOUT = float(os.environ.get("BINANCE_REQUEST_TIMEOUT_SECONDS", "4"))
 BINANCE_TOTAL_TIMEOUT = float(os.environ.get("BINANCE_TOTAL_TIMEOUT_SECONDS", "8"))
+GENAI_API_KEY = (
+    os.environ.get("GENAI_API_KEY", "")
+    or os.environ.get("GEMINI_API_KEY", "")
+    or os.environ.get("GOOGLE_API_KEY", "")
+).strip()
+GENAI_MODEL_NAME = (os.environ.get("GENAI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash").strip()
+_GENAI_MODEL = None
+_GENAI_MODEL_READY = False
 
 db = SQLAlchemy(app)
 
@@ -814,6 +823,7 @@ class Order(db.Model):
     currency = db.Column(db.String(10), default="USD")
     amount = db.Column(db.Float, default=0.0)
     reference = db.Column(db.String(120), default="")
+    capture_reference = db.Column(db.String(120), default="")
     price = db.Column(db.Float, default=0.0)
     active = db.Column(db.Boolean, default=True)
     # Gift card or delivery code (for gift category)
@@ -2963,8 +2973,16 @@ def _pabilo_extract_response_values(payload: dict, candidate_keys) -> list:
 
 
 def _pabilo_response_match_info(response_data: dict, order_obj) -> dict:
+    return _pabilo_response_match_info_for_reference(
+        response_data,
+        order_obj,
+        str(order_obj.reference or "").strip(),
+    )
+
+
+def _pabilo_response_match_info_for_reference(response_data: dict, order_obj, reference_value: str) -> dict:
     expected_amount = _pabilo_exact_amount_value(order_obj)
-    expected_reference = _pabilo_normalize_reference_value(order_obj.reference or "")
+    expected_reference = _pabilo_normalize_reference_value(reference_value)
 
     amount_candidates_raw = _pabilo_extract_response_values(
         response_data,
@@ -3044,12 +3062,17 @@ def _is_pabilo_payment_method_enforced_for_order(order_obj) -> bool:
 
 
 def _pabilo_request_info(order_obj) -> dict:
+    return _pabilo_request_info_with_reference(order_obj, str(order_obj.reference or "").strip())
+
+
+def _pabilo_request_info_with_reference(order_obj, reference_value: str) -> dict:
     cfg = _pabilo_config()
     order_method = _pabilo_normalize_method(order_obj.method or "")
     expected_method = _pabilo_normalize_method(cfg.get("method") or "pm")
     enabled = bool(cfg.get("enabled"))
     api_key = str(cfg.get("api_key") or "").strip()
     user_bank_id = _pabilo_user_bank_id_for_method(order_method)
+    safe_reference = str(reference_value or "").strip()
     reasons = []
 
     if not enabled:
@@ -3062,7 +3085,7 @@ def _pabilo_request_info(order_obj) -> dict:
         reasons.append("Falta API key de Pabilo")
     if not user_bank_id:
         reasons.append(f"Falta UserBankId de Pabilo para {order_method.upper() or expected_method.upper()}")
-    if not str(order_obj.reference or "").strip():
+    if not safe_reference:
         reasons.append("La orden no tiene referencia")
     if _pabilo_exact_amount_value(order_obj) is None:
         reasons.append("La orden no tiene un monto exacto valido para consultar en Pabilo")
@@ -3080,10 +3103,14 @@ def _pabilo_request_info(order_obj) -> dict:
 
 
 def _pabilo_build_payload(order_obj) -> dict:
+    return _pabilo_build_payload_with_reference(order_obj, str(order_obj.reference or "").strip())
+
+
+def _pabilo_build_payload_with_reference(order_obj, reference_value: str) -> dict:
     exact_amount = _pabilo_exact_amount_value(order_obj)
     payload = {
         "amount": exact_amount,
-        "bank_reference": str(order_obj.reference or "").strip(),
+        "bank_reference": str(reference_value or "").strip(),
     }
 
     if str(order_obj.payer_dni_number or "").strip():
@@ -3133,10 +3160,11 @@ def _order_is_pabilo_eligible(order_obj) -> bool:
     return bool(_pabilo_eligibility_info(order_obj).get("eligible"))
 
 
-def _pabilo_verify_payment(order_obj):
+def _pabilo_verify_payment_once(order_obj, *, reference_override: str = "", reference_source: str = "manual"):
     if not order_obj:
         return {"ok": False, "verified": False, "message": "Orden inválida"}
-    request_info = _pabilo_request_info(order_obj)
+    candidate_reference = str(reference_override or order_obj.reference or "").strip()
+    request_info = _pabilo_request_info_with_reference(order_obj, candidate_reference)
     if not request_info.get("requestable"):
         return {
             "ok": False,
@@ -3146,7 +3174,7 @@ def _pabilo_verify_payment(order_obj):
             "request": request_info,
         }
     cfg = _pabilo_config()
-    if not (order_obj.reference or "").strip():
+    if not candidate_reference:
         return {"ok": False, "verified": False, "message": "La orden no tiene referencia"}
 
     order_method = _pabilo_normalize_method(order_obj.method or "")
@@ -3157,7 +3185,7 @@ def _pabilo_verify_payment(order_obj):
     configured_url = _pabilo_verify_endpoint(user_bank_id, str(cfg.get('base_url') or '').strip())
     official_url = _pabilo_verify_endpoint(user_bank_id, "https://api.pabilo.app")
     url = configured_url
-    payload = _pabilo_build_payload(order_obj)
+    payload = _pabilo_build_payload_with_reference(order_obj, candidate_reference)
     headers = {
         "Content-Type": "application/json",
         "appKey": cfg.get("api_key"),
@@ -3375,7 +3403,7 @@ def _pabilo_verify_payment(order_obj):
                 continue
             return last_result
 
-        match_info = _pabilo_response_match_info(data, order_obj)
+        match_info = _pabilo_response_match_info_for_reference(data, order_obj, candidate_reference)
         if not match_info.get("matched"):
             mismatch_reasons = []
             if match_info.get("reference_present") and not match_info.get("reference_matches"):
@@ -3390,10 +3418,12 @@ def _pabilo_verify_payment(order_obj):
                 "response": data,
                 "request_meta": request_meta,
                 "validation": match_info,
+                "matched_reference": candidate_reference,
+                "matched_reference_source": reference_source,
             }
 
         if not verification_id:
-            verification_id = f"fallback:{order_method}:{str(order_obj.reference or '').strip()}"
+            verification_id = f"fallback:{order_method}:{candidate_reference}"
 
         return {
             "ok": True,
@@ -3403,6 +3433,8 @@ def _pabilo_verify_payment(order_obj):
             "response": data,
             "request_meta": request_meta,
             "validation": match_info,
+            "matched_reference": candidate_reference,
+            "matched_reference_source": reference_source,
         }
 
     return last_result or {
@@ -3411,6 +3443,51 @@ def _pabilo_verify_payment(order_obj):
         "message": "No se pudo completar la verificación en Pabilo",
         "request_meta": {"url": url, "payload": payload, "status_code": 0, "attempt": max_attempts, "max_attempts": max_attempts},
     }
+
+
+def _pabilo_should_try_capture_reference_fallback(result: dict) -> bool:
+    validation = result.get("validation") or {}
+    if not isinstance(validation, dict):
+        return False
+    return bool(
+        validation.get("reference_present")
+        and not validation.get("reference_matches")
+        and validation.get("amount_valid")
+    )
+
+
+def _pabilo_verify_payment(order_obj):
+    manual_reference = str(order_obj.reference or "").strip()
+    capture_reference = str(getattr(order_obj, "capture_reference", "") or "").strip()
+
+    primary_result = _pabilo_verify_payment_once(
+        order_obj,
+        reference_override=manual_reference,
+        reference_source="manual",
+    )
+    if primary_result.get("verified"):
+        return primary_result
+    if not capture_reference:
+        return primary_result
+    if _pabilo_normalize_reference_value(capture_reference) == _pabilo_normalize_reference_value(manual_reference):
+        return primary_result
+    if not _pabilo_should_try_capture_reference_fallback(primary_result):
+        return primary_result
+
+    fallback_result = _pabilo_verify_payment_once(
+        order_obj,
+        reference_override=capture_reference,
+        reference_source="capture",
+    )
+    fallback_result["fallback_used"] = True
+    fallback_result["manual_result"] = {
+        "verified": bool(primary_result.get("verified")),
+        "message": str(primary_result.get("message") or ""),
+        "validation": primary_result.get("validation") or {},
+    }
+    if not fallback_result.get("verified") and not fallback_result.get("message"):
+        fallback_result["message"] = str(primary_result.get("message") or "")
+    return fallback_result
 
 
 def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool = False, source: str = "manual"):
@@ -3431,6 +3508,7 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         order_obj.payment_verification_id = str(result.get("verification_id") or order_obj.payment_verification_id or "")
 
     state = {
+        **current,
         "provider": "pabilo",
         "enabled": bool(_pabilo_config().get("enabled")),
         "method": _pabilo_normalize_method(order_obj.method or ""),
@@ -3440,6 +3518,11 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         "verification_id": str(result.get("verification_id") or order_obj.payment_verification_id or ""),
         "message": str(result.get("message") or ""),
         "source": source,
+        "manual_reference": str(order_obj.reference or ""),
+        "capture_reference": str(getattr(order_obj, "capture_reference", "") or ""),
+        "matched_reference": str(result.get("matched_reference") or ""),
+        "matched_reference_source": str(result.get("matched_reference_source") or ""),
+        "fallback_used": bool(result.get("fallback_used")),
         "last_request_url": str(((result.get("request_meta") or {}).get("url") or "")),
         "last_request_payload": (result.get("request_meta") or {}).get("payload") or {},
         "last_response_status": int(((result.get("request_meta") or {}).get("status_code") or 0)),
@@ -4084,6 +4167,7 @@ with app.app_context():
             add_order_col('currency', "currency TEXT DEFAULT 'USD'")
             add_order_col('amount', "amount REAL DEFAULT 0")
             add_order_col('reference', "reference TEXT DEFAULT ''")
+            add_order_col('capture_reference', "capture_reference TEXT DEFAULT ''")
             # Optional columns used in model defaults
             add_order_col('price', "price REAL DEFAULT 0")
             add_order_col('active', "active INTEGER DEFAULT 1")
@@ -5378,6 +5462,68 @@ def _save_capture(file) -> str:
     return "captures/" + fname
 
 
+def _capture_absolute_path(relative_path: str) -> str:
+    safe_path = str(relative_path or "").strip()
+    if not safe_path:
+        return ""
+    return os.path.join(app.config["UPLOAD_FOLDER"], safe_path)
+
+
+def _receipt_reference_prompt() -> str:
+    return (
+        "Reglas estrictas:\n\n"
+        "Responde UNICAMENTE con los digitos del numero de referencia.\n"
+        "No incluyas palabras como Referencia o Confirmacion.\n"
+        "Si hay varios numeros, prioriza el asociado a la transaccion.\n"
+        "Si la imagen no es un comprobante de pago o no tiene una referencia clara, responde exactamente ERROR_NO_DETECTADO.\n"
+        "No inventes numeros; si no estas seguro al 100%, responde ERROR_NO_DETECTADO."
+    )
+
+
+def _genai_model():
+    global _GENAI_MODEL, _GENAI_MODEL_READY
+    if _GENAI_MODEL_READY:
+        return _GENAI_MODEL
+    if not GENAI_API_KEY:
+        raise RuntimeError("GENAI_API_KEY no configurada")
+    genai.configure(api_key=GENAI_API_KEY)
+    _GENAI_MODEL = genai.GenerativeModel(GENAI_MODEL_NAME)
+    _GENAI_MODEL_READY = True
+    return _GENAI_MODEL
+
+
+def _normalize_extracted_capture_reference(raw_value) -> str:
+    text = str(raw_value or "").strip()
+    if not text or text.upper() == "ERROR_NO_DETECTADO":
+        return ""
+    if text.isdigit() and 1 <= len(text) <= 21:
+        return text
+    return ""
+
+
+def _extract_capture_reference(relative_path: str):
+    capture_path = _capture_absolute_path(relative_path)
+    if not capture_path or not os.path.exists(capture_path):
+        return "", "capture_not_found"
+    uploaded_file = None
+    try:
+        model = _genai_model()
+        uploaded_file = genai.upload_file(path=capture_path)
+        response = model.generate_content([_receipt_reference_prompt(), uploaded_file])
+        extracted_reference = _normalize_extracted_capture_reference(getattr(response, "text", ""))
+        if extracted_reference:
+            return extracted_reference, "ok"
+        return "", "not_detected"
+    except Exception as exc:
+        return "", f"error:{exc}"
+    finally:
+        if uploaded_file is not None:
+            try:
+                genai.delete_file(name=uploaded_file.name)
+            except Exception:
+                pass
+
+
 def _delete_capture(relative_path: str):
     """Delete a payment capture file from disk if it exists."""
     if not relative_path:
@@ -5966,6 +6112,7 @@ def create_order():
             currency=currency,
             amount=amount,
             reference=reference,
+            capture_reference="",
             name=name,
             email=email,
             phone=phone,
@@ -6131,6 +6278,15 @@ def create_order():
                     capture_path = _save_capture(capture_file)
                     if capture_path:
                         o.payment_capture = capture_path
+                        extracted_reference, extraction_status = _extract_capture_reference(capture_path)
+                        if extracted_reference:
+                            o.capture_reference = extracted_reference
+                        current_payment_state = _pabilo_get_payment_state(o)
+                        _pabilo_set_payment_state(o, {
+                            **current_payment_state,
+                            "capture_reference": str(extracted_reference or ""),
+                            "capture_reference_status": extraction_status,
+                        })
             except Exception:
                 pass
             db.session.commit()
@@ -6255,6 +6411,7 @@ def admin_orders_list():
             "currency": x.currency,
             "amount": x.amount,
             "reference": x.reference,
+            "capture_reference": x.capture_reference or "",
             "delivery_code": x.delivery_code or "",
             "delivery_codes": delivery_codes,
             "payment_capture": x.payment_capture or "",
@@ -6411,6 +6568,7 @@ def orders_my():
             "currency": x.currency,
             "amount": x.amount,
             "reference": x.reference,
+            "capture_reference": x.capture_reference or "",
             "delivery_code": x.delivery_code or "",
         })
     return jsonify({"ok": True, "orders": out})
