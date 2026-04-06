@@ -23,7 +23,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const proofInner = document.getElementById('proofDropzoneInner');
   const proofFileName = document.getElementById('proofFileName');
   const proofPreview = document.getElementById('proofPreview');
+  const captureRefBox = document.getElementById('captureRefBox');
+  const captureRefLabel = document.getElementById('captureRefLabel');
+  const captureRefValue = document.getElementById('captureRefValue');
+  const captureRefHint = document.getElementById('captureRefHint');
   let proofPreviewUrl = '';
+  let captureReferenceLookupId = 0;
   let isReferenceValid = false;
   let hasCapture = false;
   let isBinanceAuto = false;
@@ -46,6 +51,68 @@ document.addEventListener('DOMContentLoaded', () => {
   function releaseCheckoutRequest() {
     checkoutRequestInFlight = false;
     updateSubmitState();
+  }
+
+  function renderCaptureReferenceState(mode, value = '', hint = '') {
+    if (!captureRefBox || !captureRefLabel || !captureRefValue || !captureRefHint) return;
+    captureRefBox.hidden = false;
+    captureRefBox.classList.remove('capture-ref-box--loading', 'capture-ref-box--error');
+
+    if (mode === 'loading') {
+      captureRefBox.classList.add('capture-ref-box--loading');
+      captureRefLabel.textContent = 'Analizando comprobante';
+      captureRefValue.textContent = 'Buscando referencia...';
+      captureRefHint.textContent = hint || 'Esto tarda unos segundos.';
+      return;
+    }
+    if (mode === 'success') {
+      captureRefLabel.textContent = 'Referencia extraída';
+      captureRefValue.textContent = value || '-';
+      captureRefHint.textContent = hint || 'Usa este número si quieres compararlo con la referencia que escribiste.';
+      return;
+    }
+    if (mode === 'error') {
+      captureRefBox.classList.add('capture-ref-box--error');
+      captureRefLabel.textContent = 'Referencia extraída';
+      captureRefValue.textContent = value || 'No detectada';
+      captureRefHint.textContent = hint || 'No se pudo extraer una referencia clara del comprobante.';
+      return;
+    }
+    captureRefBox.hidden = true;
+    captureRefLabel.textContent = 'Analizando comprobante';
+    captureRefValue.textContent = '...';
+    captureRefHint.textContent = '';
+  }
+
+  async function extractCaptureReference(file) {
+    if (!file) {
+      renderCaptureReferenceState('idle');
+      return;
+    }
+    const currentLookupId = ++captureReferenceLookupId;
+    renderCaptureReferenceState('loading');
+    const fd = new FormData();
+    fd.append('payment_capture', file);
+    try {
+      const res = await fetch('/orders/extract-capture-reference', {
+        method: 'POST',
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (currentLookupId !== captureReferenceLookupId) return;
+      if (!res.ok || !data.ok) {
+        renderCaptureReferenceState('error', '', (data && data.error) || 'No se pudo analizar el comprobante.');
+        return;
+      }
+      if (data.found && data.reference) {
+        renderCaptureReferenceState('success', data.reference);
+        return;
+      }
+      renderCaptureReferenceState('error', '', 'No se encontró una referencia clara en la imagen.');
+    } catch (_) {
+      if (currentLookupId !== captureReferenceLookupId) return;
+      renderCaptureReferenceState('error', '', 'Error de red al analizar el comprobante.');
+    }
   }
 
   function isValidVerifiedNick(nick) {
@@ -582,6 +649,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (proofInner) {
       proofInner.classList.add('proof-dropzone-inner--selected');
     }
+    extractCaptureReference(file);
     updateSubmitState();
   }
 

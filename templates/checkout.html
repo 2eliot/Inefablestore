@@ -123,6 +123,46 @@
   /* Charcoal card style */
   .co-card { background: rgba(43,47,54,0.4); border:1px solid rgba(148,163,184,0.1); border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
   .co-card h3 { margin: 0 0 8px; color: #e2e8f0; font-weight: 900; text-align:center; padding-bottom:10px; border-bottom:1px solid rgba(148,163,184,0.1); }
+  .capture-ref-box {
+    margin: 0 0 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(16,185,129,0.32);
+    background: rgba(6,78,59,0.18);
+    padding: 12px 14px;
+    text-align: center;
+  }
+  .capture-ref-box[hidden] { display: none !important; }
+  .capture-ref-label {
+    color: #a7f3d0;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .capture-ref-value {
+    color: #f8fafc;
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 1.1;
+    word-break: break-word;
+  }
+  .capture-ref-box--loading {
+    border-color: rgba(245,158,11,0.38);
+    background: rgba(120,53,15,0.18);
+  }
+  .capture-ref-box--loading .capture-ref-label { color: #fbbf24; }
+  .capture-ref-box--error {
+    border-color: rgba(239,68,68,0.34);
+    background: rgba(127,29,29,0.18);
+  }
+  .capture-ref-box--error .capture-ref-label { color: #fca5a5; }
+  .capture-ref-hint {
+    color: #cbd5e1;
+    font-size: 12px;
+    margin-top: 6px;
+    line-height: 1.4;
+  }
   /* Info rows with icon + value + copy */
   #co-info { display:grid; gap:12px; }
   .co-item { display:grid; grid-template-columns: 28px 1fr auto; align-items:center; gap:10px; }
@@ -279,6 +319,11 @@
 
   <div class="co-card proof-card">
     <h3>Comprobante de pago</h3>
+    <div id="captureRefBox" class="capture-ref-box" hidden>
+      <div id="captureRefLabel" class="capture-ref-label">Analizando comprobante</div>
+      <div id="captureRefValue" class="capture-ref-value">...</div>
+      <div id="captureRefHint" class="capture-ref-hint"></div>
+    </div>
     <div class="proof-dropzone" id="proofDropzone">
       <input type="file" id="payment_capture" name="payment_capture" accept="image/*" style="display:none;">
       <div class="proof-dropzone-inner" id="proofDropzoneInner">
@@ -330,5 +375,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/checkout.js', v='13') }}" defer></script>
+<script src="{{ url_for('static', filename='js/checkout.js', v='14') }}" defer></script>
 {% endblock %}

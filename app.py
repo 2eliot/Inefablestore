@@ -5939,6 +5939,34 @@ def check_reference():
     return jsonify({"ok": True, "exists": False})
 
 
+@app.route("/orders/extract-capture-reference", methods=["POST"])
+def extract_capture_reference_preview():
+    capture_file = request.files.get("payment_capture")
+    if not capture_file or not capture_file.filename:
+        return jsonify({"ok": False, "error": "Comprobante requerido"}), 400
+    if not _allowed_file(capture_file.filename):
+        return jsonify({"ok": False, "error": "Formato de imagen no permitido"}), 400
+
+    temp_capture_path = ""
+    try:
+        temp_capture_path = _save_capture(capture_file)
+        if not temp_capture_path:
+            return jsonify({"ok": False, "error": "No se pudo guardar el comprobante"}), 400
+
+        extracted_reference, extraction_status = _extract_capture_reference(temp_capture_path)
+        return jsonify({
+            "ok": True,
+            "reference": str(extracted_reference or ""),
+            "status": extraction_status,
+            "found": bool(extracted_reference),
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        if temp_capture_path:
+            _delete_capture(temp_capture_path)
+
+
 @app.route("/admin/orders/<int:oid>/reference", methods=["POST"])
 def admin_orders_update_reference(oid: int):
     user = session.get("user")
