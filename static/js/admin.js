@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('admin.js loaded v20');
+  console.log('admin.js loaded v22');
   const tabs = document.querySelectorAll('#adminTabs .tab');
   const panels = document.querySelectorAll('.tab-panel');
   // Elements used across handlers (declare early)
@@ -861,7 +861,7 @@ window.fetchPayments = fetchPayments;
       ubii_method: ubiiMethod ? ubiiMethod.value : 'pm',
       ubii_text_field: ubiiTextField ? ubiiTextField.value.trim() : 'texto',
       ubii_amount_regex: ubiiAmountRegex ? ubiiAmountRegex.value.trim() : 'Bs\\.\\s*([\\d\\.,]+)',
-      ubii_reference_regex: ubiiReferenceRegex ? ubiiReferenceRegex.value.trim() : 'referencia\\s*(\\d+)',
+      ubii_reference_regex: ubiiReferenceRegex ? ubiiReferenceRegex.value.trim() : 'referencia\\D*(\\d+)',
       ubii_webhook_secret: ubiiWebhookSecret ? ubiiWebhookSecret.value.trim() : ''
     };
     const res = await fetch('/admin/config/payments', {
@@ -903,7 +903,7 @@ window.fetchPayments = fetchPayments;
     if (ubiiMethod) ubiiMethod.value = (data.ubii_method || 'pm').toLowerCase() === 'binance' ? 'binance' : 'pm';
     if (ubiiTextField) ubiiTextField.value = data.ubii_text_field || 'texto';
     if (ubiiAmountRegex) ubiiAmountRegex.value = data.ubii_amount_regex || 'Bs\\.\\s*([\\d\\.,]+)';
-    if (ubiiReferenceRegex) ubiiReferenceRegex.value = data.ubii_reference_regex || 'referencia\\s*(\\d+)';
+    if (ubiiReferenceRegex) ubiiReferenceRegex.value = data.ubii_reference_regex || 'referencia\\D*(\\d+)';
     if (ubiiWebhookSecret) ubiiWebhookSecret.value = data.ubii_webhook_secret || '';
     if (ubiiWebhookPath) ubiiWebhookPath.value = data.ubii_webhook_path || '/webhook-ubii';
     showPaymentVerificationProvider((data.payment_verification_provider || '').toLowerCase());
@@ -2139,7 +2139,7 @@ window.refreshGallery = refreshGallery;
       } else if (activeVerifyProvider === 'ubii') {
         pabiloStateText = pabiloVerified
           ? `Pago verificado en Ubii${payVerify.verification_id ? ` · Ref ${payVerify.verification_id}` : ''}`
-          : 'Ubii activo: esperando webhook con referencia exacta y monto mayor o igual a la orden';
+          : 'Ubii activo: esperando webhook con ultimos 4 digitos de referencia y monto mayor o igual a la orden';
         pabiloStateColor = pabiloVerified ? '#6ee7b7' : '#86efac';
       } else if (pabiloEligible) {
         pabiloStateText = pabiloVerified
