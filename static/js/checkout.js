@@ -101,14 +101,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json().catch(() => ({}));
       if (currentLookupId !== captureReferenceLookupId) return;
       if (!res.ok || !data.ok) {
-        renderCaptureReferenceState('error', '', (data && data.error) || 'No se pudo analizar el comprobante.');
+        renderCaptureReferenceState('error', '', (data && data.error) || 'No se pudo analizar el comprobante con la IA.');
         return;
       }
       if (data.found && data.reference) {
         renderCaptureReferenceState('success', data.reference);
         return;
       }
-      renderCaptureReferenceState('error', '', 'No se encontró una referencia clara en la imagen.');
+      renderCaptureReferenceState('error', '', 'La IA no encontró una referencia clara en la imagen.');
     } catch (_) {
       if (currentLookupId !== captureReferenceLookupId) return;
       renderCaptureReferenceState('error', '', 'Error de red al analizar el comprobante.');

@@ -5530,6 +5530,21 @@ def _extract_capture_reference(relative_path: str):
                 pass
 
 
+def _capture_reference_status_error_message(status: str) -> str:
+    raw_status = str(status or "").strip()
+    if not raw_status.startswith("error:"):
+        return ""
+    detail = raw_status.split(":", 1)[1].strip()
+    lowered = detail.lower()
+    if "genai_api_key no configurada" in lowered:
+        return "La IA no está configurada todavía en el servidor. Falta GENAI_API_KEY."
+    if "api key" in lowered or "api_key" in lowered:
+        return "La clave de Gemini no es válida o no está disponible en este momento."
+    if "quota" in lowered or "resource exhausted" in lowered:
+        return "La cuenta de Gemini alcanzó el límite de uso. Intenta de nuevo más tarde."
+    return detail or "No se pudo analizar el comprobante con la IA."
+
+
 def _delete_capture(relative_path: str):
     """Delete a payment capture file from disk if it exists."""
     if not relative_path:
@@ -5960,6 +5975,13 @@ def extract_capture_reference_preview():
             return jsonify({"ok": False, "error": "No se pudo guardar el comprobante"}), 400
 
         extracted_reference, extraction_status = _extract_capture_reference(temp_capture_path)
+        error_message = _capture_reference_status_error_message(extraction_status)
+        if error_message:
+            return jsonify({
+                "ok": False,
+                "error": error_message,
+                "status": extraction_status,
+            }), 503
         return jsonify({
             "ok": True,
             "reference": str(extracted_reference or ""),
