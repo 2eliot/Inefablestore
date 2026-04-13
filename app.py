@@ -2376,6 +2376,41 @@ def _revendedores_missing_zone_error(unit_error: str) -> bool:
     return any(hint in txt for hint in hints)
 
 
+def _revendedores_is_freefire_id_label(value: str) -> bool:
+    txt = re.sub(r"\s+", " ", str(value or "")).strip().lower()
+    if not txt:
+        return False
+    compact = re.sub(r"[^a-z0-9]+", "", txt)
+    return compact in {"freefireid", "freefire"} or ("free fire" in txt and "id" in txt)
+
+
+def _revendedores_effective_product_id(remote_product_id, remote_meta: dict | None = None, remote_product_name: str = ""):
+    if remote_product_id not in (None, ""):
+        try:
+            return int(remote_product_id)
+        except (TypeError, ValueError):
+            pass
+
+    meta = remote_meta if isinstance(remote_meta, dict) else {}
+    labels = [
+        remote_product_name,
+        meta.get("product_name"),
+        meta.get("remote_product_name"),
+        meta.get("game_name"),
+        meta.get("name"),
+        meta.get("slug"),
+        meta.get("game_type"),
+    ]
+    for label in labels:
+        if _revendedores_is_freefire_id_label(label):
+            return -1
+
+    game_type = str(meta.get("game_type") or "").strip().lower()
+    if game_type == "freefire_id":
+        return -1
+    return None
+
+
 def _synthetic_product_id(label):
     txt = str(label or "").strip().lower()
     if not txt:
@@ -2441,6 +2476,11 @@ def _normalize_rev_catalog_payload(payload):
                     remote_product_id = None
 
             product_name = item.get("product_name") or item.get("game_name") or ""
+            remote_product_id = _revendedores_effective_product_id(
+                remote_product_id,
+                item,
+                product_name,
+            )
             package_name = item.get("name") or item.get("title") or f"Paquete {remote_package_id}"
             raw_obj = dict(item)
             raw_obj["remote_local_package_id"] = local_package_id
@@ -4044,6 +4084,13 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
             legacy_payload["player_id2"] = order_zone
 
         remote_meta = _revendedores_catalog_meta(unit.get("remote_product_id"), unit.get("remote_package_id"))
+        effective_remote_product_id = _revendedores_effective_product_id(
+            unit.get("remote_product_id"),
+            remote_meta,
+            unit.get("remote_label") or remote_meta.get("product_name") or remote_meta.get("game_name") or "",
+        )
+        if effective_remote_product_id is not None:
+            legacy_payload["product_id"] = effective_remote_product_id
         package_requires_zone = _package_effective_requires_zone(order_obj.store_package_id)
         remote_requires_zone = _revendedores_catalog_requires_player_id2(remote_meta)
         if remote_requires_zone and not order_zone:
@@ -4063,8 +4110,8 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
             "request_id": str(unit.get("external_order_id") or ""),
             "external_order_id": str(unit.get("external_order_id") or ""),
         }
-        if unit.get("remote_product_id") is not None:
-            modern_payload["product_id"] = str(unit.get("remote_product_id"))
+        if effective_remote_product_id is not None:
+            modern_payload["product_id"] = str(effective_remote_product_id)
         provider_package_id = remote_meta.get("provider_package_id") or remote_meta.get("gamepoint_package_id")
         if provider_package_id not in (None, "", 0, "0"):
             modern_payload["provider_package_id"] = str(provider_package_id)
@@ -7314,7 +7361,11 @@ def admin_revendedores_sync_catalog():
     games_summary = {}
     for ent in normalized:
         gname = ent.get("remote_product_name") or "?"
-        pid = ent.get("remote_product_id")
+        pid = _revendedores_effective_product_id(
+            ent.get("remote_product_id"),
+            ent,
+            ent.get("remote_product_name") or "",
+        )
         k = f"{gname} (pid={pid})"
         games_summary[k] = games_summary.get(k, 0) + 1
 
@@ -7448,6 +7499,20 @@ def admin_revendedores_mapping_data():
             "requires_player_id2": _revendedores_catalog_requires_player_id2(obj),
         }
 
+    def _catalog_effective_product_id(catalog_row):
+        remote_meta = {}
+        try:
+            remote_meta = json.loads(catalog_row.raw_json or "{}")
+            if not isinstance(remote_meta, dict):
+                remote_meta = {}
+        except Exception:
+            remote_meta = {}
+        return _revendedores_effective_product_id(
+            catalog_row.remote_product_id,
+            remote_meta,
+            catalog_row.remote_product_name or "",
+        )
+
     return jsonify({
         "ok": True,
         "selected_store_package_id": selected_package_id,
@@ -7464,7 +7529,11 @@ def admin_revendedores_mapping_data():
                 "store_package_name": package_name_by_id.get(int(it.store_package_id), ""),
                 "mapping": {
                     "id": mappings_by_item[it.id].id,
-                    "remote_product_id": mappings_by_item[it.id].remote_product_id,
+                    "remote_product_id": _revendedores_effective_product_id(
+                        mappings_by_item[it.id].remote_product_id,
+                        {"name": mappings_by_item[it.id].remote_label or ""},
+                        mappings_by_item[it.id].remote_label or "",
+                    ),
                     "remote_package_id": mappings_by_item[it.id].remote_package_id,
                     "remote_label": mappings_by_item[it.id].remote_label or "",
                     "auto_enabled": bool(mappings_by_item[it.id].auto_enabled),
@@ -7476,7 +7545,7 @@ def admin_revendedores_mapping_data():
         "remote_catalog": [
             {
                 "catalog_id": r.id,
-                "remote_product_id": r.remote_product_id,
+                "remote_product_id": _catalog_effective_product_id(r),
                 "remote_product_name": r.remote_product_name or "",
                 "remote_package_id": r.remote_package_id,
                 "remote_package_name": r.remote_package_name or "",
@@ -7562,12 +7631,17 @@ def admin_revendedores_mappings_bulk_save():
             remote_label = (
                 f"{(catalog.remote_product_name or '').strip()} · {(catalog.remote_package_name or '').strip()}"
             ).strip(" ·")
+            effective_remote_product_id = _revendedores_effective_product_id(
+                catalog.remote_product_id,
+                remote_meta,
+                catalog.remote_product_name or "",
+            )
 
             if not row:
                 row = RevendedoresItemMapping(
                     store_package_id=item.store_package_id,
                     store_item_id=store_item_id,
-                    remote_product_id=catalog.remote_product_id,
+                    remote_product_id=effective_remote_product_id,
                     remote_package_id=catalog.remote_package_id,
                     remote_label=remote_label,
                     auto_enabled=auto_enabled,
@@ -7577,7 +7651,7 @@ def admin_revendedores_mappings_bulk_save():
                 db.session.add(row)
             else:
                 row.store_package_id = item.store_package_id
-                row.remote_product_id = catalog.remote_product_id
+                row.remote_product_id = effective_remote_product_id
                 row.remote_package_id = catalog.remote_package_id
                 row.remote_label = remote_label
                 row.auto_enabled = auto_enabled
