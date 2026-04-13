@@ -24,6 +24,7 @@ from email.mime.multipart import MIMEMultipart
 import secrets
 import requests as _requests_lib
 import google.generativeai as genai
+from google.api_core import exceptions as google_api_exceptions
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -5681,6 +5682,57 @@ def _is_genai_model_not_found_error(exc: Exception) -> bool:
     )
 
 
+def _is_genai_retryable_error(exc: Exception) -> bool:
+    if isinstance(exc, (google_api_exceptions.TooManyRequests, google_api_exceptions.ResourceExhausted)):
+        return True
+    detail = str(exc or "").strip().lower()
+    return bool(
+        "too many requests" in detail
+        or "429" in detail
+        or "quota" in detail
+        or "resource exhausted" in detail
+        or "rate limit" in detail
+    )
+
+
+def _genai_extract_reference_with_retries(uploaded_file):
+    last_model_error = None
+    last_retryable_error = None
+
+    for attempt in range(3):
+        should_retry = False
+        for model_name in _genai_candidate_model_names():
+            model = genai.GenerativeModel(model_name)
+            try:
+                response = model.generate_content([_receipt_reference_prompt(), uploaded_file])
+            except Exception as exc:
+                if _is_genai_model_not_found_error(exc):
+                    last_model_error = exc
+                    continue
+                if _is_genai_retryable_error(exc):
+                    last_retryable_error = exc
+                    should_retry = True
+                    break
+                raise
+
+            return model, response
+
+        if should_retry and attempt < 2:
+            time.sleep(2 ** attempt)
+            continue
+        if should_retry and last_retryable_error is not None:
+            raise last_retryable_error
+        if last_model_error is not None:
+            raise RuntimeError(
+                "Ningun modelo Gemini compatible estuvo disponible. "
+                "Configura GENAI_MODEL con un nombre vigente, por ejemplo gemini-2.5-flash. "
+                f"Detalle: {last_model_error}"
+            )
+        break
+
+    return None, None
+
+
 def _normalize_extracted_capture_reference(raw_value) -> str:
     text = str(raw_value or "").strip()
     if not text or text.upper() == "ERROR_NO_DETECTADO":
@@ -5702,28 +5754,14 @@ def _extract_capture_reference(relative_path: str):
     try:
         _genai_model()
         uploaded_file = genai.upload_file(path=capture_path)
-        last_model_error = None
-        for model_name in _genai_candidate_model_names():
-            model = genai.GenerativeModel(model_name)
-            try:
-                response = model.generate_content([_receipt_reference_prompt(), uploaded_file])
-            except Exception as exc:
-                if _is_genai_model_not_found_error(exc):
-                    last_model_error = exc
-                    continue
-                raise
+        model, response = _genai_extract_reference_with_retries(uploaded_file)
+        if model is not None:
             _GENAI_MODEL = model
             _GENAI_MODEL_READY = True
             extracted_reference = _normalize_extracted_capture_reference(getattr(response, "text", ""))
             if extracted_reference:
                 return extracted_reference, "ok"
             return "", "not_detected"
-        if last_model_error is not None:
-            raise RuntimeError(
-                "Ningun modelo Gemini compatible estuvo disponible. "
-                "Configura GENAI_MODEL con un nombre vigente, por ejemplo gemini-2.5-flash. "
-                f"Detalle: {last_model_error}"
-            )
         return "", "not_detected"
     except Exception as exc:
         return "", f"error:{exc}"
@@ -5745,7 +5783,7 @@ def _capture_reference_status_error_message(status: str) -> str:
         return "La IA no está configurada todavía en el servidor. Falta GENAI_API_KEY."
     if "api key" in lowered or "api_key" in lowered:
         return "La clave de Gemini no es válida o no está disponible en este momento."
-    if "quota" in lowered or "resource exhausted" in lowered:
+    if "quota" in lowered or "resource exhausted" in lowered or "too many requests" in lowered or "429" in lowered:
         return "La cuenta de Gemini alcanzó el límite de uso. Intenta de nuevo más tarde."
     return detail or "No se pudo analizar el comprobante con la IA."
 
@@ -6545,20 +6583,24 @@ def create_order():
                     capture_path = _save_capture(capture_file)
                     if capture_path:
                         o.payment_capture = capture_path
-                        extracted_reference, extraction_status = _extract_capture_reference(capture_path)
-                        resolved_capture_reference = extracted_reference or capture_reference_preview
-                        if resolved_capture_reference:
-                            o.capture_reference = resolved_capture_reference
-                        elif extracted_reference:
-                            o.capture_reference = extracted_reference
+                        extracted_reference = ""
+                        extraction_status = ""
+                        capture_reference_source = ""
+                        if capture_reference_preview:
+                            o.capture_reference = capture_reference_preview
+                            extraction_status = "ok"
+                            capture_reference_source = "preview_extract"
+                        else:
+                            extracted_reference, extraction_status = _extract_capture_reference(capture_path)
+                            if extracted_reference:
+                                o.capture_reference = extracted_reference
+                                capture_reference_source = "server_extract"
                         current_payment_state = _pabilo_get_payment_state(o)
                         _pabilo_set_payment_state(o, {
                             **current_payment_state,
                             "capture_reference": str(o.capture_reference or ""),
                             "capture_reference_status": extraction_status,
-                            "capture_reference_source": (
-                                "server_extract" if extracted_reference else ("preview_extract" if capture_reference_preview else "")
-                            ),
+                            "capture_reference_source": capture_reference_source,
                         })
             except Exception:
                 pass

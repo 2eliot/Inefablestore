@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function extractCaptureReference(file) {
     if (!file) {
       renderCaptureReferenceState('idle');
-      return;
+      return '';
     }
     const currentLookupId = ++captureReferenceLookupId;
     renderCaptureReferenceState('loading');
@@ -104,19 +104,21 @@ document.addEventListener('DOMContentLoaded', () => {
         body: fd,
       });
       const data = await res.json().catch(() => ({}));
-      if (currentLookupId !== captureReferenceLookupId) return;
+      if (currentLookupId !== captureReferenceLookupId) return '';
       if (!res.ok || !data.ok) {
         renderCaptureReferenceState('error', '', (data && data.error) || 'No se pudo analizar el comprobante con la IA.');
-        return;
+        return '';
       }
       if (data.found && data.reference) {
         renderCaptureReferenceState('success', data.reference);
-        return;
+        return String(data.reference || '').trim();
       }
       renderCaptureReferenceState('error', '', 'La IA no encontró una referencia clara en la imagen.');
+      return '';
     } catch (_) {
-      if (currentLookupId !== captureReferenceLookupId) return;
+      if (currentLookupId !== captureReferenceLookupId) return '';
       renderCaptureReferenceState('error', '', 'Error de red al analizar el comprobante.');
+      return '';
     }
   }
 
@@ -638,6 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function onCaptureSelected(file) {
     hasCapture = true;
+    latestCaptureReferencePreview = '';
     if (proofPreviewUrl) {
       URL.revokeObjectURL(proofPreviewUrl);
       proofPreviewUrl = '';
@@ -654,7 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (proofInner) {
       proofInner.classList.add('proof-dropzone-inner--selected');
     }
-    extractCaptureReference(file);
+    renderCaptureReferenceState('idle');
     updateSubmitState();
   }
 
@@ -947,12 +950,22 @@ document.addEventListener('DOMContentLoaded', () => {
       fd.append('special_code', qRefCode || '');
       fd.append('nn', nn);
       fd.append('idempotency_key', idempotencyKey);
-      if (latestCaptureReferencePreview) fd.append('capture_reference_preview', latestCaptureReferencePreview);
-      fd.append('payment_capture', proofInput.files[0]);
-      // UI loading state
+      const selectedCaptureFile = proofInput.files[0];
       const originalText = btnConfirm.textContent;
       btnConfirm.textContent = 'Procesando...';
       btnConfirm.disabled = true;
+      if (!latestCaptureReferencePreview && selectedCaptureFile) {
+        try {
+          btnConfirm.textContent = 'Analizando comprobante...';
+          latestCaptureReferencePreview = await extractCaptureReference(selectedCaptureFile);
+        } catch (_) {
+          latestCaptureReferencePreview = '';
+        }
+        btnConfirm.textContent = 'Procesando...';
+      }
+      if (latestCaptureReferencePreview) fd.append('capture_reference_preview', latestCaptureReferencePreview);
+      fd.append('payment_capture', selectedCaptureFile);
+      // UI loading state
       // Abort fetch if it takes too long
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), 30000);
