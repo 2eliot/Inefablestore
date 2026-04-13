@@ -2302,6 +2302,80 @@ def _revendedores_catalog_meta(remote_product_id, remote_package_id):
         return {}
 
 
+def _package_effective_requires_zone(store_package_id) -> bool:
+    try:
+        package_id = int(store_package_id)
+    except (TypeError, ValueError):
+        return False
+    try:
+        pkg = StorePackage.query.get(package_id)
+        if pkg and bool(getattr(pkg, "requires_zone_id", False)):
+            return True
+    except Exception:
+        pass
+    try:
+        ml_package_id = (get_config_value("ml_package_id", "") or "").strip()
+        if ml_package_id and str(package_id) == ml_package_id:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _revendedores_catalog_requires_player_id2(remote_meta: dict) -> bool:
+    if not isinstance(remote_meta, dict) or not remote_meta:
+        return False
+
+    direct_flags = [
+        remote_meta.get("dual_id"),
+        remote_meta.get("requires_player_id2"),
+        remote_meta.get("requires_zone"),
+        remote_meta.get("requires_zone_id"),
+        remote_meta.get("require_zone"),
+    ]
+    if any(bool(flag) for flag in direct_flags):
+        return True
+
+    campos = remote_meta.get("campos")
+    if isinstance(campos, dict) and campos.get("campo_id2"):
+        return True
+
+    mode = str(remote_meta.get("mode") or "").strip().lower()
+    if mode in {"id_server", "server", "zone", "role_zone", "uid_zone", "user_zone"}:
+        return True
+
+    try:
+        raw_text = json.dumps(remote_meta, ensure_ascii=False).lower()
+    except Exception:
+        raw_text = str(remote_meta).lower()
+
+    hints = (
+        '"campo_id2"',
+        '"player_id2"',
+        '"input2"',
+        '"zone_id"',
+        '"zoneid"',
+        'zone id',
+        'second id',
+    )
+    return any(hint in raw_text for hint in hints)
+
+
+def _revendedores_missing_zone_error(unit_error: str) -> bool:
+    txt = str(unit_error or "").strip().lower()
+    if not txt:
+        return False
+    hints = (
+        "zone id",
+        "zona id",
+        "input2",
+        "player_id2",
+        "insert zone id",
+        "please insert zone id",
+    )
+    return any(hint in txt for hint in hints)
+
+
 def _synthetic_product_id(label):
     txt = str(label or "").strip().lower()
     if not txt:
@@ -3965,10 +4039,23 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
             "player_id": player_id,
             "external_order_id": unit.get("external_order_id"),
         }
-        if (order_obj.customer_zone or "").strip():
-            legacy_payload["player_id2"] = (order_obj.customer_zone or "").strip()
+        order_zone = (order_obj.customer_zone or "").strip()
+        if order_zone:
+            legacy_payload["player_id2"] = order_zone
 
         remote_meta = _revendedores_catalog_meta(unit.get("remote_product_id"), unit.get("remote_package_id"))
+        package_requires_zone = _package_effective_requires_zone(order_obj.store_package_id)
+        remote_requires_zone = _revendedores_catalog_requires_player_id2(remote_meta)
+        if remote_requires_zone and not order_zone:
+            unit["status"] = "failed"
+            unit["error"] = (
+                "El paquete remoto mapeado requiere Zone ID / segundo ID. Revisa el mapeo de Revendedores para este item."
+                if not package_requires_zone else
+                "La recarga automática requiere Zone ID para este mapeo y la orden no lo tiene."
+            )
+            last_error = unit["error"]
+            break
+
         modern_payload = {
             "api_key": webb_api_key,
             "package_id": str(remote_meta.get("package_id") or remote_meta.get("remote_local_package_id") or unit.get("remote_package_id") or ""),
@@ -3984,8 +4071,8 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
         provider_package_key = (remote_meta.get("provider_package_key") or remote_meta.get("script_package_key") or "").strip()
         if provider_package_key:
             modern_payload["provider_package_key"] = provider_package_key
-        if (order_obj.customer_zone or "").strip():
-            modern_payload["player_id2"] = (order_obj.customer_zone or "").strip()
+        if order_zone:
+            modern_payload["player_id2"] = order_zone
 
         for attempt in range(1, max_attempts + 1):
             unit["last_attempt_at"] = datetime.utcnow().isoformat()
@@ -4043,6 +4130,12 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
                     else:
                         unit_status = str(api_data.get("purchase_status") or api_data.get("status") or "").strip().lower()
                         unit_error = str(api_data.get("error") or api_data.get("message") or "Recarga no completada en Revendedores")
+                        if _revendedores_missing_zone_error(unit_error) and not order_zone:
+                            unit_error = (
+                                "El mapeo automático apunta a un paquete remoto que requiere Zone ID / input2. Revisa el mapeo de Revendedores de este item."
+                                if not package_requires_zone else
+                                "El proveedor pidió Zone ID / input2 y la orden no lo tiene."
+                            )
                         if unit_status in {"processing", "procesando", "pending", "pendiente", "queued", "en_cola", "en cola"}:
                             mapped_status = "processing"
                         elif unit_status in {"not_found", "no_encontrada", "no encontrada"}:
@@ -7324,6 +7417,37 @@ def admin_revendedores_mapping_data():
             pass
         return None
 
+    def _extract_catalog_debug(raw_json_str):
+        try:
+            obj = json.loads(raw_json_str or "{}")
+        except Exception:
+            obj = {}
+        if not isinstance(obj, dict):
+            obj = {}
+
+        campos = obj.get("campos") if isinstance(obj.get("campos"), dict) else {}
+        provider_package_id = (
+            obj.get("provider_package_id")
+            or obj.get("packageid")
+            or obj.get("package_id")
+            or obj.get("packageId")
+        )
+
+        mode = str(obj.get("mode") or "").strip()
+        field2_label = str(
+            campos.get("campo_id2")
+            or obj.get("campo_id2")
+            or obj.get("input2_label")
+            or ""
+        ).strip()
+
+        return {
+            "provider_package_id": str(provider_package_id).strip() if provider_package_id not in (None, "") else "",
+            "mode": mode,
+            "field2_label": field2_label,
+            "requires_player_id2": _revendedores_catalog_requires_player_id2(obj),
+        }
+
     return jsonify({
         "ok": True,
         "selected_store_package_id": selected_package_id,
@@ -7357,6 +7481,7 @@ def admin_revendedores_mapping_data():
                 "remote_package_id": r.remote_package_id,
                 "remote_package_name": r.remote_package_name or "",
                 "price": _extract_price(r.raw_json),
+                **_extract_catalog_debug(r.raw_json),
             }
             for r in catalog_rows
         ],
@@ -7412,6 +7537,27 @@ def admin_revendedores_mappings_bulk_save():
             catalog = RevendedoresCatalogItem.query.get(catalog_id)
             if not catalog:
                 continue
+
+            remote_meta = {}
+            try:
+                remote_meta = json.loads(catalog.raw_json or "{}")
+                if not isinstance(remote_meta, dict):
+                    remote_meta = {}
+            except Exception:
+                remote_meta = {}
+
+            if _revendedores_catalog_requires_player_id2(remote_meta) and not _package_effective_requires_zone(item.store_package_id):
+                remote_name = (
+                    f"{(catalog.remote_product_name or '').strip()} · {(catalog.remote_package_name or '').strip()}"
+                ).strip(" ·")
+                return jsonify({
+                    "ok": False,
+                    "error": (
+                        "Ese mapeo apunta a un paquete remoto que requiere Zone ID / segundo ID. "
+                        f"No es compatible con el item local '{item.title}' del paquete #{item.store_package_id}. "
+                        f"Mapeo remoto detectado: {remote_name}."
+                    ),
+                }), 400
 
             remote_label = (
                 f"{(catalog.remote_product_name or '').strip()} · {(catalog.remote_package_name or '').strip()}"

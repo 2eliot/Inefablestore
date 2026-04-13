@@ -338,6 +338,56 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function escapeAdminHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatRevCatalogOptionLabel(rc) {
+    const gameName = (rc.remote_product_name || '').trim() || `Juego ${rc.remote_product_id || '?'}`;
+    const pkgName = (rc.remote_package_name || '').trim() || `Paquete ${rc.remote_package_id || '?'}`;
+    const ids = `prod ${rc.remote_product_id || '?'} / pack ${rc.remote_package_id || '?'}`;
+    const provider = rc.provider_package_id ? ` / provider ${rc.provider_package_id}` : '';
+    const price = rc.price != null ? ` / $${Number(rc.price).toFixed(2)}` : '';
+    const zone = rc.requires_player_id2 ? ' / pide input2' : '';
+    return `${gameName} | ${pkgName} | ${ids}${provider}${price}${zone}`;
+  }
+
+  function renderRevCatalogMappingInfo(row, catalogId) {
+    if (!row) return;
+    const info = row.querySelector('.rev-map-info');
+    if (!info) return;
+
+    const remoteCatalog = Array.isArray(revMappingData?.remote_catalog) ? revMappingData.remote_catalog : [];
+    const selected = remoteCatalog.find((rc) => String(rc.catalog_id) === String(catalogId || '')) || null;
+    const mapping = JSON.parse(row.getAttribute('data-current-mapping') || 'null');
+
+    if (selected) {
+      const input2 = selected.requires_player_id2
+        ? ` · Requiere ${escapeAdminHtml((selected.field2_label || 'input2').trim() || 'input2')}`
+        : '';
+      const provider = selected.provider_package_id
+        ? ` · Provider ${escapeAdminHtml(selected.provider_package_id)}`
+        : '';
+      const mode = selected.mode
+        ? ` · Mode ${escapeAdminHtml(selected.mode)}`
+        : '';
+      info.innerHTML = `Remoto real: <strong>${escapeAdminHtml(selected.remote_product_name || ('Juego ' + (selected.remote_product_id || '?')))}</strong> / ${escapeAdminHtml(selected.remote_package_name || ('Paquete ' + (selected.remote_package_id || '?')))} · Product ID ${escapeAdminHtml(selected.remote_product_id)} · Package ID ${escapeAdminHtml(selected.remote_package_id)}${provider}${mode}${input2}`;
+      return;
+    }
+
+    if (mapping && mapping.remote_package_id) {
+      info.innerHTML = `Mapeo guardado fuera del catálogo actual: Product ID ${escapeAdminHtml(mapping.remote_product_id || '')} · Package ID ${escapeAdminHtml(mapping.remote_package_id)}${mapping.remote_label ? ` · ${escapeAdminHtml(mapping.remote_label)}` : ''}`;
+      return;
+    }
+
+    info.textContent = 'Sin mapeo automático guardado.';
+  }
+
   function renderRevMapping() {
     if (!revMapList || !revStorePackage || !revMappingData) return;
     const pkgs = Array.isArray(revMappingData.store_packages) ? revMappingData.store_packages : [];
@@ -373,6 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return parseInt(r.remote_package_id, 10) === parseInt(mapping.remote_package_id, 10)
           && parseInt(r.remote_product_id || 0, 10) === parseInt(mapping.remote_product_id || 0, 10);
       })?.catalog_id;
+      const mappingJson = escapeAdminHtml(JSON.stringify(mapping || null));
 
       html += `
         <div class="order-card rev-map-row" data-store-item-id="${it.id}">
@@ -398,14 +449,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 return Object.keys(groups).sort().map((gName) => {
                   const opts = groups[gName].map((rc) => {
                     const selected = mappedCatalogId && parseInt(mappedCatalogId, 10) === parseInt(rc.catalog_id, 10) ? 'selected' : '';
-                    const pkgName = (rc.remote_package_name || '').trim() || ('Paquete ' + rc.remote_package_id);
-                    const priceTag = rc.price != null ? ` ($${Number(rc.price).toFixed(2)})` : '';
-                    return `<option value="${rc.catalog_id}" ${selected}>${pkgName}${priceTag}</option>`;
+                    return `<option value="${rc.catalog_id}" ${selected}>${escapeAdminHtml(formatRevCatalogOptionLabel(rc))}</option>`;
                   }).join('');
-                  return `<optgroup label="${gName}">${opts}</optgroup>`;
+                  return `<optgroup label="${escapeAdminHtml(gName)}">${opts}</optgroup>`;
                 }).join('');
               })()}
             </select>
+            <div class="order-meta rev-map-info" data-current-mapping="${mappingJson}" style="line-height:1.45;"></div>
             <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#cbd5e1;">
               <input type="checkbox" class="rev-auto-enabled" data-store-item-id="${it.id}" ${(mapping && mapping.auto_enabled) ? 'checked' : ''}>
               Activar recarga automática para este ítem
@@ -419,6 +469,10 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
     });
     revMapList.innerHTML = html;
+    revMapList.querySelectorAll('.rev-map-row').forEach((row) => {
+      const select = row.querySelector('.rev-catalog-select');
+      renderRevCatalogMappingInfo(row, select ? select.value : '');
+    });
   }
 
   async function syncRevCatalog() {
@@ -1008,11 +1062,18 @@ window.fetchPayments = fetchPayments;
   if (revMapList) {
     revMapList.addEventListener('change', (event) => {
       const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const row = target.closest('.rev-map-row');
+      if (!row) return;
+
+      if (target instanceof HTMLSelectElement && target.classList.contains('rev-catalog-select')) {
+        renderRevCatalogMappingInfo(row, target.value || '');
+        return;
+      }
+
       if (!(target instanceof HTMLInputElement)) return;
       if (!target.classList.contains('rev-direct-script')) return;
       if (!target.checked) return;
-      const row = target.closest('.rev-map-row');
-      if (!row) return;
       const autoChk = row.querySelector('.rev-auto-enabled');
       if (autoChk && autoChk instanceof HTMLInputElement) {
         autoChk.checked = true;
