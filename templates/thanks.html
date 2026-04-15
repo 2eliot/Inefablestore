@@ -19,6 +19,10 @@
   .ty-sub{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 10px;justify-content:center}
   .ty-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:14px;background:rgba(15,23,42,.72);border:1px solid rgba(148,163,184,.14);font-weight:900;color:#e2e8f0}
   .ty-chip strong{color:#86efac}
+  .ty-order-meta{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center;margin:2px 0 10px;width:100%}
+  .ty-order-line{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 12px;border-radius:14px;background:rgba(8,15,24,.72);border:1px solid rgba(148,163,184,.12);color:#dbeafe;font-weight:800;max-width:100%;text-align:center;line-height:1.2}
+  .ty-order-label{color:#93c5fd;font-weight:900;white-space:nowrap}
+  .ty-order-line strong{color:#f8fafc}
   .ty-note{max-width:680px;color:#cbd5e1;font-size:15px;line-height:1.55;margin:0 0 10px;font-weight:600}
   .ty-note strong{color:#f8fafc}
   .ty-social-block{display:grid;gap:8px;justify-items:center;margin-bottom:6px}
@@ -84,6 +88,8 @@
     .ty-title{font-size:17px;margin:6px 0 5px}
     .ty-sub{gap:8px;justify-content:center;margin:0 0 12px}
     .ty-chip{justify-content:center;padding:9px 14px;font-size:17px;border-radius:12px}
+    .ty-order-meta{gap:8px;margin:0 0 12px;display:grid}
+    .ty-order-line{width:100%;font-size:15px;line-height:1.35;padding:10px 12px;border-radius:12px}
     .ty-note{font-size:9px;line-height:1.45;margin:0 0 8px;max-width:360px}
     .ty-social-block{gap:6px;margin-bottom:5px}
     .ty-social-label{font-size:9px}
@@ -138,6 +144,17 @@
         <div class="ty-sub">
           <span class="ty-chip">Orden <strong>#{{ order_id }}</strong></span>
           <span class="ty-chip">Entrega <strong>3 a 10 min</strong></span>
+        </div>
+
+        <div class="ty-order-meta">
+          <div class="ty-order-line">
+            <span class="ty-order-label">Jugador /</span>
+            <strong>{{ player_display or 'No especificado' }}</strong>
+          </div>
+          <div class="ty-order-line">
+            <span class="ty-order-label">Paquete /</span>
+            <strong>{{ package_display or 'No especificado' }}</strong>
+          </div>
         </div>
 
         <div id="ty-progress" class="ty-progress" data-order-id="{{ order_id }}" aria-live="polite">

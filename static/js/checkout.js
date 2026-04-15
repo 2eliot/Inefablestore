@@ -36,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let binanceAutoCode = '';
   let checkoutRequestInFlight = false;
   let checkoutAttemptKey = '';
+  let captureAnalysisInFlight = false;
+  let captureAnalysisPromise = null;
 
   function getCheckoutAttemptKey() {
     if (checkoutAttemptKey) return checkoutAttemptKey;
@@ -120,6 +122,39 @@ document.addEventListener('DOMContentLoaded', () => {
       renderCaptureReferenceState('error', '', 'Error de red al analizar el comprobante.');
       return '';
     }
+  }
+
+  async function analyzeSelectedCapture(options = {}) {
+    const { force = false } = options;
+    const selectedFile = proofInput && proofInput.files && proofInput.files[0];
+    if (!selectedFile) {
+      latestCaptureReferencePreview = '';
+      renderCaptureReferenceState('idle');
+      return '';
+    }
+    if (!force && latestCaptureReferencePreview) {
+      return latestCaptureReferencePreview;
+    }
+    if (captureAnalysisPromise) {
+      return captureAnalysisPromise;
+    }
+
+    captureAnalysisInFlight = true;
+    const currentPromise = (async () => {
+      try {
+        const extractedReference = await extractCaptureReference(selectedFile);
+        latestCaptureReferencePreview = String(extractedReference || '').trim();
+        return latestCaptureReferencePreview;
+      } finally {
+        captureAnalysisInFlight = false;
+        if (captureAnalysisPromise === currentPromise) {
+          captureAnalysisPromise = null;
+        }
+        updateSubmitState();
+      }
+    })();
+    captureAnalysisPromise = currentPromise;
+    return currentPromise;
   }
 
   function isValidVerifiedNick(nick) {
@@ -639,7 +674,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function onCaptureSelected(file) {
-    hasCapture = true;
+    hasCapture = !!file;
+    captureReferenceLookupId += 1;
+    captureAnalysisInFlight = false;
+    captureAnalysisPromise = null;
     latestCaptureReferencePreview = '';
     if (proofPreviewUrl) {
       URL.revokeObjectURL(proofPreviewUrl);
@@ -659,6 +697,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     renderCaptureReferenceState('idle');
     updateSubmitState();
+    if (file) {
+      analyzeSelectedCapture({ force: true }).catch(() => {});
+    }
   }
 
   if (blockedClose && blockedOverlay) {
@@ -954,10 +995,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const originalText = btnConfirm.textContent;
       btnConfirm.textContent = 'Procesando...';
       btnConfirm.disabled = true;
-      if (!latestCaptureReferencePreview && selectedCaptureFile) {
+      if (selectedCaptureFile) {
         try {
           btnConfirm.textContent = 'Analizando comprobante...';
-          latestCaptureReferencePreview = await extractCaptureReference(selectedCaptureFile);
+          latestCaptureReferencePreview = await analyzeSelectedCapture();
         } catch (_) {
           latestCaptureReferencePreview = '';
         }

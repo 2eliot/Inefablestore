@@ -2837,6 +2837,72 @@ def _ubii_extract_notification_data(payload: dict, cfg: dict | None = None):
     }
 
 
+_ACTIVE_REFERENCE_ORDER_STATUSES = ("pending", "approved", "delivered")
+
+
+def _normalize_numeric_reference_value(raw_value: str) -> str:
+    digits = re.sub(r"\D", "", str(raw_value or ""))
+    if not digits:
+        return ""
+    normalized = digits.lstrip("0")
+    return normalized or "0"
+
+
+def _normalize_order_reference_for_match(raw_value: str) -> str:
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return ""
+    if raw.isdigit():
+        return _normalize_numeric_reference_value(raw)
+    return re.sub(r"[^a-z0-9]", "", raw.lower())
+
+
+def _validate_reference_input(method_value: str, reference: str):
+    ref = str(reference or "").strip()
+    if not ref:
+        return False, "Referencia requerida"
+
+    method = (method_value or "").strip().lower()
+    is_binance_auto = (
+        method == "binance"
+        and get_config_value("binance_auto_enabled", "0") == "1"
+        and len(ref) == 6
+        and ref.isalnum()
+    )
+    if is_binance_auto:
+        if not ref.isalnum() or len(ref) != 6:
+            return False, "Código de verificación inválido"
+        return True, ref.upper()
+
+    if not (ref.isdigit() and 1 <= len(ref) <= 21):
+        return False, "La referencia debe ser numérica (máximo 21 dígitos)"
+    return True, ref
+
+
+def _find_existing_order_by_reference(reference: str, *, exclude_order_id: int | None = None, statuses=None):
+    normalized_reference = _normalize_order_reference_for_match(reference)
+    if not normalized_reference:
+        return None
+
+    query = Order.query
+    if statuses:
+        query = query.filter(Order.status.in_(tuple(statuses)))
+    if exclude_order_id:
+        query = query.filter(Order.id != int(exclude_order_id))
+
+    for existing_order in query.order_by(Order.created_at.desc()).all():
+        if _normalize_order_reference_for_match(existing_order.reference) == normalized_reference:
+            return existing_order
+    return None
+
+
+def _reference_conflict_error_message(existing_order) -> str:
+    status = str(getattr(existing_order, "status", "") or "").strip().lower()
+    if status == "pending":
+        return "Su referencia ya fue subida y su recarga está siendo procesada"
+    return "Esa referencia ya fue utilizada en otra orden"
+
+
 def _ubii_order_amount_matches(order_obj, expected_amount: Decimal | None) -> bool:
     if expected_amount is None:
         return False
@@ -2848,13 +2914,7 @@ def _ubii_order_amount_matches(order_obj, expected_amount: Decimal | None) -> bo
 
 
 def _ubii_normalize_reference_value(value) -> str:
-    normalized = _pabilo_normalize_reference_value(value)
-    if not normalized:
-        return ""
-    if normalized.isdigit():
-        stripped = normalized.lstrip("0")
-        return stripped or "0"
-    return normalized
+    return _normalize_order_reference_for_match(value)
 
 
 def _ubii_reference_match_key(value) -> str:
@@ -2969,35 +3029,19 @@ def _ubii_verify_and_update_order(order_obj, extracted: dict, *, payload: dict |
 
 
 def _validate_order_reference_value(order_obj, reference: str, *, exclude_order_id: int | None = None):
-    ref = str(reference or "").strip()
-    if not ref:
-        return False, "Referencia requerida"
+    ok, ref_or_error = _validate_reference_input(order_obj.method, reference)
+    if not ok:
+        return False, ref_or_error
 
-    method = (order_obj.method or "").strip().lower()
-    is_binance_auto = (
-        method == "binance"
-        and get_config_value("binance_auto_enabled", "0") == "1"
-        and len(ref) == 6
-        and ref.isalnum()
+    existing_order = _find_existing_order_by_reference(
+        ref_or_error,
+        exclude_order_id=exclude_order_id,
+        statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
     )
-    if is_binance_auto:
-        if not ref.isalnum() or len(ref) != 6:
-            return False, "Código de verificación inválido"
-    else:
-        if not (ref.isdigit() and 1 <= len(ref) <= 21):
-            return False, "La referencia debe ser numérica (máximo 21 dígitos)"
+    if existing_order:
+        return False, _reference_conflict_error_message(existing_order)
 
-    existing_query = Order.query.filter(
-        Order.reference == ref,
-        Order.status == "pending",
-    )
-    if exclude_order_id:
-        existing_query = existing_query.filter(Order.id != int(exclude_order_id))
-    existing_pending = existing_query.first()
-    if existing_pending:
-        return False, "Esa referencia ya está asignada a otra orden pendiente"
-
-    return True, ref
+    return True, ref_or_error
 
 
 def _normalize_order_idempotency_key(raw_value) -> str:
@@ -3048,10 +3092,7 @@ def _pabilo_exact_amount_value(order_obj):
 
 
 def _pabilo_normalize_reference_value(value) -> str:
-    raw_value = str(value or "").strip()
-    if not raw_value:
-        return ""
-    return re.sub(r"[^a-z0-9]", "", raw_value.lower())
+    return _normalize_order_reference_for_match(value)
 
 
 def _pabilo_integral_amount_value(value):
@@ -3702,6 +3743,78 @@ def _send_order_completed_email_if_needed(order_obj, state: dict | None = None) 
     return True
 
 
+def _looks_like_email(value: str) -> bool:
+    text = str(value or "").strip()
+    return bool(text and "@" in text)
+
+
+def _store_package_supports_player_verification(store_package_id) -> bool:
+    try:
+        package_id = int(store_package_id or 0)
+    except (TypeError, ValueError):
+        return False
+    if package_id <= 0:
+        return False
+
+    configured_ids = [
+        get_config_value("active_login_game_id", ""),
+        get_config_value("bs_package_id", ""),
+        get_config_value("ml_package_id", ""),
+    ]
+    for configured_id in configured_ids:
+        if str(configured_id or "").strip() == str(package_id):
+            return True
+
+    try:
+        return bool(SmileOneConnection.query.filter_by(store_package_id=package_id, active=True).first())
+    except Exception:
+        return False
+
+
+def _thanks_order_display_meta(order_obj):
+    player_display = ""
+    package_display = ""
+    if not order_obj:
+        return {
+            "player_display": player_display,
+            "package_display": package_display,
+        }
+
+    customer_id = str(order_obj.customer_id or "").strip()
+    customer_name = str(order_obj.customer_name or "").strip()
+    can_show_verified_name = (
+        _store_package_supports_player_verification(order_obj.store_package_id)
+        and customer_name
+        and not _looks_like_email(customer_name)
+    )
+    player_display = customer_name if can_show_verified_name else customer_id
+    if not player_display and customer_name and not _looks_like_email(customer_name):
+        player_display = customer_name
+
+    entries = _get_order_item_entries(order_obj)
+    if entries:
+        first_entry = entries[0]
+        first_title = str(first_entry.get("title") or "").strip() or "Paquete"
+        first_qty = max(int(first_entry.get("qty") or 1), 1)
+        total_entries = len(entries)
+        if total_entries == 1:
+            package_display = f"{first_title} x{first_qty}" if first_qty > 1 else first_title
+        else:
+            extra_entries = total_entries - 1
+            package_display = f"{first_title} + {extra_entries} paquete(s)"
+    elif order_obj.store_package_id:
+        try:
+            pkg = StorePackage.query.get(order_obj.store_package_id)
+            package_display = str(pkg.name or "").strip() if pkg else ""
+        except Exception:
+            package_display = ""
+
+    return {
+        "player_display": player_display,
+        "package_display": package_display,
+    }
+
+
 def _thanks_progress_payload(order_obj):
     """Build dynamic progress state for the thank-you page.
 
@@ -3726,13 +3839,63 @@ def _thanks_progress_payload(order_obj):
         and _pabilo_normalize_method(order_obj.method or "") == _pabilo_normalize_method(ubii_cfg.get("method") or "pm")
     )
     is_provider_auto = bool(auto_mapped and (ubii_like or pabilo_like))
+    order_meta = _thanks_order_display_meta(order_obj)
+    order_status = (order_obj.status or "").lower()
 
     if not is_provider_auto:
+        payment_checked = bool((order_obj.reference or "").strip() or (order_obj.payment_capture or "").strip())
+        payment_verified = bool(order_obj.payment_verified_at) or order_status in ("approved", "delivered")
+        order_validated = order_status in ("approved", "delivered")
+        if order_status == "rejected":
+            manual_message = "Tu pago no se encuentra en nuestro sistema porfavor contacta al soporte para validar tu compra"
+        elif order_validated:
+            manual_message = "Su orden está siendo procesada manualmente. Puede tardar de 5 a 10 minutos."
+        else:
+            manual_message = "Estamos procesando tu orden te llegara una confirmacion por correo"
         return {
             "ok": True,
-            "visible": False,
+            "visible": True,
             "order_id": order_obj.id,
-            "status": (order_obj.status or "").lower(),
+            "status": order_status,
+            "method": method,
+            "provider": provider,
+            "configured_method": "",
+            "steps": [
+                {
+                    "id": "search",
+                    "label": "Buscando pago en el sistema",
+                    "done": payment_checked,
+                },
+                {
+                    "id": "payment",
+                    "label": "Pago confirmado",
+                    "done": payment_verified,
+                },
+                {
+                    "id": "validate",
+                    "label": "Validando la orden",
+                    "done": order_validated,
+                },
+            ],
+            "summary": {
+                "total_units": 0,
+                "completed_units": 0,
+                "processing_units": 0,
+                "failed_units": 0,
+                "pending_units": 0,
+                "retryable_units": 0,
+            },
+            "payment": {
+                "checked": payment_checked,
+                "verified": payment_verified,
+                "attempts": 0,
+                "message": "",
+                "verification_id": str(order_obj.payment_verification_id or ""),
+            },
+            "completed": False,
+            "current_message": manual_message,
+            "player_display": order_meta.get("player_display") or "",
+            "package_display": order_meta.get("package_display") or "",
         }
 
     summary = _summarize_order_auto_recharges(_build_order_auto_recharge_units(order_obj))
@@ -3808,7 +3971,7 @@ def _thanks_progress_payload(order_obj):
         "ok": True,
         "visible": True,
         "order_id": order_obj.id,
-        "status": (order_obj.status or "").lower(),
+        "status": order_status,
         "method": method,
         "provider": provider,
         "configured_method": ubii_cfg.get("method") if is_ubii_flow else pabilo_cfg.get("method"),
@@ -3823,6 +3986,8 @@ def _thanks_progress_payload(order_obj):
         },
         "completed": recharge_done,
         "current_message": current_message,
+        "player_display": order_meta.get("player_display") or "",
+        "package_display": order_meta.get("package_display") or "",
     }
 
 
@@ -6076,7 +6241,19 @@ def thanks_order(oid: int):
     except Exception:
         logo_url = ""
         site_name = "InefableStore"
-    return render_template("thanks.html", order_id=oid, logo_url=logo_url, site_name=site_name)
+    order_obj = Order.query.get(oid)
+    order_meta = _thanks_order_display_meta(order_obj) if order_obj else {
+        "player_display": "",
+        "package_display": "",
+    }
+    return render_template(
+        "thanks.html",
+        order_id=oid,
+        logo_url=logo_url,
+        site_name=site_name,
+        player_display=order_meta.get("player_display") or "",
+        package_display=order_meta.get("package_display") or "",
+    )
 
 
 @app.route("/gracias/<int:oid>/progress", methods=["GET"])
@@ -6191,20 +6368,19 @@ def check_reference():
     reference = request.args.get("reference", "").strip()
     if not reference:
         return jsonify({"ok": False, "error": "Referencia requerida"}), 400
-    
-    # Check if reference exists in pending orders only
-    existing = Order.query.filter(
-        Order.reference == reference,
-        Order.status == "pending"
-    ).first()
-    
+
+    existing = _find_existing_order_by_reference(
+        reference,
+        statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
+    )
+
     if existing:
         return jsonify({
             "ok": True,
             "exists": True,
-            "message": "Su referencia ya fue subida y su recarga está siendo procesada"
+            "message": _reference_conflict_error_message(existing)
         })
-    
+
     return jsonify({"ok": True, "exists": False})
 
 
@@ -6379,30 +6555,17 @@ def create_order():
         except Exception:
             pass
 
-        if not reference:
-            return jsonify({"ok": False, "error": "Referencia requerida"}), 400
-        # Determine if this is a Binance auto-verification order (6-char alphanumeric code)
-        _is_binance_auto = (
-            method == "binance"
-            and get_config_value("binance_auto_enabled", "0") == "1"
-            and len(reference) == 6
-            and reference.isalnum()
+        reference_ok, reference_or_error = _validate_reference_input(method, reference)
+        if not reference_ok:
+            return jsonify({"ok": False, "error": reference_or_error}), 400
+        reference = reference_or_error
+
+        existing_order = _find_existing_order_by_reference(
+            reference,
+            statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
         )
-        if _is_binance_auto:
-            # Validate alphanumeric code format
-            if not reference.isalnum() or len(reference) != 6:
-                return jsonify({"ok": False, "error": "Código de verificación inválido"}), 400
-        else:
-            # Normal flow: validate reference is numeric with maximum 21 digits (1..21)
-            if not (reference.isdigit() and 1 <= len(reference) <= 21):
-                return jsonify({"ok": False, "error": "La referencia debe ser numérica (máximo 21 dígitos)"}), 400
-        # Check if reference already exists in pending orders
-        existing_pending = Order.query.filter(
-            Order.reference == reference,
-            Order.status == "pending"
-        ).first()
-        if existing_pending:
-            return jsonify({"ok": False, "error": "Su referencia ya fue subida y su recarga está siendo procesada"}), 400
+        if existing_order:
+            return jsonify({"ok": False, "error": _reference_conflict_error_message(existing_order)}), 400
         if amount <= 0:
             return jsonify({"ok": False, "error": "Monto inválido"}), 400
         if method not in ("pm", "binance"):
