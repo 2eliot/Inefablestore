@@ -131,6 +131,12 @@ GENAI_API_KEY = (
 GENAI_MODEL_NAME = (os.environ.get("GENAI_MODEL", "gemini-2.5-flash") or "gemini-2.5-flash").strip()
 _GENAI_MODEL = None
 _GENAI_MODEL_READY = False
+_CAPTURE_REFERENCE_CACHE = {}
+_CAPTURE_REFERENCE_CACHE_LOCK = threading.Lock()
+_GENAI_COOLDOWN_UNTIL = 0.0
+_GENAI_COOLDOWN_REASON = ""
+_CAPTURE_REFERENCE_CACHE_TTL_SECONDS = max(int(os.environ.get("CAPTURE_REFERENCE_CACHE_TTL_SECONDS", "43200") or 43200), 60)
+_GENAI_RETRY_COOLDOWN_SECONDS = max(int(os.environ.get("GENAI_RETRY_COOLDOWN_SECONDS", "90") or 90), 15)
 
 db = SQLAlchemy(app)
 
@@ -5910,11 +5916,78 @@ def _normalize_extracted_capture_reference(raw_value) -> str:
     return ""
 
 
+def _capture_reference_file_fingerprint(capture_path: str) -> str:
+    if not capture_path or not os.path.exists(capture_path):
+        return ""
+    hasher = hashlib.sha256()
+    with open(capture_path, "rb") as capture_handle:
+        for chunk in iter(lambda: capture_handle.read(1024 * 1024), b""):
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _capture_reference_cache_get(cache_key: str):
+    if not cache_key:
+        return None
+    now_ts = time.time()
+    with _CAPTURE_REFERENCE_CACHE_LOCK:
+        entry = _CAPTURE_REFERENCE_CACHE.get(cache_key)
+        if not entry:
+            return None
+        if float(entry.get("exp") or 0) <= now_ts:
+            _CAPTURE_REFERENCE_CACHE.pop(cache_key, None)
+            return None
+        return {
+            "reference": str(entry.get("reference") or ""),
+            "status": str(entry.get("status") or "not_detected"),
+        }
+
+
+def _capture_reference_cache_set(cache_key: str, reference: str, status: str, ttl_seconds: int | None = None):
+    if not cache_key:
+        return
+    ttl = int(ttl_seconds or _CAPTURE_REFERENCE_CACHE_TTL_SECONDS)
+    if ttl <= 0:
+        return
+    with _CAPTURE_REFERENCE_CACHE_LOCK:
+        _CAPTURE_REFERENCE_CACHE[cache_key] = {
+            "reference": str(reference or ""),
+            "status": str(status or "not_detected"),
+            "exp": time.time() + ttl,
+        }
+
+
+def _genai_cooldown_remaining_seconds() -> int:
+    remaining = int(round(float(_GENAI_COOLDOWN_UNTIL or 0) - time.time()))
+    return remaining if remaining > 0 else 0
+
+
+def _genai_activate_cooldown(reason: str = "", seconds: int | None = None):
+    global _GENAI_COOLDOWN_UNTIL, _GENAI_COOLDOWN_REASON
+    cooldown_seconds = max(int(seconds or _GENAI_RETRY_COOLDOWN_SECONDS), 1)
+    _GENAI_COOLDOWN_UNTIL = time.time() + cooldown_seconds
+    _GENAI_COOLDOWN_REASON = str(reason or "").strip()
+
+
 def _extract_capture_reference(relative_path: str):
     global _GENAI_MODEL, _GENAI_MODEL_READY
     capture_path = _capture_absolute_path(relative_path)
     if not capture_path or not os.path.exists(capture_path):
         return "", "capture_not_found"
+    try:
+        cache_key = _capture_reference_file_fingerprint(capture_path)
+    except Exception:
+        cache_key = ""
+    cached_result = _capture_reference_cache_get(cache_key)
+    if cached_result is not None:
+        return cached_result.get("reference") or "", cached_result.get("status") or "not_detected"
+    cooldown_remaining = _genai_cooldown_remaining_seconds()
+    if cooldown_remaining > 0:
+        status = f"error:cooldown_active:{cooldown_remaining}"
+        _capture_reference_cache_set(cache_key, "", status, ttl_seconds=min(cooldown_remaining, 30))
+        return "", status
     uploaded_file = None
     try:
         _genai_model()
@@ -5925,10 +5998,19 @@ def _extract_capture_reference(relative_path: str):
             _GENAI_MODEL_READY = True
             extracted_reference = _normalize_extracted_capture_reference(getattr(response, "text", ""))
             if extracted_reference:
+                _capture_reference_cache_set(cache_key, extracted_reference, "ok")
                 return extracted_reference, "ok"
+            _capture_reference_cache_set(cache_key, "", "not_detected")
             return "", "not_detected"
+        _capture_reference_cache_set(cache_key, "", "not_detected")
         return "", "not_detected"
     except Exception as exc:
+        if _is_genai_retryable_error(exc):
+            _genai_activate_cooldown(str(exc), _GENAI_RETRY_COOLDOWN_SECONDS)
+            cooldown_remaining = _genai_cooldown_remaining_seconds()
+            status = f"error:cooldown_active:{cooldown_remaining}"
+            _capture_reference_cache_set(cache_key, "", status, ttl_seconds=min(max(cooldown_remaining, 15), 120))
+            return "", status
         return "", f"error:{exc}"
     finally:
         if uploaded_file is not None:
@@ -5944,6 +6026,17 @@ def _capture_reference_status_error_message(status: str) -> str:
         return ""
     detail = raw_status.split(":", 1)[1].strip()
     lowered = detail.lower()
+    if lowered.startswith("cooldown_active"):
+        parts = detail.split(":")
+        retry_after = 0
+        if len(parts) >= 2:
+            try:
+                retry_after = max(int(parts[1]), 0)
+            except Exception:
+                retry_after = 0
+        if retry_after > 0:
+            return f"La IA de referencias está temporalmente en pausa por límite de uso. Intenta de nuevo en {retry_after}s."
+        return "La IA de referencias está temporalmente en pausa por límite de uso. Intenta de nuevo en unos segundos."
     if "genai_api_key no configurada" in lowered:
         return "La IA no está configurada todavía en el servidor. Falta GENAI_API_KEY."
     if "api key" in lowered or "api_key" in lowered:
