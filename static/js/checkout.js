@@ -689,9 +689,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     renderCaptureReferenceState('idle');
     updateSubmitState();
-    if (file) {
-      analyzeSelectedCapture({ force: true }).catch(() => {});
-    }
   }
 
   if (blockedClose && blockedOverlay) {
@@ -987,16 +984,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const originalText = btnConfirm.textContent;
       btnConfirm.textContent = 'Procesando...';
       btnConfirm.disabled = true;
-      if (selectedCaptureFile) {
-        try {
-          btnConfirm.textContent = 'Analizando comprobante...';
-          latestCaptureReferencePreview = await analyzeSelectedCapture();
-        } catch (_) {
-          latestCaptureReferencePreview = '';
-        }
-        btnConfirm.textContent = 'Procesando...';
-      }
-      if (latestCaptureReferencePreview) fd.append('capture_reference_preview', latestCaptureReferencePreview);
       fd.append('payment_capture', selectedCaptureFile);
       // UI loading state
       // Abort fetch if it takes too long

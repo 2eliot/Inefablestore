@@ -3647,12 +3647,21 @@ def _pabilo_verify_payment(order_obj):
         reference_source="manual",
     )
     if primary_result.get("verified"):
+        primary_result.setdefault("matched_reference", manual_reference)
+        primary_result.setdefault("matched_reference_source", "manual")
         return primary_result
+    if not _pabilo_should_try_capture_reference_fallback(primary_result):
+        return primary_result
+
+    capture_lookup = None
+    if not capture_reference:
+        capture_lookup = _ensure_order_capture_reference(order_obj)
+        capture_reference = str(capture_lookup.get("reference") or "")
+        primary_result["capture_reference_status"] = str(capture_lookup.get("status") or "")
+        primary_result["capture_reference_source"] = str(capture_lookup.get("source") or "")
     if not capture_reference:
         return primary_result
     if _pabilo_normalize_reference_value(capture_reference) == _pabilo_normalize_reference_value(manual_reference):
-        return primary_result
-    if not _pabilo_should_try_capture_reference_fallback(primary_result):
         return primary_result
 
     fallback_result = _pabilo_verify_payment_once(
@@ -3666,6 +3675,21 @@ def _pabilo_verify_payment(order_obj):
         "message": str(primary_result.get("message") or ""),
         "validation": primary_result.get("validation") or {},
     }
+    fallback_result["capture_reference_status"] = str(
+        fallback_result.get("capture_reference_status")
+        or primary_result.get("capture_reference_status")
+        or ((capture_lookup or {}).get("status") if capture_lookup else "")
+        or ""
+    )
+    fallback_result["capture_reference_source"] = str(
+        fallback_result.get("capture_reference_source")
+        or primary_result.get("capture_reference_source")
+        or ((capture_lookup or {}).get("source") if capture_lookup else "stored")
+        or "stored"
+    )
+    if fallback_result.get("verified"):
+        fallback_result["matched_reference"] = capture_reference
+        fallback_result["matched_reference_source"] = "capture"
     if not fallback_result.get("verified") and not fallback_result.get("message"):
         fallback_result["message"] = str(primary_result.get("message") or "")
     return fallback_result
@@ -3679,17 +3703,37 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
     except Exception:
         attempts = 0
 
+    original_manual_reference = str(order_obj.reference or "").strip()
     result = _pabilo_verify_payment(order_obj)
     checked_at = datetime.utcnow()
     now_iso = checked_at.isoformat()
     order_obj.payment_verification_attempts = attempts + 1
     order_obj.payment_last_verification_at = checked_at
+    corrected_reference = ""
+    corrected_reference_applied = False
+    corrected_reference_error = ""
+    matched_reference = str(result.get("matched_reference") or "").strip()
+    matched_reference_source = str(result.get("matched_reference_source") or "").strip()
+    if result.get("verified") and matched_reference_source == "capture" and matched_reference:
+        if _pabilo_normalize_reference_value(matched_reference) != _pabilo_normalize_reference_value(original_manual_reference):
+            conflicting_order = _find_existing_order_by_reference(
+                matched_reference,
+                exclude_order_id=order_obj.id,
+                statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
+            )
+            if conflicting_order:
+                corrected_reference_error = _reference_conflict_error_message(conflicting_order)
+            else:
+                order_obj.reference = matched_reference
+                corrected_reference = matched_reference
+                corrected_reference_applied = True
     if result.get("verified"):
         order_obj.payment_verified_at = checked_at
         order_obj.payment_verification_id = str(result.get("verification_id") or order_obj.payment_verification_id or "")
 
+    latest_payment_state = _pabilo_get_payment_state(order_obj)
     state = {
-        **current,
+        **latest_payment_state,
         "provider": "pabilo",
         "enabled": bool(_pabilo_config().get("enabled")),
         "method": _pabilo_normalize_method(order_obj.method or ""),
@@ -3699,8 +3743,13 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         "verification_id": str(result.get("verification_id") or order_obj.payment_verification_id or ""),
         "message": str(result.get("message") or ""),
         "source": source,
-        "manual_reference": str(order_obj.reference or ""),
+        "manual_reference": original_manual_reference,
+        "reference_corrected_to": corrected_reference,
+        "reference_corrected_applied": corrected_reference_applied,
+        "reference_corrected_error": corrected_reference_error,
         "capture_reference": str(getattr(order_obj, "capture_reference", "") or ""),
+        "capture_reference_status": str(result.get("capture_reference_status") or latest_payment_state.get("capture_reference_status") or ""),
+        "capture_reference_source": str(result.get("capture_reference_source") or latest_payment_state.get("capture_reference_source") or ""),
         "matched_reference": str(result.get("matched_reference") or ""),
         "matched_reference_source": str(result.get("matched_reference_source") or ""),
         "fallback_used": bool(result.get("fallback_used")),
@@ -3719,6 +3768,9 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         "verified": bool(result.get("verified")),
         "verification_id": state.get("verification_id") or "",
         "message": state.get("message") or "",
+        "corrected_reference": corrected_reference,
+        "corrected_reference_applied": corrected_reference_applied,
+        "corrected_reference_error": corrected_reference_error,
         "order_status": order_obj.status,
         "request_meta": result.get("request_meta") or {},
     }
@@ -6046,6 +6098,41 @@ def _capture_reference_status_error_message(status: str) -> str:
     return detail or "No se pudo analizar el comprobante con la IA."
 
 
+def _ensure_order_capture_reference(order_obj) -> dict:
+    current_reference = str(getattr(order_obj, "capture_reference", "") or "").strip()
+    if current_reference:
+        return {
+            "reference": current_reference,
+            "status": "ok",
+            "source": "stored",
+        }
+
+    payment_capture = str(getattr(order_obj, "payment_capture", "") or "").strip()
+    if not payment_capture:
+        return {
+            "reference": "",
+            "status": "capture_missing",
+            "source": "missing_capture",
+        }
+
+    extracted_reference, extraction_status = _extract_capture_reference(payment_capture)
+    if extracted_reference:
+        order_obj.capture_reference = extracted_reference
+
+    current_payment_state = _pabilo_get_payment_state(order_obj)
+    _pabilo_set_payment_state(order_obj, {
+        **current_payment_state,
+        "capture_reference": str(order_obj.capture_reference or ""),
+        "capture_reference_status": extraction_status,
+        "capture_reference_source": "verification_fallback",
+    })
+    return {
+        "reference": str(order_obj.capture_reference or ""),
+        "status": extraction_status,
+        "source": "verification_fallback",
+    }
+
+
 def _delete_capture(relative_path: str):
     """Delete a payment capture file from disk if it exists."""
     if not relative_path:
@@ -6600,7 +6687,6 @@ def create_order():
         payer_phone = (_get("payer_phone") or "").strip()
         payer_payment_date = (_get("payer_payment_date") or "").strip()
         payer_movement_type = (_get("payer_movement_type") or "").strip().upper()
-        capture_reference_preview = _normalize_extracted_capture_reference(_get("capture_reference_preview"))
         idempotency_key = _normalize_order_idempotency_key(
             request.headers.get("X-Idempotency-Key") or _get("idempotency_key")
         )
@@ -6839,24 +6925,12 @@ def create_order():
                     capture_path = _save_capture(capture_file)
                     if capture_path:
                         o.payment_capture = capture_path
-                        extracted_reference = ""
-                        extraction_status = ""
-                        capture_reference_source = ""
-                        if capture_reference_preview:
-                            o.capture_reference = capture_reference_preview
-                            extraction_status = "ok"
-                            capture_reference_source = "preview_extract"
-                        else:
-                            extracted_reference, extraction_status = _extract_capture_reference(capture_path)
-                            if extracted_reference:
-                                o.capture_reference = extracted_reference
-                                capture_reference_source = "server_extract"
                         current_payment_state = _pabilo_get_payment_state(o)
                         _pabilo_set_payment_state(o, {
                             **current_payment_state,
                             "capture_reference": str(o.capture_reference or ""),
-                            "capture_reference_status": extraction_status,
-                            "capture_reference_source": capture_reference_source,
+                            "capture_reference_status": "pending_fallback",
+                            "capture_reference_source": "",
                         })
             except Exception:
                 pass
