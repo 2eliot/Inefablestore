@@ -76,14 +76,6 @@ document.addEventListener('DOMContentLoaded', () => {
       captureRefHint.textContent = hint || 'Usa este número si quieres compararlo con la referencia que escribiste.';
       return;
     }
-    if (mode === 'error') {
-      latestCaptureReferencePreview = '';
-      captureRefBox.classList.add('capture-ref-box--error');
-      captureRefLabel.textContent = 'Referencia extraída';
-      captureRefValue.textContent = value || 'No detectada';
-      captureRefHint.textContent = hint || 'No se pudo extraer una referencia clara del comprobante.';
-      return;
-    }
     captureRefBox.hidden = true;
     latestCaptureReferencePreview = '';
     captureRefLabel.textContent = 'Analizando comprobante';
@@ -108,18 +100,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json().catch(() => ({}));
       if (currentLookupId !== captureReferenceLookupId) return '';
       if (!res.ok || !data.ok) {
-        renderCaptureReferenceState('error', '', (data && data.error) || 'No se pudo analizar el comprobante con la IA.');
+        renderCaptureReferenceState('idle');
         return '';
       }
       if (data.found && data.reference) {
         renderCaptureReferenceState('success', data.reference);
         return String(data.reference || '').trim();
       }
-      renderCaptureReferenceState('error', '', 'La IA no encontró una referencia clara en la imagen.');
+      renderCaptureReferenceState('idle');
       return '';
     } catch (_) {
       if (currentLookupId !== captureReferenceLookupId) return '';
-      renderCaptureReferenceState('error', '', 'Error de red al analizar el comprobante.');
+      renderCaptureReferenceState('idle');
       return '';
     }
   }
