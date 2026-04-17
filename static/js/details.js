@@ -187,6 +187,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let methodChosen = false; // show prices only after choosing a payment method
   let quantity = 1; // selected quantity
   let dqWrap = null; let dqVal = null; let dqPlus = null; let dqMinus = null;
+  const MOBILE_PREVIEW_COUNT = 6;
+  const MOBILE_GRID_COLUMNS = 3;
 
   // Hide "Ver más" button by default until we know there are more than 6 items
   if (btnMore) {
@@ -716,6 +718,18 @@ document.addEventListener('DOMContentLoaded', () => {
     return (currency === 'BSD') ? (base * (rate || 0)) : base;
   }
 
+  function getMobilePreviewLimit(orderedItems, specialItems) {
+    const totalItems = Array.isArray(orderedItems) ? orderedItems.length : 0;
+    if (!isMobile || showingAll || totalItems <= MOBILE_PREVIEW_COUNT) return totalItems;
+
+    const visibleSpecials = Math.min(Array.isArray(specialItems) ? specialItems.length : 0, MOBILE_PREVIEW_COUNT);
+    const visibleNormals = Math.max(MOBILE_PREVIEW_COUNT - visibleSpecials, 0);
+    const remainder = visibleNormals % MOBILE_GRID_COLUMNS;
+    const extraNeeded = remainder === 0 ? 0 : (MOBILE_GRID_COLUMNS - remainder);
+
+    return Math.min(totalItems, MOBILE_PREVIEW_COUNT + extraNeeded);
+  }
+
   function renderItems(items) {
     if (!grid) return;
     grid.innerHTML = '';
@@ -730,7 +744,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const specials = (items || []).filter(it => (it.sticker || '').toLowerCase() === 'special');
     const normals = (items || []).filter(it => (it.sticker || '').toLowerCase() !== 'special');
     const ordered = specials.concat(normals);
-    const visible = isMobile ? (showingAll ? ordered : ordered.slice(0, 6)) : ordered;
+    const mobilePreviewLimit = getMobilePreviewLimit(ordered, specials);
+    const visible = isMobile ? (showingAll ? ordered : ordered.slice(0, mobilePreviewLimit)) : ordered;
 
     const firstNormalInVisible = visible.find(x => normals.indexOf(x) !== -1);
     // Helper to trim transparent borders of a PNG icon using canvas
@@ -889,8 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnMore.hidden = true;
         btnMore.style.display = 'none';
       } else {
-        // On mobile: Show ONLY if there are MORE than 6 packages
-        const needMore = ordered.length > 6;
+        const needMore = ordered.length > mobilePreviewLimit;
         if (needMore) {
           btnMore.hidden = false;
           btnMore.style.display = 'inline-block';
@@ -915,8 +929,9 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch(`/store/package/${gid}/items`).then(r => r.json()).then(data => {
     allItems = (data && data.items) || [];
     showingAll = false;
-    // Hide "Ver más" button immediately if there are 6 or fewer items
-    if (btnMore && allItems.length <= 6) {
+    const specials = allItems.filter(it => (it.sticker || '').toLowerCase() === 'special');
+    const previewLimit = getMobilePreviewLimit(allItems, specials);
+    if (btnMore && allItems.length <= previewLimit) {
       btnMore.hidden = true;
       btnMore.style.display = 'none';
     }

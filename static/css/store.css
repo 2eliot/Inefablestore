@@ -13,8 +13,15 @@
   .details-left, .details-right { max-width: 100%; overflow-x: hidden; }
   .details-right .step-card { width: 100%; box-sizing: border-box; overflow: visible; }
     .item-pill .t {
-    font-size: 13px; font-weight: 800;
-    white-space: normal; overflow-wrap: anywhere;
+    font-size: 11px; font-weight: 800;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .item-pill .item-pill-title {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
   }
   .item-pill .p { font-size: 12px; }
 }
