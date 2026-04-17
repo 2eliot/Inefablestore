@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let checkoutAttemptKey = '';
   let captureAnalysisInFlight = false;
   let captureAnalysisPromise = null;
+  let referralCodeError = '';
 
   function getCheckoutAttemptKey() {
     if (checkoutAttemptKey) return checkoutAttemptKey;
@@ -54,6 +55,23 @@ document.addEventListener('DOMContentLoaded', () => {
   function releaseCheckoutRequest() {
     checkoutRequestInFlight = false;
     updateSubmitState();
+  }
+
+  function getValidatedSpecialCode() {
+    const validRefCode = window.__validRef && String(window.__validRef.code || '').trim();
+    if (!qRefCode || !validRefCode) return '';
+    return validRefCode.toLowerCase() === qRefCode.toLowerCase() ? qRefCode : '';
+  }
+
+  function renderReferralStatusNote() {
+    if (!coDiscNote) return;
+    if (qRefCode && referralCodeError) {
+      coDiscNote.removeAttribute('hidden');
+      coDiscNote.innerHTML = `<span style="color:#fca5a5;">${referralCodeError}</span>`;
+      return;
+    }
+    coDiscNote.setAttribute('hidden', '');
+    coDiscNote.innerHTML = '';
   }
 
   function renderCaptureReferenceState(mode, value = '', hint = '') {
@@ -434,10 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
 
-    if (coDiscNote) {
-      coDiscNote.setAttribute('hidden', '');
-      coDiscNote.innerHTML = '';
-    }
+    renderReferralStatusNote();
   }
 
   function renderInfo() {
@@ -823,9 +838,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       if (res.ok && data && data.ok && data.allowed) {
         window.__validRef = { code: qRefCode, discount: Number(data.discount || 0), item_discounts: Array.isArray(data.item_discounts) ? data.item_discounts : null };
+        referralCodeError = '';
         renderHeader();
+        return;
       }
-    } catch (_) { /* ignore */ }
+      window.__validRef = null;
+      referralCodeError = (data && data.error) ? data.error : 'El código de descuento no aplica para esta compra.';
+      renderReferralStatusNote();
+    } catch (_) {
+      window.__validRef = null;
+      referralCodeError = 'No se pudo validar el código de descuento.';
+      renderReferralStatusNote();
+    }
   })();
 
   if (btnConfirm) {
@@ -876,7 +900,7 @@ document.addEventListener('DOMContentLoaded', () => {
           phone: phone,
           customer_id: customer_id,
           customer_zone: customer_zone,
-          special_code: qRefCode || '',
+          special_code: getValidatedSpecialCode(),
           nn: nn,
           idempotency_key: idempotencyKey
         };
@@ -977,7 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fd.append('phone', phone);
       fd.append('customer_id', customer_id);
       fd.append('customer_zone', customer_zone);
-      fd.append('special_code', qRefCode || '');
+      fd.append('special_code', getValidatedSpecialCode());
       fd.append('nn', nn);
       fd.append('idempotency_key', idempotencyKey);
       const selectedCaptureFile = proofInput.files[0];

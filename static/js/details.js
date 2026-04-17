@@ -164,8 +164,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const chkSave = document.getElementById('save-data');
   const btnBuy = document.getElementById('btn-buy');
   const inputRefCode = document.getElementById('ref-code');
+  const btnApplyRef = document.getElementById('btn-apply-ref');
   const refStatus = document.getElementById('ref-status');
   let validRef = null; // { code, discount, item_discounts?: [{item_id, discount}] }
+  let refValidationError = '';
   // Pay modal
   const payModal = document.getElementById('pay-modal');
   const payInfo = document.getElementById('pay-info');
@@ -1286,6 +1288,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (inputPhoneLocal) inputPhoneLocal.focus();
         return;
       }
+      const rcode = inputRefCode ? inputRefCode.value.trim() : '';
+      if (rcode) {
+        const refOk = await validateRefCode();
+        if (!refOk) {
+          alert(refValidationError || 'El código ingresado no es válido para este jugador.');
+          if (inputRefCode) inputRefCode.focus();
+          return;
+        }
+      }
+
       const paramsObj = {
         sel: String(selectedItemIndex),
         cur: currency,
@@ -1305,7 +1317,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isGift && zoneRequiredForCheckout && inputCustomerZone) {
         paramsObj.zid = inputCustomerZone.value.trim();
       }
-      const rcode = inputRefCode ? inputRefCode.value.trim() : '';
       if (rcode) paramsObj.rc = rcode;
       const params = new URLSearchParams(paramsObj);
       window.location.href = `/checkout/${gid}?${params.toString()}`;
@@ -1313,12 +1324,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function validateRefCode() {
-    if (!inputRefCode) return;
+    if (!inputRefCode) return false;
     const code = inputRefCode.value.trim();
     const gid = (() => { const r = document.getElementById('game-details'); return r ? r.getAttribute('data-game-id') : ''; })();
     const cid = (!isGift && inputCustomerId) ? (inputCustomerId.value || '').trim() : '';
     validRef = null;
-    if (!code) { if (refStatus) refStatus.textContent = ''; renderItems(allItems); return; }
+    refValidationError = '';
+    if (!code) { if (refStatus) refStatus.textContent = ''; renderItems(allItems); return false; }
     try {
       if (refStatus) { refStatus.style.color = '#94a3b8'; refStatus.textContent = 'Validando...'; }
       const qp = new URLSearchParams({ code, gid: gid || '' });
@@ -1338,20 +1350,68 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch(_){}
       if (refStatus) { refStatus.style.color = '#86efac'; refStatus.textContent = `Código válido: ${code} (${shownPct}% OFF)`; }
       renderItems(allItems);
+      return true;
     } catch (e) {
       validRef = null;
-      if (refStatus) refStatus.textContent = '';
+      refValidationError = (e && e.message) ? e.message : 'Código inválido';
+      if (refStatus) {
+        refStatus.style.color = '#fca5a5';
+        refStatus.textContent = refValidationError;
+      }
+      renderItems(allItems);
+      return false;
     }
   }
+
+  async function applyRefCode() {
+    if (!inputRefCode) return false;
+    const rawCode = inputRefCode.value.trim();
+    if (!rawCode) {
+      refValidationError = '';
+      validRef = null;
+      if (refStatus) {
+        refStatus.style.color = '#94a3b8';
+        refStatus.textContent = 'Ingresa un código para validarlo.';
+      }
+      renderItems(allItems);
+      inputRefCode.focus();
+      return false;
+    }
+
+    if (btnApplyRef) {
+      btnApplyRef.disabled = true;
+      btnApplyRef.textContent = 'Aplicando...';
+    }
+    try {
+      return await validateRefCode();
+    } finally {
+      if (btnApplyRef) {
+        btnApplyRef.disabled = false;
+        btnApplyRef.textContent = 'Aplicar';
+      }
+    }
+  }
+
   // Attach validators
   if (inputRefCode) {
     inputRefCode.addEventListener('blur', validateRefCode);
+    inputRefCode.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      await applyRefCode();
+    });
     inputRefCode.addEventListener('input', () => {
+      refValidationError = '';
       if (!inputRefCode.value.trim()) {
         validRef = null;
         if (refStatus) refStatus.textContent = '';
         renderItems(allItems);
       }
+    });
+  }
+  if (btnApplyRef) {
+    btnApplyRef.addEventListener('click', async () => {
+      await applyRefCode();
     });
   }
 });

@@ -3146,7 +3146,7 @@ def _pabilo_response_match_info(response_data: dict, order_obj) -> dict:
 
 
 def _pabilo_response_match_info_for_reference(response_data: dict, order_obj, reference_value: str) -> dict:
-    expected_amount = _pabilo_exact_amount_value(order_obj)
+    expected_amount = _ubii_parse_amount(getattr(order_obj, "amount", None))
     expected_reference = _pabilo_normalize_reference_value(reference_value)
 
     amount_candidates_raw = _pabilo_extract_response_values(
@@ -3180,7 +3180,7 @@ def _pabilo_response_match_info_for_reference(response_data: dict, order_obj, re
 
     amount_candidates = []
     for candidate in amount_candidates_raw:
-        normalized_amount = _pabilo_integral_amount_value(candidate)
+        normalized_amount = _ubii_parse_amount(candidate)
         if normalized_amount is not None and normalized_amount not in amount_candidates:
             amount_candidates.append(normalized_amount)
 
@@ -3193,9 +3193,18 @@ def _pabilo_response_match_info_for_reference(response_data: dict, order_obj, re
     amount_present = len(amount_candidates) > 0
     reference_present = len(reference_candidates) > 0
     amount_matches = expected_amount is not None and expected_amount in amount_candidates
+    amount_equal_or_greater = bool(
+        expected_amount is not None
+        and any(candidate >= expected_amount for candidate in amount_candidates)
+    )
     reference_matches = bool(expected_reference) and expected_reference in reference_candidates
-    amount_valid = (not amount_present) or amount_matches
+    amount_valid = amount_present and amount_equal_or_greater
     reference_valid = (not reference_present) or reference_matches
+    matched_amount = None
+    if expected_amount is not None:
+        eligible_amounts = [candidate for candidate in amount_candidates if candidate >= expected_amount]
+        if eligible_amounts:
+            matched_amount = min(eligible_amounts)
 
     return {
         "expected_amount": expected_amount,
@@ -3203,10 +3212,12 @@ def _pabilo_response_match_info_for_reference(response_data: dict, order_obj, re
         "amount_present": amount_present,
         "reference_present": reference_present,
         "amount_matches": amount_matches,
+        "amount_equal_or_greater": amount_equal_or_greater,
         "reference_matches": reference_matches,
         "amount_valid": amount_valid,
         "reference_valid": reference_valid,
         "amount_candidates": amount_candidates,
+        "matched_amount": matched_amount,
         "reference_candidates": reference_candidates,
         "matched": amount_valid and reference_valid,
     }
@@ -3252,8 +3263,8 @@ def _pabilo_request_info_with_reference(order_obj, reference_value: str) -> dict
         reasons.append(f"Falta UserBankId de Pabilo para {order_method.upper() or expected_method.upper()}")
     if not safe_reference:
         reasons.append("La orden no tiene referencia")
-    if _pabilo_exact_amount_value(order_obj) is None:
-        reasons.append("La orden no tiene un monto exacto valido para consultar en Pabilo")
+    if _ubii_parse_amount(getattr(order_obj, "amount", None)) is None:
+        reasons.append("La orden no tiene un monto valido para validar en Pabilo")
 
     return {
         "requestable": len(reasons) == 0,
@@ -3272,9 +3283,7 @@ def _pabilo_build_payload(order_obj) -> dict:
 
 
 def _pabilo_build_payload_with_reference(order_obj, reference_value: str) -> dict:
-    exact_amount = _pabilo_exact_amount_value(order_obj)
     payload = {
-        "amount": exact_amount,
         "bank_reference": str(reference_value or "").strip(),
     }
 
@@ -3573,8 +3582,10 @@ def _pabilo_verify_payment_once(order_obj, *, reference_override: str = "", refe
             mismatch_reasons = []
             if match_info.get("reference_present") and not match_info.get("reference_matches"):
                 mismatch_reasons.append("la referencia devuelta por Pabilo no coincide con la orden")
-            if match_info.get("amount_present") and not match_info.get("amount_matches"):
-                mismatch_reasons.append("el monto devuelto por Pabilo no coincide con la orden")
+            if not match_info.get("amount_present"):
+                mismatch_reasons.append("Pabilo no devolvió el monto pagado")
+            elif not match_info.get("amount_equal_or_greater"):
+                mismatch_reasons.append("el monto devuelto por Pabilo es menor al de la orden")
 
             return {
                 "ok": True,
@@ -3714,6 +3725,10 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
     corrected_reference_error = ""
     matched_reference = str(result.get("matched_reference") or "").strip()
     matched_reference_source = str(result.get("matched_reference_source") or "").strip()
+    validation = result.get("validation") or {}
+    reported_amount = str(validation.get("matched_amount") or "")
+    reported_amount_candidates = [str(value) for value in (validation.get("amount_candidates") or []) if value is not None]
+    expected_amount = str(validation.get("expected_amount") or "")
     if result.get("verified") and matched_reference_source == "capture" and matched_reference:
         if _pabilo_normalize_reference_value(matched_reference) != _pabilo_normalize_reference_value(original_manual_reference):
             conflicting_order = _find_existing_order_by_reference(
@@ -3752,6 +3767,9 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         "capture_reference_source": str(result.get("capture_reference_source") or latest_payment_state.get("capture_reference_source") or ""),
         "matched_reference": str(result.get("matched_reference") or ""),
         "matched_reference_source": str(result.get("matched_reference_source") or ""),
+        "expected_amount": expected_amount,
+        "reported_amount": reported_amount,
+        "reported_amount_candidates": reported_amount_candidates,
         "fallback_used": bool(result.get("fallback_used")),
         "last_request_url": str(((result.get("request_meta") or {}).get("url") or "")),
         "last_request_payload": (result.get("request_meta") or {}).get("payload") or {},
@@ -3771,6 +3789,9 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         "corrected_reference": corrected_reference,
         "corrected_reference_applied": corrected_reference_applied,
         "corrected_reference_error": corrected_reference_error,
+        "expected_amount": expected_amount,
+        "reported_amount": reported_amount,
+        "reported_amount_candidates": reported_amount_candidates,
         "order_status": order_obj.status,
         "request_meta": result.get("request_meta") or {},
     }
