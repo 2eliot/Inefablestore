@@ -188,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let quantity = 1; // selected quantity
   let dqWrap = null; let dqVal = null; let dqPlus = null; let dqMinus = null;
   const MOBILE_PREVIEW_COUNT = 6;
-  const MOBILE_GRID_COLUMNS = 3;
+  const MOBILE_GRID_COLUMNS = 2;
 
   // Hide "Ver más" button by default until we know there are more than 6 items
   if (btnMore) {
