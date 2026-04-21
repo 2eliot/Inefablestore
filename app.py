@@ -1222,49 +1222,7 @@ def _auto_approve_order(order, *, source_label: str = "AutoApprove", binance_aut
         print(f"[{source_label}] DB error approving order #{order.id}: {exc}")
         return
 
-    # Affiliate commission crediting (mirrors admin_orders_set_status)
-    try:
-        su = None
-        if order.special_user_id:
-            su = SpecialUser.query.get(order.special_user_id)
-        if (not su) and (order.special_code or ""):
-            su = SpecialUser.query.filter(
-                db.func.lower(SpecialUser.code) == (order.special_code or "").lower(),
-                SpecialUser.active == True,
-            ).first()
-        if su and su.active:
-            sc = (su.scope or "all")
-            scope_ok = True
-            if sc == "package":
-                try:
-                    scope_ok = (su.scope_package_id == order.store_package_id)
-                except Exception:
-                    scope_ok = False
-            if scope_ok:
-                subtotal = 0.0
-                try:
-                    if (order.items_json or "").strip():
-                        items = json.loads(order.items_json or "[]")
-                        if isinstance(items, list):
-                            for ent in items:
-                                q = int(ent.get("qty") or 1)
-                                subtotal += float(ent.get("price") or 0.0) * q
-                except Exception:
-                    pass
-                if subtotal <= 0 and order.item_id:
-                    gi = GamePackageItem.query.get(order.item_id)
-                    if gi:
-                        subtotal = float(gi.price or 0.0)
-                comm_pct = float(su.commission_percent or 0.0)
-                if comm_pct > 0 and subtotal > 0:
-                    try:
-                        inc = round(subtotal * (comm_pct / 100.0), 2)
-                        su.balance = round(float(su.balance or 0.0) + inc, 2)
-                        db.session.commit()
-                    except Exception:
-                        db.session.rollback()
-    except Exception:
-        pass
+    _credit_affiliate_commission(order)
 
     has_auto_recharges = _order_has_auto_recharges(order)
 
@@ -2088,6 +2046,90 @@ def resolve_special_user_for_code(raw_code: str):
     if su:
         return su, True
     return None, False
+
+
+def _resolve_affiliate_for_order(order_obj):
+    try:
+        if getattr(order_obj, "special_user_id", None):
+            su = SpecialUser.query.get(order_obj.special_user_id)
+            if su:
+                return su
+    except Exception:
+        pass
+    try:
+        if getattr(order_obj, "special_code", ""):
+            su, _ = resolve_special_user_for_code(order_obj.special_code)
+            return su
+    except Exception:
+        pass
+    return None
+
+
+def _affiliate_commission_subtotal_usd(order_obj) -> float:
+    subtotal = 0.0
+    try:
+        if (order_obj.items_json or "").strip():
+            items = json.loads(order_obj.items_json or "[]")
+            if isinstance(items, list) and items:
+                for ent in items:
+                    qty = max(int(ent.get("qty") or 1), 1)
+                    subtotal += float(ent.get("price") or 0.0) * qty
+    except Exception:
+        subtotal = 0.0
+
+    if subtotal <= 0 and getattr(order_obj, "item_id", None):
+        try:
+            item = GamePackageItem.query.get(order_obj.item_id)
+            if item:
+                subtotal = float(item.price or 0.0)
+        except Exception:
+            pass
+
+    if subtotal <= 0:
+        try:
+            subtotal = float(order_obj.price or 0.0)
+        except Exception:
+            subtotal = 0.0
+
+    if subtotal <= 0:
+        try:
+            subtotal = float(amount_to_usd(order_obj.amount or 0.0, order_obj.currency or "USD") or 0.0)
+        except Exception:
+            subtotal = 0.0
+
+    return round(max(subtotal, 0.0), 2)
+
+
+def _credit_affiliate_commission(order_obj) -> bool:
+    try:
+        su = _resolve_affiliate_for_order(order_obj)
+        if not su or not su.active:
+            return False
+
+        scope_ok = True
+        if (su.scope or "all") == "package":
+            try:
+                scope_ok = (su.scope_package_id == order_obj.store_package_id)
+            except Exception:
+                scope_ok = False
+        if not scope_ok:
+            return False
+
+        comm_pct = float(su.commission_percent or 0.0)
+        subtotal = _affiliate_commission_subtotal_usd(order_obj)
+        if comm_pct <= 0 or subtotal <= 0:
+            return False
+
+        inc = round(subtotal * (comm_pct / 100.0), 2)
+        su.balance = round(float(su.balance or 0.0) + inc, 2)
+        db.session.commit()
+        return True
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _revendedores_env():
@@ -3334,7 +3376,14 @@ def _order_is_pabilo_eligible(order_obj) -> bool:
     return bool(_pabilo_eligibility_info(order_obj).get("eligible"))
 
 
-def _pabilo_verify_payment_once(order_obj, *, reference_override: str = "", reference_source: str = "manual"):
+def _pabilo_verify_payment_once(
+    order_obj,
+    *,
+    reference_override: str = "",
+    reference_source: str = "manual",
+    max_attempts: int = 3,
+    retry_delay_seconds: int = 2,
+):
     if not order_obj:
         return {"ok": False, "verified": False, "message": "Orden inválida"}
     candidate_reference = str(reference_override or order_obj.reference or "").strip()
@@ -3364,8 +3413,8 @@ def _pabilo_verify_payment_once(order_obj, *, reference_override: str = "", refe
         "Content-Type": "application/json",
         "appKey": cfg.get("api_key"),
     }
-    max_attempts = 3
-    retry_delay_seconds = 2
+    max_attempts = max(int(max_attempts or 1), 1)
+    retry_delay_seconds = max(int(retry_delay_seconds or 0), 0)
 
     def _decode_response_json(resp_obj):
         try:
@@ -3525,6 +3574,14 @@ def _pabilo_verify_payment_once(order_obj, *, reference_override: str = "", refe
                 time.sleep(retry_delay_seconds)
                 continue
             return last_result
+        if resp.status_code == 429:
+            return {
+                "ok": False,
+                "verified": False,
+                "message": "Pabilo está limitando demasiadas consultas seguidas. Intenta de nuevo en unos segundos.",
+                "response": data,
+                "request_meta": request_meta,
+            }
         if resp.status_code >= 500:
             last_result = {
                 "ok": False,
@@ -3679,6 +3736,8 @@ def _pabilo_verify_payment(order_obj):
         order_obj,
         reference_override=capture_reference,
         reference_source="capture",
+        max_attempts=1,
+        retry_delay_seconds=0,
     )
     fallback_result["fallback_used"] = True
     fallback_result["manual_result"] = {
@@ -4838,9 +4897,12 @@ def affiliate_summary():
     if not su:
         return jsonify({"ok": False, "error": "Afiliado no encontrado"}), 404
     from sqlalchemy import or_
+    code_filters = [db.func.lower(Order.special_code) == (su.code or "").lower()]
+    if (su.secondary_code or "").strip():
+        code_filters.append(db.func.lower(Order.special_code) == su.secondary_code.lower())
     approved_q = Order.query.filter(
-        Order.status == "approved",
-        or_(Order.special_user_id == su.id, Order.special_code == (su.code or ""))
+        Order.status.in_(["approved", "delivered"]),
+        or_(Order.special_user_id == su.id, *code_filters)
     )
     approved_count = approved_q.count()
     return jsonify({
@@ -7291,73 +7353,8 @@ def admin_orders_set_status(oid: int):
     prev_status = (o.status or '').lower()
     o.status = status
     db.session.commit()
-    # Affiliate commission crediting
-    try:
-        if status == "approved" and prev_status != "approved":
-            su = None
-            if o.special_user_id:
-                su = SpecialUser.query.get(o.special_user_id)
-            if (not su) and (o.special_code or ''):
-                su = SpecialUser.query.filter(
-                    db.func.lower(SpecialUser.code) == (o.special_code or '').lower(),
-                    SpecialUser.active == True
-                ).first()
-            if su and su.active:
-                # Respect affiliate scope
-                scope_ok = True
-                sc = (su.scope or 'all')
-                if sc == 'package':
-                    try:
-                        scope_ok = (su.scope_package_id == o.store_package_id)
-                    except Exception:
-                        scope_ok = False
-                if scope_ok:
-                    # Determine commission base (USD)
-                    subtotal = 0.0
-                    try:
-                        if (o.items_json or '').strip():
-                            items = json.loads(o.items_json or '[]')
-                            if isinstance(items, list) and items:
-                                for ent in items:
-                                    q = int(ent.get('qty') or 1)
-                                    try:
-                                        p = float(ent.get('price') or 0.0)
-                                    except Exception:
-                                        p = 0.0
-                                    subtotal += (p * q)
-                    except Exception:
-                        pass
-                    if subtotal <= 0 and o.item_id:
-                        try:
-                            gi = GamePackageItem.query.get(o.item_id)
-                            if gi:
-                                subtotal = float(gi.price or 0.0)
-                        except Exception:
-                            pass
-                    if subtotal <= 0:
-                        try:
-                            amt_usd = float(o.amount or 0.0)
-                            cur = (o.currency or 'USD').upper()
-                            if cur != 'USD':
-                                try:
-                                    rate = float(get_config_value("exchange_rate_bsd_per_usd", "0") or 0)
-                                except Exception:
-                                    rate = 0.0
-                                if rate > 0:
-                                    amt_usd = round(amt_usd / rate, 2)
-                            subtotal = amt_usd
-                        except Exception:
-                            subtotal = 0.0
-                    comm_pct = float(su.commission_percent or 0.0)
-                    if comm_pct > 0 and subtotal > 0:
-                        try:
-                            inc = round(subtotal * (comm_pct / 100.0), 2)
-                            su.balance = round(float(su.balance or 0.0) + inc, 2)
-                            db.session.commit()
-                        except Exception:
-                            db.session.rollback()
-    except Exception:
-        pass
+    if status == "approved" and prev_status != "approved":
+        _credit_affiliate_commission(o)
     # Notify buyer on approval (HTML email)
     try:
         if status == "approved" and (o.email or o.name) and not _order_has_auto_recharges(o):
