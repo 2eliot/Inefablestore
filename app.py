@@ -1263,6 +1263,9 @@ def _binance_auto_approve(order):
     the background thread after Binance API payment confirmation.
     ONLY triggers for orders where the item has auto_enabled=True in the mapping.
     """
+    if _is_reference_already_used(order.reference, exclude_order_id=order.id):
+        print(f"[BinanceAuto] Reference '{order.reference}' already used in another approved order. Skipping auto-approve for order #{order.id}.")
+        return
     _auto_approve_order(order, source_label="BinanceAuto", binance_auto=True)
 
 
@@ -2892,8 +2895,9 @@ def _normalize_numeric_reference_value(raw_value: str) -> str:
     digits = re.sub(r"\D", "", str(raw_value or ""))
     if not digits:
         return ""
-    normalized = digits.lstrip("0")
-    return normalized or "0"
+    # Take last 6 digits to prevent variations
+    last_six = digits[-6:]
+    return last_six
 
 
 def _normalize_order_reference_for_match(raw_value: str) -> str:
@@ -2942,6 +2946,21 @@ def _find_existing_order_by_reference(reference: str, *, exclude_order_id: int |
         if _normalize_order_reference_for_match(existing_order.reference) == normalized_reference:
             return existing_order
     return None
+
+
+def _is_reference_already_used(reference: str, exclude_order_id: int | None = None) -> bool:
+    """Check if the reference has already been used in an approved order."""
+    if not reference:
+        return False
+    normalized = _normalize_order_reference_for_match(reference)
+    if not normalized:
+        return False
+    existing = _find_existing_order_by_reference(
+        reference,
+        exclude_order_id=exclude_order_id,
+        statuses=("approved", "delivered")
+    )
+    return existing is not None
 
 
 def _reference_conflict_error_message(existing_order) -> str:
@@ -3838,7 +3857,10 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
     db.session.commit()
 
     if result.get("verified") and auto_approve_on_verified and (order_obj.status or "").lower() == "pending":
-        _auto_approve_order(order_obj, source_label="PabiloAuto", binance_auto=False)
+        if _is_reference_already_used(order_obj.reference, exclude_order_id=order_obj.id):
+            print(f"[PabiloAuto] Reference '{order_obj.reference}' already used in another approved order. Skipping auto-approve for order #{order_obj.id}.")
+        else:
+            _auto_approve_order(order_obj, source_label="PabiloAuto", binance_auto=False)
 
     return {
         "ok": bool(result.get("ok")),
@@ -6044,10 +6066,10 @@ def _normalize_extracted_capture_reference(raw_value) -> str:
     if not text or text.upper() == "ERROR_NO_DETECTADO":
         return ""
     if text.isdigit() and 1 <= len(text) <= 21:
-        return text
+        return text[-6:]  # Take last 6 digits
     digit_groups = re.findall(r"\d+", text)
     if len(digit_groups) == 1 and 1 <= len(digit_groups[0]) <= 21:
-        return digit_groups[0]
+        return digit_groups[0][-6:]  # Take last 6 digits
     return ""
 
 
