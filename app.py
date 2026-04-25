@@ -3079,7 +3079,10 @@ def _ubii_verify_and_update_order(order_obj, extracted: dict, *, payload: dict |
     db.session.commit()
 
     if (order_obj.status or "").lower() == "pending":
-        _auto_approve_order(order_obj, source_label="UbiiAuto", binance_auto=False)
+        if _is_reference_already_used(order_obj.reference, exclude_order_id=order_obj.id):
+            print(f"[UbiiAuto] Reference '{order_obj.reference}' already used in another approved order. Skipping auto-approve for order #{order_obj.id}.")
+        else:
+            _auto_approve_order(order_obj, source_label="UbiiAuto", binance_auto=False)
 
     return {
         "ok": True,
