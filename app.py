@@ -2948,6 +2948,56 @@ def _find_existing_order_by_reference(reference: str, *, exclude_order_id: int |
     return None
 
 
+def _find_existing_order_by_capture_reference(reference: str, *, exclude_order_id: int | None = None, statuses=None):
+    normalized_reference = _normalize_order_reference_for_match(reference)
+    if not normalized_reference:
+        return None
+
+    query = Order.query
+    if statuses:
+        query = query.filter(Order.status.in_(tuple(statuses)))
+    if exclude_order_id:
+        query = query.filter(Order.id != int(exclude_order_id))
+
+    for existing_order in query.order_by(Order.created_at.desc()).all():
+        if _normalize_order_reference_for_match(existing_order.capture_reference or "") == normalized_reference:
+            return existing_order
+    return None
+
+
+def _find_existing_order_by_capture_fingerprint(relative_path: str, *, exclude_order_id: int | None = None, statuses=None):
+    capture_path = _capture_absolute_path(relative_path)
+    if not capture_path or not os.path.exists(capture_path):
+        return None
+
+    try:
+        target_fingerprint = _capture_reference_file_fingerprint(capture_path)
+    except Exception:
+        return None
+    if not target_fingerprint:
+        return None
+
+    query = Order.query
+    if statuses:
+        query = query.filter(Order.status.in_(tuple(statuses)))
+    if exclude_order_id:
+        query = query.filter(Order.id != int(exclude_order_id))
+
+    for existing_order in query.order_by(Order.created_at.desc()).all():
+        other_relative_path = str(existing_order.payment_capture or "").strip()
+        if not other_relative_path:
+            continue
+        other_capture_path = _capture_absolute_path(other_relative_path)
+        if not other_capture_path or not os.path.exists(other_capture_path):
+            continue
+        try:
+            if _capture_reference_file_fingerprint(other_capture_path) == target_fingerprint:
+                return existing_order
+        except Exception:
+            continue
+    return None
+
+
 def _is_reference_already_used(reference: str, exclude_order_id: int | None = None) -> bool:
     """Check if the reference has already been used in an approved order."""
     if not reference:
@@ -3804,6 +3854,8 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
     corrected_reference = ""
     corrected_reference_applied = False
     corrected_reference_error = ""
+    duplicate_capture_error = ""
+    duplicate_capture_order_id = None
     matched_reference = str(result.get("matched_reference") or "").strip()
     matched_reference_source = str(result.get("matched_reference_source") or "").strip()
     validation = result.get("validation") or {}
@@ -3823,6 +3875,37 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
                 order_obj.reference = matched_reference
                 corrected_reference = matched_reference
                 corrected_reference_applied = True
+    if result.get("verified") and matched_reference_source == "capture":
+        conflicting_order = _find_existing_order_by_reference(
+            matched_reference,
+            exclude_order_id=order_obj.id,
+            statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
+        )
+        if not conflicting_order:
+            conflicting_order = _find_existing_order_by_capture_reference(
+                matched_reference,
+                exclude_order_id=order_obj.id,
+                statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
+            )
+        if conflicting_order:
+            duplicate_capture_error = "La referencia extraída del comprobante ya fue utilizada en otra orden"
+            duplicate_capture_order_id = conflicting_order.id
+        else:
+            conflicting_order = _find_existing_order_by_capture_fingerprint(
+                str(order_obj.payment_capture or "").strip(),
+                exclude_order_id=order_obj.id,
+                statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
+            )
+            if conflicting_order:
+                duplicate_capture_error = "Este comprobante ya fue utilizado en otra orden"
+                duplicate_capture_order_id = conflicting_order.id
+
+        if duplicate_capture_error:
+            result = {
+                **result,
+                "verified": False,
+                "message": duplicate_capture_error,
+            }
     if result.get("verified"):
         order_obj.payment_verified_at = checked_at
         order_obj.payment_verification_id = str(result.get("verification_id") or order_obj.payment_verification_id or "")
@@ -3843,6 +3926,8 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         "reference_corrected_to": corrected_reference,
         "reference_corrected_applied": corrected_reference_applied,
         "reference_corrected_error": corrected_reference_error,
+        "duplicate_capture_error": duplicate_capture_error,
+        "duplicate_capture_order_id": duplicate_capture_order_id,
         "capture_reference": str(getattr(order_obj, "capture_reference", "") or ""),
         "capture_reference_status": str(result.get("capture_reference_status") or latest_payment_state.get("capture_reference_status") or ""),
         "capture_reference_source": str(result.get("capture_reference_source") or latest_payment_state.get("capture_reference_source") or ""),
@@ -3860,8 +3945,9 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
     db.session.commit()
 
     if result.get("verified") and auto_approve_on_verified and (order_obj.status or "").lower() == "pending":
-        if _is_reference_already_used(order_obj.reference, exclude_order_id=order_obj.id):
-            print(f"[PabiloAuto] Reference '{order_obj.reference}' already used in another approved order. Skipping auto-approve for order #{order_obj.id}.")
+        approval_reference = str(matched_reference or order_obj.reference or "").strip()
+        if _is_reference_already_used(approval_reference, exclude_order_id=order_obj.id):
+            print(f"[PabiloAuto] Reference '{approval_reference}' already used in another approved order. Skipping auto-approve for order #{order_obj.id}.")
         else:
             _auto_approve_order(order_obj, source_label="PabiloAuto", binance_auto=False)
 
@@ -3873,6 +3959,8 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         "corrected_reference": corrected_reference,
         "corrected_reference_applied": corrected_reference_applied,
         "corrected_reference_error": corrected_reference_error,
+        "duplicate_capture_error": duplicate_capture_error,
+        "duplicate_capture_order_id": duplicate_capture_order_id,
         "expected_amount": expected_amount,
         "reported_amount": reported_amount,
         "reported_amount_candidates": reported_amount_candidates,
