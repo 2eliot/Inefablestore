@@ -799,7 +799,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (btnPayBSD) {
         const url = (cfg.pm_image_path || '').trim();
         if (url) {
-          btnPayBSD.innerHTML = `<img src="${url}" alt="Pago Móvil" style="max-height:42px; max-width:160px; object-fit:contain; display:block; margin:0 auto;" />`;
+          btnPayBSD.innerHTML = `<img class="pay-method-logo" src="${url}" alt="Pago Móvil" />`;
           if (/(\.png)(\?|$)/i.test(url)) {
             const img = btnPayBSD.querySelector('img');
             if (img) { requestAnimationFrame(() => { try {
@@ -829,7 +829,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (btnPayUSD) {
         const url2 = (cfg.binance_image_path || '').trim();
         if (url2) {
-          btnPayUSD.innerHTML = `<img src="${url2}" alt="Binance" style="max-height:42px; max-width:160px; object-fit:contain; display:block; margin:0 auto;" />`;
+          btnPayUSD.innerHTML = `<img class="pay-method-logo" src="${url2}" alt="Binance" />`;
           if (/(\.png)(\?|$)/i.test(url2)) {
             const img2 = btnPayUSD.querySelector('img');
             if (img2) { requestAnimationFrame(() => { try {

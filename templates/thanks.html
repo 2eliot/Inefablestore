@@ -97,6 +97,11 @@
     list-style: none;
     margin: 0;
   }
+  .ty-steps.is-live .ty-step {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
   .ty-steps::before {
     content: '';
     position: absolute;
@@ -262,6 +267,15 @@
     }
     .ty-badge {
       font-size: .82rem;
+    }
+    .ty-step-label {
+      font-size: 0.9rem;
+    }
+    .ty-step[data-step-id="completed"] .ty-step-label {
+      font-size: 0.72rem;
+      line-height: 1.15;
+      white-space: nowrap;
+      letter-spacing: -0.01em;
     }
     .ty-pill {
       width: 100%;
@@ -458,20 +472,37 @@
     var prevDoneMap = {};
     var pendingQueue = [];
     var animating = false;
+    var hasRenderedSteps = false;
     var waitingBubbleText = 'ESPERA ESTAMOS VALIDANDO';
     var doneBubbleText = 'LISTO TU RECARGA FUE ENVIADA';
 
     function updateBubbleText(payload) {
       if (!bubbleEl) return;
       var isCompleted = !!(payload && payload.completed);
-      bubbleEl.textContent = isCompleted ? doneBubbleText : waitingBubbleText;
-      bubbleEl.classList.toggle('waiting', !isCompleted);
+      var nextText = isCompleted ? doneBubbleText : waitingBubbleText;
+      if (bubbleEl.textContent !== nextText) {
+        bubbleEl.textContent = nextText;
+      }
+      var shouldWait = !isCompleted;
+      if (bubbleEl.classList.contains('waiting') !== shouldWait) {
+        bubbleEl.classList.toggle('waiting', shouldWait);
+      }
+    }
+
+    function displayStepLabel(st) {
+      var label = String((st && st.label) || '');
+      var isMobile = window.matchMedia('(max-width: 760px)').matches;
+      if (!isMobile) return label;
+      if ((st && st.id) === 'search') {
+        return label.replace(/\s+en el sistema$/i, '');
+      }
+      return label;
     }
 
     function buildStepHTML(st, idx, done, justDone) {
-      return '<li class="ty-step' + (done ? ' done' : '') + (justDone ? ' just-completed' : '') + '">'
+      return '<li class="ty-step' + (done ? ' done' : '') + (justDone ? ' just-completed' : '') + '" data-step-id="' + ((st.id || ('step_' + idx)).toString()) + '">'
         + '<span class="ty-step-ico">' + (done ? '✓' : '×') + '</span>'
-        + '<span class="ty-step-label">' + (st.label || '') + '</span>'
+        + '<span class="ty-step-label">' + displayStepLabel(st) + '</span>'
         + '</li>';
     }
 
@@ -496,6 +527,11 @@
         var justDone = (key === justDoneKey);
         return buildStepHTML(st, idx, done, justDone);
       }).join('');
+      if (hasRenderedSteps) {
+        listEl.classList.add('is-live');
+      } else {
+        hasRenderedSteps = true;
+      }
       // Remove just-completed highlight after animation
       if (justDoneKey) {
         var highlighted = listEl.querySelectorAll('.ty-step.just-completed');
