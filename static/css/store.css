@@ -1801,7 +1801,7 @@ body.details-checkout-page {
   }
 
   .checkout-exact .items-grid {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
   }
 
