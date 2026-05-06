@@ -1728,6 +1728,12 @@ body.details-checkout-page {
   cursor: pointer;
 }
 
+.checkout-exact .promo-apply-btn.is-applied {
+  background: rgba(0, 255, 136, 0.14);
+  border-color: rgba(0, 255, 136, 0.55);
+  color: #b8ffd8;
+}
+
 .checkout-exact .ref-status {
   display: block;
   margin-top: 8px;

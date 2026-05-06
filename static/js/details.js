@@ -153,7 +153,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const MOBILE_GRID_COLUMNS = 2;
 
   function syncMethodButtonState() {
-    if (!btnPayBSD || !btnPayUSD || methodChosen) return;
+    if (!btnPayBSD || !btnPayUSD) return;
+    if (!methodChosen) {
+      btnPayBSD.classList.remove('primary');
+      btnPayUSD.classList.remove('primary');
+      return;
+    }
     if (currency === 'BSD') {
       btnPayBSD.classList.add('primary');
       btnPayUSD.classList.remove('primary');
@@ -864,16 +869,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function setCurrency(newCurrency) {
     currency = newCurrency;
     methodChosen = true;
-    // toggle active state on buttons
-    if (btnPayBSD && btnPayUSD) {
-      if (currency === 'BSD') {
-        btnPayBSD.classList.add('primary');
-        btnPayUSD.classList.remove('primary');
-      } else {
-        btnPayUSD.classList.add('primary');
-        btnPayBSD.classList.remove('primary');
-      }
-    }
+    syncMethodButtonState();
     // Recompute and show prices only now that a method is chosen
     if (selectedItemIndex >= 0) {
       const it = allItems[selectedItemIndex];
@@ -903,8 +899,8 @@ document.addEventListener('DOMContentLoaded', () => {
       // If user hasn't chosen a method yet, keep defaulting: BsD on mobile, USD on desktop
       if (!methodChosen) {
         currency = isMobile ? 'BSD' : 'USD';
-        syncMethodButtonState();
       }
+      syncMethodButtonState();
       renderItems(allItems);
     }
     updateMobileFooter();
@@ -995,6 +991,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnBuy) {
     btnBuy.addEventListener('click', async () => {
       if (selectedItemIndex < 0) return alert('Selecciona un paquete');
+      if (!methodChosen) return alert('Selecciona un método de pago');
       if (!isGift) {
         if (!inputCustomerId || !inputCustomerId.value.trim()) {
           alert('Ingrese su ID de jugador');
@@ -1104,6 +1101,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function syncApplyRefButton(state) {
+    if (!btnApplyRef) return;
+    const nextState = state || ((validRef && inputRefCode && inputRefCode.value.trim() && validRef.code === inputRefCode.value.trim()) ? 'applied' : 'idle');
+    btnApplyRef.classList.toggle('is-applied', nextState === 'applied');
+    btnApplyRef.disabled = nextState === 'loading';
+    if (nextState === 'loading') {
+      btnApplyRef.textContent = 'Validando...';
+      return;
+    }
+    if (nextState === 'applied') {
+      btnApplyRef.textContent = 'Aplicado';
+      return;
+    }
+    btnApplyRef.textContent = 'Aplicar';
+  }
+
   async function applyRefCode() {
     if (!inputRefCode) return false;
     const rawCode = inputRefCode.value.trim();
@@ -1117,20 +1130,17 @@ document.addEventListener('DOMContentLoaded', () => {
       renderItems(allItems);
       updateMobileFooter();
       inputRefCode.focus();
+      syncApplyRefButton('idle');
       return false;
     }
 
-    if (btnApplyRef) {
-      btnApplyRef.disabled = true;
-      btnApplyRef.textContent = 'Aplicando...';
-    }
+    syncApplyRefButton('loading');
     try {
-      return await validateRefCode();
+      const ok = await validateRefCode();
+      syncApplyRefButton(ok ? 'applied' : 'idle');
+      return ok;
     } finally {
-      if (btnApplyRef) {
-        btnApplyRef.disabled = false;
-        btnApplyRef.textContent = 'Aplicar';
-      }
+      if (btnApplyRef && btnApplyRef.disabled) syncApplyRefButton('idle');
     }
   }
 
@@ -1144,6 +1154,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     inputRefCode.addEventListener('input', () => {
       refValidationError = '';
+      syncApplyRefButton('idle');
       if (!inputRefCode.value.trim()) {
         validRef = null;
         if (refStatus) refStatus.textContent = '';
@@ -1157,6 +1168,8 @@ document.addEventListener('DOMContentLoaded', () => {
       await applyRefCode();
     });
   }
+
+  syncApplyRefButton();
 });
 
 
