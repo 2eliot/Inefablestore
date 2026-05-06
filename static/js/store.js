@@ -167,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Desktop categories dropdown
   (function wireCategoriesDropdown() {
     const dd = document.getElementById('dd-cats');
+    if (!dd) return;
     const toggle = dd.querySelector('.dd-toggle');
     const menu = dd.querySelector('.dd-menu');
     if (!toggle || !menu) return;
