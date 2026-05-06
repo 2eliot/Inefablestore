@@ -750,7 +750,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnMore.hidden = true;
         btnMore.style.display = 'none';
       } else {
-        const needMore = ordered.length > mobilePreviewLimit;
+        const needMore = ordered.length > MOBILE_PREVIEW_COUNT;
         if (needMore) {
           btnMore.hidden = false;
           btnMore.style.display = 'inline-block';

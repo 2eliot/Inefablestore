@@ -363,6 +363,13 @@
     padding: 0 12px;
     border-right: 1px solid rgba(148,163,184,0.25);
   }
+  .checkout-contact-fields .phone-cc-btn img {
+    width: 18px;
+    height: 12px;
+    border-radius: 2px;
+    display: block;
+    flex: 0 0 auto;
+  }
   .checkout-contact-fields .phone-field .input#checkout-phone-local {
     min-width: 0;
     height: 100%;
@@ -374,6 +381,25 @@
   }
   .checkout-contact-fields .phone-field .input#checkout-phone-local:focus {
     box-shadow: none;
+  }
+  @media (max-width: 460px) {
+    .checkout-contact-fields .phone-prefix {
+      flex: 0 0 auto;
+    }
+    .checkout-contact-fields .phone-cc-btn {
+      min-width: 44px;
+      width: 44px;
+      justify-content: center;
+      gap: 0;
+      padding: 0 8px;
+    }
+    .checkout-contact-fields #checkout-phone-cc-label,
+    .checkout-contact-fields .phone-cc-btn .phone-caret {
+      display: none;
+    }
+    .checkout-contact-fields .phone-field .input#checkout-phone-local {
+      padding-left: 10px;
+    }
   }
   /* Reference input emphasis */
   .ref-group { display:grid; gap:8px; justify-items: center; }
