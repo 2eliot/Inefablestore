@@ -907,7 +907,7 @@ html { overflow-x: hidden; width: 100%; }
     padding: 14px 10px;
   }
 }
-@media (min-width: 700px) { .items-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; } }
+@media (min-width: 700px) { .items-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; } }
 .item-pill { display:grid; grid-template-rows: auto 1fr; justify-items:center; gap:12px; min-height: 160px; text-align:center; padding: 18px 12px 16px; border-radius: 18px; border:1px solid rgba(148,163,184,0.18); background: linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(2,6,23,0.96) 100%); color: var(--text-primary); cursor: pointer; font-weight: 700; transition: all var(--transition); position: relative; overflow: hidden; box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 24px rgba(0,0,0,0.22); }
 .item-pill::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at top, rgba(16,185,129,0.12), transparent 55%); opacity: 0; transition: opacity var(--transition); }
 .item-pill:hover { border-color: rgba(16,185,129,0.65); background: linear-gradient(180deg, rgba(15,23,42,0.98) 0%, rgba(2,6,23,1) 100%); transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,0.34); }
