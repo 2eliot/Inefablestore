@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const coRef = document.getElementById('co-ref');
   const btnConfirm = document.getElementById('btn-co-confirm');
   const coDiscNote = document.getElementById('co-disc-note');
+  const coQrModal = document.getElementById('coQrModal');
+  const coQrModalClose = document.getElementById('coQrModalClose');
+  const coQrModalTitle = document.getElementById('coQrModalTitle');
+  const coQrModalImage = document.getElementById('coQrModalImage');
   const refError = document.getElementById('ref-error');
   const refCounter = document.getElementById('ref-counter');
   const blockedOverlay = document.getElementById('blocked-overlay');
@@ -27,6 +31,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const captureRefLabel = document.getElementById('captureRefLabel');
   const captureRefValue = document.getElementById('captureRefValue');
   const captureRefHint = document.getElementById('captureRefHint');
+  const checkoutEmail = document.getElementById('checkout-email');
+  const checkoutPhone = document.getElementById('checkout-phone');
+  const checkoutPhoneLocal = document.getElementById('checkout-phone-local');
+  const checkoutPhoneCc = document.getElementById('checkout-phone-cc');
+  const checkoutPhoneCcBtn = document.getElementById('checkout-phone-cc-btn');
+  const checkoutPhoneCcMenu = document.getElementById('checkout-phone-cc-menu');
+  const checkoutPhoneCcLabel = document.getElementById('checkout-phone-cc-label');
+  const checkoutSaveContact = document.getElementById('checkout-save-contact');
   let proofPreviewUrl = '';
   let captureReferenceLookupId = 0;
   let latestCaptureReferencePreview = '';
@@ -231,12 +243,15 @@ document.addEventListener('DOMContentLoaded', () => {
     coTotal.innerHTML = `
       <div class="co-summary">
         <div class="co-summary-head">
-          ${leftImg}
-          <div class="co-summary-copy">
+          <div class="co-summary-media">
+            ${leftImg}
             ${titleLine}
+          </div>
+          <div class="co-summary-mid-divider" aria-hidden="true"></div>
+          <div class="co-summary-copy">
             <div class="co-summary-meta">
-              ${nameLine}
               ${idLine}
+              ${nameLine}
             </div>
           </div>
         </div>
@@ -256,6 +271,35 @@ document.addEventListener('DOMContentLoaded', () => {
   let paymentsCfg = null;
   let countdownId = null;
 
+  function openQrModal(src, title) {
+    if (!coQrModal || !coQrModalImage) return;
+    coQrModalImage.src = src || '';
+    coQrModalImage.alt = title || 'QR de pago';
+    if (coQrModalTitle) coQrModalTitle.textContent = title || 'QR de pago';
+    coQrModal.removeAttribute('hidden');
+    coQrModal.classList.add('is-open');
+  }
+
+  function closeQrModal() {
+    if (!coQrModal) return;
+    coQrModal.classList.remove('is-open');
+    coQrModal.setAttribute('hidden', '');
+  }
+
+  if (coQrModalClose) {
+    coQrModalClose.addEventListener('click', closeQrModal);
+  }
+  if (coQrModal) {
+    coQrModal.addEventListener('click', (event) => {
+      if (event.target === coQrModal) closeQrModal();
+    });
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && coQrModal && !coQrModal.hasAttribute('hidden')) {
+      closeQrModal();
+    }
+  });
+
   // Restore selection and currency from URL first, then localStorage
   const qs = new URLSearchParams(window.location.search);
   const qSel = qs.get('sel');
@@ -274,12 +318,117 @@ document.addEventListener('DOMContentLoaded', () => {
     const qn = parseInt(qQtyRaw, 10);
     if (!isNaN(qn) && qn > 0) quantity = Math.min(99, qn);
   } catch(_) { quantity = 1; }
-  const LS_KEY = 'inefablestore_checkout';
-  let state = null;
-  try { state = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (_) { state = null; }
+  const CONTACT_LS_KEY = 'inefablestore_checkout_contact';
+  let contactState = null;
+  try { contactState = JSON.parse(localStorage.getItem(CONTACT_LS_KEY) || 'null'); } catch (_) { contactState = null; }
   // If method is explicitly provided, it wins
-  let currency = (qMethod === 'pm') ? 'BSD' : (qMethod === 'binance') ? 'USD' : ((qCur === 'BSD' || qCur === 'USD') ? qCur : ((state && state.currency === 'BSD') ? 'BSD' : 'USD'));
-  let selectedIndex = (qSel !== null && !isNaN(parseInt(qSel, 10))) ? parseInt(qSel, 10) : ((state && typeof state.selectedIndex === 'number') ? state.selectedIndex : -1);
+  let currency = (qMethod === 'pm') ? 'BSD' : (qMethod === 'binance') ? 'USD' : ((qCur === 'BSD' || qCur === 'USD') ? qCur : 'USD');
+  let selectedIndex = (qSel !== null && !isNaN(parseInt(qSel, 10))) ? parseInt(qSel, 10) : -1;
+
+  function splitPhoneParts(rawPhone) {
+    const raw = String(rawPhone || '').trim();
+    if (!raw) return { cc: '+58', local: '' };
+    const match = raw.match(/^(\+\d+)\s*(.*)$/);
+    if (match) {
+      return {
+        cc: match[1] || '+58',
+        local: (match[2] || '').trim(),
+      };
+    }
+    return { cc: '+58', local: raw };
+  }
+
+  function updateCombinedPhone() {
+    if (!checkoutPhone) return '';
+    const cc = checkoutPhoneCc ? String(checkoutPhoneCc.value || '').trim().replace(/\s+/g, '') : '';
+    const local = checkoutPhoneLocal ? String(checkoutPhoneLocal.value || '').trim() : '';
+    const fullPhone = [cc, local].filter(Boolean).join(' ').trim();
+    checkoutPhone.value = fullPhone;
+    return fullPhone;
+  }
+
+  function getCheckoutEmailValue() {
+    return checkoutEmail ? String(checkoutEmail.value || '').trim() : '';
+  }
+
+  function getCheckoutPhoneValue() {
+    return updateCombinedPhone();
+  }
+
+  function clearSavedCheckoutContact() {
+    try { localStorage.removeItem(CONTACT_LS_KEY); } catch (_) {}
+  }
+
+  function persistCheckoutContact() {
+    if (!checkoutSaveContact || !checkoutSaveContact.checked) return;
+    try {
+      const next = {
+        email: getCheckoutEmailValue(),
+        phone: getCheckoutPhoneValue(),
+        save: true,
+      };
+      localStorage.setItem(CONTACT_LS_KEY, JSON.stringify(next));
+    } catch (_) {}
+  }
+
+  (function initCheckoutContactFields() {
+    const savedEmail = contactState && contactState.save ? String(contactState.email || '').trim() : '';
+    const savedPhone = contactState && contactState.save ? String(contactState.phone || '').trim() : '';
+    const phoneParts = splitPhoneParts(qPhone || savedPhone || '');
+    if (checkoutSaveContact) {
+      checkoutSaveContact.checked = !!(contactState && contactState.save);
+      checkoutSaveContact.addEventListener('change', () => {
+        if (checkoutSaveContact.checked) {
+          persistCheckoutContact();
+          return;
+        }
+        clearSavedCheckoutContact();
+      });
+    }
+    if (checkoutEmail) {
+      checkoutEmail.value = qEmail || savedEmail || '';
+      checkoutEmail.addEventListener('input', () => {
+        if (checkoutSaveContact && checkoutSaveContact.checked) persistCheckoutContact();
+      });
+    }
+    if (checkoutPhoneCc) checkoutPhoneCc.value = phoneParts.cc;
+    if (checkoutPhoneCcLabel) checkoutPhoneCcLabel.textContent = phoneParts.cc;
+    if (checkoutPhoneLocal) {
+      checkoutPhoneLocal.value = phoneParts.local;
+      checkoutPhoneLocal.addEventListener('input', () => {
+        updateCombinedPhone();
+        if (checkoutSaveContact && checkoutSaveContact.checked) persistCheckoutContact();
+      });
+    }
+    updateCombinedPhone();
+    if (checkoutPhoneCcBtn && checkoutPhoneCcMenu) {
+      checkoutPhoneCcBtn.addEventListener('click', () => {
+        const nextHidden = !checkoutPhoneCcMenu.hidden;
+        checkoutPhoneCcMenu.hidden = nextHidden;
+        checkoutPhoneCcBtn.classList.toggle('open', !nextHidden);
+        checkoutPhoneCcBtn.setAttribute('aria-expanded', String(!nextHidden));
+      });
+      checkoutPhoneCcMenu.addEventListener('click', (event) => {
+        const option = event.target.closest('[data-cc]');
+        if (!option) return;
+        const cc = String(option.getAttribute('data-cc') || '+58').trim();
+        if (checkoutPhoneCc) checkoutPhoneCc.value = cc;
+        if (checkoutPhoneCcLabel) checkoutPhoneCcLabel.textContent = cc;
+        updateCombinedPhone();
+        if (checkoutSaveContact && checkoutSaveContact.checked) persistCheckoutContact();
+        checkoutPhoneCcMenu.hidden = true;
+        checkoutPhoneCcBtn.classList.remove('open');
+        checkoutPhoneCcBtn.setAttribute('aria-expanded', 'false');
+      });
+      document.addEventListener('click', (event) => {
+        if (!checkoutPhoneCcMenu.hidden && !event.target.closest('.phone-prefix')) {
+          checkoutPhoneCcMenu.hidden = true;
+          checkoutPhoneCcBtn.classList.remove('open');
+          checkoutPhoneCcBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+  })();
 
   function formatPriceFor(cur, n){
     const v = Number(n || 0);
@@ -381,7 +530,10 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       if (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) {
         const item = allItems[selectedIndex];
-        selectedTitle = qty > 1 ? `${item.title} x${qty}` : `${item.title}`;
+        const baseTitle = String(item.title || '').trim();
+        const subtitle = String(item.subtitle || '').trim();
+        const titleWithSubtitle = subtitle ? `${baseTitle} ${subtitle}` : baseTitle;
+        selectedTitle = qty > 1 ? `${titleWithSubtitle} x${qty}` : titleWithSubtitle;
       }
     } catch (_) {}
 
@@ -402,8 +554,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const idValue = zid ? `${uid}/${zid}` : uid;
       return `
         <div class="co-summary-meta">
-          ${nameLine}
           <div class="co-summary-id">${idLabel}: ${idValue}</div>
+          ${nameLine}
         </div>`;
     })();
 
@@ -440,9 +592,12 @@ document.addEventListener('DOMContentLoaded', () => {
     coTotal.innerHTML = `
       <div class="co-summary">
         <div class="co-summary-head">
-          ${leftImg}
-          <div class="co-summary-copy">
+          <div class="co-summary-media">
+            ${leftImg}
             ${titleLine}
+          </div>
+          <div class="co-summary-mid-divider" aria-hidden="true"></div>
+          <div class="co-summary-copy">
             ${selectedTitle ? `<div class="co-summary-item">${selectedTitle}</div>` : ''}
             ${playerBlock}
           </div>
@@ -458,6 +613,12 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderInfo() {
     if (!coInfo) return;
     coInfo.innerHTML = '';
+    const shell = document.createElement('div');
+    shell.className = 'co-info-shell';
+    const list = document.createElement('div');
+    list.className = 'co-info-list';
+    shell.appendChild(list);
+    coInfo.appendChild(shell);
     const svg = (name) => {
       if (name === 'bank') return '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M3 10h18v2H3v-2zm2 3h2v5H5v-5zm4 0h2v5H9v-5zm4 0h2v5h-2v-5zm4 0h2v5h-2v-5zM3 21h18v2H3v-2zM12 2l9 6H3l9-6z"/></svg>';
       if (name === 'email') return '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 13L2 6.76V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6.76L12 13zm0-2.4L22 4H2l10 6.6z"/></svg>';
@@ -477,7 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
       val.textContent = value || '-';
       row.appendChild(ico);
       row.appendChild(val);
-      coInfo.appendChild(row);
+      list.appendChild(row);
     };
     const addCopyAllBtn = (getValues) => {
       const btn = document.createElement('button');
@@ -508,15 +669,35 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       coInfo.appendChild(btn);
     };
+    const addQrCard = (src, title) => {
+      const safeSrc = String(src || '').trim();
+      if (!safeSrc) return;
+      const qrCard = document.createElement('div');
+      qrCard.className = 'co-qr-card';
+      const qrTitle = document.createElement('div');
+      qrTitle.className = 'co-qr-title';
+      qrTitle.textContent = title || 'QR de pago';
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'co-qr-trigger';
+      trigger.setAttribute('aria-label', `Abrir ${title || 'QR de pago'}`);
+      trigger.innerHTML = `<img class="co-qr-image" src="${safeSrc}" alt="${title || 'QR de pago'}">`;
+      trigger.addEventListener('click', () => openQrModal(safeSrc, title || 'QR de pago'));
+      qrCard.appendChild(qrTitle);
+      qrCard.appendChild(trigger);
+      shell.appendChild(qrCard);
+    };
     // Optional player info lines (kept at top if present)
     // Player ID (qCid) intentionally hidden from checkout UI, but still used internally
     if (currency === 'BSD') {
       const bank = (paymentsCfg && paymentsCfg.pm_bank) || '';
       const cedula = (paymentsCfg && paymentsCfg.pm_id) || '';
       const phone = (paymentsCfg && paymentsCfg.pm_phone) || '';
+      const qr = (paymentsCfg && paymentsCfg.pm_qr_path) || '';
       addItem('bank', bank);
       addItem('id', cedula);
       addItem('user', phone);
+      addQrCard(qr, 'QR de Pago Móvil');
       addCopyAllBtn(() => {
         const t = computeTotals();
         const monto = String(Math.round(Number(t.amount || 0)));
@@ -524,9 +705,11 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     } else {
       // Binance: show provider name, email and Pay ID
+      const qr = (paymentsCfg && paymentsCfg.binance_qr_path) || '';
       addItem('bank', 'Binance');
       addItem('email', (paymentsCfg && paymentsCfg.binance_email) || '');
       addItem('user', (paymentsCfg && paymentsCfg.binance_phone) || '');
+      addQrCard(qr, 'QR de Binance');
       // If Binance auto-verification is enabled for THIS item, show instructions about the beneficiary note
       if (isBinanceAuto) {
         const note = document.createElement('div');
@@ -535,7 +718,7 @@ document.addEventListener('DOMContentLoaded', () => {
         note.innerHTML = '<div style="font-weight:900; color:#fbbf24; margin-bottom:6px;">⚠️ IMPORTANTE — Verificación automática</div>'
           + '<div style="color:#e2e8f0; font-size:13px; line-height:1.4;">Al realizar el pago en Binance, <b>escribe tu número de referencia</b> en el campo <b>"Nota del beneficiario"</b> (memo/note).</div>'
           + '<div style="color:#94a3b8; font-size:12px; margin-top:6px;">Sin este código en la nota, tu pago <b>NO</b> podrá ser verificado automáticamente y deberá ser aprobado manualmente.</div>';
-        coInfo.appendChild(note);
+        list.appendChild(note);
       }
     }
   }
@@ -868,11 +1051,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const item = (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) ? allItems[selectedIndex] : null;
         const totals = computeTotals();
-        let st = null;
-        try { st = JSON.parse(localStorage.getItem('inefablestore_checkout') || 'null'); } catch (_) { st = null; }
-        const name = qName || (st && st.name) || '';
-        const email = qEmail || (st && st.email) || '';
-        const phone = qPhone || (st && st.phone) || '';
+        const name = qName || '';
+        const email = getCheckoutEmailValue() || qEmail || '';
+        const phone = getCheckoutPhoneValue() || qPhone || '';
+        if (!email) {
+          alert('Ingresa tu correo');
+          if (checkoutEmail) checkoutEmail.focus();
+          releaseCheckoutRequest();
+          return;
+        }
         if (!phone) {
           alert('Ingresa tu número de teléfono');
           releaseCheckoutRequest();
@@ -969,11 +1156,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const amount = totals.amount;
       const method = (totals.usedCurrency === 'BSD') ? 'pm' : 'binance';
       // Buyer info: prefer URL params from details, fallback to localStorage
-      let state = null;
-      try { state = JSON.parse(localStorage.getItem('inefablestore_checkout') || 'null'); } catch (_) { state = null; }
-      const name = qName || (state && state.name) || '';
-      const email = qEmail || (state && state.email) || '';
-      const phone = qPhone || (state && state.phone) || '';
+      const name = qName || '';
+      const email = getCheckoutEmailValue() || qEmail || '';
+      const phone = getCheckoutPhoneValue() || qPhone || '';
+      if (!email) {
+        alert('Ingresa tu correo');
+        if (checkoutEmail) checkoutEmail.focus();
+        releaseCheckoutRequest();
+        return;
+      }
       if (!phone) {
         alert('Ingresa tu número de teléfono');
         releaseCheckoutRequest();

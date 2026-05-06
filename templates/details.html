@@ -1,63 +1,20 @@
 {% extends 'base.html' %}
+{% set body_class = 'details-checkout-page' %}
 
 {% block styles %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='6') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='8') }}">
 {% endblock %}
 
 {% block header %}
-<header class="site-header">
-  <div class="container">
-    <div class="left-actions">
-      <button class="icon-btn hamburger" aria-label="Menú">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="3" y1="6" x2="21" y2="6"/>
-          <line x1="3" y1="12" x2="21" y2="12"/>
-          <line x1="3" y1="18" x2="21" y2="18"/>
-        </svg>
-      </button>
-    </div>
-
-    <a href="/" class="brand">
-      {% if logo_url %}
-        <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="logo"/>
-      {% else %}
-        <span class="logo-text">{{ site_name|default('InefableStore') }}</span>
-      {% endif %}
-    </a>
-    <nav class="nav">
-      <div class="nav-item dropdown" id="dd-cats">
-        <button class="nav-link dd-toggle" type="button" aria-haspopup="true" aria-expanded="false">Categorías ▾</button>
-        <div class="dd-menu" role="menu" aria-label="Categorías" hidden>
-          <a href="#pkgs-gift" class="dd-item" data-cat="gift" role="menuitem">
-            <span class="dd-icon" aria-hidden="true">🎁</span>
-            <span>Gift Cards</span>
-          </a>
-          <a href="#pkgs-mobile" class="dd-item" data-cat="mobile" role="menuitem">
-            <span class="dd-icon" aria-hidden="true">✈️</span>
-            <span>Juegos Móviles</span>
-          </a>
-          <a href="#" class="dd-item" data-cat="other" role="menuitem">
-            <span class="dd-icon" aria-hidden="true">👤</span>
-            <span>Otros Servicios</span>
-          </a>
-        </div>
+<header class="checkout-header">
+  <div class="checkout-header-bar">
+    <a class="checkout-logo" href="{{ url_for('index') }}" aria-label="Ir al inicio">INEFABL<span>E</span></a>
+    <div class="checkout-header-divider" aria-hidden="true"></div>
+    <div class="checkout-header-game" aria-label="Juego actual">
+      <div class="checkout-header-game-thumb">
+        <img src="{{ game.image_path }}" alt="{{ game.name }}">
       </div>
-    </nav>
-
-    <div class="right-actions">
-      <div class="header-search" role="search">
-        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-        <input id="header-search" type="search" placeholder="Buscar Juegos" autocomplete="off" />
-      </div>
-      <button class="icon-btn login" aria-label="Iniciar sesión">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-          <circle cx="12" cy="7" r="4"/>
-        </svg>
-      </button>
+      <div class="checkout-header-game-title">{{ game.name }}</div>
     </div>
   </div>
 </header>
@@ -87,112 +44,92 @@
   <div class="modal-backdrop"></div>
 </div>
 
-<section class="details-layout container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}" data-active-login="{{ 1 if (active_login_game_id|int) == game.id else 0 }}" data-bs-package-id="{{ bs_package_id|default('') }}" data-ml-package-id="{{ ml_package_id|default('') }}" data-default-region="{{ player_lookup_region }}" data-scrape-enabled="{{ 1 if scrape_enabled else 0 }}" data-so-connections="{{ so_connections_json|default('[]') }}">
-  <div class="details-left">
-    <div class="game-content">
-      <div class="game-header">
-        <div class="game-image">
-          <div class="banner" style="background-image:url('{{ game.image_path }}')"></div>
-        </div>
-        <div class="game-info">
-          <h1 class="game-title">{{ game.name }}</h1>
-          <div class="pill-row">
-            <span class="pill">Pago seguro</span>
-            <span class="pill">Cash back</span>
-          </div>
-          <p class="game-desc" id="game-desc">{{ game.description }}</p>
-          <p id="game-special-desc" hidden>{{ game.special_description }}</p>
-        </div>
-      </div>
-      <div class="selected-box" id="selected-box" hidden>
-        <div class="selected-title" id="selected-title"></div>
-        <div class="selected-price" id="selected-price"></div>
-      </div>
-    </div>
-    
-    <div class="packages-container" style="margin-top: 24px;">
-      <div class="step-title" data-step="2" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom: 16px;">
-        <span>2. Selecciona tu producto</span>
-        <button id="btn-leer" type="button" class="link" style="color:#22c55e; font-weight:800; text-decoration:underline; background:none; border:none; cursor:pointer; display:none;">Leer</button>
-      </div>
-      <div id="items-grid" class="items-grid"><!-- items --></div>
-      <div style="margin-top:10px; text-align:center;">
-        <button id="btn-more" class="btn" type="button" hidden>Ver más</button>
-      </div>
+<section class="details-layout checkout-exact container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}" data-active-login="{{ 1 if (active_login_game_id|int) == game.id else 0 }}" data-bs-package-id="{{ bs_package_id|default('') }}" data-ml-package-id="{{ ml_package_id|default('') }}" data-default-region="{{ player_lookup_region }}" data-scrape-enabled="{{ 1 if scrape_enabled else 0 }}" data-so-connections="{{ so_connections_json|default('[]') }}">
+  {% set so_conn = so_connections|default([])|selectattr('store_package_id', 'equalto', game.id)|first %}
+  {% set is_so_game = so_conn is defined and so_conn %}
+  {% set is_so_zone = is_so_game and so_conn.requires_zone %}
+  {% set is_verify_game = scrape_enabled and ((active_login_game_id and (active_login_game_id|int) == game.id) or (bs_package_id and (bs_package_id|int) == game.id) or (ml_package_id and (ml_package_id|int) == game.id) or is_so_game) %}
+  {% set is_ml_game = ml_package_id and (ml_package_id|int) == game.id %}
+  <div class="details-left checkout-meta" hidden>
+    <p id="game-special-desc" hidden>{{ game.special_description }}</p>
+    <p id="game-desc" hidden>{{ game.description }}</p>
+    <div class="selected-box" id="selected-box" hidden>
+      <div class="selected-title" id="selected-title"></div>
+      <div class="selected-price" id="selected-price"></div>
     </div>
   </div>
-  <div class="details-right">
-    
-    <div class="step-card">
-      <div class="step-title" data-step="1">Ingrese su ID</div>
-      {% set so_conn = so_connections|default([])|selectattr('store_package_id', 'equalto', game.id)|first %}
-      {% set is_so_game = so_conn is defined and so_conn %}
-      {% set is_so_zone = is_so_game and so_conn.requires_zone %}
-      {% set is_verify_game = scrape_enabled and ((active_login_game_id and (active_login_game_id|int) == game.id) or (bs_package_id and (bs_package_id|int) == game.id) or (ml_package_id and (ml_package_id|int) == game.id) or is_so_game) %}
-      {% set is_ml_game = ml_package_id and (ml_package_id|int) == game.id %}
-      {% if is_verify_game and not is_ml_game and not is_so_zone %}
-      <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;">
-        <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
-        <button id="btn-verify-player" class="btn" type="button">Verificar</button>
-      </div>
-      {% else %}
-      <input id="customer-id" class="input" type="text" placeholder="Ingrese su ID" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
-      {% endif %}
-      {% if game.requires_zone_id or is_ml_game or is_so_zone %}
-      {% if is_ml_game or is_so_zone %}
-      <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; margin-top:8px;">
-        <input id="customer-zone" class="input" type="text" placeholder="Ingresa tu Zona ID" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
-        <button id="btn-verify-player" class="btn" type="button">Verificar</button>
-      </div>
-      {% else %}
-      <input id="customer-zone" class="input" type="text" placeholder="Ingresa tu Zona ID" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
-      {% endif %}
-      {% endif %}
-      {% if is_verify_game %}
-      <small id="player-nickname" class="ref-status" style="display:block; margin-top:6px; text-align:center;"></small>
-      {% endif %}
-    </div>
+  <div class="details-right checkout-app">
+    <div class="checkout-surface">
+      <div class="checkout-game-title" hidden>{{ game.name }}</div>
 
-    <div class="step-card">
-      <div class="step-title" data-step="3">Seleccione un método de pago</div>
-      <div class="pay-methods">
-        <button id="pay-bsd" class="btn pay" type="button">Pago Móvil</button>
-        <button id="pay-usd" class="btn pay" type="button">Binance</button>
-      </div>
-      <div class="summary">
-        <span>Total</span>
-        <strong id="summary-price">-</strong>
-      </div>
-    </div>
-
-    <div class="step-card">
-      <div class="step-title" data-step="4">Ingresa tus datos</div>
-      <input id="email" class="input" type="email" placeholder="Correo de contacto">
-      <div class="phone-field">
-        <div class="phone-prefix">
-          <button class="phone-cc-btn" type="button" aria-label="Código de país">
-            <img src="https://flagcdn.com/w20/ve.png" alt="VE" width="16" height="12" loading="lazy">
-            <span id="phone-cc-label">+58</span>
-            <span class="phone-caret" aria-hidden="true">▾</span>
-          </button>
-          <div class="phone-cc-menu" id="phone-cc-menu" hidden>
-            <button type="button" data-cc="+58" data-flag="ve">🇻🇪 +58</button>
+      <div class="step-card checkout-card checkout-player-card">
+        <span class="section-label">ID de Jugador</span>
+        <div class="input-group">
+          {% if is_verify_game and not is_ml_game and not is_so_zone %}
+          <div class="verify-row">
+            <input id="customer-id" class="input" type="text" placeholder="Ingresa tu ID de juego" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
+            <button id="btn-verify-player" class="verify-btn" type="button">Verificar</button>
           </div>
-          <input id="phone-cc" type="hidden" value="+58">
+          {% else %}
+          <input id="customer-id" class="input" type="text" placeholder="Ingresa tu ID de juego" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
+          {% endif %}
+          {% if game.requires_zone_id or is_ml_game or is_so_zone %}
+          <div class="zone-wrap {% if is_ml_game or is_so_zone %}zone-wrap-verify{% endif %}">
+            <input id="customer-zone" class="input" type="text" placeholder="Ingresa tu Zona ID" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="24">
+            {% if is_ml_game or is_so_zone %}
+            <button id="btn-verify-player" class="verify-btn" type="button">Verificar</button>
+            {% endif %}
+          </div>
+          {% endif %}
+          {% if is_verify_game %}
+          <div id="player-nickname" class="player-name-chip"></div>
+          {% endif %}
         </div>
-        <input id="phone-local" class="input" type="tel" placeholder="Número de teléfono">
-        <input id="phone" type="hidden" />
       </div>
-      <div class="form-sep" aria-hidden="true"></div>
-      <div class="discount-section" role="group" aria-label="Código de descuento">
-        <div class="discount-row">
-          <input id="ref-code" class="input" type="text" placeholder="CÓDIGO DE DESCUENTO (opcional)">
-          <button id="btn-apply-ref" class="btn" type="button">Aplicar</button>
+
+      <div class="step-card checkout-card packages-container">
+        <div class="section-row">
+          <span class="section-label">Selecciona tu Recarga</span>
+          <button id="btn-leer" type="button" class="promo-toggle checkout-read-more" style="display:none;">Leer</button>
         </div>
-        <small id="ref-status" class="ref-status"></small>
+        <div id="items-grid" class="items-grid"></div>
+        <div class="more-wrap">
+          <button id="btn-more" class="btn" type="button" hidden>Ver más</button>
+        </div>
       </div>
-      <label class="check"><input id="save-data" type="checkbox"> Guardar datos para futuras compras</label>
-      <button id="btn-buy" class="btn primary full" type="button">Comprar</button>
+
+      <div class="step-card checkout-card payment-card">
+        <span class="section-label">Método de Pago</span>
+        <div class="pay-methods payment-options">
+          <button id="pay-bsd" class="btn pay pay-method primary" type="button">
+            <span>Pagomóvil</span>
+          </button>
+          <button id="pay-usd" class="btn pay pay-method" type="button">
+            <span class="binance-label">BINANCE</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="step-card checkout-card promo-card">
+        <details class="promo-disclosure">
+          <summary class="promo-toggle">✨ ¿Tienes un código?</summary>
+          <div class="promo-content open discount-section" role="group" aria-label="Código de descuento">
+            <div class="promo-flex discount-row">
+              <input id="ref-code" class="input" type="text" placeholder="Ej: NUEVO10">
+              <button id="btn-apply-ref" class="promo-apply-btn" type="button">Ok</button>
+            </div>
+            <small id="ref-status" class="ref-status"></small>
+          </div>
+        </details>
+      </div>
+
+      <div class="step-card checkout-card final-card">
+        <div class="summary">
+          <span>Total</span>
+          <strong id="summary-price">-</strong>
+        </div>
+        <button id="btn-buy" class="btn primary full" type="button">Comprar</button>
+      </div>
     </div>
   </div>
 </section>

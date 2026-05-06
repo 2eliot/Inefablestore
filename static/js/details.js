@@ -67,42 +67,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (step4Title) {
       step4Title.dataset.step = '3';
-      step4Title.textContent = 'Ingresa tus datos';
+      step4Title.textContent = 'Finalizar compra';
     }
   }
 
   function ensureDesktopQty() {
-    if (!selBox) return;
-    const isPhone = window.matchMedia('(max-width: 699px)').matches;
-    if (isPhone) return;
-    if (!dqWrap) {
-      dqWrap = document.createElement('div');
-      dqWrap.style.display = 'flex';
-      dqWrap.style.alignItems = 'center';
-      dqWrap.style.justifyContent = 'center';
-      dqWrap.style.gap = '10px';
-      dqWrap.style.marginTop = '8px';
-      dqMinus = document.createElement('button');
-      dqMinus.type = 'button';
-      dqMinus.className = 'btn';
-      dqMinus.textContent = '−';
-      dqVal = document.createElement('span');
-      dqVal.style.minWidth = '28px';
-      dqVal.style.textAlign = 'center';
-      dqVal.style.fontWeight = '900';
-      dqVal.textContent = String(Math.max(1, quantity || 1));
-      dqPlus = document.createElement('button');
-      dqPlus.type = 'button';
-      dqPlus.className = 'btn';
-      dqPlus.textContent = '+';
-      dqWrap.appendChild(dqMinus);
-      dqWrap.appendChild(dqVal);
-      dqWrap.appendChild(dqPlus);
-      selBox.parentNode && selBox.parentNode.insertBefore(dqWrap, selBox.nextSibling);
-      dqPlus.addEventListener('click', () => setQuantity((quantity || 1) + 1));
-      dqMinus.addEventListener('click', () => setQuantity((quantity || 1) - 1));
-    }
-    if (dqVal) dqVal.textContent = String(Math.max(1, quantity || 1));
+    return;
   }
 
   // Right small login button opens auth modal (only when active)
@@ -154,14 +124,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (mfsMinus) mfsMinus.addEventListener('click', () => setQuantity((quantity || 1) - 1));
 
   
-  const inputEmail = document.getElementById('email');
-  const inputPhone = document.getElementById('phone');
-  const inputPhoneLocal = document.getElementById('phone-local');
-  const inputPhoneCc = document.getElementById('phone-cc');
-  const phoneCcBtn = document.querySelector('.phone-prefix .phone-cc-btn');
-  const phoneCcMenu = document.getElementById('phone-cc-menu');
-  const phoneCcLabel = document.getElementById('phone-cc-label');
-  const chkSave = document.getElementById('save-data');
   const btnBuy = document.getElementById('btn-buy');
   const inputRefCode = document.getElementById('ref-code');
   const btnApplyRef = document.getElementById('btn-apply-ref');
@@ -190,94 +152,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const MOBILE_PREVIEW_COUNT = 6;
   const MOBILE_GRID_COLUMNS = 2;
 
+  function syncMethodButtonState() {
+    if (!btnPayBSD || !btnPayUSD || methodChosen) return;
+    if (currency === 'BSD') {
+      btnPayBSD.classList.add('primary');
+      btnPayUSD.classList.remove('primary');
+    } else {
+      btnPayUSD.classList.add('primary');
+      btnPayBSD.classList.remove('primary');
+    }
+  }
+
+  syncMethodButtonState();
+
   // Hide "Ver más" button by default until we know there are more than 6 items
   if (btnMore) {
     btnMore.hidden = true;
     btnMore.style.display = 'none';
-  }
-
-  function updateCombinedPhone() {
-    if (!inputPhone) return;
-    const cc = (inputPhoneCc ? inputPhoneCc.value.trim() : '').replace(/\s+/g, '');
-    const local = (inputPhoneLocal ? inputPhoneLocal.value.trim() : '');
-    const val = [cc, local].filter(Boolean).join(' ');
-    inputPhone.value = val;
-  }
-
-  // Country code dropdown with dynamic population and search
-  async function populateCountries() {
-    if (!phoneCcMenu) return;
-    // Build container: search + list
-    phoneCcMenu.innerHTML = '';
-    const search = document.createElement('input');
-    search.type = 'text';
-    search.placeholder = 'Buscar país o código';
-    search.className = 'phone-cc-search';
-    const list = document.createElement('div');
-    list.className = 'phone-cc-list';
-    phoneCcMenu.appendChild(search);
-    phoneCcMenu.appendChild(list);
-    // Loading state
-    const loading = document.createElement('div');
-    loading.style.color = '#94a3b8';
-    loading.style.padding = '6px 8px';
-    loading.textContent = 'Cargando...';
-    list.appendChild(loading);
-    let rows = [];
-    try {
-      const res = await fetch('https://restcountries.com/v3.1/all?fields=name,idd,cca2');
-      const data = await res.json();
-      rows = (data || []).map(r => {
-        const root = (r.idd && r.idd.root) || '';
-        const sufs = (r.idd && r.idd.suffixes) || [];
-        const dial = (root && sufs && sufs.length) ? (root + sufs[0]) : (root || '');
-        return {
-          name: (r.name && (r.name.common || r.name.official)) || '',
-          code: (r.cca2 || '').toLowerCase(),
-          dial: dial || ''
-        };
-      }).filter(x => x.name && x.code && x.dial.startsWith('+'));
-      rows.sort((a,b) => a.name.localeCompare(b.name, 'es')); 
-    } catch(_) {
-      rows = [ { name: 'Venezuela', code: 've', dial: '+58' } ];
-    }
-    function render(filter) {
-      list.innerHTML = '';
-      const f = (filter || '').toLowerCase();
-      rows.filter(x => !f || x.name.toLowerCase().includes(f) || x.dial.includes(f))
-        .forEach(x => {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.setAttribute('data-cc', x.dial);
-          btn.setAttribute('data-flag', x.code);
-          btn.className = 'phone-cc-item';
-          btn.innerHTML = `
-            <span class="cc-left">
-              <img src="https://flagcdn.com/w20/${x.code}.png" alt="" width="16" height="12">
-              <span class="cc-name">${x.name}</span>
-            </span>
-            <span class="cc-dial">${x.dial}</span>
-          `;
-          btn.addEventListener('click', () => {
-            if (inputPhoneCc) inputPhoneCc.value = x.dial;
-            if (phoneCcLabel) phoneCcLabel.textContent = x.dial;
-            const img = phoneCcBtn && phoneCcBtn.querySelector('img');
-            if (img) img.src = `https://flagcdn.com/w20/${x.code}.png`;
-            phoneCcMenu.setAttribute('hidden', '');
-            updateCombinedPhone();
-          });
-          list.appendChild(btn);
-        });
-      if (!list.children.length) {
-        const empty = document.createElement('div');
-        empty.style.color = '#94a3b8';
-        empty.style.padding = '6px 8px';
-        empty.textContent = 'Sin resultados';
-        list.appendChild(empty);
-      }
-    }
-    search.addEventListener('input', () => render(search.value));
-    render('');
   }
 
   function mobileFooterHeight() {
@@ -290,75 +181,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return Math.max(0, r.height || 0);
     } catch (_) { return 0; }
   }
-
-  function positionPhoneMenu() {
-    if (!phoneCcBtn || !phoneCcMenu) return;
-    const menu = phoneCcMenu;
-    const list = menu.querySelector('.phone-cc-list');
-    const btnRect = phoneCcBtn.getBoundingClientRect();
-    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
-    const footerH = mobileFooterHeight();
-    const margin = 10;
-    const desired = 192; // 4 items x 44px aprox + padding
-    // Space below button considering footer
-    const spaceBelow = Math.max(0, vh - btnRect.bottom - footerH - margin);
-    const spaceAbove = Math.max(0, btnRect.top - margin);
-    // Default open downward
-    menu.style.top = 'calc(100% + 6px)';
-    menu.style.bottom = 'auto';
-    const maxHDown = Math.max(120, Math.min(desired, spaceBelow));
-    const maxHUp = Math.max(120, Math.min(desired, spaceAbove));
-    let useUp = false;
-    if (maxHDown < 140 && maxHUp > maxHDown) useUp = true;
-    if (useUp) {
-      menu.style.top = 'auto';
-      menu.style.bottom = 'calc(100% + 6px)';
-      if (list) list.style.maxHeight = `${maxHUp}px`;
-      else menu.style.maxHeight = `${maxHUp}px`;
-    } else {
-      if (list) list.style.maxHeight = `${maxHDown}px`;
-      else menu.style.maxHeight = `${maxHDown}px`;
-    }
-  }
-
-  if (phoneCcBtn && phoneCcMenu) {
-    phoneCcBtn.addEventListener('click', async () => {
-      const isHidden = phoneCcMenu.hasAttribute('hidden');
-      if (isHidden) {
-        phoneCcMenu.removeAttribute('hidden');
-        phoneCcBtn.classList.add('open');
-        phoneCcBtn.setAttribute('aria-expanded', 'true');
-        await populateCountries();
-        positionPhoneMenu();
-      } else {
-        phoneCcMenu.setAttribute('hidden', '');
-        phoneCcBtn.classList.remove('open');
-        phoneCcBtn.setAttribute('aria-expanded', 'false');
-      }
-    });
-    // Keyboard support
-    phoneCcBtn.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        phoneCcBtn.click();
-      }
-    });
-    // Close on outside click
-    document.addEventListener('click', (e) => {
-      if (!phoneCcMenu) return;
-      if (phoneCcMenu.hasAttribute('hidden')) return;
-      if (e.target === phoneCcBtn || phoneCcBtn.contains(e.target)) return;
-      if (phoneCcMenu.contains(e.target)) return;
-      phoneCcMenu.setAttribute('hidden', '');
-      phoneCcBtn.classList.remove('open');
-      phoneCcBtn.setAttribute('aria-expanded', 'false');
-    });
-    // Re-position on resize/scroll while open
-    window.addEventListener('resize', () => { if (!phoneCcMenu.hasAttribute('hidden')) positionPhoneMenu(); });
-    window.addEventListener('scroll', () => { if (!phoneCcMenu.hasAttribute('hidden')) positionPhoneMenu(); }, { passive: true });
-  }
-
-  if (inputPhoneLocal) inputPhoneLocal.addEventListener('input', updateCombinedPhone);
 
   // Player ID: numeric-only
   if (inputCustomerId) {
@@ -449,6 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
       verifiedNick = nick || '';
       try { root.dataset.verifiedNick = verifiedNick; } catch (_) {}
       if (!verifiedNick) return;
+      playerNickname.style.display = 'block';
       playerNickname.style.color = '#86efac';
       playerNickname.textContent = `Nick: ${verifiedNick}`;
       if (btnVerifyPlayer) {
@@ -458,6 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setNickUILoading() {
+      playerNickname.style.display = 'block';
       playerNickname.style.color = '#94a3b8';
       playerNickname.textContent = 'Verificando...';
       if (btnVerifyPlayer) {
@@ -469,6 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function setNickUIErr(msg) {
       verifiedNick = '';
       try { root.dataset.verifiedNick = ''; } catch (_) {}
+      playerNickname.style.display = 'block';
       playerNickname.style.color = '#fca5a5';
       playerNickname.textContent = msg || 'No se pudo verificar';
       if (btnVerifyPlayer) {
@@ -508,10 +333,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function shouldKeepVerifying(message, statusCode) {
       const msg = String(message || '').trim();
-      if (!msg) return true;
-      if (msg === 'No se pudo verificar el ID') return true;
-      if (msg === 'ID no encontrado' && (isSoPackage || activeLogin || isBsPackage || isMlPackage)) return true;
-      if (statusCode >= 500) return true;
+      if (!msg) return statusCode >= 500 || statusCode === 0;
+      if (statusCode >= 500 || statusCode === 0) return true;
       return false;
     }
 
@@ -637,6 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!uid) {
         verifiedNick = '';
         try { root.dataset.verifiedNick = ''; } catch (_) {}
+        playerNickname.style.display = 'none';
         playerNickname.textContent = '';
         if (btnVerifyPlayer) {
           btnVerifyPlayer.textContent = verifyBtnDefaultText;
@@ -658,7 +482,10 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelActiveVerification();
         verifiedNick = '';
         try { root.dataset.verifiedNick = ''; } catch (_) {}
-        if (playerNickname) playerNickname.textContent = '';
+        if (playerNickname) {
+          playerNickname.style.display = 'none';
+          playerNickname.textContent = '';
+        }
         if (!isMlPackage && !soRequiresZone) return;
         const uid = (inputCustomerId.value || '').trim();
         if (!uid) return;
@@ -689,7 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (it) {
       if (mfsTitle) mfsTitle.textContent = it.title || '';
       if (mfsPrice) {
-        const unit = currency === 'BSD' ? (Number(it.price || 0) * (rate || 0)) : Number(it.price || 0);
+        const unit = currentUnitValue(it);
         const val = unit * Math.max(1, quantity || 1);
         mfsPrice.textContent = formatPrice(val);
       }
@@ -697,7 +524,6 @@ document.addEventListener('DOMContentLoaded', () => {
     mfs.classList.add('show');
     mfs.removeAttribute('hidden');
     if (mfsQtyVal) mfsQtyVal.textContent = String(Math.max(1, quantity || 1));
-    if (dqVal) dqVal.textContent = String(Math.max(1, quantity || 1));
   }
 
   function formatPrice(n){
@@ -711,11 +537,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function discountFractionForItem(it) {
+    if (!it || !validRef) return 0;
+    let frac = Number(validRef.discount || 0);
+    try {
+      if (Array.isArray(validRef.item_discounts)) {
+        const hit = validRef.item_discounts.find(x => Number(x.item_id) === Number(it.id));
+        if (hit && typeof hit.discount === 'number') frac = Number(hit.discount || 0);
+      }
+    } catch (_) {}
+    return Math.max(0, Math.min(1, frac));
+  }
+
+  function discountedUnitUsdValue(it) {
+    const base = Number((it && it.price) || 0);
+    const frac = discountFractionForItem(it);
+    return frac > 0 ? base * (1 - frac) : base;
+  }
+
   // Returns unit price in the currently selected currency
   function currentUnitValue(it) {
     if (!it) return 0;
-    const base = Number(it.price || 0);
-    return (currency === 'BSD') ? (base * (rate || 0)) : base;
+    const unitUsd = discountedUnitUsdValue(it);
+    return (currency === 'BSD') ? (unitUsd * (rate || 0)) : unitUsd;
   }
 
   function getMobilePreviewLimit(orderedItems, specialItems) {
@@ -728,6 +572,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const extraNeeded = remainder === 0 ? 0 : (MOBILE_GRID_COLUMNS - remainder);
 
     return Math.min(totalItems, MOBILE_PREVIEW_COUNT + extraNeeded);
+  }
+
+  function syncReadMoreForItem(it) {
+    if (!btnLeer) return;
+    const isSpecial = !!it && ((it.sticker || '').toLowerCase() === 'special');
+    const pkgDesc = gameSpecDescEl ? String(gameSpecDescEl.textContent || '').trim() : '';
+    const hasDesc = !!pkgDesc;
+    if (isSpecial && hasDesc) {
+      btnLeer.style.display = 'inline';
+      if (pkgInfoContent) pkgInfoContent.textContent = pkgDesc;
+      return;
+    }
+    btnLeer.style.display = 'none';
   }
 
   function renderItems(items) {
@@ -825,16 +682,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const b = document.createElement('button');
       b.className = 'item-pill';
+      const subtitle = String(it.subtitle || '').trim();
+      if (!subtitle) b.classList.add('no-subtitle');
       // Do NOT show price in the package selector; only title. Optionally show icon (forced size).
       const isPhone = window.matchMedia('(max-width: 700px)').matches;
       const iconSize = isPhone ? 30 : 50;
       const iconHtml = (it.icon_path && it.icon_path.trim())
         ? `<img class=\"item-icon\" src=\"${it.icon_path}\" alt=\"\" style=\"width:${iconSize}px;height:${iconSize}px;object-fit:contain;display:inline-block;\" />`
         : '';
+      const subtitleHtml = subtitle ? `<div class=\"item-pill-subtitle\">${subtitle}</div>` : '';
       b.innerHTML = `
-  <div class="item-pill-col item-pill-row" style="display:flex;align-items:center;gap:8px;">
-    <div class="item-pill-title">${it.title || ''}</div>
-    ${iconHtml}
+  <div class="item-pill-body">
+    <div class="item-pill-head">
+      <div class="item-pill-title">${it.title || ''}</div>
+      ${iconHtml}
+    </div>
+    ${subtitleHtml}
   </div>
 `;
       b.addEventListener('click', () => {
@@ -847,18 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
         grid.querySelectorAll('.item-pill').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         selectedItemIndex = items.indexOf(it);
-        // Toggle 'Leer' button based on special flag and special package description
-        if (btnLeer) {
-          const isSpecial = ((it.sticker || '').toLowerCase() === 'special');
-          const pkgDesc = gameSpecDescEl ? String(gameSpecDescEl.textContent || '').trim() : '';
-          const hasDesc = !!pkgDesc;
-          if (isSpecial && hasDesc) {
-            btnLeer.style.display = 'inline';
-            if (pkgInfoContent) pkgInfoContent.textContent = pkgDesc;
-          } else {
-            btnLeer.style.display = 'none';
-          }
-        }
+        syncReadMoreForItem(it);
         persistState();
         updateMobileFooter();
         ensureDesktopQty();
@@ -873,17 +725,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selPrice.textContent = formatPrice(total);
         sumPrice.textContent = formatPrice(total);
         ensureDesktopQty();
-        if (btnLeer) {
-          const isSpecial = ((it.sticker || '').toLowerCase() === 'special');
-          const pkgDesc = gameSpecDescEl ? String(gameSpecDescEl.textContent || '').trim() : '';
-          const hasDesc = !!pkgDesc;
-          if (isSpecial && hasDesc) {
-            btnLeer.style.display = 'inline';
-            if (pkgInfoContent) pkgInfoContent.textContent = pkgDesc;
-          } else {
-            btnLeer.style.display = 'none';
-          }
-        }
+        syncReadMoreForItem(it);
       }
       // Autoselect first visible if none selected yet
       grid.appendChild(b);
@@ -896,7 +738,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (_) { /* ignore */ }
     });
-    
     // Control "Ver más" button visibility after rendering all items
     if (btnMore) {
       // Always hide on desktop
@@ -915,6 +756,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     }
+    syncReadMoreForItem((items && selectedItemIndex >= 0) ? items[selectedItemIndex] : null);
   }
 
   // Toggle "Ver más" / "Ver menos" on mobile
@@ -1061,102 +903,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // If user hasn't chosen a method yet, keep defaulting: BsD on mobile, USD on desktop
       if (!methodChosen) {
         currency = isMobile ? 'BSD' : 'USD';
+        syncMethodButtonState();
       }
       renderItems(allItems);
     }
     updateMobileFooter();
   });
 
-  // =====================
-  // Local persistence + profile autofill
-  // =====================
-  const LS_KEY = 'inefablestore_checkout';
-
-  function persistState() {
-    if (!chkSave || !chkSave.checked) return; // only persist if user opted in
-    const data = {
-      customer_id: isGift ? '' : (inputCustomerId ? inputCustomerId.value.trim() : ''),
-      customer_zone: (zoneRequiredForCheckout && !isGift && inputCustomerZone) ? (inputCustomerZone.value.trim()) : '',
-      email: inputEmail ? inputEmail.value.trim() : '',
-      phone: inputPhone ? inputPhone.value.trim() : '',
-      currency,
-      selectedIndex: selectedItemIndex,
-      quantity: Math.max(1, quantity || 1),
-      save: true
-    };
-    try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (_) {}
-  }
-
-  function clearState() {
-    try { localStorage.removeItem(LS_KEY); } catch (_) {}
-  }
-
-  function loadLocal() {
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch (_) { return null; }
-  }
-
-  function applyState(state) {
-    if (!state || !state.save) return; // only apply if user opted in previously
-    if (chkSave) chkSave.checked = true;
-    if (!isGift && inputCustomerId && state.customer_id && !inputCustomerId.value) inputCustomerId.value = state.customer_id;
-    if (!isGift && zoneRequiredForCheckout && inputCustomerZone && state.customer_zone && !inputCustomerZone.value) inputCustomerZone.value = state.customer_zone;
-    if (inputEmail && state.email) inputEmail.value = state.email;
-    if (inputPhone && state.phone) {
-      // Try to split +CC local
-      const s = String(state.phone || '').trim();
-      const m = s.match(/^(\+\d{1,4})\s+(.*)$/);
-      if (m) {
-        if (inputPhoneCc) inputPhoneCc.value = m[1];
-        if (phoneCcLabel) phoneCcLabel.textContent = m[1];
-        if (inputPhoneLocal && !inputPhoneLocal.value) inputPhoneLocal.value = m[2];
-        updateCombinedPhone();
-      } else {
-        if (inputPhoneLocal && !inputPhoneLocal.value) inputPhoneLocal.value = s;
-        updateCombinedPhone();
-      }
-    }
-    if (typeof state.selectedIndex === 'number') selectedItemIndex = state.selectedIndex;
-    if (state.currency === 'BSD' || state.currency === 'USD') setCurrency(state.currency);
-    if (typeof state.quantity === 'number' && state.quantity > 0) {
-      quantity = Math.max(1, Math.floor(state.quantity));
-      if (mfsQtyVal) mfsQtyVal.textContent = String(quantity);
-    }
-    updateMobileFooter();
-  }
-
-  async function loadProfileThenLocal() {
-    // Try admin profile endpoint (logged-in admin).
-    // If fails or not admin, fall back to localStorage only.
-    let applied = false;
-    try {
-      const res = await fetch('/auth/profile');
-      const data = await res.json();
-      if (data && data.ok && data.profile) {
-        if (inputEmail) inputEmail.value = data.profile.email || '';
-        if (inputPhone) inputPhone.value = data.profile.phone || '';
-        applied = true;
-      }
-    } catch (_) {}
-    if (!applied) {
-      const st = loadLocal();
-      applyState(st);
-    }
-  }
-
-  // Wire inputs to persist
-  [inputEmail, inputPhone].forEach(el => {
-    if (!el) return;
-    el.addEventListener('input', () => { if (chkSave && chkSave.checked) persistState(); });
-  });
-  if (chkSave) chkSave.addEventListener('change', () => { if (chkSave.checked) { persistState(); } else { clearState(); } });
-  if (btnBuy) btnBuy.addEventListener('click', () => { if (chkSave && chkSave.checked) persistState(); });
-
-  // Initial load of profile/local state after items/rate are ready
-  loadProfileThenLocal();
+  function persistState() {}
 
   // =====================
   // Pay modal logic
@@ -1169,19 +923,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function computeCurrentTotal() {
     const it = currentSelectedItem();
     if (!it) return 0;
-    const baseUsd = Number(it.price || 0);
-    let totalUsd = baseUsd;
-    if (validRef) {
-      // Prefer item-specific discount if available
-      let frac = Number(validRef.discount || 0);
-      try {
-        if (Array.isArray(validRef.item_discounts)) {
-          const hit = validRef.item_discounts.find(x => Number(x.item_id) === Number(it.id));
-          if (hit && typeof hit.discount === 'number') frac = Number(hit.discount || 0);
-        }
-      } catch(_){}
-      if (frac > 0) totalUsd = totalUsd * (1 - frac);
-    }
+    const totalUsd = discountedUnitUsdValue(it) * Math.max(1, quantity || 1);
     return currency === 'BSD' ? totalUsd * (rate || 0) : totalUsd;
   }
 
@@ -1285,24 +1027,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (_) {}
 
-      // Persist current selection if user opted
-      if (chkSave && chkSave.checked) persistState();
       const gid = root.getAttribute('data-game-id');
       const method = (currency === 'BSD') ? 'pm' : 'binance';
-      // Require email before proceeding
-      const emailVal = (inputEmail && inputEmail.value.trim()) || '';
-      if (!emailVal) {
-        alert('Ingresa tu correo');
-        if (inputEmail) inputEmail.focus();
-        return;
-      }
-      // Require phone before proceeding to checkout
-      updateCombinedPhone();
-      if (!inputPhone || !inputPhone.value.trim()) {
-        alert('Ingresa tu número de teléfono');
-        if (inputPhoneLocal) inputPhoneLocal.focus();
-        return;
-      }
       const rcode = inputRefCode ? inputRefCode.value.trim() : '';
       if (rcode) {
         const refOk = await validateRefCode();
@@ -1318,8 +1044,6 @@ document.addEventListener('DOMContentLoaded', () => {
         cur: currency,
         method,
         n: '',
-        e: emailVal,
-        p: (inputPhone && inputPhone.value.trim()) || '',
         q: String(Math.max(1, quantity || 1))
       };
       if (!isGift && inputCustomerId) {
@@ -1365,6 +1089,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch(_){}
       if (refStatus) { refStatus.style.color = '#86efac'; refStatus.textContent = `Código válido: ${code} (${shownPct}% OFF)`; }
       renderItems(allItems);
+      updateMobileFooter();
       return true;
     } catch (e) {
       validRef = null;
@@ -1374,6 +1099,7 @@ document.addEventListener('DOMContentLoaded', () => {
         refStatus.textContent = refValidationError;
       }
       renderItems(allItems);
+      updateMobileFooter();
       return false;
     }
   }
@@ -1389,6 +1115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         refStatus.textContent = 'Ingresa un código para validarlo.';
       }
       renderItems(allItems);
+      updateMobileFooter();
       inputRefCode.focus();
       return false;
     }
@@ -1421,6 +1148,7 @@ document.addEventListener('DOMContentLoaded', () => {
         validRef = null;
         if (refStatus) refStatus.textContent = '';
         renderItems(allItems);
+        updateMobileFooter();
       }
     });
   }

@@ -1211,6 +1211,9 @@ def _auto_approve_order(order, *, source_label: str = "AutoApprove", binance_aut
     if (order.status or "").lower() != "pending":
         print(f"[{source_label}] Order #{order.id} is '{order.status}', not pending. Aborting auto-approve.")
         return
+    if _is_reference_already_used(order.reference, exclude_order_id=order.id):
+        print(f"[{source_label}] Reference '{order.reference}' already used in another approved order. Aborting auto-approve for order #{order.id}.")
+        return
     try:
         order.status = "approved"
         db.session.commit()
@@ -1901,6 +1904,7 @@ class GamePackageItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     store_package_id = db.Column(db.Integer, db.ForeignKey("store_packages.id"), nullable=False)
     title = db.Column(db.String(200), nullable=False)
+    subtitle = db.Column(db.String(200), default="")
     description = db.Column(db.Text, default="")
     price = db.Column(db.Float, default=0.0)
     profit_net_usd = db.Column(db.Float, default=0.0)
@@ -4838,6 +4842,9 @@ with app.app_context():
         if "sticker" not in gp_cols:
             db.session.execute(text("ALTER TABLE game_packages ADD COLUMN sticker TEXT DEFAULT ''"))
             db.session.commit()
+        if "subtitle" not in gp_cols:
+            db.session.execute(text("ALTER TABLE game_packages ADD COLUMN subtitle TEXT DEFAULT ''"))
+            db.session.commit()
         if "icon_path" not in gp_cols:
             db.session.execute(text("ALTER TABLE game_packages ADD COLUMN icon_path TEXT DEFAULT ''"))
             db.session.commit()
@@ -5332,6 +5339,8 @@ def store_payments():
         "binance_phone": get_config_value("binance_phone", ""),
         "pm_image_path": get_config_value("pm_image_path", ""),
         "binance_image_path": get_config_value("binance_image_path", ""),
+        "pm_qr_path": get_config_value("pm_qr_path", ""),
+        "binance_qr_path": get_config_value("binance_qr_path", ""),
         "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
         "payment_verification_provider": _payment_verification_provider(),
         "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
@@ -5612,6 +5621,8 @@ def admin_config_payments_get():
         "binance_phone": get_config_value("binance_phone", ""),
         "pm_image_path": get_config_value("pm_image_path", ""),
         "binance_image_path": get_config_value("binance_image_path", ""),
+        "pm_qr_path": get_config_value("pm_qr_path", ""),
+        "binance_qr_path": get_config_value("binance_qr_path", ""),
         "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
         "payment_verification_provider": _payment_verification_provider(),
         "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
@@ -5648,6 +5659,8 @@ def admin_config_payments_set():
         "binance_phone": (data.get("binance_phone") or "").strip(),
         "pm_image_path": (data.get("pm_image_path") or "").strip(),
         "binance_image_path": (data.get("binance_image_path") or "").strip(),
+        "pm_qr_path": (data.get("pm_qr_path") or "").strip(),
+        "binance_qr_path": (data.get("binance_qr_path") or "").strip(),
         "binance_auto_enabled": "1" if data.get("binance_auto_enabled") else "0",
         "pabilo_auto_verify_enabled": "1" if data.get("pabilo_auto_verify_enabled") else "0",
         "pabilo_api_key": (data.get("pabilo_api_key") or "").strip(),
@@ -5701,6 +5714,8 @@ def admin_config_payments_set():
             "binance_phone": values.get("binance_phone", ""),
             "pm_image_path": values.get("pm_image_path", ""),
             "binance_image_path": values.get("binance_image_path", ""),
+            "pm_qr_path": values.get("pm_qr_path", ""),
+            "binance_qr_path": values.get("binance_qr_path", ""),
             "binance_auto_enabled": values.get("binance_auto_enabled", "0"),
             "payment_verification_provider": values.get("payment_verification_provider", ""),
             "pabilo_auto_verify_enabled": values.get("pabilo_auto_verify_enabled", "0"),
@@ -7809,7 +7824,7 @@ def store_game_items(gid: int):
     return jsonify({
         "ok": True,
         "items": [
-            {"id": it.id, "title": it.title, "price": it.price, "description": (it.description or ""), "sticker": (it.sticker or ""), "icon_path": (it.icon_path or "")}
+            {"id": it.id, "title": it.title, "subtitle": (it.subtitle or ""), "price": it.price, "description": (it.description or ""), "sticker": (it.sticker or ""), "icon_path": (it.icon_path or "")}
             for it in items
         ]
     })
@@ -8188,6 +8203,7 @@ def admin_game_items_list(gid: int):
             {
                 "id": it.id,
                 "title": it.title,
+                "subtitle": (it.subtitle or ""),
                 "price": it.price,
                 "cost_unit_usd": float(it.profit_net_usd or 0.0),
                 "description": it.description,
@@ -8209,6 +8225,7 @@ def admin_game_items_create(gid: int):
         return jsonify({"ok": False, "error": "Juego no existe"}), 404
     data = request.get_json(silent=True) or {}
     title = (data.get("title") or "").strip()
+    subtitle = (data.get("subtitle") or "").strip()
     description = (data.get("description") or "").strip()
     special_description = (data.get("special_description") or "").strip()
     special_description = (data.get("special_description") or "").strip()
@@ -8220,10 +8237,10 @@ def admin_game_items_create(gid: int):
         price = 0.0
     if not title:
         return jsonify({"ok": False, "error": "Título requerido"}), 400
-    item = GamePackageItem(store_package_id=gid, title=title, description=description, price=price, sticker=sticker, icon_path=icon_path, active=True)
+    item = GamePackageItem(store_package_id=gid, title=title, subtitle=subtitle, description=description, price=price, sticker=sticker, icon_path=icon_path, active=True)
     db.session.add(item)
     db.session.commit()
-    return jsonify({"ok": True, "item": {"id": item.id, "title": item.title, "price": item.price, "description": item.description, "sticker": (item.sticker or ""), "icon_path": (item.icon_path or ""), "active": item.active}})
+    return jsonify({"ok": True, "item": {"id": item.id, "title": item.title, "subtitle": (item.subtitle or ""), "price": item.price, "description": item.description, "sticker": (item.sticker or ""), "icon_path": (item.icon_path or ""), "active": item.active}})
 
 @app.route("/admin/package/item/<int:item_id>", methods=["PUT", "PATCH"])
 def admin_game_items_update(item_id: int):
@@ -8236,6 +8253,8 @@ def admin_game_items_update(item_id: int):
     data = request.get_json(silent=True) or {}
     if "title" in data:
         item.title = (data.get("title") or "").strip()
+    if "subtitle" in data:
+        item.subtitle = (data.get("subtitle") or "").strip()
     if "description" in data:
         item.description = (data.get("description") or "").strip()
     if "sticker" in data:
@@ -8302,6 +8321,8 @@ def admin_game_items_bulk_update(gid: int):
             continue
         if "title" in entry:
             item.title = (entry.get("title") or "").strip()
+        if "subtitle" in entry:
+            item.subtitle = (entry.get("subtitle") or "").strip()
         if "sticker" in entry:
             item.sticker = (entry.get("sticker") or "").strip()
         if "icon_path" in entry:

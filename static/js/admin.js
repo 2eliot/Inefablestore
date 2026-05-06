@@ -214,6 +214,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSavePayments = document.getElementById('btn-save-payments');
   const pmImage = document.getElementById('pm-image');
   const binImage = document.getElementById('binance-image');
+  const pmQrImage = document.getElementById('pm-qr-image');
+  const binQrImage = document.getElementById('binance-qr-image');
   const binAutoEnabled = document.getElementById('binance-auto-enabled');
   const binAutoNote = document.getElementById('binance-auto-note');
   const paymentVerificationProvider = document.getElementById('payment-verification-provider');
@@ -908,6 +910,8 @@ window.fetchPayments = fetchPayments;
       binance_phone: binPhone ? binPhone.value.trim() : '',
       pm_image_path: pmImage ? pmImage.value.trim() : '',
       binance_image_path: binImage ? binImage.value.trim() : '',
+      pm_qr_path: pmQrImage ? pmQrImage.value.trim() : '',
+      binance_qr_path: binQrImage ? binQrImage.value.trim() : '',
       binance_auto_enabled: binAutoEnabled ? binAutoEnabled.checked : false,
       payment_verification_provider: paymentVerificationProvider ? paymentVerificationProvider.value : '',
       pabilo_auto_verify_enabled: pabiloAutoVerifyEnabled ? pabiloAutoVerifyEnabled.checked : false,
@@ -947,6 +951,8 @@ window.fetchPayments = fetchPayments;
     if (binPhone) binPhone.value = data.binance_phone || '';
     if (pmImage) { pmImage.value = data.pm_image_path || ''; syncDropdown(pmImage); }
     if (binImage) { binImage.value = data.binance_image_path || ''; syncDropdown(binImage); }
+    if (pmQrImage) { pmQrImage.value = data.pm_qr_path || ''; syncDropdown(pmQrImage); }
+    if (binQrImage) { binQrImage.value = data.binance_qr_path || ''; syncDropdown(binQrImage); }
     if (binAutoEnabled) {
       binAutoEnabled.checked = (data.binance_auto_enabled === '1' || data.binance_auto_enabled === 1 || data.binance_auto_enabled === true);
       if (binAutoNote) binAutoNote.style.display = binAutoEnabled.checked ? '' : 'none';
@@ -2855,6 +2861,8 @@ window.fetchHero = fetchHero;
   mountConfigDropdown('slot-hero-3', hero3);
   mountConfigDropdown('slot-pm-image', pmImage);
   mountConfigDropdown('slot-binance-image', binImage);
+  mountConfigDropdown('slot-pm-qr-image', pmQrImage);
+  mountConfigDropdown('slot-binance-qr-image', binQrImage);
 
   // Package creation form dropdown
   {
@@ -2997,6 +3005,7 @@ window.fetchHero = fetchHero;
               <div class="items-list"></div>
               <div class="pkg-new-item">
                 <div class="pkg-edit-field"><label>T\u00edtulo</label><input class="new-item-title" type="text" placeholder="Nuevo item" /></div>
+                <div class="pkg-edit-field"><label>Subtítulo (opc.)</label><input class="new-item-subtitle" type="text" placeholder="+10 Extra" /></div>
                 <div class="pkg-edit-field"><label>Precio</label><input class="new-item-price" type="number" step="0.01" min="0" placeholder="0.00" /></div>
                 <div class="pkg-edit-field" style="display:flex;align-items:end;"><button class="btn btn-item-create" type="button">+ Agregar</button></div>
                 <div class="pkg-new-item-extras">
@@ -3455,12 +3464,14 @@ if (btnSaveHero) {
           const itemId = row.getAttribute('data-id');
           if (!itemId) return;
           const titleEl = row.querySelector('.it-title');
+          const subtitleEl = row.querySelector('.it-subtitle');
           const priceEl = row.querySelector('.it-price');
           const specialEl = row.querySelector('.it-special');
           const iconEl = row.querySelector('.it-icon');
           itemsPayload.push({
             id: parseInt(itemId, 10),
             title: titleEl ? titleEl.value.trim() : '',
+            subtitle: subtitleEl ? subtitleEl.value.trim() : '',
             price: priceEl ? parseFloat(priceEl.value || '0') : 0,
             sticker: specialEl && specialEl.checked ? 'special' : '',
             icon_path: iconEl ? iconEl.value.trim() : ''
@@ -3499,9 +3510,11 @@ if (btnSaveHero) {
         const game = btnItemCreate.closest('.game-items');
         const gid = game && game.getAttribute('data-gid');
         const titleEl = game && game.querySelector('.new-item-title');
+        const subtitleEl = game && game.querySelector('.new-item-subtitle');
         const priceEl = game && game.querySelector('.new-item-price');
         const iconEl = game && game.querySelector('.new-item-icon');
         const title = titleEl ? titleEl.value.trim() : '';
+        const subtitle = subtitleEl ? subtitleEl.value.trim() : '';
         const price = priceEl ? parseFloat(priceEl.value || '0') : 0;
         const icon_path = iconEl ? iconEl.value.trim() : '';
         if (!gid || !title) { toast('T\u00edtulo requerido'); return; }
@@ -3510,10 +3523,11 @@ if (btnSaveHero) {
           const res = await fetch(`/admin/package/${gid}/items`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, price, icon_path })
+            body: JSON.stringify({ title, subtitle, price, icon_path })
           });
           if (!res.ok) throw new Error('No se pudo crear');
           if (titleEl) titleEl.value = '';
+          if (subtitleEl) subtitleEl.value = '';
           if (priceEl) priceEl.value = '';
           if (iconEl) iconEl.value = '';
           await loadGameItems(game, gid);
@@ -3580,6 +3594,9 @@ if (btnSaveHero) {
       row.innerHTML = `
         <label class="pkg-edit-field"><span>T\u00edtulo</span>
           <input class="it-title" type="text" value="${it.title || ''}" placeholder="T\u00edtulo" />
+        </label>
+        <label class="pkg-edit-field"><span>Subtítulo</span>
+          <input class="it-subtitle" type="text" value="${it.subtitle || ''}" placeholder="+10 Extra" />
         </label>
         <label class="pkg-edit-field"><span>Precio</span>
           <input class="it-price" type="number" step="0.01" min="0" value="${Number(it.price || 0)}" placeholder="Precio" />
