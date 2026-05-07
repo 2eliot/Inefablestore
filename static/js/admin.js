@@ -214,12 +214,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!minigamesConfigList) return;
     minigamesConfigList.innerHTML = '<div class="empty-state"><p>Cargando configuracion...</p></div>';
     if (minigamesSummary) minigamesSummary.innerHTML = '<span class="ty-pill">Cargando...</span>';
-    const res = await fetch('/admin/minigames/config');
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar minijuegos');
-    minigamesConfigCache = Array.isArray(data.games) ? data.games : [];
-    renderMinigamesSummary(data);
-    renderMinigamesConfig(minigamesConfigCache, data.thresholds || []);
+    try {
+      const res = await fetch('/admin/minigames/config');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar minijuegos');
+      minigamesConfigCache = Array.isArray(data.games) ? data.games : [];
+      renderMinigamesSummary(data);
+      renderMinigamesConfig(minigamesConfigCache, data.thresholds || []);
+    } catch (error) {
+      minigamesConfigList.innerHTML = `<div class="empty-state"><p>${error.message || 'No se pudo cargar minijuegos'}</p></div>`;
+      if (minigamesSummary) minigamesSummary.innerHTML = `<span class="ty-pill">${error.message || 'Sin datos'}</span>`;
+      throw error;
+    }
   }
 
   function renderMinigamesSummary(data) {
@@ -283,10 +289,15 @@ document.addEventListener('DOMContentLoaded', () => {
   async function fetchMinigameWinners() {
     if (!minigamesWinnersList) return;
     minigamesWinnersList.innerHTML = '<div class="empty-state"><p>Cargando ganadores...</p></div>';
-    const res = await fetch('/admin/minigames/winners');
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar ganadores');
-    renderMinigameWinners(data.winners || []);
+    try {
+      const res = await fetch('/admin/minigames/winners');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar ganadores');
+      renderMinigameWinners(data.winners || []);
+    } catch (error) {
+      minigamesWinnersList.innerHTML = `<div class="empty-state"><p>${error.message || 'No se pudo cargar ganadores'}</p></div>`;
+      throw error;
+    }
   }
 
   function renderMinigameWinners(items) {

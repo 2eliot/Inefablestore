@@ -5140,6 +5140,19 @@ class MinigameWinner(db.Model):
     played_at = db.Column(db.DateTime, nullable=True)
     delivered_at = db.Column(db.DateTime, nullable=True)
 
+
+def _ensure_minigame_tables_ready():
+    try:
+        from sqlalchemy import text
+
+        db.session.execute(text("SELECT 1 FROM minigame_prize_configs LIMIT 1"))
+        db.session.execute(text("SELECT 1 FROM minigame_winners LIMIT 1"))
+    except Exception:
+        try:
+            db.create_all()
+        except Exception:
+            pass
+
 # Initialize
 with app.app_context():
     db.create_all()
@@ -8485,6 +8498,8 @@ def admin_minigames_config_get():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
 
+    _ensure_minigame_tables_ready()
+
     packages = StorePackage.query.filter_by(active=True).order_by(StorePackage.name.asc()).all()
     items = GamePackageItem.query.filter_by(active=True).order_by(GamePackageItem.store_package_id.asc(), GamePackageItem.title.asc()).all()
     mappings = _get_auto_mappings_for_item_ids([item.id for item in items])
@@ -8531,6 +8546,8 @@ def admin_minigames_config_set():
     user = session.get("user")
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    _ensure_minigame_tables_ready()
 
     data = request.get_json(silent=True) or {}
     entries = data.get("entries") or []
@@ -8585,6 +8602,8 @@ def admin_minigames_winners_get():
     user = session.get("user")
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    _ensure_minigame_tables_ready()
 
     winners = MinigameWinner.query.order_by(MinigameWinner.created_at.desc(), MinigameWinner.id.desc()).all()
     package_ids = {int(row.store_package_id) for row in winners if row.store_package_id}
