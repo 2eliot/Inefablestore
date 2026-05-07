@@ -10,6 +10,8 @@
     --ty-accent: #00ff88;
     --ty-accent-glow: rgba(0, 255, 136, 0.28);
     --ty-text-dim: #8b949e;
+    --ty-gold: #f59e0b;
+    --ty-gold-soft: #fcd34d;
   }
   body.thanks-order-page {
     background:
@@ -87,6 +89,303 @@
   }
   .ty-progress.visible {
     display: block;
+  }
+  .ty-minigame {
+    display: none;
+    margin-top: 18px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+  .ty-minigame.visible {
+    display: block;
+  }
+  .ty-minigame-trigger {
+    width: 100%;
+    border: none;
+    border-radius: 16px;
+    background: linear-gradient(90deg, var(--ty-gold), var(--ty-gold-soft));
+    color: #111827;
+    font-weight: 900;
+    padding: 16px 18px;
+    cursor: pointer;
+    box-shadow: 0 16px 30px rgba(245, 158, 11, 0.2);
+    transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+  }
+  .ty-minigame-trigger[disabled] {
+    cursor: default;
+    opacity: .6;
+    box-shadow: none;
+  }
+  .ty-minigame-trigger:not([disabled]):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 20px 34px rgba(245, 158, 11, 0.28);
+  }
+  .ty-minigame-modal[hidden] {
+    display: none;
+  }
+  .ty-minigame-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+  }
+  .ty-minigame-modal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.72);
+    backdrop-filter: blur(10px);
+  }
+  .ty-minigame-dialog {
+    position: relative;
+    width: min(100%, 540px);
+    padding: 18px;
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at top, rgba(245, 158, 11, 0.16), transparent 42%),
+      linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(3, 7, 18, 0.99));
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    box-shadow: 0 26px 54px rgba(0, 0, 0, 0.42);
+  }
+  .ty-minigame-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.06);
+    color: #f8fafc;
+    font-size: 1.1rem;
+    cursor: pointer;
+  }
+  .ty-minigame-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding-right: 48px;
+  }
+  .ty-minigame-title {
+    margin: 0;
+    font-size: 1rem;
+    color: #f8fafc;
+    letter-spacing: .02em;
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+  .ty-minigame-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.12);
+    color: #d1fae5;
+    font-size: 0.76rem;
+    font-weight: 800;
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    max-width: 100%;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+  .ty-minigame-copy {
+    margin: 0 0 14px;
+    color: #dbe5ef;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  .ty-slot {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 12px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(15, 23, 42, 0.42));
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .ty-slot-reel {
+    position: relative;
+    min-height: 108px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
+    overflow: hidden;
+    box-shadow: inset 0 10px 20px rgba(0,0,0,0.38), 0 12px 24px rgba(0,0,0,0.18);
+  }
+  .ty-slot-reel::before,
+  .ty-slot-reel::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 20px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .ty-slot-reel::before {
+    top: 0;
+    background: linear-gradient(180deg, rgba(2, 6, 23, 0.95), rgba(2, 6, 23, 0));
+  }
+  .ty-slot-reel::after {
+    bottom: 0;
+    background: linear-gradient(0deg, rgba(2, 6, 23, 0.95), rgba(2, 6, 23, 0));
+  }
+  .ty-slot-reel.is-spinning {
+    box-shadow: inset 0 10px 20px rgba(0,0,0,0.38), 0 0 0 1px rgba(245, 158, 11, 0.2), 0 14px 28px rgba(0,0,0,0.22);
+  }
+  .ty-slot-window {
+    position: relative;
+    height: 108px;
+    overflow: hidden;
+  }
+  .ty-slot-window::after {
+    content: '';
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 50%;
+    height: 1px;
+    transform: translateY(-50%);
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0), rgba(16, 185, 129, 0.85), rgba(16, 185, 129, 0));
+    box-shadow: 0 0 18px rgba(16, 185, 129, 0.36);
+    z-index: 2;
+    pointer-events: none;
+  }
+  .ty-slot-strip {
+    display: flex;
+    flex-direction: column;
+    will-change: transform, filter;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0px);
+  }
+  .ty-slot-symbol {
+    height: 108px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.2rem;
+    font-weight: 900;
+    color: #ffffff;
+    text-shadow: 0 6px 14px rgba(0,0,0,0.35);
+  }
+  .ty-slot-reel.is-win {
+    border-color: rgba(16,185,129,0.55);
+    box-shadow: 0 0 18px rgba(16,185,129,0.28), inset 0 10px 20px rgba(0,0,0,0.35);
+  }
+  .ty-slot-reel.is-lose {
+    border-color: rgba(239,68,68,0.5);
+    box-shadow: 0 0 16px rgba(239,68,68,0.24), inset 0 10px 20px rgba(0,0,0,0.35);
+  }
+  .ty-minigame-result {
+    min-height: 20px;
+    color: #e2e8f0;
+    font-size: 0.84rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+  .ty-minigame-result.is-win {
+    color: #6ee7b7;
+  }
+  .ty-minigame-result.is-lose {
+    color: #fca5a5;
+  }
+  .ty-minigame-summary {
+    display: none;
+    margin: 0 0 14px;
+    padding: 16px;
+    border-radius: 18px;
+    text-align: center;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .ty-minigame-summary.visible {
+    display: block;
+  }
+  .ty-minigame-summary.is-win {
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.16), rgba(255,255,255,0.03));
+    border-color: rgba(16, 185, 129, 0.24);
+  }
+  .ty-minigame-summary.is-lose {
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.14), rgba(255,255,255,0.03));
+    border-color: rgba(245, 158, 11, 0.22);
+  }
+  .ty-minigame-summary-title {
+    margin: 0 0 6px;
+    color: #f8fafc;
+    font-size: 1rem;
+    font-weight: 900;
+  }
+  .ty-minigame-summary-copy {
+    margin: 0 0 12px;
+    color: #dbe5ef;
+    font-size: 0.88rem;
+    line-height: 1.45;
+  }
+  .ty-minigame-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    text-align: left;
+  }
+  .ty-minigame-summary-item {
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(2, 6, 23, 0.38);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .ty-minigame-summary-label {
+    display: block;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .ty-minigame-summary-value {
+    display: block;
+    color: #f8fafc;
+    font-size: 0.9rem;
+    font-weight: 800;
+    word-break: break-word;
+  }
+  .ty-minigame-btn {
+    width: 100%;
+    border: none;
+    border-radius: 14px;
+    background: linear-gradient(90deg, var(--ty-gold), var(--ty-gold-soft));
+    color: #111827;
+    font-weight: 900;
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: transform .2s ease, opacity .2s ease, box-shadow .2s ease;
+    box-shadow: 0 14px 28px rgba(245, 158, 11, 0.22);
+  }
+  .ty-minigame-btn[disabled] {
+    cursor: default;
+    opacity: .65;
+  }
+  .ty-minigame-btn:not([disabled]):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 32px rgba(245, 158, 11, 0.28);
+  }
+  .ty-minigame-btn.is-lose {
+    background: linear-gradient(90deg, #b91c1c, #ef4444);
+    color: #fff7f7;
+    box-shadow: 0 14px 28px rgba(239, 68, 68, 0.24);
+  }
+  .ty-minigame-btn.is-lose:not([disabled]):hover {
+    box-shadow: 0 18px 32px rgba(239, 68, 68, 0.3);
   }
   .ty-progress-title {
     display: none;
@@ -323,6 +622,49 @@
       text-align: center;
       box-sizing: border-box;
     }
+    .ty-slot {
+      gap: 8px;
+      padding: 10px;
+    }
+    .ty-slot-reel,
+    .ty-slot-window,
+    .ty-slot-symbol {
+      min-height: 92px;
+      height: 92px;
+    }
+    .ty-slot-symbol {
+      font-size: 1.85rem;
+    }
+    .ty-minigame-summary-grid {
+      grid-template-columns: 1fr;
+    }
+    .ty-minigame-modal {
+      padding: 10px;
+    }
+    .ty-minigame-dialog {
+      padding: 16px 14px;
+      border-radius: 20px;
+    }
+    .ty-minigame-head {
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+      padding-right: 42px;
+    }
+    .ty-minigame-title {
+      flex: 1 1 auto;
+      font-size: 0.88rem;
+      line-height: 1.15;
+    }
+    .ty-minigame-badge {
+      align-self: center;
+      font-size: 0.62rem;
+      line-height: 1;
+      padding: 5px 8px;
+      letter-spacing: -.01em;
+      flex: 0 1 auto;
+      min-width: 0;
+    }
   }
 </style>
 {% endblock %}
@@ -361,6 +703,9 @@
         <h3 id="ty-progress-title" class="ty-progress-title">Estado de procesamiento</h3>
         <ul id="ty-steps" class="ty-steps"></ul>
       </div>
+      <div id="ty-minigame" class="ty-minigame" hidden data-player-display="{{ player_display or '' }}" data-package-display="{{ package_display or '' }}">
+        <button id="ty-minigame-open" class="ty-minigame-trigger" type="button">Jugar por premio</button>
+      </div>
     </div>
 
     <div class="ty-character">
@@ -381,6 +726,25 @@
     </div>
   </div>
 </section>
+
+<div id="ty-minigame-modal" class="ty-minigame-modal" hidden>
+  <div class="ty-minigame-dialog" role="dialog" aria-modal="true" aria-labelledby="ty-minigame-title">
+    <button id="ty-minigame-close" class="ty-minigame-close" type="button" aria-label="Cerrar">×</button>
+    <div class="ty-minigame-head">
+      <h3 id="ty-minigame-title" class="ty-minigame-title">Tragaperras de premios</h3>
+      <span id="ty-minigame-badge" class="ty-minigame-badge">1 sola jugada</span>
+    </div>
+    <p id="ty-minigame-copy" class="ty-minigame-copy">Completa tu recarga y usa esta orden para intentar ganar un premio automático.</p>
+    <div class="ty-slot" aria-hidden="true">
+      <div class="ty-slot-reel" data-reel="0"><div class="ty-slot-window"><div class="ty-slot-strip"></div></div></div>
+      <div class="ty-slot-reel" data-reel="1"><div class="ty-slot-window"><div class="ty-slot-strip"></div></div></div>
+      <div class="ty-slot-reel" data-reel="2"><div class="ty-slot-window"><div class="ty-slot-strip"></div></div></div>
+    </div>
+    <div id="ty-minigame-result" class="ty-minigame-result"></div>
+    <div id="ty-minigame-summary" class="ty-minigame-summary" hidden></div>
+    <button id="ty-minigame-play" class="ty-minigame-btn" type="button">Jugar por premio</button>
+  </div>
+</div>
 
 <!-- Footer (3-column grid layout) -->
 <footer class="main-footer">
@@ -543,6 +907,14 @@
 
     function renderSteps(payload) {
       updateBubbleText(payload);
+      try {
+        document.dispatchEvent(new CustomEvent('ty-progress-state', {
+          detail: {
+            completed: !!(payload && payload.completed),
+            visible: !!(payload && payload.visible)
+          }
+        }));
+      } catch (error) {}
       if (!payload || !payload.visible) {
         root.classList.remove('visible');
         return;
@@ -597,6 +969,364 @@
 
     pollOnce();
     timer = setInterval(pollOnce, 5000);
+  })();
+
+  (function () {
+    var root = document.getElementById('ty-minigame');
+    if (!root) return;
+    var modalEl = document.getElementById('ty-minigame-modal');
+    var dialogEl = modalEl ? modalEl.querySelector('.ty-minigame-dialog') : null;
+    var openBtn = document.getElementById('ty-minigame-open');
+    var closeBtn = document.getElementById('ty-minigame-close');
+    var orderBadge = document.getElementById('ty-minigame-badge');
+    var copyEl = document.getElementById('ty-minigame-copy');
+    var resultEl = document.getElementById('ty-minigame-result');
+    var summaryEl = document.getElementById('ty-minigame-summary');
+    var playBtn = document.getElementById('ty-minigame-play');
+    var reels = Array.prototype.slice.call((modalEl || document).querySelectorAll('.ty-slot-reel'));
+    var orderId = document.getElementById('ty-progress') ? document.getElementById('ty-progress').getAttribute('data-order-id') : '';
+    var playerDisplay = root.getAttribute('data-player-display') || '';
+    var packageDisplay = root.getAttribute('data-package-display') || '';
+    var symbols = ['🎮', '💎', '⚡', '🪙', '🔥', '🎁'];
+    var reelState = [];
+    var timer = null;
+    var spinning = false;
+    var state = null;
+    var progressCompleted = false;
+
+    function buildReels() {
+      reelState = reels.map(function (reel, reelIndex) {
+        var strip = reel.querySelector('.ty-slot-strip');
+        var sequence = [];
+        for (var loop = 0; loop < 16; loop += 1) {
+          for (var s = 0; s < symbols.length; s += 1) {
+            sequence.push(symbols[(s + reelIndex + loop) % symbols.length]);
+          }
+        }
+        for (var extra = 0; extra < symbols.length; extra += 1) {
+          sequence.push(symbols[(extra + reelIndex) % symbols.length]);
+        }
+        strip.innerHTML = sequence.map(function (symbol) {
+          return '<div class="ty-slot-symbol">' + symbol + '</div>';
+        }).join('');
+        var item = strip.firstElementChild;
+        var itemHeight = item ? item.getBoundingClientRect().height : reel.getBoundingClientRect().height;
+        var data = {
+          reel: reel,
+          strip: strip,
+          sequence: sequence,
+          itemHeight: itemHeight || 108,
+          currentIndex: reelIndex
+        };
+        setReelInstant(data, reelIndex);
+        return data;
+      });
+    }
+
+    function reelOffset(reel, index) {
+      return -1 * index * reel.itemHeight;
+    }
+
+    function setReelInstant(reel, index) {
+      reel.currentIndex = Math.max(0, index);
+      reel.strip.style.transition = 'none';
+      reel.strip.style.transform = 'translate3d(0, ' + reelOffset(reel, reel.currentIndex) + 'px, 0)';
+      reel.strip.style.filter = 'blur(0px)';
+    }
+
+    function refreshReelMetrics() {
+      reelState.forEach(function (reel) {
+        var item = reel.strip.firstElementChild;
+        if (item) {
+          var measuredHeight = item.getBoundingClientRect().height;
+          if (measuredHeight > 0) {
+            reel.itemHeight = measuredHeight;
+          }
+        }
+        setReelInstant(reel, reel.currentIndex || 0);
+      });
+    }
+
+    function findTargetIndex(reel, targetSymbol) {
+      var minIndex = Math.max(reel.currentIndex + (symbols.length * 7), 0);
+      for (var i = reel.sequence.length - 1; i >= minIndex; i -= 1) {
+        if (reel.sequence[i] === targetSymbol) return i;
+      }
+      return reel.sequence.length - 1;
+    }
+
+    function stopReel(reel, targetSymbol, duration, delay) {
+      return new Promise(function (resolve) {
+        var targetIndex = findTargetIndex(reel, targetSymbol);
+        var finalOffset = reelOffset(reel, targetIndex);
+        var overshoot = Math.min(18, Math.round(reel.itemHeight * 0.18));
+        reel.reel.classList.add('is-spinning');
+        window.setTimeout(function () {
+          reel.strip.style.transition = 'transform ' + duration + 'ms cubic-bezier(0.16, 0.88, 0.24, 1), filter ' + Math.max(260, duration - 160) + 'ms ease-out';
+          reel.strip.style.filter = 'blur(9px)';
+          reel.strip.style.transform = 'translate3d(0, ' + (finalOffset - overshoot) + 'px, 0)';
+        }, delay);
+        window.setTimeout(function () {
+          reel.strip.style.transition = 'transform 220ms cubic-bezier(0.22, 1.2, 0.36, 1), filter 220ms ease-out';
+          reel.strip.style.filter = 'blur(0px)';
+          reel.strip.style.transform = 'translate3d(0, ' + finalOffset + 'px, 0)';
+        }, delay + duration - 170);
+        window.setTimeout(function () {
+          reel.currentIndex = targetIndex;
+          reel.reel.classList.remove('is-spinning');
+          resolve();
+        }, delay + duration + 120);
+      });
+    }
+
+    function setVisible(visible) {
+      root.hidden = !visible;
+      root.classList.toggle('visible', !!visible);
+      if (!visible) {
+        closeModal();
+      }
+    }
+
+    function openModal() {
+      if (!modalEl || !state || !state.ready) return;
+      modalEl.hidden = false;
+      document.body.style.overflow = 'hidden';
+      refreshReelMetrics();
+    }
+
+    function closeModal() {
+      if (!modalEl) return;
+      modalEl.hidden = true;
+      document.body.style.overflow = '';
+    }
+
+    function setResult(message, tone) {
+      if (!resultEl) return;
+      resultEl.textContent = message || '';
+      resultEl.classList.toggle('is-win', tone === 'win');
+      resultEl.classList.toggle('is-lose', tone === 'lose');
+      if (playBtn) {
+        playBtn.classList.toggle('is-lose', tone === 'lose' && !spinning);
+      }
+    }
+
+    function clearSummary() {
+      if (!summaryEl) return;
+      summaryEl.hidden = true;
+      summaryEl.classList.remove('visible');
+      summaryEl.classList.remove('is-win');
+      summaryEl.classList.remove('is-lose');
+      summaryEl.innerHTML = '';
+    }
+
+    function renderSummary(payload) {
+      if (!summaryEl) return;
+      var result = String((payload && payload.result) || 'pending');
+      if (result !== 'win' && result !== 'lose') {
+        clearSummary();
+        return;
+      }
+      var isWin = result === 'win';
+      var playerName = (payload && (payload.reward_player_name || payload.player_display)) || playerDisplay || 'No especificado';
+      var rewardName = (payload && payload.reward_title) || packageDisplay || 'Sin premio';
+      var statusCopy = isWin
+        ? ((payload && payload.reward_status) === 'completed' ? 'Tu premio fue enviado correctamente.' : 'Tu premio quedó registrado en el sistema.')
+        : 'En este intento no hubo premio.';
+      var items = [
+        { label: 'Jugador', value: playerName },
+        { label: isWin ? 'Paquete ganado' : 'Paquete', value: rewardName }
+      ];
+      summaryEl.hidden = false;
+      summaryEl.classList.add('visible');
+      summaryEl.classList.toggle('is-win', isWin);
+      summaryEl.classList.toggle('is-lose', !isWin);
+      summaryEl.innerHTML = '<h4 class="ty-minigame-summary-title">Gracias por participar</h4>'
+        + '<p class="ty-minigame-summary-copy">' + statusCopy + '</p>'
+        + (isWin
+          ? '<div class="ty-minigame-summary-grid">'
+            + items.map(function (item) {
+              return '<div class="ty-minigame-summary-item">'
+                + '<span class="ty-minigame-summary-label">' + item.label + '</span>'
+                + '<span class="ty-minigame-summary-value">' + item.value + '</span>'
+                + '</div>';
+            }).join('')
+            + '</div>'
+          : '');
+    }
+
+    function paintReels(kind) {
+      reels.forEach(function (reel) {
+        reel.classList.remove('is-win');
+        reel.classList.remove('is-lose');
+        if (kind === 'win') reel.classList.add('is-win');
+        if (kind === 'lose') reel.classList.add('is-lose');
+      });
+    }
+
+    function finalSymbols(payload) {
+      var win = !!(payload && payload.winner);
+      return win ? ['🎁', '🎁', '🎁'] : ['🎮', '💎', '🔥'];
+    }
+
+    function applyFinalReels(payload) {
+      var win = !!(payload && payload.winner);
+      var targetSymbols = finalSymbols(payload);
+      reelState.forEach(function (reel, index) {
+        var targetIndex = findTargetIndex(reel, targetSymbols[index] || '🎮');
+        setReelInstant(reel, targetIndex);
+      });
+      paintReels(win ? 'win' : 'lose');
+    }
+
+    function updateStaticState(payload) {
+      state = payload || {};
+      var triggerAllowed = !!(progressCompleted || payload.dev_preview_mode);
+      setVisible(!!payload.visible && !!payload.ready && triggerAllowed);
+      if (!payload.visible || !payload.ready || !triggerAllowed) return;
+      if (orderBadge) {
+        orderBadge.textContent = payload.already_played ? 'Jugada consumida' : (payload.ready ? '1 sola jugada' : 'Esperando recarga');
+      }
+      if (copyEl) {
+        if (payload.already_played && payload.winner) {
+          copyEl.textContent = 'Tu premio ya fue procesado para esta orden.';
+        } else if (payload.result === 'win' && payload.reward_status === 'completed') {
+          copyEl.textContent = 'Tu premio fue enviado y el resultado quedó fijado en pantalla.';
+        } else {
+          copyEl.textContent = payload.message || 'Completa tu recarga y usa esta orden para intentar ganar un premio automático.';
+        }
+      }
+      if (openBtn) {
+        openBtn.disabled = !payload.ready;
+        openBtn.textContent = payload.ready ? 'Jugar por premio' : 'Esperando recarga';
+      }
+      if (playBtn) {
+        playBtn.disabled = spinning || !payload.can_play;
+        playBtn.textContent = payload.can_play ? 'Jugar por premio' : (payload.already_played ? 'Intentos agotados' : 'Esperando recarga');
+        playBtn.classList.toggle('is-lose', !payload.can_play && (payload.result === 'lose' || (!payload.winner && payload.already_played)));
+      }
+      if (payload.already_played) {
+        applyFinalReels(payload);
+        renderSummary(payload);
+        if (payload.winner) {
+          setResult(payload.reward_status === 'completed' ? 'Ganaste y el premio ya fue enviado' : (payload.message || 'Ganaste un premio'), 'win');
+        } else {
+          setResult('', '');
+        }
+      } else if (payload.result === 'win' || payload.result === 'lose') {
+        applyFinalReels(payload);
+        renderSummary(payload);
+        if (payload.result === 'win') {
+          setResult(payload.reward_status === 'completed' ? 'Ganaste y tu premio fue enviado' : (payload.message || 'Ganaste un premio'), 'win');
+        } else {
+          setResult(payload.message || 'Gracias por participar', 'lose');
+        }
+      } else {
+        paintReels('');
+        if (!spinning) {
+          reelState.forEach(function (reel, index) {
+            setReelInstant(reel, index);
+          });
+        }
+        clearSummary();
+        setResult(payload.ready ? '' : (payload.message || ''), '');
+      }
+    }
+
+    function spinAndResolve(payload) {
+      spinning = true;
+      if (playBtn) playBtn.disabled = true;
+      paintReels('');
+      var targetSymbols = finalSymbols(payload);
+      return Promise.all(reelState.map(function (reel, index) {
+        return stopReel(reel, targetSymbols[index] || '🎮', 1080 + (index * 220), index * 220);
+      })).then(function () {
+        spinning = false;
+      });
+    }
+
+    function fetchState() {
+      if (!orderId) return Promise.resolve();
+      return fetch('/gracias/' + encodeURIComponent(orderId) + '/minijuego', { cache: 'no-store' })
+        .then(function (response) { return response.json(); })
+        .then(function (payload) {
+          if (!payload || !payload.ok) return;
+          updateStaticState(payload);
+          if (payload.already_played || !payload.visible) {
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+          }
+        })
+        .catch(function () { /* silent */ });
+    }
+
+    function playMinigame() {
+      if (!orderId || spinning) return;
+      setResult('', '');
+      clearSummary();
+      if (copyEl) {
+        copyEl.textContent = 'Girando los rodillos...';
+      }
+      if (playBtn) playBtn.disabled = true;
+      fetch('/gracias/' + encodeURIComponent(orderId) + '/minijuego/play', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      })
+        .then(function (response) { return response.json(); })
+        .then(function (payload) {
+          if (!payload || !payload.ok) {
+            setResult((payload && payload.error) || 'No se pudo jugar', 'lose');
+            if (playBtn) playBtn.disabled = false;
+            fetchState();
+            return;
+          }
+          return spinAndResolve(payload).then(function () {
+            applyFinalReels(payload);
+            renderSummary(payload);
+            if (payload.winner) {
+              setResult(payload.message || 'Ganaste un premio', 'win');
+            } else {
+              setResult(payload.message || 'Esta vez no tocó premio', 'lose');
+            }
+            fetchState();
+          });
+        })
+        .catch(function () {
+          spinning = false;
+          setResult('No se pudo jugar en este momento', 'lose');
+          if (playBtn) playBtn.disabled = false;
+        });
+    }
+
+    if (playBtn) {
+      playBtn.addEventListener('click', playMinigame);
+    }
+    if (openBtn) {
+      openBtn.addEventListener('click', openModal);
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeModal);
+    }
+    if (modalEl) {
+      modalEl.addEventListener('click', function (event) {
+        if (event.target === modalEl) closeModal();
+      });
+    }
+    document.addEventListener('ty-progress-state', function (event) {
+      progressCompleted = !!(event && event.detail && event.detail.completed);
+      if (state) {
+        updateStaticState(state);
+      }
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closeModal();
+    });
+
+    buildReels();
+    fetchState();
+    timer = setInterval(fetchState, 6000);
   })();
 </script>
 {% endblock %}

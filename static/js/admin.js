@@ -84,6 +84,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const blockedReason = document.getElementById('blocked-reason');
   const blockedActive = document.getElementById('blocked-active');
   const btnBlockedAdd = document.getElementById('btn-blocked-add');
+  const btnMinigamesRefresh = document.getElementById('btn-minigames-refresh');
+  const btnMinigamesSave = document.getElementById('btn-minigames-save');
+  const minigamesSummary = document.getElementById('minigames-summary');
+  const minigamesConfigList = document.getElementById('minigames-config-list');
+  const minigamesWinnersList = document.getElementById('minigames-winners-list');
+  let minigamesConfigCache = [];
   async function fetchBlocked() {
     if (!blockedList) return;
     blockedList.innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
@@ -200,6 +206,171 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
           tog.disabled = false;
         }
+      }
+    });
+  }
+
+  async function fetchMinigamesConfig() {
+    if (!minigamesConfigList) return;
+    minigamesConfigList.innerHTML = '<div class="empty-state"><p>Cargando configuracion...</p></div>';
+    if (minigamesSummary) minigamesSummary.innerHTML = '<span class="ty-pill">Cargando...</span>';
+    const res = await fetch('/admin/minigames/config');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar minijuegos');
+    minigamesConfigCache = Array.isArray(data.games) ? data.games : [];
+    renderMinigamesSummary(data);
+    renderMinigamesConfig(minigamesConfigCache, data.thresholds || []);
+  }
+
+  function renderMinigamesSummary(data) {
+    if (!minigamesSummary) return;
+    const globalOrders = Number(data.global_order_count || 0);
+    const cycleProgress = Number(data.cycle_progress || 0);
+    const nextStops = Array.isArray(data.thresholds) ? data.thresholds.map(t => `T${t.tier}: ${t.orders}`).join(' · ') : '60 · 120 · 300';
+    minigamesSummary.innerHTML = `
+      <span class="ty-pill">Órdenes elegibles acumuladas: <strong>${globalOrders}</strong></span>
+      <span class="ty-pill">Progreso del ciclo: <strong>${cycleProgress}/${300}</strong></span>
+      <span class="ty-pill">Hitos: <strong>${nextStops}</strong></span>
+    `;
+  }
+
+  function renderMinigamesConfig(games, thresholds) {
+    if (!minigamesConfigList) return;
+    if (!games || games.length === 0) {
+      minigamesConfigList.innerHTML = '<div class="empty-state"><p>No hay juegos automáticos por ID disponibles para configurar.</p></div>';
+      return;
+    }
+    const thresholdMap = new Map((thresholds || []).map(t => [Number(t.tier), Number(t.orders)]));
+    minigamesConfigList.innerHTML = games.map(game => {
+      const options = Array.isArray(game.prize_options) ? game.prize_options : [];
+      const config = game.config || {};
+      const buildOptions = (tier) => {
+        const selected = Number(config[String(tier)] || config[tier] || 0);
+        const rows = ['<option value="">-- Sin premio --</option>'];
+        options.forEach(opt => {
+          const price = Number(opt.price || 0).toFixed(2);
+          rows.push(`<option value="${opt.id}" ${selected === Number(opt.id) ? 'selected' : ''}>${opt.title} · $${price}</option>`);
+        });
+        return rows.join('');
+      };
+      return `
+        <div class="minigame-config-row" data-store-package-id="${game.store_package_id}">
+          <div class="minigame-row-head">
+            <div>
+              <div class="minigame-row-title">${game.store_package_name}</div>
+              <div class="minigame-row-meta">Premios automáticos disponibles: ${options.length}</div>
+            </div>
+          </div>
+          <div class="minigame-tier-grid">
+            <div class="minigame-tier-cell">
+              <label for="mg-tier-1-${game.store_package_id}">Primer premio · ${thresholdMap.get(1) || 60} órdenes</label>
+              <select id="mg-tier-1-${game.store_package_id}" data-tier="1">${buildOptions(1)}</select>
+            </div>
+            <div class="minigame-tier-cell">
+              <label for="mg-tier-2-${game.store_package_id}">Segundo premio · ${thresholdMap.get(2) || 120} órdenes</label>
+              <select id="mg-tier-2-${game.store_package_id}" data-tier="2">${buildOptions(2)}</select>
+            </div>
+            <div class="minigame-tier-cell">
+              <label for="mg-tier-3-${game.store_package_id}">Tercer premio · ${thresholdMap.get(3) || 300} órdenes</label>
+              <select id="mg-tier-3-${game.store_package_id}" data-tier="3">${buildOptions(3)}</select>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function fetchMinigameWinners() {
+    if (!minigamesWinnersList) return;
+    minigamesWinnersList.innerHTML = '<div class="empty-state"><p>Cargando ganadores...</p></div>';
+    const res = await fetch('/admin/minigames/winners');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar ganadores');
+    renderMinigameWinners(data.winners || []);
+  }
+
+  function renderMinigameWinners(items) {
+    if (!minigamesWinnersList) return;
+    if (!items || items.length === 0) {
+      minigamesWinnersList.innerHTML = '<div class="empty-state"><p>Aún no hay ganadores registrados.</p></div>';
+      return;
+    }
+    minigamesWinnersList.innerHTML = items.map(item => {
+      const statusClass = item.reward_status === 'completed' ? 'approved' : item.reward_status === 'processing' ? '' : 'rejected';
+      const statusLabel = item.reward_status === 'completed' ? 'PREMIO ENTREGADO' : item.reward_status === 'processing' ? 'PREMIO EN PROCESO' : 'PREMIO CON ERROR';
+      const playedAt = item.played_at ? new Date(item.played_at).toLocaleString() : '';
+      const orderInfo = item.customer_zone ? `${item.customer_id} - ${item.customer_zone}` : (item.customer_id || '-');
+      return `
+        <div class="minigame-winner-row">
+          <div class="minigame-row-head">
+            <div>
+              <div class="minigame-row-title">#${item.order_id} · ${item.store_package_name || 'Juego'}</div>
+              <div class="minigame-row-meta">Jugador: ${orderInfo} · Tier ${item.tier} · Consumo: ${item.consumed_orders} órdenes</div>
+            </div>
+            <span class="badge ${statusClass}">${statusLabel}</span>
+          </div>
+          <div class="order-meta">
+            <span>Premio: <strong>${item.prize_title || '-'}</strong></span>
+            <span>Orden global: <strong>${item.global_order_no || 0}</strong></span>
+            <span>Jugó: <strong>${playedAt || '-'}</strong></span>
+            <span>Referencia: <strong>${item.reward_reference || '-'}</strong></span>
+          </div>
+          ${item.reward_error ? `<div class="order-meta" style="margin-top:8px;color:#fca5a5;">${item.reward_error}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function saveMinigamesConfig() {
+    if (!minigamesConfigList) return;
+    const entries = Array.from(minigamesConfigList.querySelectorAll('.minigame-config-row')).map(row => {
+      const storePackageId = Number(row.getAttribute('data-store-package-id') || 0);
+      const tiers = {};
+      row.querySelectorAll('select[data-tier]').forEach(select => {
+        tiers[select.getAttribute('data-tier')] = select.value ? Number(select.value) : 0;
+      });
+      return { store_package_id: storePackageId, tiers };
+    }).filter(entry => entry.store_package_id > 0);
+    const res = await fetch('/admin/minigames/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar premios');
+    return data;
+  }
+
+  async function refreshMinigames() {
+    await fetchMinigamesConfig();
+    await fetchMinigameWinners();
+  }
+
+  if (btnMinigamesRefresh) {
+    btnMinigamesRefresh.addEventListener('click', async () => {
+      try {
+        btnMinigamesRefresh.disabled = true;
+        await refreshMinigames();
+        toast('Minijuegos actualizados');
+      } catch (e) {
+        toast(e.message || 'Error cargando minijuegos');
+      } finally {
+        btnMinigamesRefresh.disabled = false;
+      }
+    });
+  }
+
+  if (btnMinigamesSave) {
+    btnMinigamesSave.addEventListener('click', async () => {
+      try {
+        btnMinigamesSave.disabled = true;
+        await saveMinigamesConfig();
+        await refreshMinigames();
+        toast('Premios del minijuego guardados');
+      } catch (e) {
+        toast(e.message || 'No se pudo guardar minijuegos');
+      } finally {
+        btnMinigamesSave.disabled = false;
       }
     });
   }
@@ -1053,6 +1224,7 @@ window.fetchPayments = fetchPayments;
         if (target === '#tab-affiliates') { fetchAffiliates(); fetchAffWithdrawals(); populatePackagesSelect(); }
         if (target === '#tab-packages') { fetchPackages(); }
         if (target === '#tab-rev-map') { fetchRevMappingData(revStorePackage ? revStorePackage.value : ''); }
+        if (target === '#tab-minigames') { refreshMinigames(); }
         if (target === '#tab-stats') { fetchStatsPackages(); fetchGlobalStatsSummary(); }
         if (target === '#tab-blocked') { fetchBlocked(); }
       });
@@ -1467,6 +1639,9 @@ window.fetchLogo = fetchLogo;
       if (tab.dataset.target === '#tab-packages') {
         fetchPackages();
       }
+      if (tab.dataset.target === '#tab-minigames') {
+        refreshMinigames();
+      }
       // If Affiliates tab is opened, refresh affiliates
       if (tab.dataset.target === '#tab-affiliates') {
         populatePackagesSelect();
@@ -1482,6 +1657,7 @@ window.fetchLogo = fetchLogo;
   if (active) activateTab(active.dataset.target);
   // If landing on Orders, fetch initially
   if (document.querySelector('#tab-orders.active')) { fetchOrders(); fetchAffWithdrawalsForOrders(); }
+  if (document.querySelector('#tab-minigames.active')) { refreshMinigames(); }
   if (document.querySelector('#tab-blocked.active')) { fetchBlocked(); }
   // Do not select a payment method by default on load
   showPaySection();

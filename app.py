@@ -41,6 +41,11 @@ def now_ve():
     """Return current datetime in Venezuela timezone (GMT-4)"""
     return datetime.now(VE_TIMEZONE)
 
+MINIGAME_TIER_THRESHOLDS = ((1, 60), (2, 120), (3, 300))
+MINIGAME_CYCLE_SIZE = 300
+MINIGAME_GLOBAL_COUNT_KEY = "minigame_global_order_count"
+MINIGAME_CYCLE_PROGRESS_KEY = "minigame_cycle_progress"
+MINIGAME_STATE_KEY = "minigame"
 # Make now_ve available in all templates
 @app.context_processor
 def inject_now_ve():
@@ -4425,6 +4430,408 @@ def _order_status_from_auto_summary(summary, fallback_status="approved"):
     return "pending"
 
 
+def _minigame_normalize_state(raw_state):
+    state = raw_state if isinstance(raw_state, dict) else {}
+    normalized = {
+        "eligible": bool(state.get("eligible")),
+        "assigned": bool(state.get("assigned")),
+        "ready": bool(state.get("ready")),
+        "winner": bool(state.get("winner")),
+        "played": bool(state.get("played")),
+        "result": str(state.get("result") or "pending"),
+        "message": str(state.get("message") or ""),
+        "assigned_at": str(state.get("assigned_at") or ""),
+        "played_at": str(state.get("played_at") or ""),
+        "reward_title": str(state.get("reward_title") or ""),
+        "reward_status": str(state.get("reward_status") or ""),
+        "reward_reference": str(state.get("reward_reference") or ""),
+        "reward_player_name": str(state.get("reward_player_name") or ""),
+        "reward_error": str(state.get("reward_error") or ""),
+        "dev_preview_mode": bool(state.get("dev_preview_mode")),
+        "dev_preview_result": str(state.get("dev_preview_result") or ""),
+        "dev_preview_reward_title": str(state.get("dev_preview_reward_title") or ""),
+    }
+    for int_key in ("tier", "cycle_order_no", "global_order_no", "reward_item_id", "play_count", "play_limit"):
+        raw_value = state.get(int_key)
+        try:
+            normalized[int_key] = int(raw_value) if raw_value not in (None, "") else 0
+        except Exception:
+            normalized[int_key] = 0
+    if not normalized["tier"]:
+        normalized["tier"] = None
+    return normalized
+
+
+def _minigame_get_state(order_obj):
+    state = _load_order_automation_state(order_obj)
+    return _minigame_normalize_state(state.get(MINIGAME_STATE_KEY))
+
+
+def _minigame_set_state(order_obj, minigame_state):
+    state = _load_order_automation_state(order_obj)
+    state[MINIGAME_STATE_KEY] = _minigame_normalize_state(minigame_state)
+    _save_order_automation_state(order_obj, state)
+
+
+def _minigame_tier_for_cycle_position(cycle_order_no: int):
+    for tier, threshold in MINIGAME_TIER_THRESHOLDS:
+        if cycle_order_no == threshold:
+            return tier
+    return None
+
+
+def _minigame_config_int(key: str, default: int = 0) -> int:
+    try:
+        return int((get_config_value(key, str(default)) or str(default)).strip())
+    except Exception:
+        return default
+
+
+def _minigame_dev_tools_enabled() -> bool:
+    env_name = (os.environ.get("FLASK_ENV") or os.environ.get("APP_ENV") or "").strip().lower()
+    if env_name in {"development", "dev", "local"}:
+        return True
+    if bool(getattr(app, "debug", False)):
+        return True
+    if str(app.config.get("SECRET_KEY") or "") == "dev-secret-key" and not DB_URL:
+        return True
+    return False
+
+
+def _minigame_mapping_meta(mapping_obj):
+    if not mapping_obj:
+        return {}
+    try:
+        return _revendedores_catalog_meta(mapping_obj.remote_product_id, mapping_obj.remote_package_id)
+    except Exception:
+        return {}
+
+
+def _minigame_mapping_is_id_game(mapping_obj):
+    remote_meta = _minigame_mapping_meta(mapping_obj)
+    mode = str(remote_meta.get("mode") or "").strip().lower()
+    if bool(remote_meta.get("is_id_game")):
+        return True
+    if mode in {"id", "user", "uid", "role", "id_server", "server", "zone", "uid_zone", "role_zone", "user_zone"}:
+        return True
+    if remote_meta:
+        try:
+            raw_text = json.dumps(remote_meta, ensure_ascii=False).lower()
+        except Exception:
+            raw_text = str(remote_meta).lower()
+        if any(token in raw_text for token in ('"is_id_game": true', '"mode": "id"', 'player_id', 'roleid', 'userid', 'zone id')):
+            return True
+    try:
+        pkg = StorePackage.query.get(int(getattr(mapping_obj, "store_package_id", 0) or 0))
+        if pkg and str(pkg.category or "").strip().lower() == "mobile":
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _minigame_order_is_eligible(order_obj):
+    if not order_obj or not _order_has_auto_recharges(order_obj):
+        return False
+    if not str(order_obj.customer_id or "").strip():
+        return False
+    mapping = _get_order_auto_mapping(order_obj)
+    if not mapping:
+        return False
+    return _minigame_mapping_is_id_game(mapping)
+
+
+def _minigame_order_is_ready(order_obj):
+    if not _minigame_order_is_eligible(order_obj):
+        return False
+    summary = _summarize_order_auto_recharges(_build_order_auto_recharge_units(order_obj))
+    return summary.get("total_units", 0) > 0 and summary.get("completed_units", 0) >= summary.get("total_units", 0)
+
+
+def _ensure_minigame_assignment(order_obj):
+    current = _minigame_get_state(order_obj)
+    if current.get("dev_preview_mode") and _minigame_dev_tools_enabled():
+        current["eligible"] = True
+        current["ready"] = True
+        current["assigned"] = True
+        if not current.get("message"):
+            current["message"] = "Vista previa de desarrollo lista"
+        if current.get("dev_preview_reward_title") and not current.get("reward_title"):
+            current["reward_title"] = current.get("dev_preview_reward_title") or ""
+        _minigame_set_state(order_obj, current)
+        return current
+    eligible = _minigame_order_is_eligible(order_obj)
+    ready = _minigame_order_is_ready(order_obj)
+
+    if current.get("assigned"):
+        current["eligible"] = eligible
+        current["ready"] = ready
+        if ready and not current.get("message"):
+            current["message"] = "Tu jugada está lista"
+        _minigame_set_state(order_obj, current)
+        return current
+
+    if not eligible:
+        current.update({
+            "eligible": False,
+            "ready": False,
+            "message": "Este pedido no participa en el minijuego",
+        })
+        _minigame_set_state(order_obj, current)
+        return current
+
+    if not ready:
+        current.update({
+            "eligible": True,
+            "ready": False,
+            "message": "Tu orden debe completarse antes de poder jugar",
+        })
+        _minigame_set_state(order_obj, current)
+        return current
+
+    global_count = _minigame_config_int(MINIGAME_GLOBAL_COUNT_KEY, 0)
+    cycle_progress = _minigame_config_int(MINIGAME_CYCLE_PROGRESS_KEY, 0)
+    next_global = global_count + 1
+    cycle_order_no = (cycle_progress % MINIGAME_CYCLE_SIZE) + 1
+    next_cycle_progress = 0 if cycle_order_no >= MINIGAME_CYCLE_SIZE else cycle_order_no
+    tier = _minigame_tier_for_cycle_position(cycle_order_no)
+
+    current.update({
+        "eligible": True,
+        "assigned": True,
+        "ready": True,
+        "winner": tier is not None,
+        "played": False,
+        "tier": tier,
+        "cycle_order_no": cycle_order_no,
+        "global_order_no": next_global,
+        "result": "pending",
+        "message": "Tu jugada está lista",
+        "assigned_at": datetime.utcnow().isoformat(),
+    })
+    _minigame_set_state(order_obj, current)
+    set_config_values({
+        MINIGAME_GLOBAL_COUNT_KEY: str(next_global),
+        MINIGAME_CYCLE_PROGRESS_KEY: str(next_cycle_progress),
+    })
+    db.session.commit()
+    return current
+
+
+def _minigame_prize_map_for_game(store_package_id: int):
+    try:
+        rows = MinigamePrizeConfig.query.filter_by(store_package_id=int(store_package_id)).all()
+    except Exception:
+        rows = []
+    return {int(row.tier): row for row in rows if row}
+
+
+def _minigame_record_winner(order_obj, minigame_state):
+    tier = int(minigame_state.get("tier") or 0)
+    prize_item_id = int(minigame_state.get("reward_item_id") or 0)
+    if tier <= 0 or prize_item_id <= 0:
+        return None
+    row = MinigameWinner.query.filter_by(order_id=order_obj.id).first()
+    if not row:
+        row = MinigameWinner(order_id=order_obj.id)
+        db.session.add(row)
+    row.store_package_id = int(order_obj.store_package_id or 0)
+    row.tier = tier
+    row.consumed_orders = int(minigame_state.get("cycle_order_no") or 0)
+    row.global_order_no = int(minigame_state.get("global_order_no") or 0)
+    row.customer_id = str(order_obj.customer_id or "")
+    row.customer_zone = str(order_obj.customer_zone or "")
+    row.prize_item_id = prize_item_id
+    row.prize_title = str(minigame_state.get("reward_title") or "")
+    row.reward_status = str(minigame_state.get("reward_status") or "pending")
+    row.reward_reference = str(minigame_state.get("reward_reference") or "")
+    row.reward_player_name = str(minigame_state.get("reward_player_name") or "")
+    row.reward_error = str(minigame_state.get("reward_error") or "")
+    try:
+        row.raw_result_json = json.dumps({
+            "reward_status": row.reward_status,
+            "reward_reference": row.reward_reference,
+            "reward_player_name": row.reward_player_name,
+            "reward_error": row.reward_error,
+        }, ensure_ascii=False)
+    except Exception:
+        row.raw_result_json = ""
+    if minigame_state.get("played_at"):
+        try:
+            row.played_at = datetime.fromisoformat(str(minigame_state.get("played_at")))
+        except Exception:
+            row.played_at = row.played_at or datetime.utcnow()
+    if row.reward_status == "completed":
+        row.delivered_at = datetime.utcnow()
+    return row
+
+
+def _dispatch_minigame_reward(order_obj, prize_item_id: int, tier: int):
+    prize_item = GamePackageItem.query.get(int(prize_item_id or 0))
+    if not prize_item or not prize_item.active:
+        return {"ok": False, "error": "El premio configurado no existe o está inactivo"}
+
+    mapping = _get_auto_mappings_for_item_ids([prize_item.id]).get(prize_item.id)
+    if not mapping:
+        return {"ok": False, "error": "El premio no tiene una recarga automática mapeada"}
+    if not _minigame_mapping_is_id_game(mapping):
+        return {"ok": False, "error": "El premio configurado no pertenece a un juego compatible por ID"}
+
+    player_id = str(order_obj.customer_id or "").strip()
+    order_zone = str(order_obj.customer_zone or "").strip()
+    if not player_id:
+        return {"ok": False, "error": "La orden ganadora no tiene ID de jugador"}
+
+    needs_revendedores = not bool(getattr(mapping, "direct_to_script", False))
+    webb_url, webb_api_key, _, _ = _revendedores_env()
+    if needs_revendedores and (not webb_url or not webb_api_key):
+        return {"ok": False, "error": "Revendedores API no configurada para entregar el premio"}
+
+    unit = {
+        "unit_key": f"minigame:{order_obj.id}:{tier}:{prize_item.id}",
+        "sequence": 1,
+        "entry_index": 1,
+        "repeat_index": 1,
+        "store_item_id": prize_item.id,
+        "title": str(prize_item.title or "").strip(),
+        "remote_product_id": mapping.remote_product_id,
+        "remote_package_id": mapping.remote_package_id,
+        "remote_label": str(mapping.remote_label or prize_item.title or "").strip(),
+        "direct_to_script": bool(getattr(mapping, "direct_to_script", False)),
+        "external_order_id": f"MG-{order_obj.id}-{tier}-{prize_item.id}",
+        "status": "pending",
+        "player_name": "",
+        "reference_no": "",
+        "remaining_balance": None,
+        "error": "",
+        "attempt_count": 0,
+        "last_attempt_at": "",
+        "last_checked_at": "",
+        "last_provider": "game_script_direct" if bool(getattr(mapping, "direct_to_script", False)) else "revendedores_api",
+    }
+
+    legacy_payload = {
+        "product_id": unit.get("remote_product_id"),
+        "package_id": unit.get("remote_package_id"),
+        "player_id": player_id,
+        "external_order_id": unit.get("external_order_id"),
+    }
+    if order_zone:
+        legacy_payload["player_id2"] = order_zone
+
+    remote_meta = _revendedores_catalog_meta(unit.get("remote_product_id"), unit.get("remote_package_id"))
+    effective_remote_product_id = _revendedores_effective_product_id(
+        unit.get("remote_product_id"),
+        remote_meta,
+        unit.get("remote_label") or remote_meta.get("product_name") or remote_meta.get("game_name") or "",
+    )
+    if effective_remote_product_id is not None:
+        legacy_payload["product_id"] = effective_remote_product_id
+
+    modern_payload = {
+        "api_key": webb_api_key,
+        "package_id": str(remote_meta.get("package_id") or remote_meta.get("remote_local_package_id") or unit.get("remote_package_id") or ""),
+        "player_id": player_id,
+        "request_id": str(unit.get("external_order_id") or ""),
+        "external_order_id": str(unit.get("external_order_id") or ""),
+    }
+    if effective_remote_product_id is not None:
+        modern_payload["product_id"] = str(effective_remote_product_id)
+    provider_package_id = remote_meta.get("provider_package_id") or remote_meta.get("gamepoint_package_id")
+    if provider_package_id not in (None, "", 0, "0"):
+        modern_payload["provider_package_id"] = str(provider_package_id)
+    provider_package_key = (remote_meta.get("provider_package_key") or remote_meta.get("script_package_key") or "").strip()
+    if provider_package_key:
+        modern_payload["provider_package_key"] = provider_package_key
+    if order_zone:
+        modern_payload["player_id2"] = order_zone
+
+    if _revendedores_catalog_requires_player_id2(remote_meta) and not order_zone:
+        return {"ok": False, "error": "El premio configurado requiere Zone ID y esta orden no lo tiene"}
+
+    last_error = ""
+    for attempt in range(1, 4):
+        unit["last_attempt_at"] = datetime.utcnow().isoformat()
+        unit["attempt_count"] = int(unit.get("attempt_count") or 0) + 1
+        try:
+            if unit.get("last_provider") == "game_script_direct":
+                script_result = _dispatch_game_script_unit(unit, order_obj, remote_meta)
+                _apply_dispatch_result_to_unit(unit, script_result)
+            else:
+                api_data = None
+                response_error = ""
+                api_resp = None
+                for path in _revendedores_recharge_paths():
+                    use_legacy_api = path.strip().startswith("/api/v1/")
+                    headers = {
+                        "X-API-Key": webb_api_key,
+                        "X-Request-ID": str(unit.get("external_order_id") or ""),
+                    }
+                    req_kwargs = {"headers": headers, "timeout": 60}
+                    if use_legacy_api:
+                        headers["Content-Type"] = "application/json"
+                        req_kwargs["json"] = legacy_payload
+                    else:
+                        req_kwargs["data"] = modern_payload
+                    api_resp = _requests_lib.post(f"{webb_url}{path}", **req_kwargs)
+                    try:
+                        api_data = api_resp.json()
+                    except Exception:
+                        api_data = None
+                    if api_resp.status_code in (404, 405) and not use_legacy_api:
+                        response_error = f"HTTP {api_resp.status_code} en {path}"
+                        api_data = None
+                        continue
+                    if api_data is None:
+                        response_error = f"Respuesta inválida HTTP {api_resp.status_code} en {path}"
+                        if not use_legacy_api:
+                            continue
+                        api_data = {"ok": False, "error": response_error}
+                    break
+                if api_data is None:
+                    api_data = {"ok": False, "error": response_error or "No se pudo conectar con Revendedores"}
+                if api_data.get("ok"):
+                    _apply_dispatch_result_to_unit(unit, {
+                        "status": "completed",
+                        "player_name": api_data.get("player_name"),
+                        "reference_no": api_data.get("reference_no"),
+                        "remaining_balance": api_data.get("remaining_balance"),
+                        "provider": "revendedores_api",
+                    })
+                else:
+                    unit_status = str(api_data.get("purchase_status") or api_data.get("status") or "").strip().lower()
+                    unit_error = str(api_data.get("error") or api_data.get("message") or "Recarga no completada en Revendedores")
+                    mapped_status = "processing" if unit_status in {"processing", "procesando", "pending", "pendiente", "queued", "en_cola", "en cola"} else "failed"
+                    _apply_dispatch_result_to_unit(unit, {
+                        "status": mapped_status,
+                        "error": unit_error,
+                        "provider": "revendedores_api",
+                    })
+            if unit.get("status") == "completed":
+                break
+            last_error = str(unit.get("error") or last_error)
+        except _requests_lib.exceptions.Timeout:
+            provider_name = "Game Script" if unit.get("last_provider") == "game_script_direct" else "Revendedores"
+            unit["status"] = "processing"
+            unit["error"] = f"{provider_name} no respondió en 60 segundos"
+            last_error = unit["error"]
+        except Exception as exc:
+            unit["status"] = "processing"
+            unit["error"] = str(exc)
+            last_error = unit["error"]
+        if unit.get("status") == "completed":
+            break
+        if attempt < 3:
+            time.sleep(2)
+
+    return {
+        "ok": unit.get("status") == "completed",
+        "unit": unit,
+        "prize_item": prize_item,
+        "error": str(unit.get("error") or last_error),
+    }
+
+
 def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
     max_attempts = 3
     retry_delay_seconds = 2
@@ -4658,6 +5065,8 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
     order_obj.status = _order_status_from_auto_summary(summary)
     _save_order_automation_state(order_obj, state)
     db.session.commit()
+    if state["success"]:
+        _ensure_minigame_assignment(order_obj)
     return {
         "ok": state["success"],
         "summary": summary,
@@ -4695,6 +5104,41 @@ class BlockedCustomer(db.Model):
     reason = db.Column(db.String(300), default="")
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class MinigamePrizeConfig(db.Model):
+    __tablename__ = "minigame_prize_configs"
+    id = db.Column(db.Integer, primary_key=True)
+    store_package_id = db.Column(db.Integer, nullable=False)
+    tier = db.Column(db.Integer, nullable=False)
+    prize_item_id = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("store_package_id", "tier", name="uq_minigame_prize_game_tier"),
+    )
+
+
+class MinigameWinner(db.Model):
+    __tablename__ = "minigame_winners"
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, nullable=False, unique=True)
+    store_package_id = db.Column(db.Integer, nullable=False)
+    tier = db.Column(db.Integer, nullable=False)
+    consumed_orders = db.Column(db.Integer, nullable=False)
+    global_order_no = db.Column(db.Integer, nullable=False, default=0)
+    customer_id = db.Column(db.String(120), default="")
+    customer_zone = db.Column(db.String(120), default="")
+    prize_item_id = db.Column(db.Integer, nullable=False)
+    prize_title = db.Column(db.String(200), default="")
+    reward_status = db.Column(db.String(30), default="pending")
+    reward_reference = db.Column(db.String(120), default="")
+    reward_player_name = db.Column(db.String(200), default="")
+    reward_error = db.Column(db.String(500), default="")
+    raw_result_json = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    played_at = db.Column(db.DateTime, nullable=True)
+    delivered_at = db.Column(db.DateTime, nullable=True)
 
 # Initialize
 with app.app_context():
@@ -6660,6 +7104,225 @@ def thanks_order_progress(oid: int):
     return jsonify(_thanks_progress_payload(o))
 
 
+@app.route("/gracias/<int:oid>/minijuego", methods=["GET"])
+def thanks_order_minigame_state(oid: int):
+    order_obj = Order.query.get(oid)
+    if not order_obj:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+
+    current = _ensure_minigame_assignment(order_obj)
+    order_meta = _thanks_order_display_meta(order_obj) if order_obj else {
+        "player_display": "",
+        "package_display": "",
+    }
+    pkg = StorePackage.query.get(order_obj.store_package_id) if order_obj.store_package_id else None
+    prize_row = None
+    if current.get("tier"):
+        prize_row = _minigame_prize_map_for_game(int(order_obj.store_package_id or 0)).get(int(current.get("tier") or 0))
+    prize_item = GamePackageItem.query.get(int(prize_row.prize_item_id)) if prize_row else None
+    if prize_item and not current.get("reward_title"):
+        current["reward_title"] = str(prize_item.title or "")
+        current["reward_item_id"] = int(prize_item.id)
+        _minigame_set_state(order_obj, current)
+        db.session.commit()
+
+    play_limit = max(int(current.get("play_limit") or 1), 1)
+    play_count = max(int(current.get("play_count") or 0), 0)
+    is_dev_preview = bool(current.get("dev_preview_mode") and _minigame_dev_tools_enabled())
+    can_play = bool(current.get("ready") and (play_count < play_limit if is_dev_preview else not current.get("played")))
+    already_played = bool(play_count > 0 and not can_play) if is_dev_preview else bool(current.get("played"))
+
+    message = current.get("message") or ""
+    if current.get("ready") and not current.get("played"):
+        message = "Tienes una sola oportunidad para jugar con esta orden"
+    elif current.get("played") and current.get("winner"):
+        if current.get("reward_status") == "completed":
+            message = "Tu premio ya fue enviado automáticamente"
+        elif current.get("reward_status"):
+            message = "Tu premio ya fue procesado en esta orden"
+    elif current.get("played"):
+        message = "Esta orden ya usó su jugada"
+
+    return jsonify({
+        "ok": True,
+        "visible": bool(current.get("eligible")),
+        "ready": bool(current.get("ready")),
+        "dev_preview_mode": is_dev_preview,
+        "can_play": can_play,
+        "already_played": already_played,
+        "winner": bool(current.get("winner")),
+        "result": str(current.get("result") or "pending"),
+        "tier": current.get("tier"),
+        "play_count": play_count,
+        "play_limit": play_limit,
+        "attempts_remaining": max(play_limit - play_count, 0),
+        "cycle_order_no": int(current.get("cycle_order_no") or 0),
+        "global_order_no": int(current.get("global_order_no") or 0),
+        "game_name": str((pkg.name if pkg else "") or ""),
+        "player_display": str(order_meta.get("player_display") or ""),
+        "package_display": str(order_meta.get("package_display") or ""),
+        "reward_title": str(current.get("reward_title") or (prize_item.title if prize_item else "")),
+        "reward_status": str(current.get("reward_status") or ""),
+        "reward_reference": str(current.get("reward_reference") or ""),
+        "reward_player_name": str(current.get("reward_player_name") or ""),
+        "message": message,
+        "thresholds": [{"tier": tier, "orders": threshold} for tier, threshold in MINIGAME_TIER_THRESHOLDS],
+    })
+
+
+@app.route("/gracias/<int:oid>/minijuego/play", methods=["POST"])
+def thanks_order_minigame_play(oid: int):
+    order_obj = Order.query.get(oid)
+    if not order_obj:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+
+    current = _ensure_minigame_assignment(order_obj)
+    play_limit = max(int(current.get("play_limit") or 1), 1)
+    play_count = max(int(current.get("play_count") or 0), 0)
+    is_dev_preview = bool(current.get("dev_preview_mode") and _minigame_dev_tools_enabled())
+    can_play = bool(current.get("ready") and (play_count < play_limit if is_dev_preview else not current.get("played")))
+    if not current.get("eligible"):
+        return jsonify({"ok": False, "error": "Esta orden no participa"}), 409
+    if not current.get("ready"):
+        return jsonify({"ok": False, "error": "La orden todavía no está lista para jugar"}), 409
+    if not can_play:
+        return jsonify({
+            "ok": True,
+            "already_played": True,
+            "winner": bool(current.get("winner")),
+            "result": current.get("result") or "pending",
+            "reward_title": str(current.get("reward_title") or ""),
+            "reward_status": str(current.get("reward_status") or ""),
+            "reward_reference": str(current.get("reward_reference") or ""),
+            "play_count": play_count,
+            "play_limit": play_limit,
+            "attempts_remaining": max(play_limit - play_count, 0),
+            "message": "Esta orden ya usó su oportunidad",
+        })
+
+    current["played_at"] = datetime.utcnow().isoformat()
+    if is_dev_preview:
+        current["play_count"] = play_count + 1
+        current["played"] = bool(current["play_count"] >= play_limit)
+        preview_result = str(current.get("dev_preview_result") or "lose").strip().lower()
+        if preview_result.startswith("win"):
+            current["winner"] = True
+            current["result"] = "win"
+            if not current.get("tier"):
+                if preview_result.endswith("2"):
+                    current["tier"] = 2
+                elif preview_result.endswith("3"):
+                    current["tier"] = 3
+                else:
+                    current["tier"] = 1
+            if current.get("dev_preview_reward_title"):
+                current["reward_title"] = current.get("dev_preview_reward_title") or ""
+            current["reward_status"] = "completed"
+            current["reward_reference"] = f"DEV-PREVIEW-{order_obj.id}-{current.get('tier') or 1}"
+            current["reward_player_name"] = str(order_obj.customer_name or order_obj.customer_id or "Vista previa")
+            current["reward_error"] = ""
+            current["message"] = "Vista previa de desarrollo: premio simulado"
+            _minigame_set_state(order_obj, current)
+            _minigame_record_winner(order_obj, current)
+            db.session.commit()
+            return jsonify({
+                "ok": True,
+                "winner": True,
+                "result": "win",
+                "tier": current.get("tier"),
+                "reward_title": current.get("reward_title") or "",
+                "reward_status": current.get("reward_status") or "",
+                "reward_reference": current.get("reward_reference") or "",
+                "reward_player_name": current.get("reward_player_name") or "",
+                "play_count": int(current.get("play_count") or 0),
+                "play_limit": play_limit,
+                "attempts_remaining": max(play_limit - int(current.get("play_count") or 0), 0),
+                "can_play": bool(int(current.get("play_count") or 0) < play_limit),
+                "message": current.get("message") or "",
+            })
+        current["winner"] = False
+        current["result"] = "lose"
+        current["reward_status"] = ""
+        current["reward_reference"] = ""
+        current["reward_player_name"] = ""
+        current["reward_error"] = ""
+        current["message"] = "Vista previa de desarrollo: sin premio"
+        _minigame_set_state(order_obj, current)
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "winner": False,
+            "result": "lose",
+            "play_count": int(current.get("play_count") or 0),
+            "play_limit": play_limit,
+            "attempts_remaining": max(play_limit - int(current.get("play_count") or 0), 0),
+            "can_play": bool(int(current.get("play_count") or 0) < play_limit),
+            "message": current.get("message") or "",
+        })
+    current["played"] = True
+    if not current.get("winner"):
+        current["result"] = "lose"
+        current["message"] = "Esta vez no tocó premio"
+        _minigame_set_state(order_obj, current)
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "winner": False,
+            "result": "lose",
+            "message": current["message"],
+        })
+
+    prize_row = _minigame_prize_map_for_game(int(order_obj.store_package_id or 0)).get(int(current.get("tier") or 0))
+    if not prize_row:
+        current["played"] = False
+        current["played_at"] = ""
+        current["message"] = "Aún no hay premio configurado para este juego"
+        _minigame_set_state(order_obj, current)
+        db.session.commit()
+        return jsonify({"ok": False, "error": current["message"]}), 409
+
+    dispatch = _dispatch_minigame_reward(order_obj, int(prize_row.prize_item_id), int(current.get("tier") or 0))
+    if not dispatch.get("ok") and not dispatch.get("unit"):
+        current["played"] = False
+        current["played_at"] = ""
+        current["message"] = str(dispatch.get("error") or "No se pudo enviar el premio")
+        _minigame_set_state(order_obj, current)
+        db.session.commit()
+        return jsonify({"ok": False, "error": current["message"]}), 409
+
+    prize_item = dispatch.get("prize_item")
+    unit = dispatch.get("unit") or {}
+    current["result"] = "win"
+    current["reward_item_id"] = int(prize_row.prize_item_id)
+    current["reward_title"] = str((prize_item.title if prize_item else current.get("reward_title") or "") or "")
+    current["reward_status"] = str(unit.get("status") or ("completed" if dispatch.get("ok") else "failed"))
+    current["reward_reference"] = str(unit.get("reference_no") or "")
+    current["reward_player_name"] = str(unit.get("player_name") or "")
+    current["reward_error"] = str(dispatch.get("error") or unit.get("error") or "")
+    current["message"] = (
+        "Premio enviado automáticamente"
+        if current["reward_status"] == "completed" else
+        "Tu premio quedó en proceso automático"
+        if current["reward_status"] == "processing" else
+        "Tu premio quedó registrado, pero hubo un problema al enviarlo"
+    )
+    _minigame_set_state(order_obj, current)
+    _minigame_record_winner(order_obj, current)
+    db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "winner": True,
+        "result": "win",
+        "tier": current.get("tier"),
+        "reward_title": current.get("reward_title") or "",
+        "reward_status": current.get("reward_status") or "",
+        "reward_reference": current.get("reward_reference") or "",
+        "reward_player_name": current.get("reward_player_name") or "",
+        "message": current.get("message") or "",
+    })
+
+
 def _start_checkout_automation(order_id: int, app_obj) -> None:
     def _runner():
         try:
@@ -7760,6 +8423,8 @@ def admin_orders_verify_recharge(oid: int):
     o.status = _order_status_from_auto_summary(summary)
     _save_order_automation_state(o, auto_resp)
     db.session.commit()
+    if auto_resp.get("success"):
+        _ensure_minigame_assignment(o)
 
     if summary.get("processing_units", 0) <= 0 and summary.get("pending_units", 0) > 0 and summary.get("failed_units", 0) <= 0:
         queued_result = _dispatch_order_auto_recharges(o, binance_auto=bool(auto_resp.get("binance_auto")))
@@ -7811,6 +8476,152 @@ def admin_orders_verify_recharge(oid: int):
         "can_approve": summary.get("retryable_units", 0) > 0,
         "message": f"Quedan {summary.get('retryable_units', 0)} recarga(s) por reenviar.",
         "summary": summary,
+    })
+
+
+@app.route("/admin/minigames/config", methods=["GET"])
+def admin_minigames_config_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    packages = StorePackage.query.filter_by(active=True).order_by(StorePackage.name.asc()).all()
+    items = GamePackageItem.query.filter_by(active=True).order_by(GamePackageItem.store_package_id.asc(), GamePackageItem.title.asc()).all()
+    mappings = _get_auto_mappings_for_item_ids([item.id for item in items])
+    items_by_package = {}
+    for item in items:
+        mapping = mappings.get(int(item.id))
+        if not mapping or not _minigame_mapping_is_id_game(mapping):
+            continue
+        items_by_package.setdefault(int(item.store_package_id), []).append({
+            "id": item.id,
+            "title": str(item.title or "").strip(),
+            "price": float(item.price or 0.0),
+            "mapping_label": str(mapping.remote_label or "").strip(),
+        })
+
+    config_rows = MinigamePrizeConfig.query.order_by(MinigamePrizeConfig.store_package_id.asc(), MinigamePrizeConfig.tier.asc()).all()
+    config_by_game = {}
+    for row in config_rows:
+        config_by_game.setdefault(int(row.store_package_id), {})[int(row.tier)] = int(row.prize_item_id)
+
+    games = []
+    for pkg in packages:
+        prize_options = items_by_package.get(int(pkg.id), [])
+        if not prize_options:
+            continue
+        games.append({
+            "store_package_id": pkg.id,
+            "store_package_name": str(pkg.name or "").strip(),
+            "config": config_by_game.get(int(pkg.id), {}),
+            "prize_options": prize_options,
+        })
+
+    return jsonify({
+        "ok": True,
+        "thresholds": [{"tier": tier, "orders": threshold} for tier, threshold in MINIGAME_TIER_THRESHOLDS],
+        "global_order_count": _minigame_config_int(MINIGAME_GLOBAL_COUNT_KEY, 0),
+        "cycle_progress": _minigame_config_int(MINIGAME_CYCLE_PROGRESS_KEY, 0),
+        "games": games,
+    })
+
+
+@app.route("/admin/minigames/config", methods=["POST"])
+def admin_minigames_config_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    data = request.get_json(silent=True) or {}
+    entries = data.get("entries") or []
+    if not isinstance(entries, list):
+        return jsonify({"ok": False, "error": "Formato inválido"}), 400
+
+    try:
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            store_package_id = int(entry.get("store_package_id") or 0)
+            if store_package_id <= 0:
+                continue
+            tiers = entry.get("tiers") or {}
+            if not isinstance(tiers, dict):
+                continue
+            for tier, _threshold in MINIGAME_TIER_THRESHOLDS:
+                prize_item_id_raw = tiers.get(str(tier), tiers.get(tier))
+                row = MinigamePrizeConfig.query.filter_by(store_package_id=store_package_id, tier=tier).first()
+                try:
+                    prize_item_id = int(prize_item_id_raw or 0)
+                except Exception:
+                    prize_item_id = 0
+                if prize_item_id <= 0:
+                    if row:
+                        db.session.delete(row)
+                    continue
+                item = GamePackageItem.query.get(prize_item_id)
+                if not item or int(item.store_package_id or 0) != store_package_id:
+                    return jsonify({"ok": False, "error": "El premio debe pertenecer al mismo juego"}), 400
+                mapping = _get_auto_mappings_for_item_ids([prize_item_id]).get(prize_item_id)
+                if not mapping or not _minigame_mapping_is_id_game(mapping):
+                    return jsonify({"ok": False, "error": "Cada premio debe tener recarga automática mapeada para juegos por ID"}), 400
+                if not row:
+                    row = MinigamePrizeConfig(store_package_id=store_package_id, tier=tier, prize_item_id=prize_item_id)
+                    db.session.add(row)
+                else:
+                    row.prize_item_id = prize_item_id
+        db.session.commit()
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": f"No se pudo guardar configuración: {exc}"}), 500
+
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/minigames/winners", methods=["GET"])
+def admin_minigames_winners_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    winners = MinigameWinner.query.order_by(MinigameWinner.created_at.desc(), MinigameWinner.id.desc()).all()
+    package_ids = {int(row.store_package_id) for row in winners if row.store_package_id}
+    prize_item_ids = {int(row.prize_item_id) for row in winners if row.prize_item_id}
+    packages = {pkg.id: pkg for pkg in StorePackage.query.filter(StorePackage.id.in_(package_ids)).all()} if package_ids else {}
+    prize_items = {item.id: item for item in GamePackageItem.query.filter(GamePackageItem.id.in_(prize_item_ids)).all()} if prize_item_ids else {}
+
+    return jsonify({
+        "ok": True,
+        "summary": {
+            "global_order_count": _minigame_config_int(MINIGAME_GLOBAL_COUNT_KEY, 0),
+            "cycle_progress": _minigame_config_int(MINIGAME_CYCLE_PROGRESS_KEY, 0),
+            "winners_count": len(winners),
+        },
+        "winners": [
+            {
+                "id": row.id,
+                "order_id": row.order_id,
+                "store_package_id": row.store_package_id,
+                "store_package_name": str((packages.get(row.store_package_id).name if packages.get(row.store_package_id) else "") or ""),
+                "tier": row.tier,
+                "consumed_orders": row.consumed_orders,
+                "global_order_no": row.global_order_no,
+                "customer_id": row.customer_id,
+                "customer_zone": row.customer_zone,
+                "prize_item_id": row.prize_item_id,
+                "prize_title": str((row.prize_title or (prize_items.get(row.prize_item_id).title if prize_items.get(row.prize_item_id) else "")) or ""),
+                "reward_status": row.reward_status,
+                "reward_reference": row.reward_reference,
+                "reward_player_name": row.reward_player_name,
+                "reward_error": row.reward_error,
+                "created_at": row.created_at.isoformat() if row.created_at else "",
+                "played_at": row.played_at.isoformat() if row.played_at else "",
+                "delivered_at": row.delivered_at.isoformat() if row.delivered_at else "",
+            }
+            for row in winners
+        ],
     })
 
 

@@ -22,6 +22,93 @@
   }
   #pay-method-select option { color: #0b0f14; }
   #pay-method-select option[disabled] { color: #64748b; }
+  .minigame-grid {
+    display: grid;
+    gap: 16px;
+  }
+  .minigame-card {
+    background: rgba(15, 23, 42, 0.68);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 18px;
+    padding: 18px;
+  }
+  .minigame-card h3,
+  .minigame-card h4 {
+    margin: 0 0 10px;
+  }
+  .minigame-summary {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .minigame-summary .ty-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(15, 118, 110, 0.14);
+    color: #d1fae5;
+    border: 1px solid rgba(45, 212, 191, 0.2);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .minigame-config-list,
+  .minigame-winners-list {
+    display: grid;
+    gap: 12px;
+  }
+  .minigame-config-row,
+  .minigame-winner-row {
+    background: rgba(2, 6, 23, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 16px;
+    padding: 14px;
+  }
+  .minigame-row-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .minigame-row-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: #f8fafc;
+  }
+  .minigame-row-meta {
+    font-size: 12px;
+    color: #94a3b8;
+  }
+  .minigame-tier-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+  .minigame-tier-cell label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #cbd5e1;
+  }
+  .minigame-tier-cell select {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(15, 23, 42, 0.9);
+    color: #f8fafc;
+    padding: 10px 12px;
+  }
+  .minigame-winner-row .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 96px;
+  }
 </style>
 <div class="admin-layout">
   <aside class="sidebar">
@@ -29,6 +116,7 @@
       <button class="tab active" data-target="#tab-orders" aria-selected="true">Órdenes</button>
       <button class="tab" data-target="#tab-packages" aria-selected="false">Paquetes</button>
       <button class="tab" data-target="#tab-rev-map" aria-selected="false">Mapeo Revendedores</button>
+      <button class="tab" data-target="#tab-minigames" aria-selected="false">Minijuegos</button>
       <button class="tab" data-target="#tab-stats" aria-selected="false">Estadísticas</button>
       <button class="tab" data-target="#tab-images" aria-selected="false">Imágenes</button>
       <button class="tab" data-target="#tab-config" aria-selected="false">Configuración</button>
@@ -241,6 +329,41 @@
           <div class="empty-state">
             <h3>Sin datos</h3>
             <p>Sincroniza el catálogo de Revendedores, selecciona un juego y marca cuáles ítems deben salir directo a Game Script.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Minijuegos -->
+    <div id="tab-minigames" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Minijuegos</h2>
+        <div class="actions" style="gap:8px;">
+          <button id="btn-minigames-refresh" class="btn" type="button">Refrescar</button>
+          <button id="btn-minigames-save" class="btn primary" type="button">Guardar premios</button>
+        </div>
+      </div>
+      <div class="panel-body minigame-grid">
+        <div class="minigame-card">
+          <h3>Resumen de la ruleta</h3>
+          <div id="minigames-summary" class="minigame-summary">
+            <span class="ty-pill">Cargando...</span>
+          </div>
+          <p style="margin:0; color:#94a3b8; font-size:13px;">Cada orden elegible juega una sola vez. Los hitos del ciclo son 60, 120 y 300 órdenes elegibles completadas.</p>
+        </div>
+
+        <div class="minigame-card">
+          <h3>Premios automáticos por juego</h3>
+          <p style="margin:0 0 12px; color:#94a3b8; font-size:13px;">Selecciona un solo paquete automático por juego para cada tier del minijuego. Solo aparecen ítems mapeados a recarga automática por ID.</p>
+          <div id="minigames-config-list" class="minigame-config-list">
+            <div class="empty-state"><p>Cargando configuración...</p></div>
+          </div>
+        </div>
+
+        <div class="minigame-card">
+          <h3>Ganadores</h3>
+          <div id="minigames-winners-list" class="minigame-winners-list">
+            <div class="empty-state"><p>Cargando ganadores...</p></div>
           </div>
         </div>
       </div>
