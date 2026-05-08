@@ -1263,6 +1263,21 @@ window.fetchPayments = fetchPayments;
     loadTabData(target);
   }
 
+  function syncActiveTab(target) {
+    if (!target) return;
+    tabs.forEach(tab => {
+      const isActive = tab.dataset.target === target;
+      tab.classList.toggle('active', isActive);
+      tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    activateTab(target);
+    if (adminDrawerTabs) {
+      adminDrawerTabs.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.target === target);
+      });
+    }
+  }
+
   // Wire tabs click (if not already wired by server)
   if (tabs && tabs.length) {
     tabs.forEach(btn => {
@@ -1653,7 +1668,7 @@ window.fetchLogo = fetchLogo;
 
   // Initial state
   const active = document.querySelector('#adminTabs .tab.active');
-  if (active) selectTab(active.dataset.target);
+  if (active) syncActiveTab(active.dataset.target);
   // Do not select a payment method by default on load
   showPaySection();
   // Always hide mail/session blocks (fallback)

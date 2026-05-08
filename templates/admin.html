@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/admin.js', v='37') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin.js', v='38') }}" defer></script>
 <style>
 </style>
 {% endblock %}
@@ -138,8 +138,8 @@
       <div class="panel-body">
         <div id="orders-list" class="orders-list">
           <div class="empty-state">
-            <h3>Sin órdenes</h3>
-            <p>Cuando los clientes confirmen pagos, sus órdenes aparecerán aquí.</p>
+            <h3>Órdenes no cargadas</h3>
+            <p>Toca Refrescar para cargar las órdenes pendientes.</p>
           </div>
         </div>
         <div id="orders-pagination" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:14px;"></div>
