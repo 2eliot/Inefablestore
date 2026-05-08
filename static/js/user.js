@@ -132,23 +132,33 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!myOrders) return;
     myOrders.innerHTML = '';
     if (!items || items.length === 0) {
-      myOrders.innerHTML = '<div class="muted">Sin órdenes aprobadas</div>';
+      myOrders.innerHTML = '<div class="muted">Sin órdenes registradas</div>';
       return;
     }
+    const orderStatusMeta = (rawStatus) => {
+      const status = String(rawStatus || 'pending').toLowerCase();
+      if (status === 'delivered') {
+        return { label: 'Entregada', color: '#10b981', border: 'rgba(16,185,129,0.25)' };
+      }
+      if (status === 'approved') {
+        return { label: 'Procesando', color: '#f59e0b', border: 'rgba(245,158,11,0.25)' };
+      }
+      if (status === 'rejected') {
+        return { label: 'Rechazada', color: '#ef4444', border: 'rgba(239,68,68,0.25)' };
+      }
+      return { label: 'Pendiente', color: '#f59e0b', border: 'rgba(245,158,11,0.25)' };
+    };
     items.forEach(o => {
       const row = document.createElement('div');
+      const statusMeta = orderStatusMeta(o.status);
       row.className = 'order-mini';
-      row.style.border = '1px solid rgba(16,185,129,0.25)';
+      row.style.border = `1px solid ${statusMeta.border}`;
       row.style.borderRadius = '10px';
       row.style.padding = '8px 10px';
-      const badge = (s) => {
-        const color = s === 'approved' ? '#10b981' : (s === 'rejected' ? '#ef4444' : '#f59e0b');
-        return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid ${color};color:${color};font-weight:800;font-size:11px;">${s}</span>`;
-      };
       row.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;font-weight:800;">
           <span>${o.package_name} • ${o.item_title}</span>
-          ${badge(o.status || 'approved')}
+          <span style="display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid ${statusMeta.color};color:${statusMeta.color};font-weight:800;font-size:11px;">${statusMeta.label}</span>
         </div>
         <div style="font-size:12px; color:#93c5b1;">Ref: ${o.reference} • ${new Date(o.created_at).toLocaleString()}</div>
         <div style="font-size:12px; color:#93c5b1;">Precio: $${Number(o.item_price_usd||0).toFixed(2)} (${o.method})</div>
