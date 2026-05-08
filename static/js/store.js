@@ -9,14 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const authCard = authModal ? authModal.querySelector('.auth-card') : null;
   const btnAuthClose = authModal ? authModal.querySelector('.auth-close') : null;
 
-  function textContentOrEmpty(node) {
-    return node && typeof node.textContent === 'string' ? node.textContent : '';
-  }
-
-  function valueOrEmpty(node) {
-    return node && typeof node.value === 'string' ? node.value : '';
-  }
-
   function openOverlay() {
     overlay && overlay.removeAttribute('hidden');
   }
@@ -299,7 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const isHome = !!document.getElementById('rail-best');
 
   function norm(s) {
-    return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return String(s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
   }
 
   function applySearchFilter(qRaw) {
@@ -310,8 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
       .filter(Boolean);
     rails.forEach(r => {
       r.querySelectorAll('.pkg-card').forEach(card => {
-        const pkgName = textContentOrEmpty(card.querySelector('.pkg-name'));
-        const name = norm(pkgName || card.textContent || '');
+        const name = norm(card.querySelector('.pkg-name')?.textContent || card.textContent || '');
         const show = !q || name.includes(q);
         card.style.display = show ? '' : 'none';
       });
@@ -347,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const r = document.querySelector(sel);
         if (!r) return;
         r.querySelectorAll('.pkg-card').forEach(card => {
-          const name = textContentOrEmpty(card.querySelector('.pkg-name')).trim();
+          const name = (card.querySelector('.pkg-name')?.textContent || '').trim();
           const href = (card && card.onclick) ? '' : '';
           // home.js binds click to navigate using id; we can parse from dataset if present.
           // As fallback we build /store/package/<id> only if we can infer id.
@@ -621,9 +612,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = panel.querySelector('.btn.primary');
     if (!btn) return;
     btn.addEventListener('click', async () => {
-      const name = valueOrEmpty(panel.querySelector('input[type="text"]')).trim();
-      const email = valueOrEmpty(panel.querySelector('input[type="email"]')).trim();
-      const phone = valueOrEmpty(panel.querySelector('input[type="tel"]')).trim();
+      const name = panel.querySelector('input[type="text"]')?.value.trim() || '';
+      const email = panel.querySelector('input[type="email"]')?.value.trim() || '';
+      const phone = panel.querySelector('input[type="tel"]')?.value.trim() || '';
       // last input is password
       const passInputs = panel.querySelectorAll('input[type="password"]');
       const password = passInputs.length ? passInputs[passInputs.length - 1].value : '';
@@ -702,9 +693,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = panel.querySelector('#btn-save-profile');
     if (!btn) return;
     btn.addEventListener('click', async () => {
-      const name = valueOrEmpty(panel.querySelector('#profile-name')).trim();
-      const email = valueOrEmpty(panel.querySelector('#profile-email')).trim();
-      const phone = valueOrEmpty(panel.querySelector('#profile-phone')).trim();
+      const name = panel.querySelector('#profile-name')?.value.trim() || '';
+      const email = panel.querySelector('#profile-email')?.value.trim() || '';
+      const phone = panel.querySelector('#profile-phone')?.value.trim() || '';
       try {
         const res = await fetch('/auth/profile', {
           method: 'POST',
