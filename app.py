@@ -7876,10 +7876,10 @@ def admin_orders_list():
     except Exception:
         page = 1
     try:
-        per_page = int(request.args.get("per_page", 50) or 50)
+        per_page = int(request.args.get("per_page", 20) or 20)
     except Exception:
-        per_page = 50
-    per_page = 50 if per_page <= 0 else min(per_page, 50)
+        per_page = 20
+    per_page = 20 if per_page <= 0 else min(per_page, 20)
 
     base_query = Order.query.order_by(Order.created_at.desc())
     total_orders = base_query.count()
@@ -7894,12 +7894,33 @@ def admin_orders_list():
         .all()
     )
 
+    package_ids = sorted({int(x.store_package_id) for x in orders if int(getattr(x, "store_package_id", 0) or 0) > 0})
+    item_ids = sorted({int(x.item_id) for x in orders if int(getattr(x, "item_id", 0) or 0) > 0})
+    packages_by_id = {}
+    items_by_id = {}
+    if package_ids:
+        try:
+            packages_by_id = {
+                int(pkg.id): pkg
+                for pkg in StorePackage.query.filter(StorePackage.id.in_(package_ids)).all()
+            }
+        except Exception:
+            packages_by_id = {}
+    if item_ids:
+        try:
+            items_by_id = {
+                int(item.id): item
+                for item in GamePackageItem.query.filter(GamePackageItem.id.in_(item_ids)).all()
+            }
+        except Exception:
+            items_by_id = {}
+
     out = []
     active_payment_provider = _payment_verification_provider()
     for x in orders:
         try:
-            pkg = StorePackage.query.get(x.store_package_id)
-            it = GamePackageItem.query.get(x.item_id) if x.item_id else None
+            pkg = packages_by_id.get(int(x.store_package_id or 0)) if x.store_package_id else None
+            it = items_by_id.get(int(x.item_id or 0)) if x.item_id else None
             items_payload = []
             if (x.items_json or '').strip():
                 parsed = json.loads(x.items_json or '[]')

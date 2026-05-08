@@ -498,7 +498,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnOrdersWdRefresh = document.getElementById('btn-orders-wd-refresh');
   const ordersWdList = document.getElementById('orders-wd-list');
   let ordersCurrentPage = 1;
-  const ordersPerPage = 50;
+  const ordersPerPage = 20;
   // Revendedores mapping elements
   const btnRevSync = document.getElementById('btn-rev-sync');
   const btnRevRefresh = document.getElementById('btn-rev-refresh');
