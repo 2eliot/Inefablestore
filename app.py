@@ -92,11 +92,18 @@ def _make_session_permanent():
 def _disable_admin_cache(response):
     try:
         req_path = (request.path or "").strip()
-        if req_path == "/admin" or req_path.endswith("/admin") or req_path == "/static/js/admin.js":
+        critical_html_paths = {"/", "/user", "/admin"}
+        critical_js_paths = {
+            "/static/js/admin.js",
+            "/static/js/store.js",
+            "/static/js/user.js",
+            "/static/js/home.js",
+        }
+        if req_path in critical_html_paths or req_path.endswith("/admin") or req_path in critical_js_paths:
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
-            if req_path == "/admin" or req_path.endswith("/admin"):
+            if req_path in critical_html_paths or req_path.endswith("/admin"):
                 response.headers["Clear-Site-Data"] = '"cache"'
         elif response.mimetype == "text/html":
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
