@@ -723,6 +723,7 @@ document.addEventListener('DOMContentLoaded', () => {
     desktopTabs.forEach(dt => {
       const btn = document.createElement('button');
       btn.className = 'tab';
+      if (dt.classList.contains('active')) btn.classList.add('active');
       btn.textContent = dt.textContent;
       btn.dataset.target = dt.dataset.target;
       adminDrawerTabs.appendChild(btn);
@@ -1200,10 +1201,8 @@ window.fetchPayments = fetchPayments;
     adminDrawerTabs.addEventListener('click', (e) => {
       const btn = e.target.closest('.tab');
       if (!btn) return;
-      // switch to the same tab as desktop
       const target = btn.dataset.target;
-      const desktopBtn = document.querySelector(`#adminTabs .tab[data-target="${target}"]`);
-      if (desktopBtn) desktopBtn.click();
+      selectTab(target);
       closeDrawer();
     });
   }
@@ -1220,24 +1219,55 @@ window.fetchPayments = fetchPayments;
 
   }
 
+  function loadTabData(target) {
+    if (target === '#tab-orders') { fetchOrders(); fetchAffWithdrawalsForOrders(); }
+    if (target === '#tab-images') { if (gallery) refreshGallery(); }
+    if (target === '#tab-config') {
+      fetchSiteName();
+      fetchLogo();
+      fetchMidBanner();
+      fetchThanksImage();
+      fetchActiveLoginGame();
+      fetchPayments();
+      fetchRate();
+      fetchMailInfo();
+      fetchSessionInfo();
+      hideMailAndSessionSections();
+    }
+    if (target === '#tab-affiliates') {
+      fetchAffiliates();
+      fetchAffWithdrawals();
+      populatePackagesSelect();
+      updatePkgSelectEnabled();
+    }
+    if (target === '#tab-packages') { fetchPackages(); }
+    if (target === '#tab-rev-map') { fetchRevMappingData(revStorePackage ? revStorePackage.value : ''); }
+    if (target === '#tab-minigames') { refreshMinigames(); }
+    if (target === '#tab-stats') { fetchStatsPackages(); fetchGlobalStatsSummary(); }
+    if (target === '#tab-blocked') { fetchBlocked(); }
+  }
+
+  function selectTab(target) {
+    if (!target) return;
+    tabs.forEach(tab => {
+      const isActive = tab.dataset.target === target;
+      tab.classList.toggle('active', isActive);
+      tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    activateTab(target);
+    if (adminDrawerTabs) {
+      adminDrawerTabs.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.target === target);
+      });
+    }
+    loadTabData(target);
+  }
+
   // Wire tabs click (if not already wired by server)
   if (tabs && tabs.length) {
     tabs.forEach(btn => {
-      btn.addEventListener('click', async () => {
-        tabs.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const target = btn.dataset.target;
-        activateTab(target);
-        // Lazy-load per tab
-        if (target === '#tab-orders') { fetchOrders(); fetchAffWithdrawalsForOrders(); }
-        if (target === '#tab-images') { if (gallery) await fetchImages(); }
-        if (target === '#tab-config') { fetchSiteName(); fetchLogo(); fetchMidBanner(); fetchThanksImage(); fetchActiveLoginGame(); fetchPayments(); }
-        if (target === '#tab-affiliates') { fetchAffiliates(); fetchAffWithdrawals(); populatePackagesSelect(); }
-        if (target === '#tab-packages') { fetchPackages(); }
-        if (target === '#tab-rev-map') { fetchRevMappingData(revStorePackage ? revStorePackage.value : ''); }
-        if (target === '#tab-minigames') { refreshMinigames(); }
-        if (target === '#tab-stats') { fetchStatsPackages(); fetchGlobalStatsSummary(); }
-        if (target === '#tab-blocked') { fetchBlocked(); }
+      btn.addEventListener('click', () => {
+        selectTab(btn.dataset.target);
       });
     });
   }
@@ -1621,55 +1651,9 @@ window.fetchLogo = fetchLogo;
     });
   }
 
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      tabs.forEach(t => t.setAttribute('aria-selected', 'false'));
-      tab.setAttribute('aria-selected', 'true');
-      tab.classList.add('active');
-      activateTab(tab.dataset.target);
-      // If Images tab is opened, refresh gallery
-      if (tab.dataset.target === '#tab-images') {
-        refreshGallery();
-      }
-      // If Config tab is opened, refresh rate and payments forms
-      if (tab.dataset.target === '#tab-config') {
-        fetchSiteName();
-        fetchRate();
-        fetchPayments();
-        fetchMailInfo();
-        fetchSessionInfo();
-        fetchMidBanner && fetchMidBanner();
-        fetchActiveLoginGame();
-        hideMailAndSessionSections();
-      }
-      // If Orders tab is opened, refresh orders
-      if (tab.dataset.target === '#tab-orders') {
-        fetchOrders();
-      }
-      // If Packages tab is opened, fetch packages to populate selector and list
-      if (tab.dataset.target === '#tab-packages') {
-        fetchPackages();
-      }
-      if (tab.dataset.target === '#tab-minigames') {
-        refreshMinigames();
-      }
-      // If Affiliates tab is opened, refresh affiliates
-      if (tab.dataset.target === '#tab-affiliates') {
-        populatePackagesSelect();
-        updatePkgSelectEnabled();
-        fetchAffiliates();
-        fetchAffWithdrawals();
-      }
-    });
-  });
-
   // Initial state
   const active = document.querySelector('#adminTabs .tab.active');
-  if (active) activateTab(active.dataset.target);
-  // If landing on Orders, fetch initially
-  if (document.querySelector('#tab-orders.active')) { fetchOrders(); fetchAffWithdrawalsForOrders(); }
-  if (document.querySelector('#tab-minigames.active')) { refreshMinigames(); }
-  if (document.querySelector('#tab-blocked.active')) { fetchBlocked(); }
+  if (active) selectTab(active.dataset.target);
   // Do not select a payment method by default on load
   showPaySection();
   // Always hide mail/session blocks (fallback)
