@@ -2728,9 +2728,13 @@ window.refreshGallery = refreshGallery;
           // If Pabilo verification failed (409), offer manual override
           if (res.status === 409 && data.payment_verify && !data.payment_verify.verified) {
             const pvMsg = data.payment_verify.message || data.error || 'Pago no verificado';
-            const override = confirm(
-              `⚠️ Verificación Pabilo falló:\n${pvMsg}\n\n¿Deseas aprobar esta orden manualmente sin verificación de Pabilo?`
-            );
+            const override = await showAdminConfirmDialog({
+              title: 'Verificacion Pabilo fallida',
+              message: `${pvMsg}\n\n¿Deseas aprobar esta orden manualmente sin verificacion de Pabilo?`,
+              confirmText: 'Aprobar manualmente',
+              cancelText: 'Cancelar',
+              danger: true,
+            });
             if (override) {
               payload.skip_payment_verification = true;
               const res2 = await fetch(`/admin/orders/${id}/status`, {
@@ -3856,6 +3860,96 @@ function closeCaptureModal() {
   if (img) img.src = '';
   if (modal) modal.style.display = 'none';
 }
+
+function showAdminConfirmDialog(options) {
+  const config = options || {};
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(2,6,23,0.82)';
+    overlay.style.zIndex = '10001';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.padding = '16px';
+    overlay.style.boxSizing = 'border-box';
+
+    const panel = document.createElement('div');
+    panel.style.width = '100%';
+    panel.style.maxWidth = '520px';
+    panel.style.background = '#111827';
+    panel.style.border = '1px solid rgba(255,255,255,.1)';
+    panel.style.borderRadius = '14px';
+    panel.style.boxShadow = '0 20px 60px rgba(0,0,0,.6)';
+    panel.style.padding = '18px';
+    panel.style.color = '#e2e8f0';
+
+    const title = document.createElement('h3');
+    title.textContent = config.title || 'Confirmar accion';
+    title.style.margin = '0 0 12px';
+    title.style.fontSize = '16px';
+
+    const body = document.createElement('div');
+    body.textContent = config.message || 'Confirma esta accion.';
+    body.style.whiteSpace = 'pre-wrap';
+    body.style.lineHeight = '1.5';
+    body.style.fontSize = '14px';
+    body.style.color = '#cbd5e1';
+
+    const actions = document.createElement('div');
+    actions.style.display = 'flex';
+    actions.style.justifyContent = 'flex-end';
+    actions.style.gap = '10px';
+    actions.style.marginTop = '18px';
+    actions.style.flexWrap = 'wrap';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = config.cancelText || 'Cancelar';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'btn';
+    confirmBtn.textContent = config.confirmText || 'Confirmar';
+    confirmBtn.style.background = config.danger ? '#b91c1c' : '#2563eb';
+    confirmBtn.style.border = '1px solid rgba(255,255,255,.12)';
+    confirmBtn.style.color = '#fff';
+
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      document.removeEventListener('keydown', onKeyDown, true);
+      resolve(result);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        finish(false);
+      }
+    };
+
+    cancelBtn.addEventListener('click', () => finish(false));
+    confirmBtn.addEventListener('click', () => finish(true));
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) finish(false);
+    });
+    document.addEventListener('keydown', onKeyDown, true);
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(confirmBtn);
+    panel.appendChild(title);
+    panel.appendChild(body);
+    panel.appendChild(actions);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    confirmBtn.focus();
+  });
+}
+
 document.addEventListener('click', function(e) {
   var modal = document.getElementById('captureModal');
   if (modal && e.target === modal) closeCaptureModal();

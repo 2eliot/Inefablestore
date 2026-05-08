@@ -7897,67 +7897,98 @@ def admin_orders_list():
     out = []
     active_payment_provider = _payment_verification_provider()
     for x in orders:
-        pkg = StorePackage.query.get(x.store_package_id)
-        it = GamePackageItem.query.get(x.item_id) if x.item_id else None
-        # Parse items_json if available
-        items_payload = []
         try:
+            pkg = StorePackage.query.get(x.store_package_id)
+            it = GamePackageItem.query.get(x.item_id) if x.item_id else None
+            items_payload = []
             if (x.items_json or '').strip():
                 parsed = json.loads(x.items_json or '[]')
                 if isinstance(parsed, list):
                     items_payload = parsed
-        except Exception:
-            items_payload = []
-        # Parse multiple delivery codes if available
-        delivery_codes = []
-        try:
+
+            delivery_codes = []
             if (x.delivery_codes_json or '').strip():
                 dc_parsed = json.loads(x.delivery_codes_json or '[]')
                 if isinstance(dc_parsed, list):
                     delivery_codes = [str(c or '').strip() for c in dc_parsed if str(c or '').strip()]
-        except Exception:
-            delivery_codes = []
-        auto_summary = _summarize_order_auto_recharges(_build_order_auto_recharge_units(x))
-        payment_state = _pabilo_get_payment_state(x)
-        pabilo_request = _pabilo_request_info(x)
-        pabilo_eligibility = _pabilo_eligibility_info(x)
-        out.append({
-            "id": x.id,
-            "created_at": x.created_at.isoformat(),
-            "status": x.status,
-            "store_package_id": x.store_package_id,
-            "package_name": pkg.name if pkg else "",
-            "package_category": (pkg.category if pkg and pkg.category else "mobile"),
-            "item_id": x.item_id,
-            "item_title": it.title if it else "",
-            "item_price_usd": (it.price if it else 0.0),
-            "is_auto_mapped": bool(auto_summary.get("total_units")),
-            "auto_recharge_summary": auto_summary,
-            "payment_verification_provider_active": active_payment_provider,
-            "payment_verify": payment_state,
-            "pabilo_request": pabilo_request,
-            "pabilo_eligible": bool(pabilo_eligibility.get("eligible")),
-            "pabilo_eligibility": pabilo_eligibility,
-            "items": items_payload,
-            "customer_id": x.customer_id,
-            "customer_zone": x.customer_zone or "",
-            "customer_name": x.customer_name or "",
-            "name": x.name,
-            "email": x.email,
-            "phone": x.phone,
-            "method": x.method,
-            "currency": x.currency,
-            "amount": x.amount,
-            "reference": x.reference,
-            "capture_reference": x.capture_reference or "",
-            "delivery_code": x.delivery_code or "",
-            "delivery_codes": delivery_codes,
-            "payment_capture": x.payment_capture or "",
-            "payment_capture_url": (
-                f"{app.config.get('UPLOAD_URL_PREFIX', '/static/uploads').rstrip('/')}/{x.payment_capture}"
-                if x.payment_capture else ""
-            ),
-        })
+
+            auto_summary = _summarize_order_auto_recharges(_build_order_auto_recharge_units(x))
+            payment_state = _pabilo_get_payment_state(x)
+            pabilo_request = _pabilo_request_info(x)
+            pabilo_eligibility = _pabilo_eligibility_info(x)
+            out.append({
+                "id": x.id,
+                "created_at": x.created_at.isoformat() if x.created_at else "",
+                "status": x.status,
+                "store_package_id": x.store_package_id,
+                "package_name": pkg.name if pkg else "",
+                "package_category": (pkg.category if pkg and pkg.category else "mobile"),
+                "item_id": x.item_id,
+                "item_title": it.title if it else "",
+                "item_price_usd": (it.price if it else 0.0),
+                "is_auto_mapped": bool(auto_summary.get("total_units")),
+                "auto_recharge_summary": auto_summary,
+                "payment_verification_provider_active": active_payment_provider,
+                "payment_verify": payment_state,
+                "pabilo_request": pabilo_request,
+                "pabilo_eligible": bool(pabilo_eligibility.get("eligible")),
+                "pabilo_eligibility": pabilo_eligibility,
+                "items": items_payload,
+                "customer_id": x.customer_id,
+                "customer_zone": x.customer_zone or "",
+                "customer_name": x.customer_name or "",
+                "name": x.name,
+                "email": x.email,
+                "phone": x.phone,
+                "method": x.method,
+                "currency": x.currency,
+                "amount": x.amount,
+                "reference": x.reference,
+                "capture_reference": x.capture_reference or "",
+                "delivery_code": x.delivery_code or "",
+                "delivery_codes": delivery_codes,
+                "payment_capture": x.payment_capture or "",
+                "payment_capture_url": (
+                    f"{app.config.get('UPLOAD_URL_PREFIX', '/static/uploads').rstrip('/')}/{x.payment_capture}"
+                    if x.payment_capture else ""
+                ),
+            })
+        except Exception as order_error:
+            out.append({
+                "id": getattr(x, "id", None),
+                "created_at": x.created_at.isoformat() if getattr(x, "created_at", None) else "",
+                "status": getattr(x, "status", "pending") or "pending",
+                "store_package_id": getattr(x, "store_package_id", None),
+                "package_name": "",
+                "package_category": "mobile",
+                "item_id": getattr(x, "item_id", None),
+                "item_title": "",
+                "item_price_usd": 0.0,
+                "is_auto_mapped": False,
+                "auto_recharge_summary": {},
+                "payment_verification_provider_active": active_payment_provider,
+                "payment_verify": {},
+                "pabilo_request": {},
+                "pabilo_eligible": False,
+                "pabilo_eligibility": {},
+                "items": [],
+                "customer_id": getattr(x, "customer_id", "") or "",
+                "customer_zone": getattr(x, "customer_zone", "") or "",
+                "customer_name": getattr(x, "customer_name", "") or "",
+                "name": getattr(x, "name", "") or "",
+                "email": getattr(x, "email", "") or "",
+                "phone": getattr(x, "phone", "") or "",
+                "method": getattr(x, "method", "") or "",
+                "currency": getattr(x, "currency", "") or "",
+                "amount": getattr(x, "amount", 0),
+                "reference": getattr(x, "reference", "") or "",
+                "capture_reference": getattr(x, "capture_reference", "") or "",
+                "delivery_code": getattr(x, "delivery_code", "") or "",
+                "delivery_codes": [],
+                "payment_capture": getattr(x, "payment_capture", "") or "",
+                "payment_capture_url": "",
+                "load_error": f"No se pudo procesar la orden: {str(order_error)}",
+            })
     return jsonify({
         "ok": True,
         "orders": out,
