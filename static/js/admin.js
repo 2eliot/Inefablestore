@@ -3750,9 +3750,6 @@ if (btnSaveHero) {
     });
   }
 
-  // Load packages initially (and again on tab switch)
-  fetchPackages();
-
   // Helpers for game items rendering
   async function loadGameItems(gameContainer, gid) {
     if (!gameContainer || !gid) return;
