@@ -2686,6 +2686,7 @@ window.refreshGallery = refreshGallery;
       if (!btn) return;
       const id = btn.getAttribute('data-id');
       const status = btnA ? 'approved' : 'rejected';
+      let allowManualOverride = false;
       if (btnA) {
         const tile = btn.closest('.order-tile');
         const isAutoTile = tile && tile.getAttribute('data-is-auto') === '1';
@@ -2699,8 +2700,16 @@ window.refreshGallery = refreshGallery;
             `ID: ${_pid}\n` +
             (_nick ? `Nombre: ${_nick}\n` : '') +
             `Referencia: ${_ref}\n\n` +
+            `Si la verificación de pago falla, esta aprobación continuará manualmente sin volver a preguntar.\n\n` +
             `¿Confirmar envío?`;
-          if (!confirm(msg)) return;
+          allowManualOverride = await showAdminConfirmDialog({
+            title: 'Confirmar recarga',
+            message: msg,
+            confirmText: 'Enviar recarga',
+            cancelText: 'Cancelar',
+            danger: true,
+          });
+          if (!allowManualOverride) return;
         }
       }
       let keepDisabled = false;
@@ -2727,7 +2736,7 @@ window.refreshGallery = refreshGallery;
           // If Pabilo verification failed (409), offer manual override
           if (res.status === 409 && data.payment_verify && !data.payment_verify.verified) {
             const pvMsg = data.payment_verify.message || data.error || 'Pago no verificado';
-            const override = await showAdminConfirmDialog({
+            const override = allowManualOverride ? true : await showAdminConfirmDialog({
               title: 'Verificacion Pabilo fallida',
               message: `${pvMsg}\n\n¿Deseas aprobar esta orden manualmente sin verificacion de Pabilo?`,
               confirmText: 'Aprobar manualmente',
