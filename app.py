@@ -97,7 +97,7 @@ def _disable_admin_cache(response):
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
             if req_path == "/admin" or req_path.endswith("/admin"):
-                response.headers["Clear-Site-Data"] = '"cache", "storage"'
+                response.headers["Clear-Site-Data"] = '"cache"'
         elif response.mimetype == "text/html":
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"

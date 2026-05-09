@@ -1,42 +1,5 @@
 {% extends 'base.html' %}
 {% block scripts %}
-<script>
-(() => {
-  const resetKey = 'inefablestore_admin_reset_v1';
-  const url = new URL(window.location.href);
-  const isResetPass = url.searchParams.get('admin_reset') === '1';
-
-  if (isResetPass) {
-    try { sessionStorage.setItem(resetKey, '1'); } catch (_) {}
-    url.searchParams.delete('admin_reset');
-    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
-    return;
-  }
-
-  let alreadyReset = false;
-  try { alreadyReset = sessionStorage.getItem(resetKey) === '1'; } catch (_) {}
-  if (alreadyReset) return;
-
-  try { localStorage.clear(); } catch (_) {}
-  try { sessionStorage.clear(); } catch (_) {}
-
-  const continueToAdmin = () => {
-    url.searchParams.set('admin_reset', '1');
-    window.location.replace(url.toString());
-  };
-
-  try {
-    if ('caches' in window && typeof window.caches.keys === 'function') {
-      window.caches.keys()
-        .then((keys) => Promise.all(keys.map((key) => window.caches.delete(key))))
-        .finally(continueToAdmin);
-      return;
-    }
-  } catch (_) {}
-
-  continueToAdmin();
-})();
-</script>
 <script src="{{ url_for('static', filename='js/admin.js', v='39') }}" defer></script>
 <style>
 </style>
