@@ -1668,7 +1668,7 @@ window.fetchLogo = fetchLogo;
 
   // Initial state
   const active = document.querySelector('#adminTabs .tab.active');
-  if (active) syncActiveTab(active.dataset.target);
+    if (active) selectTab(active.dataset.target);
   // Do not select a payment method by default on load
   showPaySection();
   // Always hide mail/session blocks (fallback)
