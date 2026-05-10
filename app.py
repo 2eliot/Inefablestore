@@ -45,6 +45,7 @@ MINIGAME_TIER_THRESHOLDS = ((1, 60), (2, 120), (3, 300))
 MINIGAME_CYCLE_SIZE = 300
 MINIGAME_GLOBAL_COUNT_KEY = "minigame_global_order_count"
 MINIGAME_CYCLE_PROGRESS_KEY = "minigame_cycle_progress"
+MINIGAME_PENDING_TIERS_KEY = "minigame_pending_tiers"
 MINIGAME_STATE_KEY = "minigame"
 # Make now_ve available in all templates
 @app.context_processor
@@ -4480,6 +4481,33 @@ def _minigame_tier_for_cycle_position(cycle_order_no: int):
     return None
 
 
+def _minigame_pending_tiers() -> list[int]:
+    raw_value = str(get_config_value(MINIGAME_PENDING_TIERS_KEY, "") or "").strip()
+    if not raw_value:
+        return []
+    try:
+        payload = json.loads(raw_value)
+    except Exception:
+        payload = [part.strip() for part in raw_value.split(",") if str(part or "").strip()]
+    if not isinstance(payload, list):
+        return []
+    valid_tiers = {int(tier) for tier, _threshold in MINIGAME_TIER_THRESHOLDS}
+    pending = []
+    for value in payload:
+        try:
+            tier = int(value)
+        except Exception:
+            continue
+        if tier in valid_tiers:
+            pending.append(tier)
+    return pending
+
+
+def _minigame_save_pending_tiers(pending_tiers, *, commit: bool = True) -> None:
+    serialized = json.dumps([int(tier) for tier in (pending_tiers or [])], ensure_ascii=True)
+    set_config_value(MINIGAME_PENDING_TIERS_KEY, serialized, commit=commit)
+
+
 def _minigame_config_int(key: str, default: int = 0) -> int:
     try:
         return int((get_config_value(key, str(default)) or str(default)).strip())
@@ -4594,15 +4622,18 @@ def _ensure_minigame_assignment(order_obj):
     next_global = global_count + 1
     cycle_order_no = (cycle_progress % MINIGAME_CYCLE_SIZE) + 1
     next_cycle_progress = 0 if cycle_order_no >= MINIGAME_CYCLE_SIZE else cycle_order_no
-    tier = _minigame_tier_for_cycle_position(cycle_order_no)
+    threshold_tier = _minigame_tier_for_cycle_position(cycle_order_no)
+    pending_tiers = _minigame_pending_tiers()
+    if threshold_tier:
+        pending_tiers.append(threshold_tier)
 
     current.update({
         "eligible": True,
         "assigned": True,
         "ready": True,
-        "winner": tier is not None,
+        "winner": False,
         "played": False,
-        "tier": tier,
+        "tier": None,
         "cycle_order_no": cycle_order_no,
         "global_order_no": next_global,
         "result": "pending",
@@ -4613,6 +4644,7 @@ def _ensure_minigame_assignment(order_obj):
     set_config_values({
         MINIGAME_GLOBAL_COUNT_KEY: str(next_global),
         MINIGAME_CYCLE_PROGRESS_KEY: str(next_cycle_progress),
+        MINIGAME_PENDING_TIERS_KEY: json.dumps(pending_tiers, ensure_ascii=True),
     })
     db.session.commit()
     return current
@@ -7273,6 +7305,14 @@ def thanks_order_minigame_play(oid: int):
             "message": current.get("message") or "",
         })
     current["played"] = True
+    pending_tiers = _minigame_pending_tiers()
+    awarded_tier = int(pending_tiers[0]) if pending_tiers else 0
+    if awarded_tier > 0:
+        current["winner"] = True
+        current["tier"] = awarded_tier
+    else:
+        current["winner"] = False
+        current["tier"] = None
     if not current.get("winner"):
         current["result"] = "lose"
         current["message"] = "Esta vez no tocó premio"
@@ -7287,6 +7327,8 @@ def thanks_order_minigame_play(oid: int):
 
     prize_row = _minigame_prize_map_for_game(int(order_obj.store_package_id or 0)).get(int(current.get("tier") or 0))
     if not prize_row:
+        current["winner"] = False
+        current["tier"] = None
         current["played"] = False
         current["played_at"] = ""
         current["message"] = "Aún no hay premio configurado para este juego"
@@ -7296,6 +7338,8 @@ def thanks_order_minigame_play(oid: int):
 
     dispatch = _dispatch_minigame_reward(order_obj, int(prize_row.prize_item_id), int(current.get("tier") or 0))
     if not dispatch.get("ok") and not dispatch.get("unit"):
+        current["winner"] = False
+        current["tier"] = None
         current["played"] = False
         current["played_at"] = ""
         current["message"] = str(dispatch.get("error") or "No se pudo enviar el premio")
@@ -7320,6 +7364,7 @@ def thanks_order_minigame_play(oid: int):
         "Tu premio quedó registrado, pero hubo un problema al enviarlo"
     )
     _minigame_set_state(order_obj, current)
+    _minigame_save_pending_tiers(pending_tiers[1:], commit=False)
     _minigame_record_winner(order_obj, current)
     db.session.commit()
 
