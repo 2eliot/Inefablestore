@@ -1244,6 +1244,7 @@ window.fetchPayments = fetchPayments;
     if (target === '#tab-rev-map') { fetchRevMappingData(revStorePackage ? revStorePackage.value : ''); }
     if (target === '#tab-minigames') { refreshMinigames(); }
     if (target === '#tab-stats') { fetchStatsPackages(); fetchGlobalStatsSummary(); }
+    if (target === '#tab-smileone') { fetchSmileOneConnections(); }
     if (target === '#tab-blocked') { fetchBlocked(); }
   }
 
@@ -1677,8 +1678,6 @@ window.fetchLogo = fetchLogo;
   // Wire mail test button
   if (btnMailTest) btnMailTest.addEventListener('click', sendMailTest);
   if (btnMailSave) btnMailSave.addEventListener('click', saveMailDestination);
-  // If landing on Config, also fetch session/mail info immediately
-  if (document.querySelector('#tab-config.active')) { fetchMailInfo(); fetchSessionInfo(); }
 
   // Wire save active login game
   if (btnSaveActiveLoginGame) {
@@ -2924,14 +2923,6 @@ window.fetchHero = fetchHero;
     });
   }
 
-  // Fetch current config on load of admin page (after element refs are defined)
-  window.fetchLogo && window.fetchLogo();
-  window.fetchMidBanner && window.fetchMidBanner();
-  window.fetchThanksImage && window.fetchThanksImage();
-  window.fetchHero && window.fetchHero();
-  window.fetchRate && window.fetchRate();
-  window.fetchPayments && window.fetchPayments();
-
   // =====================
   // Image thumbnail dropdown (used everywhere)
   // =====================
@@ -3507,7 +3498,6 @@ if (btnSaveHero) {
   }
 
   if (btnSoRefresh) btnSoRefresh.addEventListener('click', fetchSmileOneConnections);
-  fetchSmileOneConnections();
 
   function filterPackagesBySelect() {
     const sel = pkgSelect ? String(pkgSelect.value || '') : '';
