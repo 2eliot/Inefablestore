@@ -2365,6 +2365,17 @@ window.refreshGallery = refreshGallery;
 
   function renderOrders(items) {
     function fixMb(s){ s = String(s==null?'':s); return s.replace(/ÃƒÆ’Ã‚Â¡|ÃƒÂ¡/g,'Ã¡').replace(/ÃƒÆ’Ã‚Â©|ÃƒÂ©/g,'Ã©').replace(/ÃƒÆ’Ã‚Â­|ÃƒÂ­/g,'Ã­').replace(/ÃƒÆ’Ã‚Â³|ÃƒÂ³/g,'Ã³').replace(/ÃƒÆ’Ã‚Âº|ÃƒÂº/g,'Ãº').replace(/ÃƒÆ’Ã‚Â±|ÃƒÂ±/g,'Ã±').replace(/Ãƒâ€šÃ‚Â·/g,'Â·').replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½/g,'-').replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢/g,'â€¢'); }
+    function formatOrderAmount(amount, currency) {
+      const numericAmount = Number(amount || 0);
+      const currencyCode = String(currency || '').toUpperCase();
+      if (!Number.isFinite(numericAmount)) return `0 ${currencyCode}`.trim();
+      if (currencyCode === 'USD') return `${numericAmount.toFixed(2)} USD`;
+      if (currencyCode === 'BSD' || currencyCode === 'VES' || currencyCode === 'BS') {
+        return `${Math.round(numericAmount)} ${currencyCode}`.trim();
+      }
+      const fixedAmount = Number.isInteger(numericAmount) ? numericAmount.toFixed(0) : numericAmount.toFixed(2);
+      return `${fixedAmount} ${currencyCode}`.trim();
+    }
     if (!ordersList) return;
     ordersList.innerHTML = '';
     if (!items || items.length === 0) {
@@ -2436,8 +2447,7 @@ window.refreshGallery = refreshGallery;
       const diam = itemsArr.length
         ? itemsArr.map(it => `${parseInt(it.qty||1,10)}x ${fixMb(it.title||'')}`).join(' · ')
         : ((qtyTotal > 1 ? `${qtyTotal}x ` : '') + (fixMb(o.item_title) || ''));
-      const amountRounded = Math.round(Number(o.amount||0));
-      const amountDisp = `${amountRounded} ${o.currency || ''}`.trim();
+      const amountDisp = formatOrderAmount(o.amount, o.currency);
       const affiliateTag = o.affiliate_code ? ` <span class="aff-code">(${fixMb(o.affiliate_code)})</span>` : '';
       const statusIcon = o.status === 'approved' ? 'Aprobado' : o.status === 'rejected' ? 'Rechazado' : o.status === 'delivered' ? 'Entregado' : 'Pendiente';
       const statusClass = (o.status === 'approved' || o.status === 'delivered') ? 'ok' : o.status === 'rejected' ? 'rej' : 'pend';
