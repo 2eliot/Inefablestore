@@ -483,7 +483,9 @@ document.addEventListener('DOMContentLoaded', () => {
       let frac = Number(window.__validRef.discount || 0);
       try {
         const it = (allItems && selectedIndex >= 0) ? allItems[selectedIndex] : null;
-        if (it && Array.isArray(window.__validRef.item_discounts)) {
+        // Items with no_discount flag are excluded from all discount codes
+        if (it && it.no_discount) frac = 0;
+        if (it && frac > 0 && Array.isArray(window.__validRef.item_discounts)) {
           const hit = window.__validRef.item_discounts.find(x => Number(x.item_id) === Number(it.id));
           if (hit && typeof hit.discount === 'number') frac = Number(hit.discount || 0);
         }

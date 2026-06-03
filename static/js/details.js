@@ -543,6 +543,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Returns the discount fraction for a single unit (0 = no discount)
   function discountFractionForItem(it) {
     if (!it || !validRef) return 0;
+    // Items with no_discount flag are excluded from all discount codes
+    if (it.no_discount) return 0;
     let frac = Number(validRef.discount || 0);
     try {
       if (Array.isArray(validRef.item_discounts)) {
@@ -704,7 +706,9 @@ document.addEventListener('DOMContentLoaded', () => {
         ? `<img class=\"item-icon\" src=\"${it.icon_path}\" alt=\"\" style=\"width:${iconSize}px;height:${iconSize}px;object-fit:contain;display:inline-block;\" />`
         : '';
       const subtitleHtml = subtitle ? `<div class=\"item-pill-subtitle\">${subtitle}</div>` : '';
+      const promoTag = it.no_discount ? '<span class="promo-badge">Promo</span>' : '';
       b.innerHTML = `
+  ${promoTag}
   <div class="item-pill-body">
     <div class="item-pill-head">
       <div class="item-pill-title">${it.title || ''}</div>

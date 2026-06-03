@@ -1922,6 +1922,8 @@ class GamePackageItem(db.Model):
     sticker = db.Column(db.String(50), default="")
     # Optional small icon shown next to the item title in details page
     icon_path = db.Column(db.String(300), default="")
+    # When True, discount codes do not apply to this item
+    no_discount = db.Column(db.Boolean, default=False)
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -5343,6 +5345,9 @@ with app.app_context():
             db.session.commit()
         if "profit_net_usd" not in gp_cols:
             db.session.execute(text("ALTER TABLE game_packages ADD COLUMN profit_net_usd REAL DEFAULT 0.0"))
+            db.session.commit()
+        if "no_discount" not in gp_cols:
+            db.session.execute(text("ALTER TABLE game_packages ADD COLUMN no_discount INTEGER DEFAULT 0"))
             db.session.commit()
     except Exception:
         pass
@@ -8766,7 +8771,7 @@ def store_game_items(gid: int):
     return jsonify({
         "ok": True,
         "items": [
-            {"id": it.id, "title": it.title, "subtitle": (it.subtitle or ""), "price": it.price, "description": (it.description or ""), "sticker": (it.sticker or ""), "icon_path": (it.icon_path or "")}
+            {"id": it.id, "title": it.title, "subtitle": (it.subtitle or ""), "price": it.price, "description": (it.description or ""), "sticker": (it.sticker or ""), "icon_path": (it.icon_path or ""), "no_discount": bool(it.no_discount)}
             for it in items
         ]
     })
@@ -9281,6 +9286,8 @@ def admin_game_items_bulk_update(gid: int):
                 pass
         if "active" in entry:
             item.active = bool(entry.get("active"))
+        if "no_discount" in entry:
+            item.no_discount = bool(entry.get("no_discount"))
         updated += 1
     db.session.commit()
     return jsonify({"ok": True, "updated": updated})

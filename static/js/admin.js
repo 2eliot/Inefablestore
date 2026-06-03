@@ -3666,6 +3666,7 @@ if (btnSaveHero) {
           const subtitleEl = row.querySelector('.it-subtitle');
           const priceEl = row.querySelector('.it-price');
           const specialEl = row.querySelector('.it-special');
+          const noDiscountEl = row.querySelector('.it-no-discount');
           const iconEl = row.querySelector('.it-icon');
           itemsPayload.push({
             id: parseInt(itemId, 10),
@@ -3673,6 +3674,7 @@ if (btnSaveHero) {
             subtitle: subtitleEl ? subtitleEl.value.trim() : '',
             price: priceEl ? parseFloat(priceEl.value || '0') : 0,
             sticker: specialEl && specialEl.checked ? 'special' : '',
+            no_discount: noDiscountEl ? !!noDiscountEl.checked : false,
             icon_path: iconEl ? iconEl.value.trim() : ''
           });
         });
@@ -3800,6 +3802,9 @@ if (btnSaveHero) {
         <div class="pkg-item-extras">
           <label class="pkg-edit-field" style="flex:0 auto;"><span>Especial</span>
             <input class="it-special" type="checkbox" ${(it.sticker||'').toLowerCase()==='special' ? 'checked' : ''}/>
+          </label>
+          <label class="pkg-edit-field" style="flex:0 auto;"><span>No desc.</span>
+            <input class="it-no-discount" type="checkbox" ${it.no_discount ? 'checked' : ''}/>
           </label>
           <label class="pkg-edit-field" style="flex:1;"><span>Icono</span>
             <div class="it-icon-wrap">
