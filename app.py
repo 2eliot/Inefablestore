@@ -33,8 +33,27 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 app = Flask(__name__, instance_relative_config=True)
 load_dotenv()
 
-# Global deploy version — incrementada manualmente en cada deploy para forzar cache reset
-DEPLOY_VERSION = 2
+# Deploy version — se actualiza automáticamente al hacer git pull (usa el timestamp del .git/HEAD)
+import subprocess, pathlib
+_DEPLOY_VERSION = None
+def _get_deploy_version():
+    global _DEPLOY_VERSION
+    if _DEPLOY_VERSION is not None:
+        return _DEPLOY_VERSION
+    try:
+        head = pathlib.Path(app.root_path) / ".git" / "HEAD"
+        if head.exists():
+            ref = head.read_text().strip()
+            if ref.startswith("ref: "):
+                ref_path = pathlib.Path(app.root_path) / ".git" / ref[5:]
+                if ref_path.exists():
+                    _DEPLOY_VERSION = ref_path.read_text().strip()[:12]
+                    return _DEPLOY_VERSION
+        _DEPLOY_VERSION = str(int(head.stat().st_mtime))
+    except Exception:
+        _DEPLOY_VERSION = "0"
+    return _DEPLOY_VERSION
+DEPLOY_VERSION = _get_deploy_version()
 
 # Configure Venezuela timezone (GMT-4)
 VE_TIMEZONE = timezone(timedelta(hours=-4))
