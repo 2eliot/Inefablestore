@@ -8300,6 +8300,11 @@ def admin_orders_set_status(oid: int):
             auto_summary = auto_dispatch.get("summary") or {}
             if auto_summary.get("total_units", 0) > 0 and auto_summary.get("completed_units", 0) >= auto_summary.get("total_units", 0):
                 _send_order_completed_email_if_needed(o)
+            # Si el admin aprobó manualmente (skip_payment_verification) y el dispatch
+            # falló revirtiendo la orden a "pending", la volvemos a "approved".
+            if skip_payment_verification and not auto_dispatch.get("ok") and (o.status or "").lower() == "pending":
+                o.status = "approved"
+                db.session.commit()
     except Exception as exc:
         auto_dispatch = {
             "ok": False,
@@ -8308,6 +8313,10 @@ def admin_orders_set_status(oid: int):
             "order_id": o.id,
             "summary": _summarize_order_auto_recharges(_build_order_auto_recharge_units(o)),
         }
+        # También aquí, si skip_payment_verification, aseguramos que la orden quede approved
+        if skip_payment_verification and (o.status or "").lower() == "pending":
+            o.status = "approved"
+            db.session.commit()
 
     response_payload = {"ok": True}
     if skip_payment_verification:
