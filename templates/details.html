@@ -2,7 +2,7 @@
 {% set body_class = 'details-checkout-page' %}
 
 {% block styles %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='13') }}">
+<link rel="stylesheet" href="{{ static_url('css/store.css') }}">
 {% endblock %}
 
 {% block header %}
@@ -316,8 +316,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/store.js', v='5') }}" defer></script>
-<script src="{{ url_for('static', filename='js/details.js', v='12') }}" defer></script>
+<script src="{{ static_url('js/store.js') }}" defer></script>
+<script src="{{ static_url('js/details.js') }}" defer></script>
 {% endblock %}
 
 

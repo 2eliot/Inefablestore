@@ -9442,6 +9442,20 @@ def inject_cfg_helpers():
     return dict(get_config_value=get_config_value)
 
 
+@app.template_global()
+def static_url(filename):
+    """Returns a versioned URL for static files based on file mtime.
+    Usage: {{ static_url('css/store.css') }}  →  /static/css/store.css?v=1234567890
+    """
+    import os, pathlib
+    full = os.path.join(app.static_folder, filename.replace("/", os.sep))
+    try:
+        mtime = int(os.path.getmtime(full))
+    except (OSError, TypeError):
+        mtime = 0
+    return url_for('static', filename=filename, v=mtime)
+
+
 @app.route("/admin/stats/packages", methods=["GET"])
 def admin_stats_packages():
     user = session.get("user")
