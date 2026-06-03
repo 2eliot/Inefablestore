@@ -33,6 +33,9 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 app = Flask(__name__, instance_relative_config=True)
 load_dotenv()
 
+# Global deploy version — incrementada manualmente en cada deploy para forzar cache reset
+DEPLOY_VERSION = 2
+
 # Configure Venezuela timezone (GMT-4)
 VE_TIMEZONE = timezone(timedelta(hours=-4))
 
@@ -9444,16 +9447,10 @@ def inject_cfg_helpers():
 
 @app.template_global()
 def static_url(filename):
-    """Returns a versioned URL for static files based on file mtime.
+    """Returns a versioned URL for static files using a global deploy version.
     Usage: {{ static_url('css/store.css') }}  →  /static/css/store.css?v=1234567890
     """
-    import os, pathlib
-    full = os.path.join(app.static_folder, filename.replace("/", os.sep))
-    try:
-        mtime = int(os.path.getmtime(full))
-    except (OSError, TypeError):
-        mtime = 0
-    return url_for('static', filename=filename, v=mtime)
+    return url_for('static', filename=filename, v=DEPLOY_VERSION)
 
 
 @app.route("/admin/stats/packages", methods=["GET"])
