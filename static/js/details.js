@@ -111,8 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update shown prices when quantity changes
       if (selectedItemIndex >= 0) {
         const it = allItems[selectedItemIndex];
-        const unit = currentUnitValue(it);
-        const total = unit * quantity;
+        const total = computeDiscountedTotal(it, quantity);
         if (selPrice) selPrice.textContent = formatPrice(total);
         if (sumPrice) sumPrice.textContent = formatPrice(total);
       }
@@ -521,8 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (it) {
       if (mfsTitle) mfsTitle.textContent = it.title || '';
       if (mfsPrice) {
-        const unit = currentUnitValue(it);
-        const val = unit * Math.max(1, quantity || 1);
+        const val = computeDiscountedTotal(it, quantity);
         mfsPrice.textContent = formatPrice(val);
       }
     }
@@ -542,6 +540,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Returns the discount fraction for a single unit (0 = no discount)
   function discountFractionForItem(it) {
     if (!it || !validRef) return 0;
     let frac = Number(validRef.discount || 0);
@@ -554,17 +553,26 @@ document.addEventListener('DOMContentLoaded', () => {
     return Math.max(0, Math.min(1, frac));
   }
 
-  function discountedUnitUsdValue(it) {
-    const base = Number((it && it.price) || 0);
-    const frac = discountFractionForItem(it);
-    return frac > 0 ? base * (1 - frac) : base;
-  }
-
-  // Returns unit price in the currently selected currency
+  // Returns unit price in the currently selected currency (WITHOUT discount)
   function currentUnitValue(it) {
     if (!it) return 0;
-    const unitUsd = discountedUnitUsdValue(it);
-    return (currency === 'BSD') ? (unitUsd * (rate || 0)) : unitUsd;
+    const base = Number((it && it.price) || 0);
+    return (currency === 'BSD') ? (base * (rate || 0)) : base;
+  }
+
+  // Computes total applying discount ONLY to 1 unit (not to all quantity),
+  // matching checkout.js behavior for influencer/referral codes.
+  function computeDiscountedTotal(it, qty) {
+    if (!it) return 0;
+    const unitPrice = Number(it.price || 0);
+    const q = Math.max(1, qty || 1);
+    const baseTotal = unitPrice * q;
+    const frac = discountFractionForItem(it);
+    let totalUsd = baseTotal;
+    if (frac > 0) {
+      totalUsd = baseTotal - (unitPrice * frac);
+    }
+    return (currency === 'BSD') ? (totalUsd * (rate || 0)) : totalUsd;
   }
 
   function getMobilePreviewLimit(orderedItems, specialItems) {
@@ -708,8 +716,7 @@ document.addEventListener('DOMContentLoaded', () => {
       b.addEventListener('click', () => {
         selBox.hidden = false;
         selTitle.textContent = it.title;
-        const unit = currentUnitValue(it);
-        const total = unit * Math.max(1, quantity || 1);
+        const total = computeDiscountedTotal(it, quantity);
         selPrice.textContent = formatPrice(total);
         sumPrice.textContent = formatPrice(total);
         grid.querySelectorAll('.item-pill').forEach(x => x.classList.remove('active'));
@@ -725,8 +732,7 @@ document.addEventListener('DOMContentLoaded', () => {
         b.classList.add('active');
         selBox.hidden = false;
         selTitle.textContent = it.title || '';
-        const unit = currentUnitValue(it);
-        const total = unit * Math.max(1, quantity || 1);
+        const total = computeDiscountedTotal(it, quantity);
         selPrice.textContent = formatPrice(total);
         sumPrice.textContent = formatPrice(total);
         ensureDesktopQty();
@@ -874,8 +880,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selectedItemIndex >= 0) {
       const it = allItems[selectedItemIndex];
       if (it) {
-        const unit = currentUnitValue(it);
-        const total = unit * Math.max(1, quantity || 1);
+        const total = computeDiscountedTotal(it, quantity);
         selPrice.textContent = formatPrice(total);
         sumPrice.textContent = formatPrice(total);
       }
@@ -919,8 +924,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function computeCurrentTotal() {
     const it = currentSelectedItem();
     if (!it) return 0;
-    const totalUsd = discountedUnitUsdValue(it) * Math.max(1, quantity || 1);
-    return currency === 'BSD' ? totalUsd * (rate || 0) : totalUsd;
+    return computeDiscountedTotal(it, quantity);
   }
 
   function openPay() {
