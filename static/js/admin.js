@@ -532,11 +532,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function formatRevCatalogOptionLabel(rc) {
-    if (rc.is_pin) {
-      const pkgName = (rc.remote_package_name || '').trim() || `PIN #${rc.remote_package_id || '?'}`;
-      const price = rc.price != null ? ` / $${Number(rc.price).toFixed(2)}` : '';
-      return `🔑 ${pkgName}${price}`;
-    }
     const gameName = (rc.remote_product_name || '').trim() || `Juego ${rc.remote_product_id || '?'}`;
     const pkgName = (rc.remote_package_name || '').trim() || `Paquete ${rc.remote_package_id || '?'}`;
     const ids = `prod ${rc.remote_product_id || '?'} / pack ${rc.remote_package_id || '?'}`;
@@ -556,11 +551,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const mapping = JSON.parse(row.getAttribute('data-current-mapping') || 'null');
 
     if (selected) {
-      if (selected.is_pin) {
-        const price = selected.price != null ? ` · $${Number(selected.price).toFixed(2)}` : '';
-        info.innerHTML = `PIN directo: <strong>🔑 ${escapeAdminHtml(selected.remote_package_name || ('PIN #' + selected.remote_package_id))}</strong> · ID ${escapeAdminHtml(selected.remote_package_id)}${price}`;
-        return;
-      }
       const input2 = selected.requires_player_id2
         ? ` · Requiere ${escapeAdminHtml((selected.field2_label || 'input2').trim() || 'input2')}`
         : '';
@@ -575,12 +565,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (mapping && mapping.remote_package_id) {
-      if (mapping.direct_to_pin) {
-        info.innerHTML = `PIN directo guardado: Package ID ${escapeAdminHtml(mapping.remote_package_id)}${mapping.remote_label ? ` · ${escapeAdminHtml(mapping.remote_label)}` : ''}`;
-      } else {
         info.innerHTML = `Mapeo guardado fuera del catálogo actual: Product ID ${escapeAdminHtml(mapping.remote_product_id || '')} · Package ID ${escapeAdminHtml(mapping.remote_package_id)}${mapping.remote_label ? ` · ${escapeAdminHtml(mapping.remote_label)}` : ''}`;
-      }
-      return;
+        return;
     }
 
     info.textContent = 'Sin mapeo automático guardado.';
@@ -628,15 +614,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let html = '';
     items.forEach((it) => {
       const mapping = it.mapping || null;
-      // Determine if this item has a PIN mapping
-      const isPinMapping = !!(mapping && mapping.direct_to_pin);
-      // For PIN mappings, the catalog_id is "pin_X"; for normal mappings, find it in the catalog
       let mappedCatalogId = null;
       let mappedGameName = '';
-      if (isPinMapping) {
-        mappedCatalogId = mapping.catalog_id || ('pin_' + mapping.remote_package_id);
-        mappedGameName = 'PINs (Conexión)';
-      } else if (mapping) {
+      if (mapping) {
         const found = remoteCatalog.find((r) => {
           return parseInt(r.remote_package_id, 10) === parseInt(mapping.remote_package_id, 10)
             && parseInt(r.remote_product_id || 0, 10) === parseInt(mapping.remote_product_id || 0, 10);
@@ -664,8 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <option value="">— Elige un juego —</option>
               ${gameNames.map((gName) => {
                 const selected = gName === mappedGameName ? 'selected' : '';
-                const label = gName === 'PINs (Conexión)' ? '🔑 PINs (Conexión)' : escapeAdminHtml(gName);
-                return `<option value="${escapeAdminHtml(gName)}" ${selected}>${label}</option>`;
+                return `<option value="${escapeAdminHtml(gName)}" ${selected}>${escapeAdminHtml(gName)}</option>`;
               }).join('')}
             </select>
             <select class="input rev-catalog-select" data-store-item-id="${it.id}" data-game="${escapeAdminHtml(mappedGameName)}" style="${mappedGameName ? '' : 'display:none;'}">
@@ -676,7 +655,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <input type="checkbox" class="rev-auto-enabled" data-store-item-id="${it.id}" ${(mapping && mapping.auto_enabled) ? 'checked' : ''}>
               Activar recarga automática para este ítem
             </label>
-            <label class="rev-direct-script-label" style="display:flex; align-items:center; gap:8px; font-size:13px; color:#cbd5e1;${isPinMapping ? 'display:none;' : ''}">
+            <label class="rev-direct-script-label" style="display:flex; align-items:center; gap:8px; font-size:13px; color:#cbd5e1;">
               <input type="checkbox" class="rev-direct-script" data-store-item-id="${it.id}" ${(mapping && mapping.direct_to_script) ? 'checked' : ''}>
               Enviar directo a Game Script para este ítem
             </label>
@@ -704,7 +683,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function populateCatalogSelect(selectEl, gameName, remoteCatalog) {
     const prevValue = selectEl.value;
     selectEl.innerHTML = '<option value="">Manual (sin mapeo automático)</option>';
-    const isPinGame = gameName === 'PINs (Conexión)';
     remoteCatalog
       .filter((rc) => {
         const gName = (rc.remote_product_name || '').trim() || 'Otro';
@@ -719,25 +697,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         selectEl.appendChild(opt);
       });
-    if (isPinGame) {
-      // When switching to PIN game, hide direct-script checkbox
-      const row = selectEl.closest('.rev-map-row');
-      if (row) {
-        const directScriptLabel = row.querySelector('.rev-direct-script-label');
-        if (directScriptLabel) directScriptLabel.style.display = 'none';
-        const directScriptChk = row.querySelector('.rev-direct-script');
-        if (directScriptChk) directScriptChk.checked = false;
-        // Auto-enable the auto checkbox for PIN
-        const autoChk = row.querySelector('.rev-auto-enabled');
-        if (autoChk) autoChk.checked = true;
-      }
-    } else {
-      const row = selectEl.closest('.rev-map-row');
-      if (row) {
-        const directScriptLabel = row.querySelector('.rev-direct-script-label');
-        if (directScriptLabel) directScriptLabel.style.display = '';
-      }
-    }
   }
 
   async function syncRevCatalog() {
@@ -756,13 +715,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const chk = row.querySelector('.rev-auto-enabled');
       const directChk = row.querySelector('.rev-direct-script');
       const directToScript = !!(directChk && directChk.checked);
-      const directToPin = sel ? String(sel.value || '').startsWith('pin_') : false;
       return {
         store_item_id: storeItemId,
         catalog_id: sel ? (sel.value || '') : '',
-        auto_enabled: !!(chk && chk.checked) || directToScript || directToPin,
+        auto_enabled: !!(chk && chk.checked) || directToScript,
         direct_to_script: directToScript,
-        direct_to_pin: directToPin,
       };
     }).filter((x) => x.store_item_id > 0);
 
