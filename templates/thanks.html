@@ -666,6 +666,71 @@
       min-width: 0;
     }
   }
+
+  /* ── PIN display section ── */
+  .ty-pins-section {
+    display: none;
+    margin-top: 16px;
+    width: 100%;
+  }
+  .ty-pins-section.visible {
+    display: block;
+  }
+  .ty-pins-title {
+    color: #dbe5ef;
+    font-size: 0.92rem;
+    font-weight: 700;
+    margin: 0 0 10px;
+  }
+  .ty-pin-card {
+    background: linear-gradient(135deg, rgba(0,255,136,.08), rgba(0,255,136,.02));
+    border: 1px solid rgba(0,255,136,.22);
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .ty-pin-info {
+    flex: 1;
+    min-width: 180px;
+  }
+  .ty-pin-label {
+    color: #8b949e;
+    font-size: 0.78rem;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .ty-pin-code {
+    font-family: 'Courier New', monospace;
+    font-size: 1.2rem;
+    font-weight: 900;
+    color: var(--ty-accent);
+    letter-spacing: .05em;
+    word-break: break-all;
+  }
+  .ty-pin-copy-btn {
+    background: rgba(0,255,136,.12);
+    border: 1px solid rgba(0,255,136,.28);
+    color: var(--ty-accent);
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.82rem;
+    transition: background .2s;
+    white-space: nowrap;
+  }
+  .ty-pin-copy-btn:hover {
+    background: rgba(0,255,136,.22);
+  }
+  .ty-pin-copy-btn.copied {
+    background: var(--ty-accent);
+    color: #080a0c;
+  }
 </style>
 {% endblock %}
 
@@ -702,6 +767,10 @@
       <div id="ty-progress" class="ty-progress" data-order-id="{{ order_id }}" aria-live="polite">
         <h3 id="ty-progress-title" class="ty-progress-title">Estado de procesamiento</h3>
         <ul id="ty-steps" class="ty-steps"></ul>
+        <div id="ty-pins-section" class="ty-pins-section">
+          <h4 class="ty-pins-title">Tus PINs de Recarga</h4>
+          <div id="ty-pins-list"></div>
+        </div>
       </div>
       <div id="ty-minigame" class="ty-minigame" hidden data-player-display="{{ player_display or '' }}" data-package-display="{{ package_display or '' }}">
         <button id="ty-minigame-open" class="ty-minigame-trigger" type="button">Jugar por premio</button>
@@ -942,11 +1011,57 @@
       // Render current state (without new ones yet)
       renderImmediate(payload, null);
 
+      // Render PINs if present
+      renderPins(payload);
+
       // Start draining queue if not already
       if (!animating && pendingQueue.length > 0) {
         setTimeout(applyNextInQueue, 800 + Math.random() * 400);
       }
     }
+
+    function renderPins(payload) {
+      var sectionEl = document.getElementById('ty-pins-section');
+      var listEl = document.getElementById('ty-pins-list');
+      if (!sectionEl || !listEl) return;
+      var pins = Array.isArray(payload && payload.pins) ? payload.pins : [];
+      if (pins.length === 0) { sectionEl.classList.remove('visible'); return; }
+      sectionEl.classList.add('visible');
+      listEl.innerHTML = pins.map(function (pin, i) {
+        var code = String(pin.pin_code || '').trim();
+        var title = String(pin.title || 'PIN').trim();
+        var safeCode = code.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return '<div class="ty-pin-card">'
+          + '<div class="ty-pin-info">'
+          + '<span class="ty-pin-label">' + title + '</span>'
+          + '<span class="ty-pin-code">' + safeCode + '</span>'
+          + '</div>'
+          + '<button class="ty-pin-copy-btn" data-pin-code="' + safeCode + '" onclick="copyPinCode(this)" type="button">Copiar</button>'
+          + '</div>';
+      }).join('');
+    }
+
+    window.copyPinCode = function (btn) {
+      var code = btn.getAttribute('data-pin-code') || '';
+      if (!code) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(function () {
+          btn.textContent = '¡Copiado!';
+          btn.classList.add('copied');
+          setTimeout(function () { btn.textContent = 'Copiar'; btn.classList.remove('copied'); }, 2000);
+        }).catch(function () { /* fallback */ });
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = code;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); btn.textContent = '¡Copiado!'; btn.classList.add('copied'); } catch (e) {}
+        document.body.removeChild(ta);
+        setTimeout(function () { btn.textContent = 'Copiar'; btn.classList.remove('copied'); }, 2000);
+      }
+    };
 
     function stopPolling() {
       if (timer) {

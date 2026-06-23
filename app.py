@@ -1379,6 +1379,20 @@ def _ensure_automation_json_column():
 
 _ensure_automation_json_column()
 
+def _ensure_direct_to_pin_column():
+    try:
+        with app.app_context():
+            inspector = db.inspect(db.engine)
+            cols = [c['name'] for c in inspector.get_columns('rev_item_mappings')]
+            if 'direct_to_pin' not in cols:
+                db.session.execute(db.text("ALTER TABLE rev_item_mappings ADD COLUMN direct_to_pin BOOLEAN DEFAULT FALSE"))
+                db.session.commit()
+                print("[Migration] Added direct_to_pin column to rev_item_mappings table")
+    except Exception as e:
+        print(f"[Migration] direct_to_pin check: {e}")
+
+_ensure_direct_to_pin_column()
+
 
 # ==============================
 # Email helper
@@ -1976,6 +1990,7 @@ class RevendedoresItemMapping(db.Model):
     remote_label = db.Column(db.String(250), default="")
     auto_enabled = db.Column(db.Boolean, default=False)
     direct_to_script = db.Column(db.Boolean, default=False)
+    direct_to_pin = db.Column(db.Boolean, default=False)
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -2230,6 +2245,8 @@ def _game_script_request(method: str, endpoint_path: str, payload=None, timeout=
 
 
 def _unit_delivery_source(unit):
+    if bool(unit.get("direct_to_pin")):
+        return "connection_api_pin"
     if bool(unit.get("direct_to_script")):
         return "game_script_direct"
     return "revendedores_api"
@@ -2253,6 +2270,15 @@ def _apply_dispatch_result_to_unit(unit, result):
     unit["remaining_balance"] = result.get("remaining_balance", unit.get("remaining_balance"))
     unit["error"] = str(result.get("error") or "")
     unit["last_provider"] = str(result.get("provider") or _unit_delivery_source(unit))
+    # Store PIN code if present in result
+    if result.get("pin_code"):
+        unit["pin_code"] = str(result.get("pin_code") or "")
+    if result.get("pins"):
+        unit["pins"] = [str(p) for p in result.get("pins") or []]
+    if result.get("transaction_id"):
+        unit["transaction_id"] = str(result.get("transaction_id") or "")
+    if result.get("control_number"):
+        unit["control_number"] = str(result.get("control_number") or "")
     return unit
 
 
@@ -2374,6 +2400,80 @@ def _revendedores_recharge_paths():
         if path and path not in paths:
             paths.append(path)
     return paths
+
+
+# ── Connection API (Revendedores51 PIN delivery) ──
+def _connection_api_env():
+    url = (os.environ.get("CONNECTION_API_URL") or "").strip().rstrip("/")
+    email = (os.environ.get("CONNECTION_API_EMAIL") or "").strip()
+    password = (os.environ.get("CONNECTION_API_PASSWORD") or "").strip()
+    return url, email, password
+
+_connection_api_token_cache = {"token": None, "user_id": None, "expires_at": 0}
+
+def _connection_api_login():
+    """Authenticate with the Connection API and cache the bearer token and user_id."""
+    global _connection_api_token_cache
+    now_ts = time.time()
+    if _connection_api_token_cache["token"] and _connection_api_token_cache["expires_at"] > now_ts + 60:
+        return _connection_api_token_cache["token"], _connection_api_token_cache["user_id"]
+
+    url, email, password = _connection_api_env()
+    if not url or not email or not password:
+        return None, None
+
+    try:
+        resp = _requests_lib.post(
+            f"{url}/api/connection/login",
+            json={"email": email, "password": password},
+            timeout=15,
+        )
+        data = resp.json() if resp.ok else {}
+        token_data = data.get("data") or {}
+        token = token_data.get("token") or ""
+        user_id = token_data.get("user_id")
+        if token and data.get("status") == "success":
+            _connection_api_token_cache = {"token": token, "user_id": user_id, "expires_at": now_ts + 82800}
+            return token, user_id
+        print(f"[ConnectionAPI] Login failed: {data.get('message', 'Unknown error')}")
+        return None, None
+    except Exception as e:
+        print(f"[ConnectionAPI] Login error: {e}")
+        return None, None
+
+def _connection_api_purchase_pin(package_id: int, quantity: int = 1):
+    """Purchase PIN(s) from the Connection API and return the result."""
+    url, email, password = _connection_api_env()
+    if not url:
+        return {"status": "error", "message": "CONNECTION_API_URL not configured"}
+
+    token, user_id = _connection_api_login()
+    if not token or not user_id:
+        return {"status": "error", "message": "Could not authenticate with Connection API"}
+
+    try:
+        resp = _requests_lib.post(
+            f"{url}/api/connection/purchase",
+            json={"user_id": user_id, "package_id": package_id, "quantity": quantity},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=60,
+        )
+        data = resp.json() if resp.ok else {}
+        if data.get("status") == "success":
+            result_data = data.get("data") or {}
+            return {
+                "status": "success",
+                "pin_code": result_data.get("pin") or "",
+                "pins": result_data.get("pins") or [],
+                "package_name": result_data.get("package_name") or "",
+                "transaction_id": result_data.get("transaction_id") or "",
+                "control_number": result_data.get("control_number") or "",
+                "new_balance": result_data.get("new_balance"),
+                "price": result_data.get("price"),
+            }
+        return {"status": "error", "message": data.get("message") or "PIN purchase failed"}
+    except Exception as e:
+        return {"status": "error", "message": f"Connection API error: {str(e)}"}
 
 
 def _revendedores_catalog_meta(remote_product_id, remote_package_id):
@@ -4131,6 +4231,32 @@ def _thanks_progress_payload(order_obj):
     order_meta = _thanks_order_display_meta(order_obj)
     order_status = (order_obj.status or "").lower()
 
+    # Gather delivered PINs from automation state
+    auto_state = _load_order_automation_state(order_obj)
+    delivered_pins = []
+    for unit in auto_state.get("units") or []:
+        if not isinstance(unit, dict):
+            continue
+        if (unit.get("status") or "") != "completed":
+            continue
+        pin_code = str(unit.get("pin_code") or "").strip()
+        pins_list = unit.get("pins") or []
+        if pin_code:
+            delivered_pins.append({
+                "title": str(unit.get("title") or "PIN"),
+                "pin_code": pin_code,
+                "transaction_id": str(unit.get("transaction_id") or ""),
+                "control_number": str(unit.get("control_number") or ""),
+            })
+        elif pins_list:
+            for p in pins_list:
+                delivered_pins.append({
+                    "title": str(unit.get("title") or "PIN"),
+                    "pin_code": str(p),
+                    "transaction_id": str(unit.get("transaction_id") or ""),
+                    "control_number": str(unit.get("control_number") or ""),
+                })
+
     if not is_provider_auto:
         payment_checked = bool((order_obj.reference or "").strip() or (order_obj.payment_capture or "").strip())
         payment_verified = bool(order_obj.payment_verified_at) or order_status in ("approved", "delivered")
@@ -4181,6 +4307,7 @@ def _thanks_progress_payload(order_obj):
                 "message": "",
                 "verification_id": str(order_obj.payment_verification_id or ""),
             },
+            "pins": delivered_pins,
             "completed": False,
             "current_message": manual_message,
             "player_display": order_meta.get("player_display") or "",
@@ -4273,6 +4400,7 @@ def _thanks_progress_payload(order_obj):
             "message": str(pay_state.get("message") or ""),
             "verification_id": str(pay_state.get("verification_id") or ""),
         },
+        "pins": delivered_pins,
         "completed": recharge_done,
         "current_message": current_message,
         "player_display": order_meta.get("player_display") or "",
@@ -4331,6 +4459,7 @@ def _get_auto_mappings_for_item_ids(item_ids):
             (
                 (RevendedoresItemMapping.auto_enabled == True)
                 | (RevendedoresItemMapping.direct_to_script == True)
+                | (RevendedoresItemMapping.direct_to_pin == True)
             ),
         ).all()
         return {int(row.store_item_id): row for row in rows}
@@ -4380,6 +4509,7 @@ def _build_order_auto_recharge_units(order_obj, automation_state=None):
                 "remote_package_id": mapping.remote_package_id,
                 "remote_label": (mapping.remote_label or "").strip(),
                 "direct_to_script": bool(getattr(mapping, "direct_to_script", False)),
+                "direct_to_pin": bool(getattr(mapping, "direct_to_pin", False)),
             })
     existing_units = {}
     for raw_unit in state.get("units") or []:
@@ -4410,6 +4540,7 @@ def _build_order_auto_recharge_units(order_obj, automation_state=None):
             "remote_package_id": planned["remote_package_id"],
             "remote_label": planned["remote_label"],
             "direct_to_script": bool(planned.get("direct_to_script")),
+            "direct_to_pin": bool(planned.get("direct_to_pin")),
             "external_order_id": str((previous or {}).get("external_order_id") or default_external_order_id),
             "status": status,
             "player_name": str((previous or {}).get("player_name") or ""),
@@ -4813,6 +4944,25 @@ def _dispatch_minigame_reward(order_obj, prize_item_id: int, tier: int):
             if unit.get("last_provider") == "game_script_direct":
                 script_result = _dispatch_game_script_unit(unit, order_obj, remote_meta)
                 _apply_dispatch_result_to_unit(unit, script_result)
+            elif unit.get("last_provider") == "connection_api_pin":
+                pin_package_id = int(unit.get("remote_package_id") or 0)
+                if not pin_package_id:
+                    _apply_dispatch_result_to_unit(unit, {
+                        "status": "failed",
+                        "error": "PIN delivery requires remote_package_id (package_id from Connection API)",
+                        "provider": "connection_api_pin",
+                    })
+                else:
+                    pin_result = _connection_api_purchase_pin(pin_package_id)
+                    _apply_dispatch_result_to_unit(unit, {
+                        "status": "completed" if pin_result.get("status") == "success" else "failed",
+                        "pin_code": pin_result.get("pin_code") or "",
+                        "pins": pin_result.get("pins") or [],
+                        "transaction_id": pin_result.get("transaction_id") or "",
+                        "control_number": pin_result.get("control_number") or "",
+                        "error": pin_result.get("message") or "",
+                        "provider": "connection_api_pin",
+                    })
             else:
                 api_data = None
                 response_error = ""
@@ -4867,7 +5017,8 @@ def _dispatch_minigame_reward(order_obj, prize_item_id: int, tier: int):
                 break
             last_error = str(unit.get("error") or last_error)
         except _requests_lib.exceptions.Timeout:
-            provider_name = "Game Script" if unit.get("last_provider") == "game_script_direct" else "Revendedores"
+            providers = {"game_script_direct": "Game Script", "connection_api_pin": "Connection API", "revendedores_api": "Revendedores"}
+            provider_name = providers.get(unit.get("last_provider", ""), "Revendedores")
             unit["status"] = "processing"
             unit["error"] = f"{provider_name} no respondió en 60 segundos"
             last_error = unit["error"]
@@ -4905,6 +5056,7 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
         return {"ok": True, "summary": summary, "units": units}
 
     needs_revendedores = any(_unit_delivery_source(unit) == "revendedores_api" for unit in units)
+    has_non_pin_units = any(_unit_delivery_source(unit) != "connection_api_pin" for unit in units)
     webb_url, webb_api_key, _, _ = _revendedores_env()
     player_id = (order_obj.customer_id or "").strip()
     if needs_revendedores and (not webb_url or not webb_api_key):
@@ -4921,7 +5073,7 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
             "pending_verification": False,
             "order_id": order_obj.id,
         }
-    if not player_id:
+    if has_non_pin_units and not player_id:
         state["error"] = "No se encontró ID de jugador para recarga automática"
         state["pending_verification"] = False
         order_obj.status = "pending"
@@ -5013,9 +5165,29 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
             unit["last_attempt_at"] = datetime.utcnow().isoformat()
             unit["attempt_count"] = int(unit.get("attempt_count") or 0) + 1
             try:
-                if _unit_delivery_source(unit) == "game_script_direct":
+                delivery_source = _unit_delivery_source(unit)
+                if delivery_source == "game_script_direct":
                     script_result = _dispatch_game_script_unit(unit, order_obj, remote_meta)
                     _apply_dispatch_result_to_unit(unit, script_result)
+                elif delivery_source == "connection_api_pin":
+                    pin_package_id = int(unit.get("remote_package_id") or 0)
+                    if not pin_package_id:
+                        _apply_dispatch_result_to_unit(unit, {
+                            "status": "failed",
+                            "error": "PIN delivery requires remote_package_id (package_id from Connection API)",
+                            "provider": "connection_api_pin",
+                        })
+                    else:
+                        pin_result = _connection_api_purchase_pin(pin_package_id)
+                        _apply_dispatch_result_to_unit(unit, {
+                            "status": "completed" if pin_result.get("status") == "success" else "failed",
+                            "pin_code": pin_result.get("pin_code") or "",
+                            "pins": pin_result.get("pins") or [],
+                            "transaction_id": pin_result.get("transaction_id") or "",
+                            "control_number": pin_result.get("control_number") or "",
+                            "error": pin_result.get("message") or "",
+                            "provider": "connection_api_pin",
+                        })
                 else:
                     api_data = None
                     response_error = ""
@@ -5090,7 +5262,8 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
                     break
                 last_error = str(unit.get("error") or last_error)
             except _requests_lib.exceptions.Timeout:
-                provider_name = "Game Script" if _unit_delivery_source(unit) == "game_script_direct" else "Revendedores"
+                providers = {"game_script_direct": "Game Script", "connection_api_pin": "Connection API", "revendedores_api": "Revendedores"}
+                provider_name = providers.get(_unit_delivery_source(unit), "Revendedores")
                 unit["status"] = "processing"
                 unit["error"] = f"{provider_name} no respondió en 60 segundos"
                 last_error = unit["error"]
