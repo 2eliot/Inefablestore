@@ -2476,6 +2476,25 @@ def _connection_api_purchase_pin(package_id: int, quantity: int = 1):
         return {"status": "error", "message": f"Connection API error: {str(e)}"}
 
 
+def _connection_api_fetch_packages():
+    """Fetch available PIN packages from the Connection API. Returns list of dicts."""
+    url, email, password = _connection_api_env()
+    if not url:
+        return []
+    try:
+        resp = _requests_lib.get(
+            f"{url}/api/connection/packages",
+            timeout=15,
+        )
+        if resp.ok:
+            data = resp.json()
+            if data.get("status") == "success":
+                return data.get("data") or []
+    except Exception as e:
+        print(f"[ConnectionAPI] Failed to fetch packages: {e}")
+    return []
+
+
 def _revendedores_catalog_meta(remote_product_id, remote_package_id):
     try:
         query = RevendedoresCatalogItem.query.filter_by(remote_package_id=remote_package_id)
@@ -9173,6 +9192,43 @@ def admin_revendedores_mapping_data():
             catalog_row.remote_product_name or "",
         )
 
+    # Merge Connection API PIN packages into remote_catalog
+    pin_packages = _connection_api_fetch_packages()
+    pin_entries = []
+    for pkg in pin_packages:
+        pin_id = pkg.get("id")
+        if pin_id is not None:
+            pin_entries.append({
+                "catalog_id": f"pin_{pin_id}",
+                "remote_product_id": 0,
+                "remote_product_name": "PINs (Conexión)",
+                "remote_package_id": int(pin_id),
+                "remote_package_name": pkg.get("name") or "",
+                "price": float(pkg.get("price") or 0),
+                "is_pin": True,
+                "provider_package_id": "",
+                "mode": "",
+                "field2_label": "",
+                "requires_player_id2": False,
+            })
+
+    # Build initial remote_catalog from DB rows
+    remote_catalog = [
+        {
+            "catalog_id": r.id,
+            "remote_product_id": _catalog_effective_product_id(r),
+            "remote_product_name": r.remote_product_name or "",
+            "remote_package_id": r.remote_package_id,
+            "remote_package_name": r.remote_package_name or "",
+            "price": _extract_price(r.raw_json),
+            "is_pin": False,
+            **_extract_catalog_debug(r.raw_json),
+        }
+        for r in catalog_rows
+    ]
+    # Append PIN packages at the end
+    remote_catalog.extend(pin_entries)
+
     return jsonify({
         "ok": True,
         "selected_store_package_id": selected_package_id,
@@ -9198,22 +9254,13 @@ def admin_revendedores_mapping_data():
                     "remote_label": mappings_by_item[it.id].remote_label or "",
                     "auto_enabled": bool(mappings_by_item[it.id].auto_enabled),
                     "direct_to_script": bool(getattr(mappings_by_item[it.id], "direct_to_script", False)),
+                    "direct_to_pin": bool(getattr(mappings_by_item[it.id], "direct_to_pin", False)),
+                    "catalog_id": ("pin_" + str(mappings_by_item[it.id].remote_package_id)) if bool(getattr(mappings_by_item[it.id], "direct_to_pin", False)) else None,
                 } if it.id in mappings_by_item else None,
             }
             for it in store_items
         ],
-        "remote_catalog": [
-            {
-                "catalog_id": r.id,
-                "remote_product_id": _catalog_effective_product_id(r),
-                "remote_product_name": r.remote_product_name or "",
-                "remote_package_id": r.remote_package_id,
-                "remote_package_name": r.remote_package_name or "",
-                "price": _extract_price(r.raw_json),
-                **_extract_catalog_debug(r.raw_json),
-            }
-            for r in catalog_rows
-        ],
+        "remote_catalog": remote_catalog,
     })
 
 
@@ -9244,9 +9291,10 @@ def admin_revendedores_mappings_bulk_save():
             if not item:
                 continue
 
-            catalog_id_raw = ent.get("catalog_id")
+            catalog_id_raw = str(ent.get("catalog_id") or "")
             direct_to_script = bool(ent.get("direct_to_script"))
-            auto_enabled = bool(ent.get("auto_enabled")) or direct_to_script
+            direct_to_pin = bool(ent.get("direct_to_pin"))
+            auto_enabled = bool(ent.get("auto_enabled")) or direct_to_script or direct_to_pin
 
             row = RevendedoresItemMapping.query.filter_by(store_item_id=store_item_id).first()
 
@@ -9255,7 +9303,43 @@ def admin_revendedores_mappings_bulk_save():
                     row.active = False
                     row.auto_enabled = False
                     row.direct_to_script = False
+                    row.direct_to_pin = False
                     disabled += 1
+                continue
+
+            # --- Connection API PIN package (catalog_id = "pin_<id>") ---
+            if catalog_id_raw.startswith("pin_"):
+                try:
+                    pin_package_id = int(catalog_id_raw[4:])
+                except Exception:
+                    continue
+                pin_packages = _connection_api_fetch_packages()
+                pin_pkg = next((p for p in pin_packages if int(p.get("id") or 0) == pin_package_id), None)
+                pin_label = pin_pkg.get("name") or f"PIN #{pin_package_id}" if pin_pkg else f"PIN #{pin_package_id}"
+
+                if not row:
+                    row = RevendedoresItemMapping(
+                        store_package_id=item.store_package_id,
+                        store_item_id=store_item_id,
+                        remote_product_id=0,
+                        remote_package_id=pin_package_id,
+                        remote_label=f"PINs (Conexión) · {pin_label}",
+                        auto_enabled=auto_enabled,
+                        direct_to_script=False,
+                        direct_to_pin=True,
+                        active=True,
+                    )
+                    db.session.add(row)
+                else:
+                    row.store_package_id = item.store_package_id
+                    row.remote_product_id = 0
+                    row.remote_package_id = pin_package_id
+                    row.remote_label = f"PINs (Conexión) · {pin_label}"
+                    row.auto_enabled = auto_enabled
+                    row.direct_to_script = False
+                    row.direct_to_pin = True
+                    row.active = True
+                saved += 1
                 continue
 
             try:
@@ -9306,6 +9390,7 @@ def admin_revendedores_mappings_bulk_save():
                     remote_label=remote_label,
                     auto_enabled=auto_enabled,
                     direct_to_script=direct_to_script,
+                    direct_to_pin=False,
                     active=True,
                 )
                 db.session.add(row)
@@ -9316,6 +9401,7 @@ def admin_revendedores_mappings_bulk_save():
                 row.remote_label = remote_label
                 row.auto_enabled = auto_enabled
                 row.direct_to_script = direct_to_script
+                row.direct_to_pin = False
                 row.active = True
             saved += 1
 
