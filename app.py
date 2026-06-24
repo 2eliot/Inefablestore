@@ -9247,6 +9247,7 @@ def store_game_items(gid: int):
         "ok": True,
         "direct_to_pin": bool(game.direct_to_pin),
         "has_verification": _package_has_verification(gid),
+        "requires_zone": _package_effective_requires_zone(gid),
         "subcat_label_a": (game.subcat_label_a or "Diamantes"),
         "subcat_label_b": (game.subcat_label_b or "Tarjetas"),
         "items": [

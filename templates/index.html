@@ -369,6 +369,7 @@
         let allPackages = { mobile: [], gift: [] };
         let currentItems = [];
         let hasVerification = false;  // true si el paquete tiene scraping configurado en el admin
+        let requiresZonePkg = false; // true si el paquete requiere Zone ID (ej. Mobile Legends, Free Fire)
         let currentSubcat = 'a';     // 'a' o 'b' — subcategoria activa para filtrar items
         let subcatLabelA = 'Diamantes';
         let subcatLabelB = 'Tarjetas';
@@ -450,6 +451,7 @@
                     currentItems = data.items || [];
                     selectedPkgDirectToPin = !!data.direct_to_pin;
                     hasVerification = !!data.has_verification;
+                    requiresZonePkg = !!data.requires_zone;
                     subcatLabelA = data.subcat_label_a || 'Diamantes';
                     subcatLabelB = data.subcat_label_b || 'Tarjetas';
                     // Auto-seleccionar la primera subcat que tenga items
@@ -487,6 +489,7 @@
             selectedPkgDirectToPin = false;
             currentItems = [];
             hasVerification = false;
+            requiresZonePkg = false;
             currentSubcat = 'a';
             purchaseQuantity = 1;
             isIdVerified = false;
@@ -542,9 +545,18 @@
             const pkg = getCurrentPackage();
             const label = document.getElementById('verification-label');
             const btnVerify = document.getElementById('btn-verify-id');
+            const zoneRow = document.getElementById('zone-id-row');
             if (pkg && label) {
                 label.innerText = 'ID de Jugador (' + pkg.name + ')';
                 document.getElementById('id-verification-input').placeholder = 'Ingresa tu ID de ' + pkg.name;
+            }
+            // Mostrar Zone ID si el paquete lo requiere
+            if (zoneRow) {
+                if (requiresZonePkg) {
+                    zoneRow.classList.remove('hidden');
+                } else {
+                    zoneRow.classList.add('hidden');
+                }
             }
             // Ocultar SOLO el boton de Verificar si el paquete NO tiene scraper configurado
             if (btnVerify) {
