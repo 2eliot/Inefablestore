@@ -1381,6 +1381,17 @@
             }).observe(document.getElementById('mobile-checkout-bar'), {attributes: true});
         }
 
+        // Scroll horizontal con rueda del mouse en el carrusel de juegos
+        (function enableWheelScroll() {
+            var mc = document.getElementById('mosaic-container');
+            if (!mc) return;
+            mc.addEventListener('wheel', function(e) {
+                if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return; // ya es horizontal (trackpad)
+                e.preventDefault();
+                mc.scrollLeft += e.deltaY;
+            }, {passive: false});
+        })();
+
         window.onload = function () {
             checkSession();
             loadAllData();
