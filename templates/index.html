@@ -365,10 +365,10 @@
                 <div id="mob-game-name" class="text-[10px] font-extrabold text-white truncate uppercase tracking-wide leading-tight">---</div>
                 <div id="mob-item-name" class="text-[9px] text-gray-400 truncate leading-tight">---</div>
             </div>
-            <div class="flex items-center gap-1 bg-[#121214] border border-[#222226] rounded-lg p-1 shrink-0">
-                <button type="button" data-delta="-1" style="touch-action:manipulation" class="w-7 h-7 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white hover:bg-red-950/40 active:bg-red-950/60 transition-all text-sm font-black select-none pointer-events-auto">-</button>
-                <span id="mob-qty" class="w-5 text-center text-xs font-black text-white">1</span>
-                <button type="button" data-delta="1" style="touch-action:manipulation" class="w-7 h-7 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white hover:bg-emerald-950/40 active:bg-emerald-950/60 transition-all text-sm font-black select-none pointer-events-auto">+</button>
+            <div class="flex items-center gap-0.5 bg-[#121214] border border-[#222226] rounded-lg shrink-0">
+                <button type="button" data-delta="-1" class="min-w-[36px] h-9 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-red-600 active:scale-90 transition-all text-base font-black select-none cursor-pointer">−</button>
+                <span id="mob-qty" class="min-w-[22px] text-center text-sm font-black text-white px-0.5">1</span>
+                <button type="button" data-delta="1" class="min-w-[36px] h-9 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-emerald-500 active:scale-90 transition-all text-base font-black select-none cursor-pointer">+</button>
             </div>
             <span class="text-[8px] font-extrabold text-gray-500 uppercase tracking-wider shrink-0">Combos</span>
         </div>
@@ -1352,22 +1352,22 @@
         // Event delegation para botones +/- del footer flotante movil
         (function initMobileBar() {
             const bar = document.getElementById('mobile-checkout-bar');
-            if (bar) {
-                bar.addEventListener('click', function(e) {
-                    const btn = e.target.closest('button[data-delta]');
-                    if (!btn) return;
-                    const delta = parseInt(btn.getAttribute('data-delta'));
-                    if (!isNaN(delta)) changeQuantity(delta);
+            if (!bar) return;
+            // Vincular directamente a cada boton con data-delta
+            bar.querySelectorAll('button[data-delta]').forEach(function(btn) {
+                const delta = parseInt(btn.getAttribute('data-delta'));
+                if (isNaN(delta)) return;
+                // click (escritorio + movil) — sin preventDefault
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    changeQuantity(delta);
                 });
-                // Tambien capturar touchend para mayor fiabilidad en mobile
-                bar.addEventListener('touchend', function(e) {
-                    const btn = e.target.closest('button[data-delta]');
-                    if (!btn) return;
-                    e.preventDefault();
-                    const delta = parseInt(btn.getAttribute('data-delta'));
-                    if (!isNaN(delta)) changeQuantity(delta);
-                });
-            }
+                // touchstart para respuesta instantanea en tactil
+                btn.addEventListener('touchstart', function(e) {
+                    e.stopPropagation();
+                    changeQuantity(delta);
+                }, {passive: true});
+            });
         })();
 
         window.onload = function () {
