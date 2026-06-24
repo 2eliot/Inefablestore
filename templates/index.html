@@ -60,7 +60,7 @@
     <main class="flex-grow max-w-md md:max-w-2xl w-full mx-auto px-4 py-5 space-y-6">
 
         <!-- CARRUSEL PROMOCIONAL (imagenes del admin) -->
-        <section class="relative overflow-hidden rounded-2xl bg-[#141418] h-44 md:h-52 flex items-center justify-center border border-[#222226]">
+        <section class="relative overflow-hidden rounded-2xl bg-[#141418] h-32 md:h-52 flex items-center justify-center border border-[#222226]">
             <div class="absolute inset-0 flex transition-transform duration-500" id="image-carousel">
                 <!-- Se llena dinamicamente con imagenes del admin -->
                 <div class="carousel-slide min-w-full h-full flex items-center justify-center shrink-0">
@@ -1086,9 +1086,9 @@
 
             validImages.forEach((imgPath, i) => {
                 const slide = document.createElement('div');
-                slide.className = 'carousel-slide min-w-full h-full shrink-0';
+                slide.className = 'carousel-slide min-w-full h-full shrink-0 px-5 md:px-0';
                 if (i !== 0) slide.classList.add('hidden');
-                slide.innerHTML = `<img src="${imgPath}" alt="Promocion ${i+1}" class="w-full h-full object-contain" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center bg-[#141418]\\'><span class=\\'text-gray-600 text-xs\\'>Imagen no disponible</span></div>';">`;
+                slide.innerHTML = `<img src="${imgPath}" alt="Promocion ${i+1}" class="max-w-full max-h-full object-contain" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center bg-[#141418]\\'><span class=\\'text-gray-600 text-xs\\'>Imagen no disponible</span></div>';">`;
                 carousel.appendChild(slide);
 
                 const dot = document.createElement('span');
