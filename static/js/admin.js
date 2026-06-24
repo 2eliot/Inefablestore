@@ -479,6 +479,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const pkgDesc = document.getElementById('pkg-desc');
   const pkgRequires = document.getElementById('pkg-requires-zone');
   const pkgRequiresZoneId = document.getElementById('pkg-requires-zone-id');
+  const pkgDirectPin = document.getElementById('pkg-direct-pin');
+  const pkgSubcatA = document.getElementById('pkg-subcat-a');
+  const pkgSubcatB = document.getElementById('pkg-subcat-b');
   const btnCreatePkg = document.getElementById('btn-create-pkg');
   const btnPackagesRefresh = document.getElementById('btn-packages-refresh');
   const pkgList = document.getElementById('pkg-list');
@@ -3242,6 +3245,10 @@ window.fetchHero = fetchHero;
             <div class="pkg-edit-grid pkg-edit-grid--1">
               <div class="pkg-edit-field"><label>Descripci\u00f3n</label><textarea class="edit-desc" rows="2">${p.description || ''}</textarea></div>
             </div>
+            <div class="pkg-edit-grid pkg-edit-grid--2">
+              <div class="pkg-edit-field"><label>Subcat A</label><input class="edit-subcat-a" type="text" value="${(p.subcat_label_a || 'Diamantes')}" placeholder="Diamantes" /></div>
+              <div class="pkg-edit-field"><label>Subcat B</label><input class="edit-subcat-b" type="text" value="${(p.subcat_label_b || 'Tarjetas')}" placeholder="Tarjetas" /></div>
+            </div>
             <div class="pkg-edit-grid pkg-edit-grid--3">
               <div class="pkg-edit-field"><label>Imagen</label>
                 <div class="pkg-img-dropdown-slot"></div>
@@ -3254,6 +3261,10 @@ window.fetchHero = fetchHero;
               <div class="pkg-edit-field" style="display:flex;flex-direction:column;justify-content:center;">
                 <label>Zona ID</label>
                 <label class="pkg-toggle"><input class="edit-requires-zone" type="checkbox" ${p.requires_zone_id ? 'checked' : ''} /><span class="pkg-toggle-label">Requerida</span></label>
+              </div>
+              <div class="pkg-edit-field" style="display:flex;flex-direction:column;justify-content:center;">
+                <label>Entrega PIN</label>
+                <label class="pkg-toggle"><input class="edit-direct-pin" type="checkbox" ${p.direct_to_pin ? 'checked' : ''} /><span class="pkg-toggle-label">Entrega directa de PIN (Gift Card)</span></label>
               </div>
             </div>
 
@@ -3269,6 +3280,9 @@ window.fetchHero = fetchHero;
                   <div class="pkg-edit-field" style="flex:1;min-width:180px;"><label>Icono (opc.)</label>
                     <div class="item-icon-dropdown-slot"></div><input class="new-item-icon" type="hidden">
                   </div>
+                  <label class="pkg-edit-field" style="flex:0 auto;"><span>Subcat B</span>
+                    <input class="new-item-subcat-b" type="checkbox" />
+                  </label>
                 </div>
               </div>
             </div>
@@ -3597,6 +3611,9 @@ if (btnSaveHero) {
     const category = (pkgCategory && pkgCategory.value) || 'mobile';
     const description = (pkgDesc && pkgDesc.value.trim()) || '';
     const requires_zone_id = !!(pkgRequires && pkgRequires.checked);
+    const direct_to_pin = !!(pkgDirectPin && pkgDirectPin.checked);
+    const subcat_label_a = (pkgSubcatA && pkgSubcatA.value.trim()) || 'Diamantes';
+    const subcat_label_b = (pkgSubcatB && pkgSubcatB.value.trim()) || 'Tarjetas';
     if (!name || !image_path) {
       toast('Nombre e imagen requeridos');
       throw new Error('Nombre e imagen requeridos');
@@ -3604,7 +3621,7 @@ if (btnSaveHero) {
     const res = await fetch('/admin/packages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, image_path, category, description, requires_zone_id })
+      body: JSON.stringify({ name, image_path, category, description, requires_zone_id, direct_to_pin, subcat_label_a, subcat_label_b })
     });
     const text = await res.text();
     let data;
@@ -3628,6 +3645,7 @@ if (btnSaveHero) {
         if (pkgImage) { pkgImage.value = ''; syncDropdown(pkgImage); }
         if (pkgDesc) pkgDesc.value = '';
         if (pkgRequires) pkgRequires.checked = false;
+        if (pkgDirectPin) pkgDirectPin.checked = false;
         await fetchPackages();
       } catch (e) {
         toast(e.message || 'No se pudo crear', 'error');
@@ -3698,15 +3716,21 @@ if (btnSaveHero) {
         const descEl = card.querySelector('.edit-desc');
         const activeEl = card.querySelector('.edit-active');
         const rzEl = card.querySelector('.edit-requires-zone');
+        const dpEl = card.querySelector('.edit-direct-pin');
         const specDescEl = card.querySelector('.edit-special-desc');
         const specialDescTextarea = card.querySelector('.special-desc');
+        const subcatAEl = card.querySelector('.edit-subcat-a');
+        const subcatBEl = card.querySelector('.edit-subcat-b');
         const pkgPayload = {
           name: nameEl ? nameEl.value.trim() : '',
           category: catEl ? catEl.value : 'mobile',
           image_path: imgEl ? imgEl.value.trim() : '',
           description: descEl ? descEl.value.trim() : '',
           requires_zone_id: rzEl ? !!rzEl.checked : false,
-          active: activeEl ? !!activeEl.checked : true
+          direct_to_pin: dpEl ? !!dpEl.checked : false,
+          active: activeEl ? !!activeEl.checked : true,
+          subcat_label_a: subcatAEl ? subcatAEl.value.trim() : 'Diamantes',
+          subcat_label_b: subcatBEl ? subcatBEl.value.trim() : 'Tarjetas'
         };
         if (specialDescTextarea) {
           pkgPayload.special_description = specialDescTextarea.value.trim();
@@ -3725,6 +3749,7 @@ if (btnSaveHero) {
           const specialEl = row.querySelector('.it-special');
           const noDiscountEl = row.querySelector('.it-no-discount');
           const iconEl = row.querySelector('.it-icon');
+          const subcatBEl = row.querySelector('.it-subcat-b');
           itemsPayload.push({
             id: parseInt(itemId, 10),
             title: titleEl ? titleEl.value.trim() : '',
@@ -3732,6 +3757,7 @@ if (btnSaveHero) {
             price: priceEl ? parseFloat(priceEl.value || '0') : 0,
             sticker: specialEl && specialEl.checked ? 'special' : '',
             no_discount: noDiscountEl ? !!noDiscountEl.checked : false,
+            is_subcat_b: subcatBEl ? !!subcatBEl.checked : false,
             icon_path: iconEl ? iconEl.value.trim() : ''
           });
         });
@@ -3771,17 +3797,19 @@ if (btnSaveHero) {
         const subtitleEl = game && game.querySelector('.new-item-subtitle');
         const priceEl = game && game.querySelector('.new-item-price');
         const iconEl = game && game.querySelector('.new-item-icon');
+        const subcatBEl = game && game.querySelector('.new-item-subcat-b');
         const title = titleEl ? titleEl.value.trim() : '';
         const subtitle = subtitleEl ? subtitleEl.value.trim() : '';
         const price = priceEl ? parseFloat(priceEl.value || '0') : 0;
         const icon_path = iconEl ? iconEl.value.trim() : '';
+        const is_subcat_b = subcatBEl ? !!subcatBEl.checked : false;
         if (!gid || !title) { toast('T\u00edtulo requerido'); return; }
         try {
           btnItemCreate.disabled = true;
           const res = await fetch(`/admin/package/${gid}/items`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, subtitle, price, icon_path })
+            body: JSON.stringify({ title, subtitle, price, icon_path, is_subcat_b })
           });
           if (!res.ok) throw new Error('No se pudo crear');
           if (titleEl) titleEl.value = '';
@@ -3862,6 +3890,9 @@ if (btnSaveHero) {
           </label>
           <label class="pkg-edit-field" style="flex:0 auto;"><span>No desc.</span>
             <input class="it-no-discount" type="checkbox" ${it.no_discount ? 'checked' : ''}/>
+          </label>
+          <label class="pkg-edit-field" style="flex:0 auto;"><span>Subcat B</span>
+            <input class="it-subcat-b" type="checkbox" ${it.is_subcat_b ? 'checked' : ''}/>
           </label>
           <label class="pkg-edit-field" style="flex:1;"><span>Icono</span>
             <div class="it-icon-wrap">

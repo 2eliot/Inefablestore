@@ -722,6 +722,100 @@ def _scrape_smileone_generic(conn, uid: str, zid: str = "") -> str:
         return ""
 
 
+@app.route("/store/verify-player")
+def store_verify_player_unified():
+    """Unified player verification — auto-detects scraper from admin config.
+    Frontend calls: GET /store/verify-player?gid=<package_id>&uid=<player_id>[&zid=<zone_id>]
+    Returns: {"ok": true, "nick": "PlayerName", "uid": "123", "cached": false}
+    """
+    scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
+    if not scrape_enabled:
+        return jsonify({"ok": False, "error": "Verificacion deshabilitada"}), 403
+
+    uid = (request.args.get("uid") or "").strip()
+    zid = (request.args.get("zid") or request.args.get("zone") or "").strip()
+    gid_raw = (request.args.get("gid") or "").strip()
+
+    if not uid or not uid.isdigit():
+        return jsonify({"ok": False, "error": "ID invalido"}), 400
+    if not gid_raw or not gid_raw.isdigit():
+        return jsonify({"ok": False, "error": "Juego invalido"}), 400
+
+    try:
+        gid = int(gid_raw)
+    except ValueError:
+        return jsonify({"ok": False, "error": "Juego invalido"}), 400
+
+    # 1) Dynamic SmileOne connections (most flexible — check first)
+    so_conn = SmileOneConnection.query.filter_by(store_package_id=gid, active=True).first()
+    if so_conn:
+        if so_conn.requires_zone and (not zid or not zid.isdigit()):
+            return jsonify({"ok": False, "error": "Zona ID requerida", "requires_zone": True}), 422
+        cache_key = f"so_{so_conn.id}:{uid}" + (f":{zid}" if so_conn.requires_zone else "")
+        cached = _player_cache_get(cache_key)
+        if cached:
+            result = {"ok": True, "uid": uid, "nick": cached, "cached": True}
+            if so_conn.requires_zone:
+                result["zid"] = zid
+            return jsonify(result)
+        nick = _scrape_smileone_generic(so_conn, uid, zid)
+        if not nick:
+            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+        _player_cache_set(cache_key, nick, ttl_seconds=600)
+        result = {"ok": True, "uid": uid, "nick": nick, "cached": False}
+        if so_conn.requires_zone:
+            result["zid"] = zid
+        return jsonify(result)
+
+    # 2) Legacy config-based verification
+    active_login_game_id = (get_config_value("active_login_game_id", "") or "").strip()
+    bs_package_id = (get_config_value("bs_package_id", "") or "").strip()
+    ml_package_id = (get_config_value("ml_package_id", "") or "").strip()
+
+    # Free Fire (freefiremania.com.br)
+    if active_login_game_id and active_login_game_id == str(gid):
+        cache_key = f"ffmania:{uid}"
+        cached = _player_cache_get(cache_key)
+        if cached:
+            return jsonify({"ok": True, "uid": uid, "nick": cached, "cached": True})
+        try:
+            nick = _player_lookup_singleflight(cache_key, lambda: _scrape_ffmania_nick(uid))
+        except Exception:
+            return jsonify({"ok": False, "error": "No se pudo verificar el ID"}), 502
+        if not nick:
+            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+        _player_cache_set(cache_key, nick, ttl_seconds=600)
+        return jsonify({"ok": True, "uid": uid, "nick": nick, "cached": False})
+
+    # Blood Strike (Smile.One)
+    if bs_package_id and bs_package_id == str(gid):
+        cache_key = f"bs_smileone:{uid}"
+        cached = _player_cache_get(cache_key)
+        if cached:
+            return jsonify({"ok": True, "uid": uid, "nick": cached, "cached": True})
+        nick = _scrape_smileone_bloodstrike_nick(uid)
+        if not nick:
+            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+        _player_cache_set(cache_key, nick, ttl_seconds=600)
+        return jsonify({"ok": True, "uid": uid, "nick": nick, "cached": False})
+
+    # Mobile Legends (Smile.One, requires zone)
+    if ml_package_id and ml_package_id == str(gid):
+        if not zid or not zid.isdigit():
+            return jsonify({"ok": False, "error": "Zona ID requerida", "requires_zone": True}), 422
+        cache_key = f"ml_smileone:{uid}:{zid}"
+        cached = _player_cache_get(cache_key)
+        if cached:
+            return jsonify({"ok": True, "uid": uid, "nick": cached, "zid": zid, "cached": True})
+        nick = _scrape_smileone_mobilelegends_nick(uid, zid)
+        if not nick:
+            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+        _player_cache_set(cache_key, nick, ttl_seconds=600)
+        return jsonify({"ok": True, "uid": uid, "nick": nick, "zid": zid, "cached": False})
+
+    return jsonify({"ok": False, "error": "Verificacion no disponible para este juego"}), 403
+
+
 @app.route("/store/player/verify/smileone")
 def store_player_verify_smileone():
     """Dynamic Smile.One verification using admin-configured connections."""
@@ -1943,7 +2037,12 @@ class StorePackage(db.Model):
     special_description = db.Column(db.Text, default="")
     # whether this game requires an extra Zone ID (INTEGER on PG via ALTER TABLE)
     requires_zone_id = db.Column(db.Integer, default=0)
+    # whether this game delivers PINs directly (gift cards) — skips player ID in checkout
+    direct_to_pin = db.Column(db.Integer, default=0)
     sort_order = db.Column(db.Integer, default=0)
+    # Sub-category labels for the item filter tabs (e.g. "Diamantes" / "Tarjetas")
+    subcat_label_a = db.Column(db.String(60), default="Diamantes")
+    subcat_label_b = db.Column(db.String(60), default="Tarjetas")
 
 class GamePackageItem(db.Model):
     __tablename__ = "game_packages"
@@ -1962,6 +2061,8 @@ class GamePackageItem(db.Model):
     no_discount = db.Column(db.Boolean, default=False)
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Sub-category: False = label_a (e.g. Diamantes), True = label_b (e.g. Tarjetas)
+    is_subcat_b = db.Column(db.Boolean, default=False)
 
 
 class RevendedoresCatalogItem(db.Model):
@@ -2245,10 +2346,10 @@ def _game_script_request(method: str, endpoint_path: str, payload=None, timeout=
 
 
 def _unit_delivery_source(unit):
-    if bool(unit.get("direct_to_pin")):
-        return "connection_api_pin"
     if bool(unit.get("direct_to_script")):
         return "game_script_direct"
+    if bool(unit.get("direct_to_pin")):
+        return "connection_api_pin"
     return "revendedores_api"
 
 
@@ -2442,36 +2543,35 @@ def _connection_api_login():
         return None, None
 
 def _connection_api_purchase_pin(package_id: int, quantity: int = 1):
-    """Purchase PIN(s) from the Connection API and return the result."""
-    url, email, password = _connection_api_env()
+    """Purchase PIN(s) from the Connection API using X-API-Key auth (same as Revendedores)."""
+    url = (os.environ.get("CONNECTION_API_URL") or "").strip().rstrip("/")
     if not url:
         return {"status": "error", "message": "CONNECTION_API_URL not configured"}
 
-    token, user_id = _connection_api_login()
-    if not token or not user_id:
-        return {"status": "error", "message": "Could not authenticate with Connection API"}
+    api_key = (os.environ.get("REVENDEDORES_API_KEY") or os.environ.get("WEBB_API_KEY") or "").strip()
+    if not api_key:
+        return {"status": "error", "message": "API key not configured for Connection API"}
 
     try:
         resp = _requests_lib.post(
-            f"{url}/api/connection/purchase",
-            json={"user_id": user_id, "package_id": package_id, "quantity": quantity},
-            headers={"Authorization": f"Bearer {token}"},
+            f"{url}/api/connection/pin-purchase",
+            data={"package_id": str(package_id), "quantity": str(quantity)},
+            headers={"X-API-Key": api_key},
             timeout=60,
         )
         data = resp.json() if resp.ok else {}
-        if data.get("status") == "success":
-            result_data = data.get("data") or {}
+        if data.get("ok"):
             return {
                 "status": "success",
-                "pin_code": result_data.get("pin") or "",
-                "pins": result_data.get("pins") or [],
-                "package_name": result_data.get("package_name") or "",
-                "transaction_id": result_data.get("transaction_id") or "",
-                "control_number": result_data.get("control_number") or "",
-                "new_balance": result_data.get("new_balance"),
-                "price": result_data.get("price"),
+                "pin_code": data.get("pin") or "",
+                "pins": data.get("pins") or [],
+                "package_name": data.get("package_name") or "",
+                "transaction_id": data.get("transaction_id") or "",
+                "control_number": data.get("reference_no") or "",
+                "new_balance": data.get("total_price"),
+                "price": data.get("price_per_unit"),
             }
-        return {"status": "error", "message": data.get("message") or "PIN purchase failed"}
+        return {"status": "error", "message": data.get("error") or "PIN purchase failed"}
     except Exception as e:
         return {"status": "error", "message": f"Connection API error: {str(e)}"}
 
@@ -4481,7 +4581,22 @@ def _get_auto_mappings_for_item_ids(item_ids):
                 | (RevendedoresItemMapping.direct_to_pin == True)
             ),
         ).all()
-        return {int(row.store_item_id): row for row in rows}
+        result = {int(row.store_item_id): row for row in rows}
+        # Also include active mappings for items whose package has direct_to_pin=True
+        # even if the mapping itself doesn't have direct_to_pin set yet
+        missing_ids = [i for i in ids if i not in result]
+        if missing_ids:
+            extra_rows = RevendedoresItemMapping.query.filter(
+                RevendedoresItemMapping.store_item_id.in_(missing_ids),
+                RevendedoresItemMapping.active == True,
+            ).all()
+            for row in extra_rows:
+                item = GamePackageItem.query.get(row.store_item_id)
+                if item:
+                    pkg = StorePackage.query.get(item.store_package_id)
+                    if pkg and bool(pkg.direct_to_pin):
+                        result[int(row.store_item_id)] = row
+        return result
     except Exception:
         return {}
 
@@ -4511,24 +4626,57 @@ def _build_order_auto_recharge_units(order_obj, automation_state=None):
     state = automation_state if isinstance(automation_state, dict) else _load_order_automation_state(order_obj)
     entries = _get_order_item_entries(order_obj)
     mappings_by_item = _get_auto_mappings_for_item_ids([entry.get("item_id") for entry in entries])
+    # Preload package direct_to_pin flags (fallback when mapping doesn't have it)
+    store_item_ids = [int(entry.get("item_id") or 0) for entry in entries if int(entry.get("item_id") or 0) > 0]
+    pkg_direct_pin_by_item = {}
+    if store_item_ids:
+        try:
+            items_with_pkg = db.session.query(
+                GamePackageItem.id, StorePackage.direct_to_pin
+            ).join(StorePackage, GamePackageItem.store_package_id == StorePackage.id).filter(
+                GamePackageItem.id.in_(store_item_ids)
+            ).all()
+            for item_id, pkg_direct_pin in items_with_pkg:
+                pkg_direct_pin_by_item[int(item_id)] = bool(pkg_direct_pin)
+        except Exception:
+            pass
+    # Also pull active mappings for items whose package has direct_to_pin, even if the mapping
+    # itself doesn't have auto_enabled/direct_to_pin set yet
+    extra_mapping_ids = [
+        sid for sid in store_item_ids
+        if sid not in mappings_by_item and pkg_direct_pin_by_item.get(sid)
+    ]
+    if extra_mapping_ids:
+        try:
+            extra_rows = RevendedoresItemMapping.query.filter(
+                RevendedoresItemMapping.store_item_id.in_(extra_mapping_ids),
+                RevendedoresItemMapping.active == True,
+            ).all()
+            for row in extra_rows:
+                mappings_by_item[int(row.store_item_id)] = row
+        except Exception:
+            pass
     planned_units = []
     for entry in entries:
         mapping = mappings_by_item.get(int(entry.get("item_id") or 0))
         if not mapping:
             continue
+        store_item_id = int(entry.get("item_id") or 0)
+        # Package-level direct_to_pin is a fallback when mapping doesn't have it
+        is_direct_pin = bool(getattr(mapping, "direct_to_pin", False)) or pkg_direct_pin_by_item.get(store_item_id, False)
         qty = max(int(entry.get("qty") or 1), 1)
         for repeat_index in range(1, qty + 1):
             planned_units.append({
                 "unit_key": f"{entry.get('entry_index')}:{entry.get('item_id')}:{repeat_index}",
                 "entry_index": int(entry.get("entry_index") or 0),
                 "repeat_index": repeat_index,
-                "store_item_id": int(entry.get("item_id") or 0),
+                "store_item_id": store_item_id,
                 "title": (entry.get("title") or mapping.remote_label or "").strip(),
                 "remote_product_id": mapping.remote_product_id,
                 "remote_package_id": mapping.remote_package_id,
                 "remote_label": (mapping.remote_label or "").strip(),
                 "direct_to_script": bool(getattr(mapping, "direct_to_script", False)),
-                "direct_to_pin": bool(getattr(mapping, "direct_to_pin", False)),
+                "direct_to_pin": is_direct_pin,
             })
     existing_units = {}
     for raw_unit in state.get("units") or []:
@@ -4960,28 +5108,9 @@ def _dispatch_minigame_reward(order_obj, prize_item_id: int, tier: int):
         unit["last_attempt_at"] = datetime.utcnow().isoformat()
         unit["attempt_count"] = int(unit.get("attempt_count") or 0) + 1
         try:
-            if unit.get("last_provider") == "game_script_direct":
+            if _unit_delivery_source(unit) == "game_script_direct":
                 script_result = _dispatch_game_script_unit(unit, order_obj, remote_meta)
                 _apply_dispatch_result_to_unit(unit, script_result)
-            elif unit.get("last_provider") == "connection_api_pin":
-                pin_package_id = int(unit.get("remote_package_id") or 0)
-                if not pin_package_id:
-                    _apply_dispatch_result_to_unit(unit, {
-                        "status": "failed",
-                        "error": "PIN delivery requires remote_package_id (package_id from Connection API)",
-                        "provider": "connection_api_pin",
-                    })
-                else:
-                    pin_result = _connection_api_purchase_pin(pin_package_id)
-                    _apply_dispatch_result_to_unit(unit, {
-                        "status": "completed" if pin_result.get("status") == "success" else "failed",
-                        "pin_code": pin_result.get("pin_code") or "",
-                        "pins": pin_result.get("pins") or [],
-                        "transaction_id": pin_result.get("transaction_id") or "",
-                        "control_number": pin_result.get("control_number") or "",
-                        "error": pin_result.get("message") or "",
-                        "provider": "connection_api_pin",
-                    })
             else:
                 api_data = None
                 response_error = ""
@@ -5036,8 +5165,8 @@ def _dispatch_minigame_reward(order_obj, prize_item_id: int, tier: int):
                 break
             last_error = str(unit.get("error") or last_error)
         except _requests_lib.exceptions.Timeout:
-            providers = {"game_script_direct": "Game Script", "connection_api_pin": "Connection API", "revendedores_api": "Revendedores"}
-            provider_name = providers.get(unit.get("last_provider", ""), "Revendedores")
+            providers = {"game_script_direct": "Game Script", "revendedores_api": "Revendedores", "connection_api_pin": "Connection API"}
+            provider_name = providers.get(_unit_delivery_source(unit), "Revendedores")
             unit["status"] = "processing"
             unit["error"] = f"{provider_name} no respondió en 60 segundos"
             last_error = unit["error"]
@@ -5075,11 +5204,26 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
         return {"ok": True, "summary": summary, "units": units}
 
     needs_revendedores = any(_unit_delivery_source(unit) == "revendedores_api" for unit in units)
-    has_non_pin_units = any(_unit_delivery_source(unit) != "connection_api_pin" for unit in units)
+    needs_connection_api = any(_unit_delivery_source(unit) == "connection_api_pin" for unit in units)
+    has_non_pin_units = any(not bool(unit.get("direct_to_pin")) for unit in units)
     webb_url, webb_api_key, _, _ = _revendedores_env()
     player_id = (order_obj.customer_id or "").strip()
     if needs_revendedores and (not webb_url or not webb_api_key):
         state["error"] = "Falta configurar REVENDEDORES_BASE_URL y REVENDEDORES_API_KEY"
+        state["pending_verification"] = False
+        order_obj.status = "pending"
+        _save_order_automation_state(order_obj, state)
+        db.session.commit()
+        return {
+            "ok": False,
+            "error": state["error"],
+            "summary": summary,
+            "units": units,
+            "pending_verification": False,
+            "order_id": order_obj.id,
+        }
+    if needs_connection_api and not webb_api_key:
+        state["error"] = "Falta configurar REVENDEDORES_API_KEY (necesaria para Connection API)"
         state["pending_verification"] = False
         order_obj.status = "pending"
         _save_order_automation_state(order_obj, state)
@@ -5132,10 +5276,15 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
             break
         unit = units_to_send[0]
         unit["last_provider"] = _unit_delivery_source(unit)
+        # For direct_to_pin units without a real player_id, use a placeholder so
+        # Revendedores API accepts the request (it requires player_id as a string).
+        effective_player_id = player_id
+        if bool(unit.get("direct_to_pin")) and not effective_player_id:
+            effective_player_id = f"PINGIFT-{order_obj.id}"
         legacy_payload = {
             "product_id": unit.get("remote_product_id"),
             "package_id": unit.get("remote_package_id"),
-            "player_id": player_id,
+            "player_id": effective_player_id,
             "external_order_id": unit.get("external_order_id"),
         }
         order_zone = (order_obj.customer_zone or "").strip()
@@ -5165,7 +5314,7 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
         modern_payload = {
             "api_key": webb_api_key,
             "package_id": str(remote_meta.get("package_id") or remote_meta.get("remote_local_package_id") or unit.get("remote_package_id") or ""),
-            "player_id": player_id,
+            "player_id": effective_player_id,
             "request_id": str(unit.get("external_order_id") or ""),
             "external_order_id": str(unit.get("external_order_id") or ""),
         }
@@ -5189,24 +5338,53 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
                     script_result = _dispatch_game_script_unit(unit, order_obj, remote_meta)
                     _apply_dispatch_result_to_unit(unit, script_result)
                 elif delivery_source == "connection_api_pin":
-                    pin_package_id = int(unit.get("remote_package_id") or 0)
-                    if not pin_package_id:
+                    connection_url = (os.environ.get("CONNECTION_API_URL") or "").strip().rstrip("/")
+                    if not connection_url:
                         _apply_dispatch_result_to_unit(unit, {
                             "status": "failed",
-                            "error": "PIN delivery requires remote_package_id (package_id from Connection API)",
+                            "error": "CONNECTION_API_URL no configurada para entrega de PIN",
                             "provider": "connection_api_pin",
                         })
                     else:
-                        pin_result = _connection_api_purchase_pin(pin_package_id)
-                        _apply_dispatch_result_to_unit(unit, {
-                            "status": "completed" if pin_result.get("status") == "success" else "failed",
-                            "pin_code": pin_result.get("pin_code") or "",
-                            "pins": pin_result.get("pins") or [],
-                            "transaction_id": pin_result.get("transaction_id") or "",
-                            "control_number": pin_result.get("control_number") or "",
-                            "error": pin_result.get("message") or "",
-                            "provider": "connection_api_pin",
-                        })
+                        pin_payload = {
+                            "package_id": str(unit.get("remote_package_id") or ""),
+                            "quantity": "1",
+                            "external_order_id": str(unit.get("external_order_id") or ""),
+                        }
+                        api_resp = _requests_lib.post(
+                            f"{connection_url}/api/connection/pin-purchase",
+                            data=pin_payload,
+                            headers={
+                                "X-API-Key": webb_api_key,
+                                "X-Request-ID": str(unit.get("external_order_id") or ""),
+                            },
+                            timeout=60,
+                        )
+                        try:
+                            api_data = api_resp.json()
+                        except Exception:
+                            api_data = None
+                        if api_data and api_data.get("ok"):
+                            pin_value = api_data.get("pin") or ""
+                            pins_list = api_data.get("pins") or []
+                            if not pin_value and pins_list:
+                                pin_value = ", ".join(pins_list)
+                            _apply_dispatch_result_to_unit(unit, {
+                                "status": "completed",
+                                "player_name": f"PIN: {pin_value}" if pin_value else "PIN entregado",
+                                "reference_no": api_data.get("reference_no") or api_data.get("transaction_id") or "",
+                                "remaining_balance": None,
+                                "provider": "connection_api_pin",
+                                "pin_code": pin_value,
+                                "pins": pins_list if pins_list else ([pin_value] if pin_value else []),
+                            })
+                        else:
+                            pin_error = (api_data or {}).get("error") or "PIN purchase failed"
+                            _apply_dispatch_result_to_unit(unit, {
+                                "status": "failed",
+                                "error": pin_error,
+                                "provider": "connection_api_pin",
+                            })
                 else:
                     api_data = None
                     response_error = ""
@@ -5281,7 +5459,7 @@ def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
                     break
                 last_error = str(unit.get("error") or last_error)
             except _requests_lib.exceptions.Timeout:
-                providers = {"game_script_direct": "Game Script", "connection_api_pin": "Connection API", "revendedores_api": "Revendedores"}
+                providers = {"game_script_direct": "Game Script", "revendedores_api": "Revendedores", "connection_api_pin": "Connection API"}
                 provider_name = providers.get(_unit_delivery_source(unit), "Revendedores")
                 unit["status"] = "processing"
                 unit["error"] = f"{provider_name} no respondió en 60 segundos"
@@ -7332,6 +7510,7 @@ def store_checkout(gid: int):
         whatsapp_url=whatsapp_url,
         game_name=game.name,
         game_image=game.image_path,
+        direct_to_pin=bool(game.direct_to_pin),
     )
 
 
@@ -8971,6 +9150,21 @@ def admin_minigames_winners_get():
     })
 
 
+def _package_has_verification(gid: int) -> bool:
+    """Return True if the package has a configured ID verification scraper."""
+    # Dynamic SmileOne connections
+    if SmileOneConnection.query.filter_by(store_package_id=gid, active=True).first():
+        return True
+    # Legacy config-based
+    if (get_config_value("active_login_game_id", "") or "").strip() == str(gid):
+        return True
+    if (get_config_value("bs_package_id", "") or "").strip() == str(gid):
+        return True
+    if (get_config_value("ml_package_id", "") or "").strip() == str(gid):
+        return True
+    return False
+
+
 @app.route("/store/package/<int:gid>/items")
 def store_game_items(gid: int):
     game = StorePackage.query.get(gid)
@@ -8984,8 +9178,12 @@ def store_game_items(gid: int):
     )
     return jsonify({
         "ok": True,
+        "direct_to_pin": bool(game.direct_to_pin),
+        "has_verification": _package_has_verification(gid),
+        "subcat_label_a": (game.subcat_label_a or "Diamantes"),
+        "subcat_label_b": (game.subcat_label_b or "Tarjetas"),
         "items": [
-            {"id": it.id, "title": it.title, "subtitle": (it.subtitle or ""), "price": it.price, "description": (it.description or ""), "sticker": (it.sticker or ""), "icon_path": (it.icon_path or ""), "no_discount": bool(it.no_discount)}
+            {"id": it.id, "title": it.title, "subtitle": (it.subtitle or ""), "price": it.price, "description": (it.description or ""), "sticker": (it.sticker or ""), "icon_path": (it.icon_path or ""), "no_discount": bool(it.no_discount), "is_subcat_b": bool(it.is_subcat_b)}
             for it in items
         ]
     })
@@ -9268,7 +9466,11 @@ def admin_revendedores_mappings_bulk_save():
 
             catalog_id_raw = str(ent.get("catalog_id") or "")
             direct_to_script = bool(ent.get("direct_to_script"))
-            auto_enabled = bool(ent.get("auto_enabled")) or direct_to_script
+            # Infer direct_to_pin from entry + fallback to package-level flag
+            pkg = StorePackage.query.get(item.store_package_id)
+            pkg_direct_to_pin = bool(pkg.direct_to_pin) if pkg else False
+            direct_to_pin = bool(ent.get("direct_to_pin")) or pkg_direct_to_pin
+            auto_enabled = bool(ent.get("auto_enabled")) or direct_to_script or direct_to_pin
 
             row = RevendedoresItemMapping.query.filter_by(store_item_id=store_item_id).first()
 
@@ -9329,7 +9531,7 @@ def admin_revendedores_mappings_bulk_save():
                     remote_label=remote_label,
                     auto_enabled=auto_enabled,
                     direct_to_script=direct_to_script,
-                    direct_to_pin=False,
+                    direct_to_pin=direct_to_pin,
                     active=True,
                 )
                 db.session.add(row)
@@ -9340,7 +9542,7 @@ def admin_revendedores_mappings_bulk_save():
                 row.remote_label = remote_label
                 row.auto_enabled = auto_enabled
                 row.direct_to_script = direct_to_script
-                row.direct_to_pin = False
+                row.direct_to_pin = direct_to_pin
                 row.active = True
             saved += 1
 
@@ -9377,6 +9579,7 @@ def admin_game_items_list(gid: int):
                 "sticker": (it.sticker or ""),
                 "icon_path": (it.icon_path or ""),
                 "active": it.active,
+                "is_subcat_b": bool(it.is_subcat_b),
             }
             for it in items
         ]
@@ -9404,7 +9607,8 @@ def admin_game_items_create(gid: int):
         price = 0.0
     if not title:
         return jsonify({"ok": False, "error": "Título requerido"}), 400
-    item = GamePackageItem(store_package_id=gid, title=title, subtitle=subtitle, description=description, price=price, sticker=sticker, icon_path=icon_path, active=True)
+    is_subcat_b = bool(data.get("is_subcat_b", False))
+    item = GamePackageItem(store_package_id=gid, title=title, subtitle=subtitle, description=description, price=price, sticker=sticker, icon_path=icon_path, active=True, is_subcat_b=is_subcat_b)
     db.session.add(item)
     db.session.commit()
     return jsonify({"ok": True, "item": {"id": item.id, "title": item.title, "subtitle": (item.subtitle or ""), "price": item.price, "description": item.description, "sticker": (item.sticker or ""), "icon_path": (item.icon_path or ""), "active": item.active}})
@@ -9447,7 +9651,10 @@ def admin_game_items_update(item_id: int):
             item.profit_net_usd = 0.0
     if "active" in data:
         item.active = bool(data.get("active"))
-    db.session.commit()
+    if "is_subcat_b" in data:
+        item.is_subcat_b = bool(data.get("is_subcat_b"))
+    if "no_discount" in data:
+        item.no_discount = bool(data.get("no_discount"))
     return jsonify({"ok": True})
 
 @app.route("/admin/package/item/<int:item_id>", methods=["DELETE"])
@@ -9508,6 +9715,8 @@ def admin_game_items_bulk_update(gid: int):
             item.active = bool(entry.get("active"))
         if "no_discount" in entry:
             item.no_discount = bool(entry.get("no_discount"))
+        if "is_subcat_b" in entry:
+            item.is_subcat_b = bool(entry.get("is_subcat_b"))
         updated += 1
     db.session.commit()
     return jsonify({"ok": True, "updated": updated})
@@ -9560,6 +9769,7 @@ def admin_packages_update(pid: int):
     description = data.get("description")
     special_description = data.get("special_description")
     requires_zone_id = data.get("requires_zone_id")
+    direct_to_pin = data.get("direct_to_pin")
     active = data.get("active")
     if name is not None:
         item.name = (name or '').strip()
@@ -9576,8 +9786,14 @@ def admin_packages_update(pid: int):
         item.special_description = (special_description or '').strip()
     if requires_zone_id is not None:
         item.requires_zone_id = int(bool(requires_zone_id))
+    if direct_to_pin is not None:
+        item.direct_to_pin = int(bool(direct_to_pin))
     if active is not None:
         item.active = bool(active)
+    if data.get("subcat_label_a") is not None:
+        item.subcat_label_a = (data.get("subcat_label_a") or "Diamantes").strip()
+    if data.get("subcat_label_b") is not None:
+        item.subcat_label_b = (data.get("subcat_label_b") or "Tarjetas").strip()
     db.session.commit()
     return jsonify({
         "ok": True,
@@ -9587,7 +9803,10 @@ def admin_packages_update(pid: int):
             "image_path": item.image_path,
             "active": item.active,
             "category": item.category,
-            "requires_zone_id": bool(item.requires_zone_id)
+            "requires_zone_id": bool(item.requires_zone_id),
+            "direct_to_pin": bool(item.direct_to_pin),
+            "subcat_label_a": (item.subcat_label_a or "Diamantes"),
+            "subcat_label_b": (item.subcat_label_b or "Tarjetas"),
         }
     })
 
@@ -9605,7 +9824,7 @@ def admin_packages_list():
     return jsonify({
         "ok": True,
         "packages": [
-            {"id": p.id, "name": p.name, "image_path": p.image_path, "active": p.active, "category": (p.category or 'mobile'), "description": (p.description or ''), "special_description": (p.special_description or ''), "requires_zone_id": bool(p.requires_zone_id), "sort_order": int(p.sort_order or 0)}
+            {"id": p.id, "name": p.name, "image_path": p.image_path, "active": p.active, "category": (p.category or 'mobile'), "description": (p.description or ''), "special_description": (p.special_description or ''), "requires_zone_id": bool(p.requires_zone_id), "direct_to_pin": bool(p.direct_to_pin), "sort_order": int(p.sort_order or 0), "subcat_label_a": (p.subcat_label_a or "Diamantes"), "subcat_label_b": (p.subcat_label_b or "Tarjetas")}
             for p in items
         ]
     })
@@ -9623,11 +9842,14 @@ def admin_packages_create():
     description = (data.get("description") or "").strip()
     special_description = (data.get("special_description") or "").strip()
     requires_zone_id = int(bool(data.get("requires_zone_id", False)))
+    direct_to_pin = int(bool(data.get("direct_to_pin", False)))
+    subcat_label_a = (data.get("subcat_label_a") or "Diamantes").strip()
+    subcat_label_b = (data.get("subcat_label_b") or "Tarjetas").strip()
     if category not in ("mobile", "gift", "other"):
         category = "mobile"
     if not name or not image_path:
         return jsonify({"ok": False, "error": "Nombre e imagen requeridos"}), 400
-    item = StorePackage(name=name, image_path=image_path, active=True, category=category, description=description, special_description=special_description, requires_zone_id=requires_zone_id)
+    item = StorePackage(name=name, image_path=image_path, active=True, category=category, description=description, special_description=special_description, requires_zone_id=requires_zone_id, direct_to_pin=direct_to_pin, subcat_label_a=subcat_label_a, subcat_label_b=subcat_label_b)
     try:
         db.session.add(item)
         db.session.commit()

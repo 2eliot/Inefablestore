@@ -1,0 +1,1447 @@
+{% extends 'base.html' %}
+{% set body_class = 'thanks-order-page' %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='10') }}">
+<style>
+  :root {
+    --ty-bg: #080a0c;
+    --ty-card-bg: rgba(13, 17, 23, 0.84);
+    --ty-accent: #00ff88;
+    --ty-accent-glow: rgba(0, 255, 136, 0.28);
+    --ty-text-dim: #8b949e;
+    --ty-gold: #f59e0b;
+    --ty-gold-soft: #fcd34d;
+  }
+  body.thanks-order-page {
+    background:
+      radial-gradient(circle at top left, rgba(0,255,136,.08), transparent 24%),
+      radial-gradient(circle at top right, rgba(255,255,255,.05), transparent 18%),
+      var(--ty-bg);
+  }
+  .thanks-order-page .main-footer {
+    margin-top: 18px;
+  }
+  .ty-wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 28px 16px 18px;
+    min-height: calc(100vh - 120px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ty-card {
+    width: min(100%, 860px);
+    background: var(--ty-card-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    padding: 30px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  }
+  .ty-header {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .ty-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 255, 136, 0.1);
+    color: var(--ty-accent);
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-weight: 900;
+    font-size: 0.9rem;
+    letter-spacing: .04em;
+  }
+  .ty-info-row {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .ty-pill {
+    background: rgba(255,255,255,0.05);
+    padding: 8px 16px;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    color: var(--ty-text-dim);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .ty-pill strong {
+    color: #ffffff;
+    margin-left: 5px;
+  }
+  .ty-status {
+    flex: 1;
+    min-width: 300px;
+  }
+  .ty-progress {
+    display: none;
+    width: 100%;
+  }
+  .ty-progress.visible {
+    display: block;
+  }
+  .ty-minigame {
+    display: none;
+    margin-top: 18px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+  .ty-minigame.visible {
+    display: block;
+  }
+  .ty-minigame-trigger {
+    width: 100%;
+    border: none;
+    border-radius: 16px;
+    background: linear-gradient(90deg, var(--ty-gold), var(--ty-gold-soft));
+    color: #111827;
+    font-weight: 900;
+    padding: 16px 18px;
+    cursor: pointer;
+    box-shadow: 0 16px 30px rgba(245, 158, 11, 0.2);
+    transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+  }
+  .ty-minigame-trigger[disabled] {
+    cursor: default;
+    opacity: .6;
+    box-shadow: none;
+  }
+  .ty-minigame-trigger:not([disabled]):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 20px 34px rgba(245, 158, 11, 0.28);
+  }
+  .ty-minigame-modal[hidden] {
+    display: none;
+  }
+  .ty-minigame-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+  }
+  .ty-minigame-modal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.72);
+    backdrop-filter: blur(10px);
+  }
+  .ty-minigame-dialog {
+    position: relative;
+    width: min(100%, 540px);
+    padding: 18px;
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at top, rgba(245, 158, 11, 0.16), transparent 42%),
+      linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(3, 7, 18, 0.99));
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    box-shadow: 0 26px 54px rgba(0, 0, 0, 0.42);
+  }
+  .ty-minigame-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.06);
+    color: #f8fafc;
+    font-size: 1.1rem;
+    cursor: pointer;
+  }
+  .ty-minigame-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding-right: 48px;
+  }
+  .ty-minigame-title {
+    margin: 0;
+    font-size: 1rem;
+    color: #f8fafc;
+    letter-spacing: .02em;
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+  .ty-minigame-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.12);
+    color: #d1fae5;
+    font-size: 0.76rem;
+    font-weight: 800;
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    max-width: 100%;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+  .ty-minigame-copy {
+    margin: 0 0 14px;
+    color: #dbe5ef;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  .ty-slot {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 12px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(15, 23, 42, 0.42));
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .ty-slot-reel {
+    position: relative;
+    min-height: 108px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
+    overflow: hidden;
+    box-shadow: inset 0 10px 20px rgba(0,0,0,0.38), 0 12px 24px rgba(0,0,0,0.18);
+  }
+  .ty-slot-reel::before,
+  .ty-slot-reel::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 20px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .ty-slot-reel::before {
+    top: 0;
+    background: linear-gradient(180deg, rgba(2, 6, 23, 0.95), rgba(2, 6, 23, 0));
+  }
+  .ty-slot-reel::after {
+    bottom: 0;
+    background: linear-gradient(0deg, rgba(2, 6, 23, 0.95), rgba(2, 6, 23, 0));
+  }
+  .ty-slot-reel.is-spinning {
+    box-shadow: inset 0 10px 20px rgba(0,0,0,0.38), 0 0 0 1px rgba(245, 158, 11, 0.2), 0 14px 28px rgba(0,0,0,0.22);
+  }
+  .ty-slot-window {
+    position: relative;
+    height: 108px;
+    overflow: hidden;
+  }
+  .ty-slot-window::after {
+    content: '';
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 50%;
+    height: 1px;
+    transform: translateY(-50%);
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0), rgba(16, 185, 129, 0.85), rgba(16, 185, 129, 0));
+    box-shadow: 0 0 18px rgba(16, 185, 129, 0.36);
+    z-index: 2;
+    pointer-events: none;
+  }
+  .ty-slot-strip {
+    display: flex;
+    flex-direction: column;
+    will-change: transform, filter;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0px);
+  }
+  .ty-slot-symbol {
+    height: 108px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.2rem;
+    font-weight: 900;
+    color: #ffffff;
+    text-shadow: 0 6px 14px rgba(0,0,0,0.35);
+  }
+  .ty-slot-reel.is-win {
+    border-color: rgba(16,185,129,0.55);
+    box-shadow: 0 0 18px rgba(16,185,129,0.28), inset 0 10px 20px rgba(0,0,0,0.35);
+  }
+  .ty-slot-reel.is-lose {
+    border-color: rgba(239,68,68,0.5);
+    box-shadow: 0 0 16px rgba(239,68,68,0.24), inset 0 10px 20px rgba(0,0,0,0.35);
+  }
+  .ty-minigame-result {
+    min-height: 20px;
+    color: #e2e8f0;
+    font-size: 0.84rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+  .ty-minigame-result.is-win {
+    color: #6ee7b7;
+  }
+  .ty-minigame-result.is-lose {
+    color: #fca5a5;
+  }
+  .ty-minigame-summary {
+    display: none;
+    margin: 0 0 14px;
+    padding: 16px;
+    border-radius: 18px;
+    text-align: center;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .ty-minigame-summary.visible {
+    display: block;
+  }
+  .ty-minigame-summary.is-win {
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.16), rgba(255,255,255,0.03));
+    border-color: rgba(16, 185, 129, 0.24);
+  }
+  .ty-minigame-summary.is-lose {
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.14), rgba(255,255,255,0.03));
+    border-color: rgba(245, 158, 11, 0.22);
+  }
+  .ty-minigame-summary-title {
+    margin: 0 0 6px;
+    color: #f8fafc;
+    font-size: 1rem;
+    font-weight: 900;
+  }
+  .ty-minigame-summary-copy {
+    margin: 0 0 12px;
+    color: #dbe5ef;
+    font-size: 0.88rem;
+    line-height: 1.45;
+  }
+  .ty-minigame-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    text-align: left;
+  }
+  .ty-minigame-summary-item {
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(2, 6, 23, 0.38);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .ty-minigame-summary-label {
+    display: block;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .ty-minigame-summary-value {
+    display: block;
+    color: #f8fafc;
+    font-size: 0.9rem;
+    font-weight: 800;
+    word-break: break-word;
+  }
+  .ty-minigame-btn {
+    width: 100%;
+    border: none;
+    border-radius: 14px;
+    background: linear-gradient(90deg, var(--ty-gold), var(--ty-gold-soft));
+    color: #111827;
+    font-weight: 900;
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: transform .2s ease, opacity .2s ease, box-shadow .2s ease;
+    box-shadow: 0 14px 28px rgba(245, 158, 11, 0.22);
+  }
+  .ty-minigame-btn[disabled] {
+    cursor: default;
+    opacity: .65;
+  }
+  .ty-minigame-btn:not([disabled]):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 32px rgba(245, 158, 11, 0.28);
+  }
+  .ty-minigame-btn.is-lose {
+    background: linear-gradient(90deg, #b91c1c, #ef4444);
+    color: #fff7f7;
+    box-shadow: 0 14px 28px rgba(239, 68, 68, 0.24);
+  }
+  .ty-minigame-btn.is-lose:not([disabled]):hover {
+    box-shadow: 0 18px 32px rgba(239, 68, 68, 0.3);
+  }
+  .ty-progress-title {
+    display: none;
+  }
+  .ty-steps {
+    position: relative;
+    padding-left: 30px;
+    list-style: none;
+    margin: 0;
+  }
+  .ty-steps.is-live .ty-step {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+  .ty-steps::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 5px;
+    width: 2px;
+    height: calc(100% - 10px);
+    background: rgba(255,255,255,0.1);
+  }
+  .ty-step {
+    position: relative;
+    display: block;
+    margin-bottom: 22px;
+    opacity: 0;
+    transform: translateX(-10px);
+    animation: ty-slide-in .5s forwards;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+  .ty-step:last-child {
+    margin-bottom: 0;
+  }
+  .ty-step-ico {
+    position: absolute;
+    left: -30px;
+    top: 1px;
+    width: 16px;
+    height: 16px;
+    background: rgba(125, 211, 252, 0.18);
+    color: #dbeafe;
+    font-size: 10px;
+    font-weight: 900;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .ty-step.done .ty-step-ico,
+  .ty-step.just-completed .ty-step-ico {
+    background: var(--ty-accent);
+    color: #03120a;
+    box-shadow: 0 0 12px var(--ty-accent-glow);
+    border-color: transparent;
+  }
+  .ty-step-label {
+    font-size: 0.98rem;
+    font-weight: 600;
+    color: #dbe5ef;
+    line-height: 1.4;
+  }
+  .ty-step.done .ty-step-label,
+  .ty-step.just-completed .ty-step-label {
+    color: #ffffff;
+  }
+  .ty-character {
+    flex: .84;
+    min-width: 250px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    gap: 8px;
+  }
+  .ty-bubble {
+    background: #ffffff;
+    color: #000000;
+    padding: 10px 20px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 900;
+    position: relative;
+    text-align: center;
+  }
+  .ty-bubble.waiting {
+    font-size: 0.68rem;
+    padding: 8px 14px;
+    letter-spacing: .01em;
+  }
+  .ty-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid #ffffff;
+    transform: translateX(-50%);
+  }
+  .ty-ill {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
+  .ty-ill img {
+    width: min(100%, 190px);
+    animation: ty-float 3s ease-in-out infinite;
+  }
+  .ty-footer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 8px;
+    gap: 14px;
+  }
+  .ty-btn {
+    background: linear-gradient(90deg, #00ff88, #00bd68);
+    color: #04150e;
+    border: none;
+    padding: 15px 40px;
+    border-radius: 14px;
+    font-weight: 900;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform .3s ease, box-shadow .3s ease;
+    box-shadow: 0 5px 20px var(--ty-accent-glow);
+  }
+  .ty-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 25px var(--ty-accent-glow);
+  }
+  .ty-cta-note {
+    font-size: 0.75rem;
+    color: var(--ty-text-dim);
+    text-align: center;
+    font-weight: 700;
+  }
+  @keyframes ty-slide-in {
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes ty-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  @media (max-width: 760px) {
+    .ty-wrap {
+      padding: 18px 10px 12px;
+      min-height: auto;
+    }
+    .ty-card {
+      padding: 20px 16px;
+      border-radius: 20px;
+      gap: 18px;
+    }
+    .ty-status {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .ty-character {
+      flex: 0 0 76px;
+      min-width: 76px;
+      width: 76px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      flex-wrap: nowrap;
+      align-self: center;
+    }
+    .ty-badge {
+      font-size: .82rem;
+    }
+    .ty-step-label {
+      font-size: 0.9rem;
+    }
+    .ty-step[data-step-id="completed"] .ty-step-label {
+      font-size: 0.72rem;
+      line-height: 1.15;
+      white-space: nowrap;
+      letter-spacing: -0.01em;
+    }
+    .ty-pill {
+      width: 100%;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    .ty-bubble {
+      flex: 0 0 auto;
+      width: 68px;
+      max-width: 68px;
+      min-width: 68px;
+      padding: 7px 10px;
+      font-size: 0.6rem;
+      line-height: 1.2;
+      border-radius: 11px;
+      white-space: normal;
+      word-break: break-word;
+    }
+    .ty-bubble.waiting {
+      font-size: 0.52rem;
+      padding: 6px 6px;
+    }
+    .ty-bubble::after {
+      left: 50%;
+      right: auto;
+      bottom: -6px;
+      transform: translateX(-50%);
+      border-left-width: 6px;
+      border-right-width: 6px;
+      border-top-width: 6px;
+    }
+    .ty-ill {
+      width: 68px;
+      flex: 0 0 auto;
+    }
+    .ty-ill img {
+      width: 68px;
+      max-width: 68px;
+    }
+    .ty-footer {
+      margin-top: 2px;
+    }
+    .ty-btn {
+      width: 100%;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    .ty-slot {
+      gap: 8px;
+      padding: 10px;
+    }
+    .ty-slot-reel,
+    .ty-slot-window,
+    .ty-slot-symbol {
+      min-height: 92px;
+      height: 92px;
+    }
+    .ty-slot-symbol {
+      font-size: 1.85rem;
+    }
+    .ty-minigame-summary-grid {
+      grid-template-columns: 1fr;
+    }
+    .ty-minigame-modal {
+      padding: 10px;
+    }
+    .ty-minigame-dialog {
+      padding: 16px 14px;
+      border-radius: 20px;
+    }
+    .ty-minigame-head {
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+      padding-right: 42px;
+    }
+    .ty-minigame-title {
+      flex: 1 1 auto;
+      font-size: 0.88rem;
+      line-height: 1.15;
+    }
+    .ty-minigame-badge {
+      align-self: center;
+      font-size: 0.62rem;
+      line-height: 1;
+      padding: 5px 8px;
+      letter-spacing: -.01em;
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+  }
+
+  /* ── PIN display section ── */
+  .ty-pins-section {
+    display: none;
+    margin-top: 16px;
+    width: 100%;
+  }
+  .ty-pins-section.visible {
+    display: block;
+  }
+  .ty-pins-title {
+    color: #dbe5ef;
+    font-size: 0.92rem;
+    font-weight: 700;
+    margin: 0 0 10px;
+  }
+  .ty-pin-card {
+    background: linear-gradient(135deg, rgba(0,255,136,.08), rgba(0,255,136,.02));
+    border: 1px solid rgba(0,255,136,.22);
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .ty-pin-info {
+    flex: 1;
+    min-width: 180px;
+  }
+  .ty-pin-label {
+    color: #8b949e;
+    font-size: 0.78rem;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .ty-pin-code {
+    font-family: 'Courier New', monospace;
+    font-size: 1.2rem;
+    font-weight: 900;
+    color: var(--ty-accent);
+    letter-spacing: .05em;
+    word-break: break-all;
+  }
+  .ty-pin-copy-btn {
+    background: rgba(0,255,136,.12);
+    border: 1px solid rgba(0,255,136,.28);
+    color: var(--ty-accent);
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.82rem;
+    transition: background .2s;
+    white-space: nowrap;
+  }
+  .ty-pin-copy-btn:hover {
+    background: rgba(0,255,136,.22);
+  }
+  .ty-pin-copy-btn.copied {
+    background: var(--ty-accent);
+    color: #080a0c;
+  }
+</style>
+{% endblock %}
+
+{% block header %}
+<header class="site-header">
+  <div class="container">
+    <div class="left-actions">
+      <a href="/" class="icon-btn" aria-label="Inicio" title="Inicio">‹</a>
+    </div>
+    <a href="/" class="brand">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="logo"/>
+      {% else %}
+        <span class="logo-text">{{ site_name|default('InefableStore') }}</span>
+      {% endif %}
+    </a>
+    <div class="right-actions"></div>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<section class="ty-wrap">
+  <div class="ty-card">
+    <div class="ty-header">
+      <span class="ty-badge">ORDEN #{{ order_id }}</span>
+      <div class="ty-info-row">
+        <div class="ty-pill">Jugador:<strong>{{ player_display or 'No especificado' }}</strong></div>
+        <div class="ty-pill">Paquete:<strong>{{ package_display or 'No especificado' }}</strong></div>
+      </div>
+    </div>
+
+    <div class="ty-status">
+      <div id="ty-progress" class="ty-progress" data-order-id="{{ order_id }}" aria-live="polite">
+        <h3 id="ty-progress-title" class="ty-progress-title">Estado de procesamiento</h3>
+        <ul id="ty-steps" class="ty-steps"></ul>
+        <div id="ty-pins-section" class="ty-pins-section">
+          <h4 class="ty-pins-title">Tus PINs de Recarga</h4>
+          <div id="ty-pins-list"></div>
+        </div>
+      </div>
+      <div id="ty-minigame" class="ty-minigame" hidden data-player-display="{{ player_display or '' }}" data-package-display="{{ package_display or '' }}">
+        <button id="ty-minigame-open" class="ty-minigame-trigger" type="button">Jugar por premio</button>
+      </div>
+    </div>
+
+    <div class="ty-character">
+      <div id="ty-bubble" class="ty-bubble">ESPERA ESTAMOS VALIDANDO</div>
+      <div class="ty-ill">
+        {% set ty_img = get_config_value('thanks_image_path', '') %}
+        {% if ty_img %}
+          <img src="{{ ty_img }}" alt="Gracias">
+        {% else %}
+          <img src="{{ url_for('static', filename='img/thanks-mascot.png') }}" alt="Gracias">
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="ty-footer">
+      <a class="ty-btn" href="/">REGRESAR A COMPRAR</a>
+      <span class="ty-cta-note">Seguimiento activo en tiempo real</span>
+    </div>
+  </div>
+</section>
+
+<div id="ty-minigame-modal" class="ty-minigame-modal" hidden>
+  <div class="ty-minigame-dialog" role="dialog" aria-modal="true" aria-labelledby="ty-minigame-title">
+    <button id="ty-minigame-close" class="ty-minigame-close" type="button" aria-label="Cerrar">×</button>
+    <div class="ty-minigame-head">
+      <h3 id="ty-minigame-title" class="ty-minigame-title">Tragaperras de premios</h3>
+      <span id="ty-minigame-badge" class="ty-minigame-badge">1 sola jugada</span>
+    </div>
+    <p id="ty-minigame-copy" class="ty-minigame-copy">Completa tu recarga y usa esta orden para intentar ganar un premio automático.</p>
+    <div class="ty-slot" aria-hidden="true">
+      <div class="ty-slot-reel" data-reel="0"><div class="ty-slot-window"><div class="ty-slot-strip"></div></div></div>
+      <div class="ty-slot-reel" data-reel="1"><div class="ty-slot-window"><div class="ty-slot-strip"></div></div></div>
+      <div class="ty-slot-reel" data-reel="2"><div class="ty-slot-window"><div class="ty-slot-strip"></div></div></div>
+    </div>
+    <div id="ty-minigame-result" class="ty-minigame-result"></div>
+    <div id="ty-minigame-summary" class="ty-minigame-summary" hidden></div>
+    <button id="ty-minigame-play" class="ty-minigame-btn" type="button">Jugar por premio</button>
+  </div>
+</div>
+
+<!-- Footer (3-column grid layout) -->
+<footer class="main-footer">
+  <div class="footer-grid">
+    <!-- Col 1: Brand & Description -->
+    <div class="footer-col">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="footer-logo">
+      {% else %}
+        <div class="footer-logo-text">{{ site_name|default('Inefable') }}<span>Store</span></div>
+      {% endif %}
+      <p class="footer-description">
+        Tu tienda de confianza para recargas de juegos, Gift Cards y productos digitales. Entrega inmediata y segura.
+      </p>
+      <div class="footer-features-row">
+        <span class="footer-feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+          Compra Segura
+        </span>
+        <span class="footer-feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Soporte 24/7
+        </span>
+      </div>
+    </div>
+
+    <!-- Col 2: Social Links -->
+    <div class="footer-col footer-col-center">
+      <h4 class="footer-heading">S&Iacute;GUENOS</h4>
+      <div class="footer-social-list">
+        <a href="https://www.facebook.com/InefablestoreR/" target="_blank" rel="noopener" class="footer-social-link">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          Facebook
+        </a>
+        <a href="https://www.instagram.com/inefable_store_12/" target="_blank" rel="noopener" class="footer-social-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+          @inefable_store
+        </a>
+        <a href="https://www.tiktok.com/@inefablestore" target="_blank" rel="noopener" class="footer-social-link">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
+          @inefablestore
+        </a>
+        <a href="https://api.whatsapp.com/send?phone=%2B584125712917" target="_blank" rel="noopener" class="footer-social-link footer-social-wa">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          WhatsApp
+        </a>
+      </div>
+    </div>
+
+    <!-- Col 3: Contact & Support -->
+    <div class="footer-col footer-col-right">
+      <h4 class="footer-heading">CONTACTO Y SOPORTE</h4>
+      <ul class="footer-contact-list">
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          soporte@inefablestore.com
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Lunes a Domingo: 8:00 AM - 10:00 PM
+        </li>
+        <li>
+          <a href="/terms" style="color:inherit; text-decoration:none; display:flex; align-items:center; gap:10px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            T&eacute;rminos y Condiciones
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Copyright -->
+  <div class="copyright-bar">
+    &copy; {{ now_ve().year }} <span class="brand-name">{{ site_name|default('InefableStore') }}</span> &mdash; Todos los derechos reservados.
+  </div>
+</footer>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var root = document.getElementById('ty-progress');
+    if (!root) return;
+    var orderId = root.getAttribute('data-order-id');
+    var titleEl = document.getElementById('ty-progress-title');
+    var listEl = document.getElementById('ty-steps');
+    var bubbleEl = document.getElementById('ty-bubble');
+    var timer = null;
+    var prevDoneMap = {};
+    var pendingQueue = [];
+    var animating = false;
+    var hasRenderedSteps = false;
+    var waitingBubbleText = 'ESPERA ESTAMOS VALIDANDO';
+    var doneBubbleText = 'LISTO TU RECARGA FUE ENVIADA';
+
+    function updateBubbleText(payload) {
+      if (!bubbleEl) return;
+      var isCompleted = !!(payload && payload.completed);
+      var nextText = isCompleted ? doneBubbleText : waitingBubbleText;
+      if (bubbleEl.textContent !== nextText) {
+        bubbleEl.textContent = nextText;
+      }
+      var shouldWait = !isCompleted;
+      if (bubbleEl.classList.contains('waiting') !== shouldWait) {
+        bubbleEl.classList.toggle('waiting', shouldWait);
+      }
+    }
+
+    function displayStepLabel(st) {
+      var label = String((st && st.label) || '');
+      var isMobile = window.matchMedia('(max-width: 760px)').matches;
+      if (!isMobile) return label;
+      if ((st && st.id) === 'search') {
+        return label.replace(/\s+en el sistema$/i, '');
+      }
+      return label;
+    }
+
+    function buildStepHTML(st, idx, done, justDone) {
+      return '<li class="ty-step' + (done ? ' done' : '') + (justDone ? ' just-completed' : '') + '" data-step-id="' + ((st.id || ('step_' + idx)).toString()) + '">'
+        + '<span class="ty-step-ico">' + (done ? '✓' : '×') + '</span>'
+        + '<span class="ty-step-label">' + displayStepLabel(st) + '</span>'
+        + '</li>';
+    }
+
+    function applyNextInQueue() {
+      if (pendingQueue.length === 0) { animating = false; return; }
+      animating = true;
+      var key = pendingQueue.shift();
+      prevDoneMap[key] = true;
+      // Re-render with updated prevDoneMap
+      if (lastPayload) renderImmediate(lastPayload, key);
+      setTimeout(applyNextInQueue, 900 + Math.random() * 600);
+    }
+
+    var lastPayload = null;
+
+    function renderImmediate(payload, justDoneKey) {
+      if (!listEl) return;
+      var steps = Array.isArray(payload.steps) ? payload.steps : [];
+      listEl.innerHTML = steps.map(function (st, idx) {
+        var key = (st.id || ('step_' + idx)).toString();
+        var done = !!prevDoneMap[key];
+        var justDone = (key === justDoneKey);
+        return buildStepHTML(st, idx, done, justDone);
+      }).join('');
+      if (hasRenderedSteps) {
+        listEl.classList.add('is-live');
+      } else {
+        hasRenderedSteps = true;
+      }
+      // Remove just-completed highlight after animation
+      if (justDoneKey) {
+        var highlighted = listEl.querySelectorAll('.ty-step.just-completed');
+        highlighted.forEach(function (el) {
+          setTimeout(function () { el.classList.remove('just-completed'); }, 500);
+        });
+      }
+    }
+
+    function renderSteps(payload) {
+      updateBubbleText(payload);
+      try {
+        document.dispatchEvent(new CustomEvent('ty-progress-state', {
+          detail: {
+            completed: !!(payload && payload.completed),
+            visible: !!(payload && payload.visible)
+          }
+        }));
+      } catch (error) {}
+      if (!payload || !payload.visible) {
+        root.classList.remove('visible');
+        return;
+      }
+      root.classList.add('visible');
+      lastPayload = payload;
+
+      var steps = Array.isArray(payload.steps) ? payload.steps : [];
+      if (titleEl) {
+        titleEl.textContent = 'Estado de procesamiento';
+      }
+
+      // Find newly done steps and queue them for staggered animation
+      var newlyDone = [];
+      steps.forEach(function (st, idx) {
+        var key = (st.id || ('step_' + idx)).toString();
+        if (st.done && !prevDoneMap[key] && pendingQueue.indexOf(key) === -1) {
+          newlyDone.push(key);
+        }
+      });
+
+      // Queue new ones
+      newlyDone.forEach(function (k) { pendingQueue.push(k); });
+
+      // Render current state (without new ones yet)
+      renderImmediate(payload, null);
+
+      // Render PINs if present
+      renderPins(payload);
+
+      // Start draining queue if not already
+      if (!animating && pendingQueue.length > 0) {
+        setTimeout(applyNextInQueue, 800 + Math.random() * 400);
+      }
+    }
+
+    function renderPins(payload) {
+      var sectionEl = document.getElementById('ty-pins-section');
+      var listEl = document.getElementById('ty-pins-list');
+      if (!sectionEl || !listEl) return;
+      var pins = Array.isArray(payload && payload.pins) ? payload.pins : [];
+      if (pins.length === 0) { sectionEl.classList.remove('visible'); return; }
+      sectionEl.classList.add('visible');
+      listEl.innerHTML = pins.map(function (pin, i) {
+        var code = String(pin.pin_code || '').trim();
+        var title = String(pin.title || 'PIN').trim();
+        var safeCode = code.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return '<div class="ty-pin-card">'
+          + '<div class="ty-pin-info">'
+          + '<span class="ty-pin-label">' + title + '</span>'
+          + '<span class="ty-pin-code">' + safeCode + '</span>'
+          + '</div>'
+          + '<button class="ty-pin-copy-btn" data-pin-code="' + safeCode + '" onclick="copyPinCode(this)" type="button">Copiar</button>'
+          + '</div>';
+      }).join('');
+    }
+
+    window.copyPinCode = function (btn) {
+      var code = btn.getAttribute('data-pin-code') || '';
+      if (!code) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(function () {
+          btn.textContent = '¡Copiado!';
+          btn.classList.add('copied');
+          setTimeout(function () { btn.textContent = 'Copiar'; btn.classList.remove('copied'); }, 2000);
+        }).catch(function () { /* fallback */ });
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = code;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); btn.textContent = '¡Copiado!'; btn.classList.add('copied'); } catch (e) {}
+        document.body.removeChild(ta);
+        setTimeout(function () { btn.textContent = 'Copiar'; btn.classList.remove('copied'); }, 2000);
+      }
+    };
+
+    function stopPolling() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+
+    function pollOnce() {
+      if (!orderId) return;
+      fetch('/gracias/' + encodeURIComponent(orderId) + '/progress', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data || !data.ok) return;
+          renderSteps(data);
+          if (data.completed) stopPolling();
+        })
+        .catch(function () { /* keep polling silently */ });
+    }
+
+    pollOnce();
+    timer = setInterval(pollOnce, 5000);
+  })();
+
+  (function () {
+    var root = document.getElementById('ty-minigame');
+    if (!root) return;
+    var modalEl = document.getElementById('ty-minigame-modal');
+    var dialogEl = modalEl ? modalEl.querySelector('.ty-minigame-dialog') : null;
+    var openBtn = document.getElementById('ty-minigame-open');
+    var closeBtn = document.getElementById('ty-minigame-close');
+    var orderBadge = document.getElementById('ty-minigame-badge');
+    var copyEl = document.getElementById('ty-minigame-copy');
+    var resultEl = document.getElementById('ty-minigame-result');
+    var summaryEl = document.getElementById('ty-minigame-summary');
+    var playBtn = document.getElementById('ty-minigame-play');
+    var reels = Array.prototype.slice.call((modalEl || document).querySelectorAll('.ty-slot-reel'));
+    var orderId = document.getElementById('ty-progress') ? document.getElementById('ty-progress').getAttribute('data-order-id') : '';
+    var playerDisplay = root.getAttribute('data-player-display') || '';
+    var packageDisplay = root.getAttribute('data-package-display') || '';
+    var symbols = ['🎮', '💎', '⚡', '🪙', '🔥', '🎁'];
+    var reelState = [];
+    var timer = null;
+    var spinning = false;
+    var state = null;
+    var progressCompleted = false;
+
+    function buildReels() {
+      reelState = reels.map(function (reel, reelIndex) {
+        var strip = reel.querySelector('.ty-slot-strip');
+        var sequence = [];
+        for (var loop = 0; loop < 16; loop += 1) {
+          for (var s = 0; s < symbols.length; s += 1) {
+            sequence.push(symbols[(s + reelIndex + loop) % symbols.length]);
+          }
+        }
+        for (var extra = 0; extra < symbols.length; extra += 1) {
+          sequence.push(symbols[(extra + reelIndex) % symbols.length]);
+        }
+        strip.innerHTML = sequence.map(function (symbol) {
+          return '<div class="ty-slot-symbol">' + symbol + '</div>';
+        }).join('');
+        var item = strip.firstElementChild;
+        var itemHeight = item ? item.getBoundingClientRect().height : reel.getBoundingClientRect().height;
+        var data = {
+          reel: reel,
+          strip: strip,
+          sequence: sequence,
+          itemHeight: itemHeight || 108,
+          currentIndex: reelIndex
+        };
+        setReelInstant(data, reelIndex);
+        return data;
+      });
+    }
+
+    function reelOffset(reel, index) {
+      return -1 * index * reel.itemHeight;
+    }
+
+    function setReelInstant(reel, index) {
+      reel.currentIndex = Math.max(0, index);
+      reel.strip.style.transition = 'none';
+      reel.strip.style.transform = 'translate3d(0, ' + reelOffset(reel, reel.currentIndex) + 'px, 0)';
+      reel.strip.style.filter = 'blur(0px)';
+    }
+
+    function refreshReelMetrics() {
+      reelState.forEach(function (reel) {
+        var item = reel.strip.firstElementChild;
+        if (item) {
+          var measuredHeight = item.getBoundingClientRect().height;
+          if (measuredHeight > 0) {
+            reel.itemHeight = measuredHeight;
+          }
+        }
+        setReelInstant(reel, reel.currentIndex || 0);
+      });
+    }
+
+    function findTargetIndex(reel, targetSymbol) {
+      var minIndex = Math.max(reel.currentIndex + (symbols.length * 7), 0);
+      for (var i = reel.sequence.length - 1; i >= minIndex; i -= 1) {
+        if (reel.sequence[i] === targetSymbol) return i;
+      }
+      return reel.sequence.length - 1;
+    }
+
+    function stopReel(reel, targetSymbol, duration, delay) {
+      return new Promise(function (resolve) {
+        var targetIndex = findTargetIndex(reel, targetSymbol);
+        var finalOffset = reelOffset(reel, targetIndex);
+        var overshoot = Math.min(18, Math.round(reel.itemHeight * 0.18));
+        reel.reel.classList.add('is-spinning');
+        window.setTimeout(function () {
+          reel.strip.style.transition = 'transform ' + duration + 'ms cubic-bezier(0.16, 0.88, 0.24, 1), filter ' + Math.max(260, duration - 160) + 'ms ease-out';
+          reel.strip.style.filter = 'blur(9px)';
+          reel.strip.style.transform = 'translate3d(0, ' + (finalOffset - overshoot) + 'px, 0)';
+        }, delay);
+        window.setTimeout(function () {
+          reel.strip.style.transition = 'transform 220ms cubic-bezier(0.22, 1.2, 0.36, 1), filter 220ms ease-out';
+          reel.strip.style.filter = 'blur(0px)';
+          reel.strip.style.transform = 'translate3d(0, ' + finalOffset + 'px, 0)';
+        }, delay + duration - 170);
+        window.setTimeout(function () {
+          reel.currentIndex = targetIndex;
+          reel.reel.classList.remove('is-spinning');
+          resolve();
+        }, delay + duration + 120);
+      });
+    }
+
+    function setVisible(visible) {
+      root.hidden = !visible;
+      root.classList.toggle('visible', !!visible);
+      if (!visible) {
+        closeModal();
+      }
+    }
+
+    function openModal() {
+      if (!modalEl || !state || !state.ready) return;
+      modalEl.hidden = false;
+      document.body.style.overflow = 'hidden';
+      refreshReelMetrics();
+    }
+
+    function closeModal() {
+      if (!modalEl) return;
+      modalEl.hidden = true;
+      document.body.style.overflow = '';
+    }
+
+    function setResult(message, tone) {
+      if (!resultEl) return;
+      resultEl.textContent = message || '';
+      resultEl.classList.toggle('is-win', tone === 'win');
+      resultEl.classList.toggle('is-lose', tone === 'lose');
+      if (playBtn) {
+        playBtn.classList.toggle('is-lose', tone === 'lose' && !spinning);
+      }
+    }
+
+    function clearSummary() {
+      if (!summaryEl) return;
+      summaryEl.hidden = true;
+      summaryEl.classList.remove('visible');
+      summaryEl.classList.remove('is-win');
+      summaryEl.classList.remove('is-lose');
+      summaryEl.innerHTML = '';
+    }
+
+    function renderSummary(payload) {
+      if (!summaryEl) return;
+      var result = String((payload && payload.result) || 'pending');
+      if (result !== 'win' && result !== 'lose') {
+        clearSummary();
+        return;
+      }
+      var isWin = result === 'win';
+      var playerName = (payload && (payload.reward_player_name || payload.player_display)) || playerDisplay || 'No especificado';
+      var rewardName = (payload && payload.reward_title) || packageDisplay || 'Sin premio';
+      var statusCopy = isWin
+        ? ((payload && payload.reward_status) === 'completed' ? 'Tu premio fue enviado correctamente.' : 'Tu premio quedó registrado en el sistema.')
+        : 'En este intento no hubo premio.';
+      var items = [
+        { label: 'Jugador', value: playerName },
+        { label: isWin ? 'Paquete ganado' : 'Paquete', value: rewardName }
+      ];
+      summaryEl.hidden = false;
+      summaryEl.classList.add('visible');
+      summaryEl.classList.toggle('is-win', isWin);
+      summaryEl.classList.toggle('is-lose', !isWin);
+      summaryEl.innerHTML = '<h4 class="ty-minigame-summary-title">Gracias por participar</h4>'
+        + '<p class="ty-minigame-summary-copy">' + statusCopy + '</p>'
+        + (isWin
+          ? '<div class="ty-minigame-summary-grid">'
+            + items.map(function (item) {
+              return '<div class="ty-minigame-summary-item">'
+                + '<span class="ty-minigame-summary-label">' + item.label + '</span>'
+                + '<span class="ty-minigame-summary-value">' + item.value + '</span>'
+                + '</div>';
+            }).join('')
+            + '</div>'
+          : '');
+    }
+
+    function paintReels(kind) {
+      reels.forEach(function (reel) {
+        reel.classList.remove('is-win');
+        reel.classList.remove('is-lose');
+        if (kind === 'win') reel.classList.add('is-win');
+        if (kind === 'lose') reel.classList.add('is-lose');
+      });
+    }
+
+    function finalSymbols(payload) {
+      var win = !!(payload && payload.winner);
+      return win ? ['🎁', '🎁', '🎁'] : ['🎮', '💎', '🔥'];
+    }
+
+    function applyFinalReels(payload) {
+      var win = !!(payload && payload.winner);
+      var targetSymbols = finalSymbols(payload);
+      reelState.forEach(function (reel, index) {
+        var targetIndex = findTargetIndex(reel, targetSymbols[index] || '🎮');
+        setReelInstant(reel, targetIndex);
+      });
+      paintReels(win ? 'win' : 'lose');
+    }
+
+    function updateStaticState(payload) {
+      state = payload || {};
+      var triggerAllowed = !!(progressCompleted || payload.dev_preview_mode);
+      setVisible(!!payload.visible && !!payload.ready && triggerAllowed);
+      if (!payload.visible || !payload.ready || !triggerAllowed) return;
+      if (orderBadge) {
+        orderBadge.textContent = payload.already_played ? 'Jugada consumida' : (payload.ready ? '1 sola jugada' : 'Esperando recarga');
+      }
+      if (copyEl) {
+        if (payload.already_played && payload.winner) {
+          copyEl.textContent = 'Tu premio ya fue procesado para esta orden.';
+        } else if (payload.result === 'win' && payload.reward_status === 'completed') {
+          copyEl.textContent = 'Tu premio fue enviado y el resultado quedó fijado en pantalla.';
+        } else {
+          copyEl.textContent = payload.message || 'Completa tu recarga y usa esta orden para intentar ganar un premio automático.';
+        }
+      }
+      if (openBtn) {
+        openBtn.disabled = !payload.ready;
+        openBtn.textContent = payload.ready ? 'Jugar por premio' : 'Esperando recarga';
+      }
+      if (playBtn) {
+        playBtn.disabled = spinning || !payload.can_play;
+        playBtn.textContent = payload.can_play ? 'Jugar por premio' : (payload.already_played ? 'Intentos agotados' : 'Esperando recarga');
+        playBtn.classList.toggle('is-lose', !payload.can_play && (payload.result === 'lose' || (!payload.winner && payload.already_played)));
+      }
+      if (payload.already_played) {
+        applyFinalReels(payload);
+        renderSummary(payload);
+        if (payload.winner) {
+          setResult(payload.reward_status === 'completed' ? 'Ganaste y el premio ya fue enviado' : (payload.message || 'Ganaste un premio'), 'win');
+        } else {
+          setResult('', '');
+        }
+      } else if (payload.result === 'win' || payload.result === 'lose') {
+        applyFinalReels(payload);
+        renderSummary(payload);
+        if (payload.result === 'win') {
+          setResult(payload.reward_status === 'completed' ? 'Ganaste y tu premio fue enviado' : (payload.message || 'Ganaste un premio'), 'win');
+        } else {
+          setResult(payload.message || 'Gracias por participar', 'lose');
+        }
+      } else {
+        paintReels('');
+        if (!spinning) {
+          reelState.forEach(function (reel, index) {
+            setReelInstant(reel, index);
+          });
+        }
+        clearSummary();
+        setResult(payload.ready ? '' : (payload.message || ''), '');
+      }
+    }
+
+    function spinAndResolve(payload) {
+      spinning = true;
+      if (playBtn) playBtn.disabled = true;
+      paintReels('');
+      var targetSymbols = finalSymbols(payload);
+      return Promise.all(reelState.map(function (reel, index) {
+        return stopReel(reel, targetSymbols[index] || '🎮', 1080 + (index * 220), index * 220);
+      })).then(function () {
+        spinning = false;
+      });
+    }
+
+    function fetchState() {
+      if (!orderId) return Promise.resolve();
+      return fetch('/gracias/' + encodeURIComponent(orderId) + '/minijuego', { cache: 'no-store' })
+        .then(function (response) { return response.json(); })
+        .then(function (payload) {
+          if (!payload || !payload.ok) return;
+          updateStaticState(payload);
+          if (payload.already_played || !payload.visible) {
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+          }
+        })
+        .catch(function () { /* silent */ });
+    }
+
+    function playMinigame() {
+      if (!orderId || spinning) return;
+      setResult('', '');
+      clearSummary();
+      if (copyEl) {
+        copyEl.textContent = 'Girando los rodillos...';
+      }
+      if (playBtn) playBtn.disabled = true;
+      fetch('/gracias/' + encodeURIComponent(orderId) + '/minijuego/play', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      })
+        .then(function (response) { return response.json(); })
+        .then(function (payload) {
+          if (!payload || !payload.ok) {
+            setResult((payload && payload.error) || 'No se pudo jugar', 'lose');
+            if (playBtn) playBtn.disabled = false;
+            fetchState();
+            return;
+          }
+          return spinAndResolve(payload).then(function () {
+            applyFinalReels(payload);
+            renderSummary(payload);
+            if (payload.winner) {
+              setResult(payload.message || 'Ganaste un premio', 'win');
+            } else {
+              setResult(payload.message || 'Esta vez no tocó premio', 'lose');
+            }
+            fetchState();
+          });
+        })
+        .catch(function () {
+          spinning = false;
+          setResult('No se pudo jugar en este momento', 'lose');
+          if (playBtn) playBtn.disabled = false;
+        });
+    }
+
+    if (playBtn) {
+      playBtn.addEventListener('click', playMinigame);
+    }
+    if (openBtn) {
+      openBtn.addEventListener('click', openModal);
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeModal);
+    }
+    if (modalEl) {
+      modalEl.addEventListener('click', function (event) {
+        if (event.target === modalEl) closeModal();
+      });
+    }
+    document.addEventListener('ty-progress-state', function (event) {
+      progressCompleted = !!(event && event.detail && event.detail.completed);
+      if (state) {
+        updateStaticState(state);
+      }
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closeModal();
+    });
+
+    buildReels();
+    fetchState();
+    timer = setInterval(fetchState, 6000);
+  })();
+</script>
+{% endblock %}

@@ -6,6 +6,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const category = (root.getAttribute('data-category') || '').toLowerCase();
   const requiresZone = (root.getAttribute('data-requires-zone') === '1');
   const isGift = category === 'gift';
+  const directToPin = (root.getAttribute('data-direct-pin') === '1');
+  // Skip player ID for packages flagged as direct PIN/gift card delivery
+  const skipPlayerId = isGift || directToPin;
   const grid = document.getElementById('items-grid');
   const selBox = document.getElementById('selected-box');
   const selTitle = document.getElementById('selected-title');
@@ -49,8 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const soRequiresZone = soConn ? !!soConn.requires_zone : false;
   const zoneRequiredForCheckout = requiresZone || isMlPackage || soRequiresZone;
   let verifiedNick = '';
-  // Hide Step 1 (player ID) for gift category and renumber badges/texts
-  if (isGift && inputCustomerId) {
+  // Hide Step 1 (player ID) for gift/direct-pin packages and renumber badges/texts
+  if (skipPlayerId && inputCustomerId) {
     const stepCard = inputCustomerId.closest('.step-card');
     if (stepCard) stepCard.hidden = true;
     const stepCards = root.querySelectorAll('.details-right .step-card');
@@ -1000,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnBuy.addEventListener('click', async () => {
       if (selectedItemIndex < 0) return alert('Selecciona un paquete');
       if (!methodChosen) return alert('Selecciona un método de pago');
-      if (!isGift) {
+      if (!skipPlayerId) {
         if (!inputCustomerId || !inputCustomerId.value.trim()) {
           alert('Ingrese su ID de jugador');
           if (inputCustomerId) inputCustomerId.focus();
@@ -1020,7 +1023,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // If user clicks fast, try to verify quietly for a short time so checkout can show nick.
       try {
-        if (!isGift && inputCustomerId && scrapeEnabled && (activeLogin || isBsPackage || isMlPackage || isSoPackage)) {
+        if (!skipPlayerId && inputCustomerId && scrapeEnabled && (activeLogin || isBsPackage || isMlPackage || isSoPackage)) {
           const uid = (inputCustomerId.value || '').trim();
           const nn = (root && root.dataset) ? String(root.dataset.verifiedNick || '').trim() : '';
           if (uid && !nn && root.__doVerifyPlayer) {
@@ -1051,14 +1054,14 @@ document.addEventListener('DOMContentLoaded', () => {
         n: '',
         q: String(Math.max(1, quantity || 1))
       };
-      if (!isGift && inputCustomerId) {
+      if (!skipPlayerId && inputCustomerId) {
         paramsObj.cid = inputCustomerId.value.trim();
       }
       try {
         const nn = (root && root.dataset && root.dataset.verifiedNick) ? String(root.dataset.verifiedNick || '').trim() : '';
         if (nn) paramsObj.nn = nn;
       } catch (_) {}
-      if (!isGift && zoneRequiredForCheckout && inputCustomerZone) {
+      if (!skipPlayerId && zoneRequiredForCheckout && inputCustomerZone) {
         paramsObj.zid = inputCustomerZone.value.trim();
       }
       if (rcode) paramsObj.rc = rcode;
@@ -1071,7 +1074,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!inputRefCode) return false;
     const code = inputRefCode.value.trim();
     const gid = (() => { const r = document.getElementById('game-details'); return r ? r.getAttribute('data-game-id') : ''; })();
-    const cid = (!isGift && inputCustomerId) ? (inputCustomerId.value || '').trim() : '';
+    const cid = (!skipPlayerId && inputCustomerId) ? (inputCustomerId.value || '').trim() : '';
     validRef = null;
     refValidationError = '';
     if (!code) { if (refStatus) refStatus.textContent = ''; renderItems(allItems); return false; }

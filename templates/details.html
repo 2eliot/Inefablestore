@@ -44,7 +44,7 @@
   <div class="modal-backdrop"></div>
 </div>
 
-<section class="details-layout checkout-exact container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}" data-active-login="{{ 1 if (active_login_game_id|int) == game.id else 0 }}" data-bs-package-id="{{ bs_package_id|default('') }}" data-ml-package-id="{{ ml_package_id|default('') }}" data-default-region="{{ player_lookup_region }}" data-scrape-enabled="{{ 1 if scrape_enabled else 0 }}" data-so-connections="{{ so_connections_json|default('[]') }}">
+<section class="details-layout checkout-exact container" id="game-details" data-game-id="{{ game.id }}" data-category="{{ game.category }}" data-requires-zone="{{ 1 if game.requires_zone_id else 0 }}" data-direct-pin="{{ 1 if game.direct_to_pin else 0 }}" data-active-login="{{ 1 if (active_login_game_id|int) == game.id else 0 }}" data-bs-package-id="{{ bs_package_id|default('') }}" data-ml-package-id="{{ ml_package_id|default('') }}" data-default-region="{{ player_lookup_region }}" data-scrape-enabled="{{ 1 if scrape_enabled else 0 }}" data-so-connections="{{ so_connections_json|default('[]') }}">
   {% set so_conn = so_connections|default([])|selectattr('store_package_id', 'equalto', game.id)|first %}
   {% set is_so_game = so_conn is defined and so_conn %}
   {% set is_so_zone = is_so_game and so_conn.requires_zone %}

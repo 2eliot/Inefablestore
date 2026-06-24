@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const waLink = (root.getAttribute('data-whatsapp') || '').trim();
   const gname = (root.getAttribute('data-gname') || '').trim();
   const gimg = (root.getAttribute('data-gimg') || '').trim();
+  const directToPin = (root.getAttribute('data-direct-pin') || 'false').trim().toLowerCase() === 'true';
   // Proof / comprobante elements
   const proofInput = document.getElementById('payment_capture');
   const proofDropzone = document.getElementById('proofDropzone');
@@ -226,20 +227,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const qCid0 = (qs0.get('cid') || '').trim();
     const qNick0 = (qs0.get('nn') || '').trim();
     const qZid0 = (qs0.get('zid') || '').trim();
-    if (!qCid0) {
-      coTotal.setAttribute('hidden', '');
-      return;
-    }
     const leftImg = gimg ? `<img class="co-summary-art" src="${gimg}" alt="${gname || 'Juego'}">` : '';
     const titleLine = gname ? `<div class="co-summary-game">${gname}</div>` : '';
-    let nn0 = qNick0;
-    if (!nn0) {
-      nn0 = getStoredVerifiedNick(qCid0, qZid0);
+    let playerSection = '';
+    if (!directToPin && qCid0) {
+      let nn0 = qNick0;
+      if (!nn0) {
+        nn0 = getStoredVerifiedNick(qCid0, qZid0);
+      }
+      const idLabel0 = qZid0 ? 'ID/Zona ID' : 'ID';
+      const idValue0 = qZid0 ? `${qCid0}/${qZid0}` : qCid0;
+      const idLine = `<div class="co-summary-id">${idLabel0}: ${idValue0}</div>`;
+      const nameLine = nn0 ? `<div class="co-summary-nick">Nick: ${nn0}</div>` : '';
+      playerSection = `
+        <div class="co-summary-mid-divider" aria-hidden="true"></div>
+        <div class="co-summary-copy">
+          <div class="co-summary-meta">
+            ${idLine}
+            ${nameLine}
+          </div>
+        </div>`;
     }
-    const idLabel0 = qZid0 ? 'ID/Zona ID' : 'ID';
-    const idValue0 = qZid0 ? `${qCid0}/${qZid0}` : qCid0;
-    const idLine = `<div class="co-summary-id">${idLabel0}: ${idValue0}</div>`;
-    const nameLine = nn0 ? `<div class="co-summary-nick">Nick: ${nn0}</div>` : '';
     coTotal.innerHTML = `
       <div class="co-summary">
         <div class="co-summary-head">
@@ -247,13 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ${leftImg}
             ${titleLine}
           </div>
-          <div class="co-summary-mid-divider" aria-hidden="true"></div>
-          <div class="co-summary-copy">
-            <div class="co-summary-meta">
-              ${idLine}
-              ${nameLine}
-            </div>
-          </div>
+          ${playerSection}
         </div>
         <div class="co-summary-divider"></div>
         <div class="co-summary-body">
@@ -516,10 +518,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderHeader() {
     if (!coTotal) return;
-    if (!(qCid || '').trim()) {
-      coTotal.setAttribute('hidden', '');
-      return;
-    }
     try { coTotal.removeAttribute('hidden'); } catch (_) {}
 
     const t = computeTotals();
@@ -542,24 +540,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const leftImg = gimg ? `<img class="co-summary-art" src="${gimg}" alt="${gname || 'Juego'}">` : '';
     const titleLine = gname ? `<div class="co-summary-game">${gname}</div>` : '';
 
-    const playerBlock = (() => {
-      const uid = (qCid || '').trim();
+    // Build player section only if CID is present (skip for gift cards)
+    let playerSection = '';
+    const uid = (qCid || '').trim();
+    if (!directToPin && uid) {
       let nn = (qNick || '').trim();
       const zid = (qZid || '').trim();
       if (!nn && uid) {
         nn = getStoredVerifiedNick(uid, zid);
       }
-      if (!uid) return '';
       const safeName = nn || '';
       const nameLine = safeName ? `<div class="co-summary-nick">Nick: ${safeName}</div>` : '';
       const idLabel = zid ? 'ID/Zona ID' : 'ID';
       const idValue = zid ? `${uid}/${zid}` : uid;
-      return `
+      const playerBlock = `
         <div class="co-summary-meta">
           <div class="co-summary-id">${idLabel}: ${idValue}</div>
           ${nameLine}
         </div>`;
-    })();
+      playerSection = `
+        <div class="co-summary-mid-divider" aria-hidden="true"></div>
+        <div class="co-summary-copy">
+          ${selectedTitle ? `<div class="co-summary-item">${selectedTitle}</div>` : ''}
+          ${playerBlock}
+        </div>`;
+    }
 
     const rows = [];
     if (originalAmount > 0) {
@@ -598,11 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ${leftImg}
             ${titleLine}
           </div>
-          <div class="co-summary-mid-divider" aria-hidden="true"></div>
-          <div class="co-summary-copy">
-            ${selectedTitle ? `<div class="co-summary-item">${selectedTitle}</div>` : ''}
-            ${playerBlock}
-          </div>
+          ${playerSection}
         </div>
         <div class="co-summary-divider"></div>
         <div class="co-summary-body">${rows.join('')}</div>
