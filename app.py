@@ -6159,6 +6159,32 @@ def store_special_validate():
     resp = {"ok": True, "allowed": True, "discount": round(disc/100.0, 4)}
     return jsonify(resp)
 
+
+@app.route("/store/validate-code", methods=["POST"])
+def store_validate_code():
+    """Validate a discount code from the homepage (POST with JSON body)."""
+    data = request.get_json(silent=True) or {}
+    code = (data.get("code") or '').strip().upper()
+    package_id_raw = data.get("package_id")
+    try:
+        package_id = int(package_id_raw) if package_id_raw is not None else None
+    except (TypeError, ValueError):
+        package_id = None
+    if not code:
+        return jsonify({"ok": False, "error": "Código vacío"}), 400
+    su, is_secondary_code = resolve_special_user_for_code(code)
+    if not su:
+        return jsonify({"ok": False, "error": "Código inválido", "discount_percent": 0})
+    # Check scope
+    if (su.scope or 'all') == 'package':
+        if not package_id or (su.scope_package_id and su.scope_package_id != package_id):
+            return jsonify({"ok": False, "error": "El código no aplica a este juego", "discount_percent": 0})
+    if is_secondary_code:
+        return jsonify({"ok": False, "error": "Este código requiere el ID del jugador en el checkout", "discount_percent": 0})
+    disc = float(su.discount_percent or 0.0)
+    return jsonify({"ok": True, "discount_percent": disc})
+
+
 # Routes
 @app.route("/")
 def index():
