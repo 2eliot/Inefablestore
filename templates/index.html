@@ -1088,7 +1088,7 @@
                 const slide = document.createElement('div');
                 slide.className = 'carousel-slide min-w-full h-full shrink-0';
                 if (i !== 0) slide.classList.add('hidden');
-                slide.innerHTML = `<img src="${imgPath}" alt="Promocion ${i+1}" class="w-full h-full object-cover" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center bg-[#141418]\\'><span class=\\'text-gray-600 text-xs\\'>Imagen no disponible</span></div>';">`;
+                slide.innerHTML = `<img src="${imgPath}" alt="Promocion ${i+1}" class="w-full h-full object-contain" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center bg-[#141418]\\'><span class=\\'text-gray-600 text-xs\\'>Imagen no disponible</span></div>';">`;
                 carousel.appendChild(slide);
 
                 const dot = document.createElement('span');
