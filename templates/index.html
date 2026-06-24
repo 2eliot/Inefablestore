@@ -357,7 +357,7 @@
     </div>
 
     <!-- FLOATING MOBILE CHECKOUT BAR (solo en telefono, oculta hasta seleccionar item) -->
-    <div id="mobile-checkout-bar" class="hidden fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#0c0c0e] border-t border-[#222226] px-3 py-2 space-y-1.5" style="-webkit-backdrop-filter:none; backdrop-filter:none">
+    <div id="mobile-checkout-bar" class="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#0c0c0e] border-t border-[#222226] px-3 py-2 space-y-1.5 translate-y-full opacity-0 pointer-events-none transition-all duration-300 ease-out" style="-webkit-backdrop-filter:none; backdrop-filter:none">
         <!-- Fila 1: Juego + Item + Cantidad -->
         <div class="flex items-center gap-2">
             <div id="mob-badge" class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-600 to-cyan-500 flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0">---</div>
@@ -935,13 +935,19 @@
                 document.getElementById('summary-subtotal').innerHTML = 'Bs. -- <span class="text-gray-500 font-normal">($-- USD)</span>';
                 document.getElementById('summary-total-bs').innerText = '--';
                 document.getElementById('summary-total-usd').innerText = '($--)';
-                // Ocultar barra flotante movil
-                if (mobBar) mobBar.classList.add('hidden');
+                // Ocultar barra flotante movil con animacion
+                if (mobBar) {
+                    mobBar.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
+                    mobBar.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
+                }
                 return;
             }
 
-            // Mostrar barra flotante movil
-            if (mobBar) mobBar.classList.remove('hidden');
+            // Mostrar barra flotante movil con animacion de slide-up
+            if (mobBar) {
+                mobBar.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
+                mobBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
+            }
 
             const badge = document.getElementById('summary-game-badge');
             const pkgIdx = allPackages[currentCategory].findIndex(p => p.id === pkg.id);
@@ -1370,16 +1376,6 @@
             });
         }
         bindMobileQtyButtons();
-        // Re-vincular cuando la barra se muestre (por si acaso)
-        if (window.MutationObserver) {
-            new MutationObserver(function(mutations) {
-                mutations.forEach(function(m) {
-                    if (m.type === 'attributes' && m.attributeName === 'class') {
-                        if (!m.target.classList.contains('hidden')) bindMobileQtyButtons();
-                    }
-                });
-            }).observe(document.getElementById('mobile-checkout-bar'), {attributes: true});
-        }
 
         // Scroll horizontal con rueda del mouse en el carrusel de juegos
         (function enableWheelScroll() {
