@@ -366,9 +366,9 @@
                 <div id="mob-item-name" class="text-[9px] text-gray-400 truncate leading-tight">---</div>
             </div>
             <div class="flex items-center gap-1 bg-[#121214] border border-[#222226] rounded-lg p-1 shrink-0">
-                <button type="button" onclick="changeQuantity(-1)" style="touch-action:manipulation" class="w-7 h-7 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white hover:bg-red-950/40 active:bg-red-950/60 transition-all text-sm font-black select-none pointer-events-auto">-</button>
+                <button type="button" data-delta="-1" style="touch-action:manipulation" class="w-7 h-7 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white hover:bg-red-950/40 active:bg-red-950/60 transition-all text-sm font-black select-none pointer-events-auto">-</button>
                 <span id="mob-qty" class="w-5 text-center text-xs font-black text-white">1</span>
-                <button type="button" onclick="changeQuantity(1)" style="touch-action:manipulation" class="w-7 h-7 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white hover:bg-emerald-950/40 active:bg-emerald-950/60 transition-all text-sm font-black select-none pointer-events-auto">+</button>
+                <button type="button" data-delta="1" style="touch-action:manipulation" class="w-7 h-7 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white hover:bg-emerald-950/40 active:bg-emerald-950/60 transition-all text-sm font-black select-none pointer-events-auto">+</button>
             </div>
             <span class="text-[8px] font-extrabold text-gray-500 uppercase tracking-wider shrink-0">Combos</span>
         </div>
@@ -1349,6 +1349,27 @@
         }
 
         // ============ INIT ============
+        // Event delegation para botones +/- del footer flotante movil
+        (function initMobileBar() {
+            const bar = document.getElementById('mobile-checkout-bar');
+            if (bar) {
+                bar.addEventListener('click', function(e) {
+                    const btn = e.target.closest('button[data-delta]');
+                    if (!btn) return;
+                    const delta = parseInt(btn.getAttribute('data-delta'));
+                    if (!isNaN(delta)) changeQuantity(delta);
+                });
+                // Tambien capturar touchend para mayor fiabilidad en mobile
+                bar.addEventListener('touchend', function(e) {
+                    const btn = e.target.closest('button[data-delta]');
+                    if (!btn) return;
+                    e.preventDefault();
+                    const delta = parseInt(btn.getAttribute('data-delta'));
+                    if (!isNaN(delta)) changeQuantity(delta);
+                });
+            }
+        })();
+
         window.onload = function () {
             checkSession();
             loadAllData();
