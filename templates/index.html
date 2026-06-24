@@ -357,7 +357,7 @@
     </div>
 
     <!-- FLOATING MOBILE CHECKOUT BAR (solo en telefono, oculta hasta seleccionar item) -->
-    <div id="mobile-checkout-bar" class="hidden fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#0c0c0e]/95 backdrop-blur-md border-t border-[#222226] px-3 py-2 space-y-1.5 shadow-2xl shadow-black/50">
+    <div id="mobile-checkout-bar" class="hidden fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#0c0c0e] border-t border-[#222226] px-3 py-2 space-y-1.5" style="-webkit-backdrop-filter:none; backdrop-filter:none">
         <!-- Fila 1: Juego + Item + Cantidad -->
         <div class="flex items-center gap-2">
             <div id="mob-badge" class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-600 to-cyan-500 flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0">---</div>
@@ -366,9 +366,9 @@
                 <div id="mob-item-name" class="text-[9px] text-gray-400 truncate leading-tight">---</div>
             </div>
             <div class="flex items-center gap-0.5 bg-[#121214] border border-[#222226] rounded-lg shrink-0">
-                <button type="button" data-delta="-1" class="min-w-[36px] h-9 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-red-600 active:scale-90 transition-all text-base font-black select-none cursor-pointer">−</button>
+                <button type="button" data-delta="-1" class="min-w-[36px] h-9 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-red-600 active:scale-90 transition-all text-base font-black select-none cursor-pointer" style="touch-action:manipulation; -webkit-tap-highlight-color:transparent">−</button>
                 <span id="mob-qty" class="min-w-[22px] text-center text-sm font-black text-white px-0.5">1</span>
-                <button type="button" data-delta="1" class="min-w-[36px] h-9 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-emerald-500 active:scale-90 transition-all text-base font-black select-none cursor-pointer">+</button>
+                <button type="button" data-delta="1" class="min-w-[36px] h-9 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-emerald-500 active:scale-90 transition-all text-base font-black select-none cursor-pointer" style="touch-action:manipulation; -webkit-tap-highlight-color:transparent">+</button>
             </div>
             <span class="text-[8px] font-extrabold text-gray-500 uppercase tracking-wider shrink-0">Combos</span>
         </div>
@@ -1349,26 +1349,35 @@
         }
 
         // ============ INIT ============
-        // Event delegation para botones +/- del footer flotante movil
-        (function initMobileBar() {
+        // Vincular botones +/- del footer flotante movil
+        function bindMobileQtyButtons() {
             const bar = document.getElementById('mobile-checkout-bar');
             if (!bar) return;
-            // Vincular directamente a cada boton con data-delta
             bar.querySelectorAll('button[data-delta]').forEach(function(btn) {
+                if (btn.dataset.bound === '1') return;
+                btn.dataset.bound = '1';
                 const delta = parseInt(btn.getAttribute('data-delta'));
                 if (isNaN(delta)) return;
-                // click (escritorio + movil) — sin preventDefault
-                btn.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    changeQuantity(delta);
-                });
-                // touchstart para respuesta instantanea en tactil
-                btn.addEventListener('touchstart', function(e) {
-                    e.stopPropagation();
-                    changeQuantity(delta);
-                }, {passive: true});
+                function fire() { changeQuantity(delta); }
+                btn.addEventListener('click', fire);
+                btn.addEventListener('pointerdown', fire);
             });
-        })();
+        }
+        bindMobileQtyButtons();
+        // Re-vincular cuando la barra se muestre (por si acaso)
+        if (window.MutationObserver) {
+            new MutationObserver(function(mutations) {
+                mutations.forEach(function(m) {
+                    if (m.type === 'attributes' && m.attributeName === 'class') {
+                        if (!m.target.classList.contains('hidden')) bindMobileQtyButtons();
+                    }
+                });
+            }).observe(document.getElementById('mobile-checkout-bar'), {attributes: true});
+        }
+
+        window.onload = function () {
+            checkSession();
+            loadAllData();
 
         window.onload = function () {
             checkSession();
