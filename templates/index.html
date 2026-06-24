@@ -1358,9 +1358,15 @@
                 btn.dataset.bound = '1';
                 const delta = parseInt(btn.getAttribute('data-delta'));
                 if (isNaN(delta)) return;
-                function fire() { changeQuantity(delta); }
-                btn.addEventListener('click', fire);
+                let lastFire = 0;
+                function fire(e) {
+                    const now = Date.now();
+                    if (now - lastFire < 250) return; // evitar doble disparo en mismo tap
+                    lastFire = now;
+                    changeQuantity(delta);
+                }
                 btn.addEventListener('pointerdown', fire);
+                btn.addEventListener('click', fire);
             });
         }
         bindMobileQtyButtons();
