@@ -60,7 +60,7 @@
     <main class="flex-grow max-w-md md:max-w-2xl w-full mx-auto px-4 py-5 space-y-6">
 
         <!-- CARRUSEL PROMOCIONAL (imagenes del admin) -->
-        <section class="relative overflow-hidden rounded-2xl bg-[#141418] h-32 md:h-52 border border-[#222226] px-3 md:px-0">
+        <section class="relative overflow-hidden rounded-2xl bg-[#141418] h-32 md:h-52 border border-[#222226]">
             <div class="absolute inset-0 flex transition-transform duration-500" id="image-carousel">
                 <!-- Se llena dinamicamente con imagenes del admin -->
                 <div class="carousel-slide min-w-full h-full flex items-center justify-center shrink-0">
@@ -76,7 +76,7 @@
             <button onclick="nextSlide()" class="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/40 hover:bg-black/75 flex items-center justify-center text-white text-xs transition-all border border-[#222226] z-10">
                 <i class="fa-solid fa-chevron-right"></i>
             </button>
-            <div class="absolute bottom-2 flex gap-1.5 z-10" id="carousel-dots">
+            <div class="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5" id="carousel-dots">
             </div>
         </section>
 
@@ -1086,9 +1086,9 @@
 
             validImages.forEach((imgPath, i) => {
                 const slide = document.createElement('div');
-                slide.className = 'carousel-slide min-w-full h-full shrink-0 flex items-center justify-center';
+                slide.className = 'carousel-slide min-w-full h-full shrink-0 flex items-center justify-center p-3 md:p-0';
                 if (i !== 0) slide.classList.add('hidden');
-                slide.innerHTML = `<img src="${imgPath}" alt="Promocion ${i+1}" class="max-w-[88%] md:max-w-full max-h-full object-contain" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center bg-[#141418]\\'><span class=\\'text-gray-600 text-xs\\'>Imagen no disponible</span></div>';">`;
+                slide.innerHTML = `<img src="${imgPath}" alt="Promocion ${i+1}" class="w-full h-full object-contain" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center bg-[#141418]\\'><span class=\\'text-gray-600 text-xs\\'>Imagen no disponible</span></div>';">`;
                 carousel.appendChild(slide);
 
                 const dot = document.createElement('span');
