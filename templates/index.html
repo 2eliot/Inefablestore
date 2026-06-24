@@ -400,8 +400,8 @@
         async function loadAllData() {
             try {
                 const [mobileData, giftData, rateData, heroData] = await Promise.all([
-                    fetchJSON('/store/packages?category=mobile'),
-                    fetchJSON('/store/packages?category=gift'),
+                    fetchJSON('/store/packages?category=mobile&sort=popular'),
+                    fetchJSON('/store/packages?category=gift&sort=popular'),
                     fetchJSON('/store/rate'),
                     fetchJSON('/store/hero'),
                 ]);

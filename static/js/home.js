@@ -134,9 +134,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   Promise.all([
     fetch('/store/best_sellers').then(r => r.json()).catch(() => ({})),
-    fetch('/store/packages?category=mobile').then(r => r.json()).catch(() => ({})),
-    fetch('/store/packages?category=gift').then(r => r.json()).catch(() => ({})),
-    fetch('/store/packages?category=other').then(r => r.json()).catch(() => ({})),
+    fetch('/store/packages?category=mobile&sort=popular').then(r => r.json()).catch(() => ({})),
+    fetch('/store/packages?category=gift&sort=popular').then(r => r.json()).catch(() => ({})),
+    fetch('/store/packages?category=other&sort=popular').then(r => r.json()).catch(() => ({})),
   ]).then(([best, mobile, gift, other]) => {
     const mobilePkgs = (mobile && mobile.packages) || [];
     const giftPkgs = (gift && gift.packages) || [];

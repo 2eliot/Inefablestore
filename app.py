@@ -7341,6 +7341,7 @@ def admin_images_delete_by_path():
 @app.route("/store/packages")
 def store_packages():
     category = (request.args.get("category") or '').strip().lower()
+    sort_mode = (request.args.get("sort") or '').strip().lower()
     q = StorePackage.query.filter_by(active=True)
     # Accept common aliases
     if category:
@@ -7354,10 +7355,50 @@ def store_packages():
             q = q.filter(StorePackage.category.in_(["gift", "gif", "giftcards"]))
         elif cat in other_aliases:
             q = q.filter(StorePackage.category.in_(["other", "others", "otro", "otros", "services", "servicios"]))
-    try:
-        items = q.order_by(StorePackage.sort_order.asc(), StorePackage.created_at.desc()).all()
-    except Exception:
-        items = q.order_by(StorePackage.created_at.desc()).all()
+
+    # --- sort=popular: order by total successful sales (most purchased first) ---
+    if sort_mode == "popular":
+        try:
+            successful_statuses = ["approved", "delivered"]
+            sales_by_package = {}
+
+            live_counts = (
+                db.session.query(Order.store_package_id, db.func.count(Order.id).label("cnt"))
+                .filter(Order.status.in_(successful_statuses))
+                .group_by(Order.store_package_id)
+                .all()
+            )
+            for package_id, count in live_counts:
+                if package_id is None:
+                    continue
+                sales_by_package[int(package_id)] = sales_by_package.get(int(package_id), 0) + int(count or 0)
+
+            archived_counts = (
+                db.session.query(
+                    OrderSummary.store_package_id,
+                    db.func.coalesce(db.func.sum(OrderSummary.order_count), 0).label("cnt"),
+                )
+                .filter(OrderSummary.status.in_(successful_statuses))
+                .group_by(OrderSummary.store_package_id)
+                .all()
+            )
+            for package_id, count in archived_counts:
+                if package_id is None:
+                    continue
+                sales_by_package[int(package_id)] = sales_by_package.get(int(package_id), 0) + int(count or 0)
+
+            all_items = q.all()
+            # Sort: highest sales first, then fall back to sort_order for ties
+            all_items.sort(key=lambda p: (-sales_by_package.get(p.id, 0), p.sort_order or 0, p.name or ''))
+            items = all_items
+        except Exception:
+            items = q.order_by(StorePackage.sort_order.asc(), StorePackage.created_at.desc()).all()
+    else:
+        try:
+            items = q.order_by(StorePackage.sort_order.asc(), StorePackage.created_at.desc()).all()
+        except Exception:
+            items = q.order_by(StorePackage.created_at.desc()).all()
+
     return jsonify({
         "packages": [
             {"id": p.id, "name": p.name, "image_path": p.image_path, "category": (p.category or 'mobile')}
