@@ -1086,7 +1086,7 @@
 
             validImages.forEach((imgPath, i) => {
                 const slide = document.createElement('div');
-                slide.className = 'carousel-slide min-w-full h-full shrink-0 flex items-center justify-center p-3 md:p-0';
+                slide.className = 'carousel-slide min-w-full h-full shrink-0 flex items-center justify-center';
                 if (i !== 0) slide.classList.add('hidden');
                 slide.innerHTML = `<img src="${imgPath}" alt="Promocion ${i+1}" class="w-full h-full object-contain" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center bg-[#141418]\\'><span class=\\'text-gray-600 text-xs\\'>Imagen no disponible</span></div>';">`;
                 carousel.appendChild(slide);
