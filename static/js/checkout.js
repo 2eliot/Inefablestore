@@ -256,12 +256,11 @@ document.addEventListener('DOMContentLoaded', () => {
             ${titleLine}
           </div>
           ${playerSection}
-        </div>
-        <div class="co-summary-divider"></div>
-        <div class="co-summary-body">
-          <div class="co-summary-row co-summary-row--total">
-            <div class="co-summary-label">Total a pagar</div>
-            <div class="co-summary-value co-summary-value--total">...</div>
+          <div class="co-summary-price">
+            <div class="co-summary-price-row">
+              <div class="co-summary-value co-summary-value--total">...</div>
+            </div>
+            <div class="co-summary-qty">Cantidad: 1</div>
           </div>
         </div>
       </div>
@@ -566,35 +565,20 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`;
     }
 
-    const rows = [];
-    if (originalAmount > 0) {
-      rows.push(`
-        <div class="co-summary-row">
-          <div class="co-summary-label">Precio original</div>
-          <div class="co-summary-value ${discountAmount > 0 ? 'co-summary-value--muted' : ''}">${formatPriceFor(t.displayCurrency, originalAmount)}</div>
+    // Precio compacto a la derecha: total grande + (si hay descuento) precio anterior tachado.
+    const hasDiscount = discountAmount > 0 && originalAmount > totalAmount;
+    const priceMain = `<div class="co-summary-value co-summary-value--total">${formatPriceFor(t.displayCurrency, totalAmount)}</div>`;
+    const priceOld = hasDiscount
+      ? `<div class="co-summary-value co-summary-value--old">${formatPriceFor(t.displayCurrency, originalAmount)}</div>`
+      : '';
+    const priceBlock = `
+      <div class="co-summary-price">
+        <div class="co-summary-price-row">
+          ${priceMain}
+          ${priceOld}
         </div>
-      `);
-    }
-    if (discountAmount > 0) {
-      rows.push(`
-        <div class="co-summary-row">
-          <div class="co-summary-label">Descuento aplicado</div>
-          <div class="co-summary-value co-summary-value--discount">- ${formatPriceFor(t.displayCurrency, discountAmount)}</div>
-        </div>
-      `);
-    }
-    rows.push(`
-      <div class="co-summary-row">
-        <div class="co-summary-label">Cantidad</div>
-        <div class="co-summary-value">${qty}</div>
-      </div>
-    `);
-    rows.push(`
-      <div class="co-summary-row co-summary-row--total">
-        <div class="co-summary-label">Total a pagar</div>
-        <div class="co-summary-value co-summary-value--total">${formatPriceFor(t.displayCurrency, totalAmount)}</div>
-      </div>
-    `);
+        <div class="co-summary-qty">Cantidad: ${qty}</div>
+      </div>`;
 
     coTotal.innerHTML = `
       <div class="co-summary">
@@ -604,9 +588,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ${titleLine}
           </div>
           ${playerSection}
+          ${priceBlock}
         </div>
-        <div class="co-summary-divider"></div>
-        <div class="co-summary-body">${rows.join('')}</div>
       </div>
     `;
 

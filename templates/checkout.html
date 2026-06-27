@@ -24,6 +24,28 @@
     z-index: 1;
   }
 
+  /* ---------- Header del checkout: logo centrado, sin buscador ---------- */
+  .site-header.co-header .container {
+    grid-template-columns: 32px 1fr 32px !important;
+    gap: 8px;
+  }
+  .site-header.co-header .brand {
+    justify-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .site-header.co-header .co-header-spacer {
+    width: 32px;
+    height: 32px;
+  }
+  @media (max-width: 700px) {
+    .site-header.co-header .container {
+      grid-template-columns: 28px 1fr 28px !important;
+    }
+    .site-header.co-header .co-header-spacer { width: 28px; height: 28px; }
+  }
+
   /* ---------- Subtítulo pasarela segura ---------- */
   .co-subtitle {
     display: flex;
@@ -179,6 +201,36 @@
     font-size: 20px;
     font-weight: 900;
     line-height: 1;
+  }
+  .co-summary-value--old {
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 700;
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    align-self: center;
+  }
+  .co-summary-price {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-end;
+    justify-self: end;
+    min-width: 0;
+  }
+  .co-summary-price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  .co-summary-qty {
+    color: #9ca3af;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    white-space: nowrap;
   }
   .co-summary-empty {
     color: #9ca3af;
@@ -713,7 +765,7 @@
 </style>
 {% endblock %}
 {% block header %}
-<header class="site-header">
+<header class="site-header co-header">
   <div class="container">
     <div class="left-actions">
       <a href="/" class="icon-btn" aria-label="Volver" title="Volver">‹</a>
@@ -725,15 +777,7 @@
         <span class="logo-text">{{ site_name|default('InefableStore') }}</span>
       {% endif %}
     </a>
-    <div class="right-actions">
-      <div class="header-search" role="search">
-        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-        <input id="header-search" type="search" placeholder="Buscar Juegos" autocomplete="off" />
-      </div>
-    </div>
+    <div class="co-header-spacer" aria-hidden="true"></div>
   </div>
 </header>
 {% endblock %}
