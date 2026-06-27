@@ -228,8 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const qNick0 = (qs0.get('nn') || '').trim();
     const qZid0 = (qs0.get('zid') || '').trim();
     const leftImg = gimg ? `<img class="co-summary-art" src="${gimg}" alt="${gname || 'Juego'}">` : '';
-    const titleLine = gname ? `<div class="co-summary-game">${gname}</div>` : '';
-    let playerSection = '';
+    const gameLabel = gname ? `<div class="co-summary-game">${gname}</div>` : '';
+    let playerMeta = '';
     if (!directToPin && qCid0) {
       let nn0 = qNick0;
       if (!nn0) {
@@ -239,13 +239,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const idValue0 = qZid0 ? `${qCid0}/${qZid0}` : qCid0;
       const idLine = `<div class="co-summary-id">${idLabel0}: ${idValue0}</div>`;
       const nameLine = nn0 ? `<div class="co-summary-nick">Nick: ${nn0}</div>` : '';
-      playerSection = `
-        <div class="co-summary-mid-divider" aria-hidden="true"></div>
-        <div class="co-summary-copy">
-          <div class="co-summary-meta">
-            ${idLine}
-            ${nameLine}
-          </div>
+      playerMeta = `
+        <div class="co-summary-meta">
+          ${idLine}
+          ${nameLine}
         </div>`;
     }
     coTotal.innerHTML = `
@@ -253,9 +250,11 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="co-summary-head">
           <div class="co-summary-media">
             ${leftImg}
-            ${titleLine}
           </div>
-          ${playerSection}
+          <div class="co-summary-copy">
+            ${gameLabel}
+            ${playerMeta}
+          </div>
           <div class="co-summary-price">
             <div class="co-summary-price-row">
               <div class="co-summary-value co-summary-value--total">...</div>
@@ -537,10 +536,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (_) {}
 
     const leftImg = gimg ? `<img class="co-summary-art" src="${gimg}" alt="${gname || 'Juego'}">` : '';
-    const titleLine = gname ? `<div class="co-summary-game">${gname}</div>` : '';
+    const gameLabel = gname ? `<div class="co-summary-game">${gname}</div>` : '';
 
-    // Build player section only if CID is present (skip for gift cards)
-    let playerSection = '';
+    // Build player meta block (ID + Nick) only if CID is present (skip for gift cards)
+    let playerMeta = '';
     const uid = (qCid || '').trim();
     if (!directToPin && uid) {
       let nn = (qNick || '').trim();
@@ -552,18 +551,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const nameLine = safeName ? `<div class="co-summary-nick">Nick: ${safeName}</div>` : '';
       const idLabel = zid ? 'ID/Zona ID' : 'ID';
       const idValue = zid ? `${uid}/${zid}` : uid;
-      const playerBlock = `
+      playerMeta = `
         <div class="co-summary-meta">
           <div class="co-summary-id">${idLabel}: ${idValue}</div>
           ${nameLine}
         </div>`;
-      playerSection = `
-        <div class="co-summary-mid-divider" aria-hidden="true"></div>
-        <div class="co-summary-copy">
-          ${selectedTitle ? `<div class="co-summary-item">${selectedTitle}</div>` : ''}
-          ${playerBlock}
-        </div>`;
     }
+
+    const copyBlock = `
+      <div class="co-summary-copy">
+        ${gameLabel}
+        ${selectedTitle ? `<div class="co-summary-item">${selectedTitle}</div>` : ''}
+        ${playerMeta}
+      </div>`;
 
     // Precio compacto a la derecha: total grande + (si hay descuento) precio anterior tachado.
     const hasDiscount = discountAmount > 0 && originalAmount > totalAmount;
@@ -585,9 +585,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="co-summary-head">
           <div class="co-summary-media">
             ${leftImg}
-            ${titleLine}
           </div>
-          ${playerSection}
+          ${copyBlock}
           ${priceBlock}
         </div>
       </div>

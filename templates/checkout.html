@@ -135,7 +135,11 @@
     gap: 14px;
     align-items: center;
   }
-  .co-summary-media { display: grid; justify-items: center; gap: 4px; }
+  .co-summary-media {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   .co-summary-mid-divider { display: none; }
   .co-summary-copy {
     display: grid;
@@ -143,6 +147,7 @@
     text-align: left;
     justify-items: start;
     min-width: 0;
+    width: 100%;
   }
   .co-summary-art {
     width: 56px;
@@ -154,31 +159,46 @@
   .co-summary-game {
     font-size: 9px;
     line-height: 1.15;
-    font-weight: 700;
-    color: #9ca3af;
-    text-align: center;
-    max-width: 60px;
-    letter-spacing: .12em;
+    font-weight: 800;
+    color: #15c26b;
+    text-align: left;
+    letter-spacing: .18em;
     text-transform: uppercase;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .co-summary-item {
     font-size: 14px;
     line-height: 1.2;
     font-weight: 800;
     color: #ffffff;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .co-summary-meta { display: grid; gap: 1px; justify-items: start; }
+  .co-summary-meta { display: grid; gap: 1px; justify-items: start; max-width: 100%; min-width: 0; }
   .co-summary-nick {
     color: #15c26b;
     font-size: 11px;
     font-weight: 700;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .co-summary-id {
     color: #d1d5db;
     font-size: 11px;
     font-weight: 600;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .co-summary-divider {
     width: 100%;
@@ -760,10 +780,20 @@
     .co-banner, .co-card { padding: 14px; border-radius: 12px; }
     .co-form-grid { grid-template-columns: 1fr; gap: 14px; }
     .co-final-card { padding: 16px; }
-    .co-summary-head { grid-template-columns: 48px minmax(0,1fr) auto; gap: 12px; }
+    .co-summary-head { grid-template-columns: 48px minmax(0,1fr) auto; gap: 10px; }
     .co-summary-art { width: 48px; height: 48px; border-radius: 10px; }
+    .co-summary-game { font-size: 8px; letter-spacing: .14em; }
     .co-summary-item { font-size: 13px; }
-    .co-summary-value--total { font-size: 18px; }
+    .co-summary-id, .co-summary-nick { font-size: 10px; }
+    .co-summary-value--total { font-size: 16px; }
+    .co-summary-value--old { font-size: 10px; }
+    /* Precio en mobile: precio anterior tachado ARRIBA, total a pagar ABAJO */
+    .co-summary-price-row {
+      flex-direction: column-reverse;
+      align-items: flex-end;
+      gap: 1px;
+    }
+    .co-summary-qty { font-size: 10px; }
   }
   @media (max-width: 460px) {
     .checkout-contact-fields .phone-prefix { flex: 0 0 auto; }
@@ -776,10 +806,15 @@
     .checkout-contact-fields .phone-field .input#checkout-phone-local { padding-left: 10px; }
     #co-timer { font-size: 18px; }
     #co-ref.input { padding: 10px 12px; font-size: 12px; }
+    .co-summary-id, .co-summary-nick { font-size: 9px; }
+    .co-summary-item { font-size: 12px; }
   }
   @media (max-width: 380px) {
     .co-info-shell { grid-template-columns: minmax(0, 1fr); }
     .co-qr-card { justify-self: center; width: 100%; max-width: 200px; }
+    .co-summary-head { grid-template-columns: 42px minmax(0,1fr) auto; gap: 8px; }
+    .co-summary-art { width: 42px; height: 42px; }
+    .co-summary-value--total { font-size: 15px; }
   }
 </style>
 {% endblock %}
