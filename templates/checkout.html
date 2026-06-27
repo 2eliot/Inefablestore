@@ -26,17 +26,29 @@
 
   /* ---------- Header del checkout: logo centrado, sin buscador ---------- */
   .site-header.co-header .container {
-    grid-template-columns: 1fr auto 1fr !important;
-    gap: 8px;
+    position: relative;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-start;
+    grid-template-columns: none !important;
+    gap: 0;
   }
   .site-header.co-header .left-actions {
-    justify-self: start;
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
   }
   .site-header.co-header .brand {
-    justify-self: center;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     display: inline-flex;
     align-items: center;
     margin: 0;
+    pointer-events: auto;
+    z-index: 1;
   }
   .site-header.co-header .logo {
     height: 40px !important;
@@ -49,20 +61,11 @@
     display: inline-block;
     text-align: center;
   }
-  .site-header.co-header .co-header-spacer {
-    justify-self: end;
-    width: 32px;
-    height: 32px;
-  }
   @media (max-width: 700px) {
-    .site-header.co-header .container {
-      grid-template-columns: 1fr auto 1fr !important;
-    }
     .site-header.co-header .logo {
       height: 32px !important;
       max-width: min(200px, 55vw);
     }
-    .site-header.co-header .co-header-spacer { width: 28px; height: 28px; }
   }
 
   /* ---------- Subtítulo pasarela segura ---------- */
@@ -831,7 +834,6 @@
         <span class="logo-text">{{ site_name|default('InefableStore') }}</span>
       {% endif %}
     </a>
-    <div class="co-header-spacer" aria-hidden="true"></div>
   </div>
 </header>
 {% endblock %}
