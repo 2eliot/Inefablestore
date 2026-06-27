@@ -239,10 +239,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function getEffectivePlayerContext() {
-    const uid = String(qCid || '').trim();
-    const explicitZid = String(qZid || '').trim();
-    const explicitNick = String(qNick || '').trim();
+  function getEffectivePlayerContext(overrides) {
+    const uid = String((overrides && overrides.uid != null ? overrides.uid : qCid) || '').trim();
+    const explicitZid = String((overrides && overrides.zid != null ? overrides.zid : qZid) || '').trim();
+    const explicitNick = String((overrides && overrides.nick != null ? overrides.nick : qNick) || '').trim();
     const stored = getStoredVerifiedPlayerContext(uid);
     const zid = explicitZid || (stored ? stored.zid : '');
     const nick = explicitNick || getStoredVerifiedNick(uid, zid) || (stored ? stored.nick : '');
@@ -254,7 +254,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!coTotal) return;
     const qs0 = new URLSearchParams(window.location.search);
     const qCid0 = (qs0.get('cid') || '').trim();
-    const initialCtx = qCid0 ? getEffectivePlayerContext() : { uid: '', zid: '', nick: '' };
+    const initialCtx = qCid0
+      ? getEffectivePlayerContext({
+          uid: qCid0,
+          zid: (qs0.get('zid') || '').trim(),
+          nick: (qs0.get('nn') || '').trim(),
+        })
+      : { uid: '', zid: '', nick: '' };
     const leftImg = gimg ? `<img class="co-summary-art" src="${gimg}" alt="${gname || 'Juego'}">` : '';
     const gameLabel = gname ? `<div class="co-summary-game">${gname}</div>` : '';
     let playerMeta = '';
