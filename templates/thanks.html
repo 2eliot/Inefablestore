@@ -348,13 +348,24 @@
   }
   .ty-step-label {
     font-size: 0.98rem;
-    font-weight: 600;
-    color: #dbe5ef;
-    line-height: 1.4;
+    font-weight: 700;
+    color: var(--ty-text);
+    line-height: 1.3;
+    display: block;
   }
   .ty-step.done .ty-step-label,
   .ty-step.just-completed .ty-step-label {
     color: var(--ty-text);
+  }
+  .ty-step-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--ty-text-dim);
+    line-height: 1.35;
+    white-space: normal;
+    letter-spacing: 0;
   }
 
   /* ===== Right column: bubble + mascot + trust ===== */
@@ -907,9 +918,17 @@
       gap: 14px;
     }
     .ty-grid-right { padding: 4px 0; gap: 6px; }
-    .ty-section-title { font-size: 0.72rem; margin-bottom: 10px; }
-    .ty-section-ico { width: 18px; height: 18px; font-size: 0.7rem; }
-    .ty-step-label { font-size: 0.9rem; }
+    .ty-section-title {
+      font-size: 0.6rem;
+      margin-bottom: 10px;
+      letter-spacing: .02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ty-section-ico { width: 16px; height: 16px; font-size: 0.62rem; }
+    .ty-step-label { font-size: 0.82rem; }
+    .ty-step-sub { font-size: 0.66rem; margin-top: 1px; }
     .ty-step[data-step-id="completed"] .ty-step-label {
       font-size: 0.72rem;
       line-height: 1.15;
@@ -1042,7 +1061,7 @@
           </div>
           <div class="ty-meta-text">
             <span class="ty-meta-label">Paquete</span>
-            <span class="ty-meta-value">{{ package_display or 'No especificado' }}</span>
+            <span class="ty-meta-value">{{ (package_display or 'No especificado')|replace(' paquete(s)', '')|replace(' Paquete(s)', '')|replace(' paquetes', '')|replace(' Paquetes', '') }}</span>
           </div>
         </div>
       </div>
@@ -1238,10 +1257,30 @@
       return label;
     }
 
+    var STEP_SUB_LABELS = {
+      search: 'Verificando comprobante transaccional',
+      payment: 'Monto verificado correctamente',
+      validate: 'Asignando recursos al ID del jugador',
+      dispatch: 'Abriendo canal de transferencia seguro',
+      completed: '\u00a1Tu recarga ya est\u00e1 lista en el juego!'
+    };
+
+    function escapeHTML(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
     function buildStepHTML(st, idx, done, justDone) {
-      return '<li class="ty-step' + (done ? ' done' : '') + (justDone ? ' just-completed' : '') + '" data-step-id="' + ((st.id || ('step_' + idx)).toString()) + '">'
+      var key = (st && st.id) || ('step_' + idx);
+      var sub = STEP_SUB_LABELS[key] || '';
+      return '<li class="ty-step' + (done ? ' done' : '') + (justDone ? ' just-completed' : '') + '" data-step-id="' + escapeHTML(key) + '">'
         + '<span class="ty-step-ico">' + (done ? '✓' : '×') + '</span>'
-        + '<span class="ty-step-label">' + displayStepLabel(st) + '</span>'
+        + '<span class="ty-step-label">' + escapeHTML(displayStepLabel(st))
+        + (sub ? '<span class="ty-step-sub">' + escapeHTML(sub) + '</span>' : '')
+        + '</span>'
         + '</li>';
     }
 
