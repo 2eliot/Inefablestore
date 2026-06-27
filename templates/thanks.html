@@ -5,25 +5,32 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css', v='10') }}">
 <style>
   :root {
-    --ty-bg: #080a0c;
-    --ty-card-bg: rgba(13, 17, 23, 0.84);
-    --ty-accent: #00ff88;
-    --ty-accent-glow: rgba(0, 255, 136, 0.28);
-    --ty-text-dim: #8b949e;
-    --ty-gold: #f59e0b;
-    --ty-gold-soft: #fcd34d;
+    --ty-bg: #080a10;
+    --ty-card: #111524;
+    --ty-card-bg: rgba(17, 21, 36, 0.75);
+    --ty-border: #1e2640;
+    --ty-border-soft: rgba(30, 38, 64, 0.6);
+    --ty-green: #00e676;
+    --ty-green-soft: rgba(0, 230, 118, 0.18);
+    --ty-gold: #ffb300;
+    --ty-gold-soft: rgba(255, 179, 0, 0.2);
+    --ty-text: #f8fafc;
+    --ty-text-dim: #94a3b8;
+    --ty-accent: #00e676;
+    --ty-accent-glow: rgba(0, 230, 118, 0.28);
   }
   body.thanks-order-page {
     background:
-      radial-gradient(circle at top left, rgba(0,255,136,.08), transparent 24%),
-      radial-gradient(circle at top right, rgba(255,255,255,.05), transparent 18%),
+      radial-gradient(circle at top left, rgba(0, 230, 118, 0.10), transparent 32%),
+      radial-gradient(circle at bottom right, rgba(255, 179, 0, 0.08), transparent 32%),
       var(--ty-bg);
+    min-height: 100vh;
   }
-  .thanks-order-page .main-footer {
-    margin-top: 18px;
-  }
+  .thanks-order-page .main-footer { margin-top: 18px; }
+
+  /* ===== Page wrap ===== */
   .ty-wrap {
-    max-width: 980px;
+    max-width: 1080px;
     margin: 0 auto;
     padding: 28px 16px 18px;
     min-height: calc(100vh - 120px);
@@ -32,99 +39,461 @@
     justify-content: center;
   }
   .ty-card {
-    width: min(100%, 860px);
+    position: relative;
+    width: min(100%, 960px);
     background: var(--ty-card-bg);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 24px;
-    padding: 30px;
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    border: 1px solid var(--ty-border-soft);
+    border-radius: 28px;
+    padding: 28px 28px 22px;
+    box-shadow: 0 26px 60px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+  }
+  .ty-card-blur {
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.45;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .ty-card-blur--green {
+    top: -60px;
+    right: -40px;
+    background: rgba(0, 230, 118, 0.4);
+  }
+  .ty-card-blur--gold {
+    bottom: -60px;
+    left: -40px;
+    background: rgba(255, 179, 0, 0.32);
+  }
+  .ty-card > * { position: relative; z-index: 1; }
+
+  /* ===== Top row: status + meta ===== */
+  .ty-top-row {
     display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    justify-content: space-between;
     flex-wrap: wrap;
-    gap: 20px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    margin-bottom: 22px;
   }
-  .ty-header {
-    width: 100%;
-    text-align: center;
-    margin-bottom: 6px;
+  .ty-top-left {
+    flex: 1 1 280px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
-  .ty-badge {
+  .ty-status-badge {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    background: rgba(0, 255, 136, 0.1);
-    color: var(--ty-accent);
-    padding: 6px 16px;
+    gap: 8px;
+    padding: 6px 14px;
     border-radius: 999px;
+    font-weight: 800;
+    font-size: 0.72rem;
+    letter-spacing: .06em;
+    border: 1px solid transparent;
+    text-transform: uppercase;
+    width: fit-content;
+    transition: background .25s ease, color .25s ease, border-color .25s ease;
+  }
+  .ty-status-badge.is-processing {
+    background: rgba(255, 179, 0, 0.12);
+    border-color: rgba(255, 179, 0, 0.32);
+    color: #ffd166;
+  }
+  .ty-status-badge.is-success {
+    background: rgba(0, 230, 118, 0.14);
+    border-color: rgba(0, 230, 118, 0.36);
+    color: #6ee7b7;
+  }
+  .ty-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ffb300;
+    box-shadow: 0 0 10px rgba(255, 179, 0, 0.7);
+    animation: ty-live-pulse 1.6s ease-in-out infinite;
+  }
+  .ty-status-badge.is-success .ty-status-dot {
+    background: var(--ty-green);
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.7);
+  }
+  .ty-order-title {
+    margin: 0;
+    font-size: 1.35rem;
     font-weight: 900;
-    font-size: 0.9rem;
-    letter-spacing: .04em;
+    color: var(--ty-text);
+    line-height: 1.2;
+    letter-spacing: -.01em;
+    transition: color .25s ease;
   }
-  .ty-info-row {
+  .ty-order-title.is-success { color: #6ee7b7; }
+
+  .ty-meta-card {
+    flex: 0 1 360px;
+    min-width: 0;
+    background: rgba(8, 10, 16, 0.7);
+    border: 1px solid var(--ty-border-soft);
+    border-radius: 18px;
+    padding: 12px 14px;
     display: flex;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 14px;
+    align-items: stretch;
+    gap: 10px;
   }
-  .ty-pill {
-    background: rgba(255,255,255,0.05);
-    padding: 8px 16px;
-    border-radius: 12px;
-    font-size: 0.88rem;
-    color: var(--ty-text-dim);
-    border: 1px solid rgba(255,255,255,0.06);
-  }
-  .ty-pill strong {
-    color: #ffffff;
-    margin-left: 5px;
-  }
-  .ty-status {
+  .ty-meta-block {
     flex: 1;
-    min-width: 300px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ty-meta-ico {
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 230, 118, 0.14);
+    color: var(--ty-green);
+    border: 1px solid rgba(0, 230, 118, 0.22);
+  }
+  .ty-meta-ico svg {
+    width: 14px;
+    height: 14px;
+  }
+  .ty-meta-ico--gold {
+    background: rgba(255, 179, 0, 0.14);
+    color: var(--ty-gold);
+    border-color: rgba(255, 179, 0, 0.22);
+  }
+  .ty-meta-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.15;
+  }
+  .ty-meta-label {
+    font-size: 0.62rem;
+    color: var(--ty-text-dim);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    font-weight: 700;
+  }
+  .ty-meta-value {
+    font-size: 0.85rem;
+    color: var(--ty-text);
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .ty-meta-value--green { color: var(--ty-green); }
+  .ty-meta-divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--ty-border-soft);
+  }
+
+  /* ===== Two-column grid ===== */
+  .ty-grid {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 22px;
+    align-items: stretch;
+  }
+  .ty-grid-left,
+  .ty-grid-right {
+    display: flex;
+    flex-direction: column;
+  }
+  .ty-grid-right {
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 8px 6px;
+  }
+  .ty-section-title {
+    margin: 0 0 14px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--ty-text);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ty-section-ico {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 8px;
+    background: rgba(0, 230, 118, 0.14);
+    color: var(--ty-green);
+    font-size: 0.78rem;
   }
   .ty-progress {
     display: none;
     width: 100%;
   }
-  .ty-progress.visible {
+  .ty-progress.visible { display: block; }
+  .ty-progress-title { display: none; }
+
+  /* ===== Stepper (preserved + tuned) ===== */
+  .ty-steps {
+    position: relative;
+    padding-left: 30px;
+    list-style: none;
+    margin: 0;
+  }
+  .ty-steps.is-live .ty-step {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+  .ty-steps::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 5px;
+    width: 2px;
+    height: calc(100% - 10px);
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .ty-step {
+    position: relative;
     display: block;
+    margin-bottom: 22px;
+    opacity: 0;
+    transform: translateX(-10px);
+    animation: ty-slide-in .5s forwards;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+  .ty-step:last-child { margin-bottom: 0; }
+  .ty-step-ico {
+    position: absolute;
+    left: -30px;
+    top: 1px;
+    width: 16px;
+    height: 16px;
+    background: rgba(125, 211, 252, 0.16);
+    color: #dbeafe;
+    font-size: 10px;
+    font-weight: 900;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    transition: background .3s ease, color .3s ease, box-shadow .3s ease;
+  }
+  .ty-step.done .ty-step-ico,
+  .ty-step.just-completed .ty-step-ico {
+    background: var(--ty-accent);
+    color: #03120a;
+    box-shadow: 0 0 12px var(--ty-accent-glow);
+    border-color: transparent;
+  }
+  .ty-step-label {
+    font-size: 0.98rem;
+    font-weight: 600;
+    color: #dbe5ef;
+    line-height: 1.4;
+  }
+  .ty-step.done .ty-step-label,
+  .ty-step.just-completed .ty-step-label {
+    color: var(--ty-text);
+  }
+
+  /* ===== Right column: bubble + mascot + trust ===== */
+  .ty-bubble {
+    background: #ffffff;
+    color: #000000;
+    padding: 10px 20px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 900;
+    position: relative;
+    text-align: center;
+    max-width: 100%;
+  }
+  .ty-bubble.waiting {
+    font-size: 0.68rem;
+    padding: 8px 14px;
+    letter-spacing: .01em;
+  }
+  .ty-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid #ffffff;
+    transform: translateX(-50%);
+  }
+  .ty-ill {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
+  .ty-ill img {
+    width: min(100%, 190px);
+    animation: ty-float 3s ease-in-out infinite;
+  }
+  .ty-trust {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(0, 230, 118, 0.08);
+    border: 1px solid rgba(0, 230, 118, 0.22);
+    color: #6ee7b7;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .ty-trust svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  /* ===== Actions footer ===== */
+  .ty-actions {
+    margin-top: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
   }
   .ty-minigame {
     display: none;
-    margin-top: 18px;
     padding: 0;
     background: transparent;
     border: none;
     box-shadow: none;
   }
-  .ty-minigame.visible {
-    display: block;
-  }
+  .ty-minigame.visible { display: block; }
   .ty-minigame-trigger {
+    position: relative;
     width: 100%;
     border: none;
     border-radius: 16px;
-    background: linear-gradient(90deg, var(--ty-gold), var(--ty-gold-soft));
-    color: #111827;
+    background: linear-gradient(90deg, var(--ty-gold), #f59e0b);
+    color: #1a1106;
     font-weight: 900;
     padding: 16px 18px;
     cursor: pointer;
-    box-shadow: 0 16px 30px rgba(245, 158, 11, 0.2);
+    box-shadow: 0 16px 30px rgba(255, 179, 0, 0.32);
     transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: 0.92rem;
+    animation: ty-glow-pulse 2.4s ease-in-out infinite;
+    overflow: hidden;
   }
   .ty-minigame-trigger[disabled] {
     cursor: default;
     opacity: .6;
     box-shadow: none;
+    animation: none;
   }
   .ty-minigame-trigger:not([disabled]):hover {
     transform: translateY(-1px);
-    box-shadow: 0 20px 34px rgba(245, 158, 11, 0.28);
+    box-shadow: 0 20px 36px rgba(255, 179, 0, 0.4);
   }
-  .ty-minigame-modal[hidden] {
-    display: none;
+  .ty-trigger-ping {
+    position: relative;
+    width: 10px;
+    height: 10px;
+    display: inline-block;
   }
+  .ty-trigger-ping span {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: #ffffff;
+  }
+  .ty-trigger-ping span:first-child {
+    animation: ty-ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+    opacity: .75;
+  }
+  .ty-trigger-spark {
+    font-size: 1rem;
+    line-height: 1;
+  }
+  .ty-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 13px 18px;
+    border-radius: 14px;
+    background: transparent;
+    border: 1px solid rgba(0, 230, 118, 0.4);
+    color: var(--ty-green);
+    font-weight: 800;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background .2s ease, transform .2s ease, box-shadow .2s ease;
+    font-size: 0.88rem;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+  }
+  .ty-btn-secondary svg {
+    width: 16px;
+    height: 16px;
+  }
+  .ty-btn-secondary:hover {
+    background: rgba(0, 230, 118, 0.1);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(0, 230, 118, 0.16);
+  }
+  .ty-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    color: var(--ty-text-dim);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+  }
+  .ty-indicator-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ffb300;
+    box-shadow: 0 0 8px rgba(255, 179, 0, 0.7);
+    animation: ty-live-pulse 1.8s ease-in-out infinite;
+  }
+  .ty-indicator-dot.is-success {
+    background: var(--ty-green);
+    box-shadow: 0 0 8px rgba(0, 230, 118, 0.7);
+  }
+
+  /* ===== Slot-machine modal (preserved verbatim) ===== */
+  .ty-minigame-modal[hidden] { display: none; }
   .ty-minigame-modal {
     position: fixed;
     inset: 0;
@@ -146,7 +515,7 @@
     padding: 18px;
     border-radius: 24px;
     background:
-      radial-gradient(circle at top, rgba(245, 158, 11, 0.16), transparent 42%),
+      radial-gradient(circle at top, rgba(255, 179, 0, 0.16), transparent 42%),
       linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(3, 7, 18, 0.99));
     border: 1px solid rgba(16, 185, 129, 0.22);
     box-shadow: 0 26px 54px rgba(0, 0, 0, 0.42);
@@ -158,8 +527,8 @@
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.1);
-    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
     color: #f8fafc;
     font-size: 1.1rem;
     cursor: pointer;
@@ -210,16 +579,16 @@
     padding: 12px;
     border-radius: 20px;
     background: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(15, 23, 42, 0.42));
-    border: 1px solid rgba(255,255,255,0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
   .ty-slot-reel {
     position: relative;
     min-height: 108px;
     border-radius: 18px;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
     overflow: hidden;
-    box-shadow: inset 0 10px 20px rgba(0,0,0,0.38), 0 12px 24px rgba(0,0,0,0.18);
+    box-shadow: inset 0 10px 20px rgba(0, 0, 0, 0.38), 0 12px 24px rgba(0, 0, 0, 0.18);
   }
   .ty-slot-reel::before,
   .ty-slot-reel::after {
@@ -240,7 +609,7 @@
     background: linear-gradient(0deg, rgba(2, 6, 23, 0.95), rgba(2, 6, 23, 0));
   }
   .ty-slot-reel.is-spinning {
-    box-shadow: inset 0 10px 20px rgba(0,0,0,0.38), 0 0 0 1px rgba(245, 158, 11, 0.2), 0 14px 28px rgba(0,0,0,0.22);
+    box-shadow: inset 0 10px 20px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(255, 179, 0, 0.22), 0 14px 28px rgba(0, 0, 0, 0.22);
   }
   .ty-slot-window {
     position: relative;
@@ -275,15 +644,15 @@
     font-size: 2.2rem;
     font-weight: 900;
     color: #ffffff;
-    text-shadow: 0 6px 14px rgba(0,0,0,0.35);
+    text-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
   }
   .ty-slot-reel.is-win {
-    border-color: rgba(16,185,129,0.55);
-    box-shadow: 0 0 18px rgba(16,185,129,0.28), inset 0 10px 20px rgba(0,0,0,0.35);
+    border-color: rgba(16, 185, 129, 0.55);
+    box-shadow: 0 0 18px rgba(16, 185, 129, 0.28), inset 0 10px 20px rgba(0, 0, 0, 0.35);
   }
   .ty-slot-reel.is-lose {
-    border-color: rgba(239,68,68,0.5);
-    box-shadow: 0 0 16px rgba(239,68,68,0.24), inset 0 10px 20px rgba(0,0,0,0.35);
+    border-color: rgba(239, 68, 68, 0.5);
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.24), inset 0 10px 20px rgba(0, 0, 0, 0.35);
   }
   .ty-minigame-result {
     min-height: 20px;
@@ -293,30 +662,24 @@
     margin-bottom: 12px;
     text-align: center;
   }
-  .ty-minigame-result.is-win {
-    color: #6ee7b7;
-  }
-  .ty-minigame-result.is-lose {
-    color: #fca5a5;
-  }
+  .ty-minigame-result.is-win { color: #6ee7b7; }
+  .ty-minigame-result.is-lose { color: #fca5a5; }
   .ty-minigame-summary {
     display: none;
     margin: 0 0 14px;
     padding: 16px;
     border-radius: 18px;
     text-align: center;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
-  .ty-minigame-summary.visible {
-    display: block;
-  }
+  .ty-minigame-summary.visible { display: block; }
   .ty-minigame-summary.is-win {
-    background: linear-gradient(180deg, rgba(16, 185, 129, 0.16), rgba(255,255,255,0.03));
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.16), rgba(255, 255, 255, 0.03));
     border-color: rgba(16, 185, 129, 0.24);
   }
   .ty-minigame-summary.is-lose {
-    background: linear-gradient(180deg, rgba(245, 158, 11, 0.14), rgba(255,255,255,0.03));
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.14), rgba(255, 255, 255, 0.03));
     border-color: rgba(245, 158, 11, 0.22);
   }
   .ty-minigame-summary-title {
@@ -341,7 +704,7 @@
     padding: 10px 12px;
     border-radius: 14px;
     background: rgba(2, 6, 23, 0.38);
-    border: 1px solid rgba(255,255,255,0.06);
+    border: 1px solid rgba(255, 255, 255, 0.06);
   }
   .ty-minigame-summary-label {
     display: block;
@@ -363,21 +726,18 @@
     width: 100%;
     border: none;
     border-radius: 14px;
-    background: linear-gradient(90deg, var(--ty-gold), var(--ty-gold-soft));
+    background: linear-gradient(90deg, var(--ty-gold), #fcd34d);
     color: #111827;
     font-weight: 900;
     padding: 14px 18px;
     cursor: pointer;
     transition: transform .2s ease, opacity .2s ease, box-shadow .2s ease;
-    box-shadow: 0 14px 28px rgba(245, 158, 11, 0.22);
+    box-shadow: 0 14px 28px rgba(255, 179, 0, 0.28);
   }
-  .ty-minigame-btn[disabled] {
-    cursor: default;
-    opacity: .65;
-  }
+  .ty-minigame-btn[disabled] { cursor: default; opacity: .65; }
   .ty-minigame-btn:not([disabled]):hover {
     transform: translateY(-1px);
-    box-shadow: 0 18px 32px rgba(245, 158, 11, 0.28);
+    box-shadow: 0 18px 32px rgba(255, 179, 0, 0.34);
   }
   .ty-minigame-btn.is-lose {
     background: linear-gradient(90deg, #b91c1c, #ef4444);
@@ -387,151 +747,66 @@
   .ty-minigame-btn.is-lose:not([disabled]):hover {
     box-shadow: 0 18px 32px rgba(239, 68, 68, 0.3);
   }
-  .ty-progress-title {
+
+  /* ===== PIN display (preserved) ===== */
+  .ty-pins-section {
     display: none;
+    margin-top: 16px;
+    width: 100%;
   }
-  .ty-steps {
-    position: relative;
-    padding-left: 30px;
-    list-style: none;
-    margin: 0;
-  }
-  .ty-steps.is-live .ty-step {
-    opacity: 1;
-    transform: none;
-    animation: none;
-  }
-  .ty-steps::before {
-    content: '';
-    position: absolute;
-    left: 7px;
-    top: 5px;
-    width: 2px;
-    height: calc(100% - 10px);
-    background: rgba(255,255,255,0.1);
-  }
-  .ty-step {
-    position: relative;
-    display: block;
-    margin-bottom: 22px;
-    opacity: 0;
-    transform: translateX(-10px);
-    animation: ty-slide-in .5s forwards;
-    padding: 0;
-    border: none;
-    background: transparent;
-  }
-  .ty-step:last-child {
-    margin-bottom: 0;
-  }
-  .ty-step-ico {
-    position: absolute;
-    left: -30px;
-    top: 1px;
-    width: 16px;
-    height: 16px;
-    background: rgba(125, 211, 252, 0.18);
-    color: #dbeafe;
-    font-size: 10px;
-    font-weight: 900;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(255,255,255,0.12);
-  }
-  .ty-step.done .ty-step-ico,
-  .ty-step.just-completed .ty-step-ico {
-    background: var(--ty-accent);
-    color: #03120a;
-    box-shadow: 0 0 12px var(--ty-accent-glow);
-    border-color: transparent;
-  }
-  .ty-step-label {
-    font-size: 0.98rem;
-    font-weight: 600;
+  .ty-pins-section.visible { display: block; }
+  .ty-pins-title {
     color: #dbe5ef;
-    line-height: 1.4;
-  }
-  .ty-step.done .ty-step-label,
-  .ty-step.just-completed .ty-step-label {
-    color: #ffffff;
-  }
-  .ty-character {
-    flex: .84;
-    min-width: 250px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    gap: 8px;
-  }
-  .ty-bubble {
-    background: #ffffff;
-    color: #000000;
-    padding: 10px 20px;
-    border-radius: 15px;
-    font-size: 0.8rem;
-    font-weight: 900;
-    position: relative;
-    text-align: center;
-  }
-  .ty-bubble.waiting {
-    font-size: 0.68rem;
-    padding: 8px 14px;
-    letter-spacing: .01em;
-  }
-  .ty-bubble::after {
-    content: '';
-    position: absolute;
-    bottom: -8px;
-    left: 50%;
-    border-left: 8px solid transparent;
-    border-right: 8px solid transparent;
-    border-top: 8px solid #ffffff;
-    transform: translateX(-50%);
-  }
-  .ty-ill {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-  }
-  .ty-ill img {
-    width: min(100%, 190px);
-    animation: ty-float 3s ease-in-out infinite;
-  }
-  .ty-footer {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-top: 8px;
-    gap: 14px;
-  }
-  .ty-btn {
-    background: linear-gradient(90deg, #00ff88, #00bd68);
-    color: #04150e;
-    border: none;
-    padding: 15px 40px;
-    border-radius: 14px;
-    font-weight: 900;
-    text-decoration: none;
-    cursor: pointer;
-    transition: transform .3s ease, box-shadow .3s ease;
-    box-shadow: 0 5px 20px var(--ty-accent-glow);
-  }
-  .ty-btn:hover {
-    transform: scale(1.05);
-    box-shadow: 0 8px 25px var(--ty-accent-glow);
-  }
-  .ty-cta-note {
-    font-size: 0.75rem;
-    color: var(--ty-text-dim);
-    text-align: center;
+    font-size: 0.92rem;
     font-weight: 700;
+    margin: 0 0 10px;
   }
+  .ty-pin-card {
+    background: linear-gradient(135deg, rgba(0, 255, 136, .08), rgba(0, 255, 136, .02));
+    border: 1px solid rgba(0, 255, 136, .22);
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .ty-pin-info { flex: 1; min-width: 180px; }
+  .ty-pin-label {
+    color: #8b949e;
+    font-size: 0.78rem;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .ty-pin-code {
+    font-family: 'Courier New', monospace;
+    font-size: 1.2rem;
+    font-weight: 900;
+    color: var(--ty-accent);
+    letter-spacing: .05em;
+    word-break: break-all;
+  }
+  .ty-pin-copy-btn {
+    background: rgba(0, 255, 136, .12);
+    border: 1px solid rgba(0, 255, 136, .28);
+    color: var(--ty-accent);
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.82rem;
+    transition: background .2s;
+    white-space: nowrap;
+  }
+  .ty-pin-copy-btn:hover { background: rgba(0, 255, 136, .22); }
+  .ty-pin-copy-btn.copied {
+    background: var(--ty-accent);
+    color: #080a0c;
+  }
+
+  /* ===== Keyframes ===== */
   @keyframes ty-slide-in {
     to { opacity: 1; transform: translateX(0); }
   }
@@ -539,6 +814,20 @@
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-10px); }
   }
+  @keyframes ty-glow-pulse {
+    0%, 100% { box-shadow: 0 16px 30px rgba(255, 179, 0, 0.32); }
+    50% { box-shadow: 0 20px 38px rgba(255, 179, 0, 0.5), 0 0 0 4px rgba(255, 179, 0, 0.12); }
+  }
+  @keyframes ty-live-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.35); opacity: .6; }
+  }
+  @keyframes ty-ping {
+    0% { transform: scale(1); opacity: .75; }
+    75%, 100% { transform: scale(2.4); opacity: 0; }
+  }
+
+  /* ===== Mobile (preserve all small font sizes that work) ===== */
   @media (max-width: 760px) {
     .ty-wrap {
       padding: 18px 10px 12px;
@@ -546,46 +835,51 @@
     }
     .ty-card {
       padding: 20px 16px;
-      border-radius: 20px;
-      gap: 18px;
+      border-radius: 22px;
     }
-    .ty-status {
-      flex: 1 1 0;
-      min-width: 0;
+    .ty-card-blur {
+      width: 160px;
+      height: 160px;
+      filter: blur(60px);
     }
-    .ty-character {
-      flex: 0 0 76px;
-      min-width: 76px;
-      width: 76px;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 6px;
-      flex-wrap: nowrap;
-      align-self: center;
+    .ty-top-row {
+      gap: 12px;
+      margin-bottom: 14px;
     }
-    .ty-badge {
-      font-size: .82rem;
+    .ty-top-left { gap: 8px; flex-basis: 100%; }
+    .ty-order-title { font-size: 1.05rem; }
+    .ty-status-badge { font-size: 0.62rem; padding: 5px 10px; }
+    .ty-meta-card {
+      flex: 1 1 100%;
+      padding: 10px 12px;
+      gap: 8px;
     }
-    .ty-step-label {
-      font-size: 0.9rem;
+    .ty-meta-ico {
+      flex: 0 0 26px;
+      width: 26px;
+      height: 26px;
     }
+    .ty-meta-ico svg { width: 12px; height: 12px; }
+    .ty-meta-label { font-size: 0.56rem; }
+    .ty-meta-value { font-size: 0.76rem; }
+    .ty-grid {
+      grid-template-columns: 1fr 88px;
+      gap: 14px;
+    }
+    .ty-grid-right { padding: 4px 0; gap: 6px; }
+    .ty-section-title { font-size: 0.72rem; margin-bottom: 10px; }
+    .ty-section-ico { width: 18px; height: 18px; font-size: 0.7rem; }
+    .ty-step-label { font-size: 0.9rem; }
     .ty-step[data-step-id="completed"] .ty-step-label {
       font-size: 0.72rem;
       line-height: 1.15;
       white-space: nowrap;
       letter-spacing: -0.01em;
     }
-    .ty-pill {
-      width: 100%;
-      text-align: center;
-      box-sizing: border-box;
-    }
     .ty-bubble {
-      flex: 0 0 auto;
-      width: 68px;
-      max-width: 68px;
-      min-width: 68px;
+      width: 78px;
+      max-width: 78px;
+      min-width: 78px;
       padding: 7px 10px;
       font-size: 0.6rem;
       line-height: 1.2;
@@ -606,41 +900,32 @@
       border-right-width: 6px;
       border-top-width: 6px;
     }
-    .ty-ill {
-      width: 68px;
-      flex: 0 0 auto;
+    .ty-ill { width: 78px; }
+    .ty-ill img { width: 78px; max-width: 78px; }
+    .ty-trust { font-size: 0.54rem; padding: 4px 8px; }
+    .ty-trust svg { width: 10px; height: 10px; }
+    .ty-actions { margin-top: 14px; gap: 10px; }
+    .ty-minigame-trigger {
+      font-size: 0.78rem;
+      padding: 13px 14px;
+      letter-spacing: .03em;
     }
-    .ty-ill img {
-      width: 68px;
-      max-width: 68px;
+    .ty-btn-secondary {
+      font-size: 0.78rem;
+      padding: 11px 14px;
     }
-    .ty-footer {
-      margin-top: 2px;
-    }
-    .ty-btn {
-      width: 100%;
-      text-align: center;
-      box-sizing: border-box;
-    }
-    .ty-slot {
-      gap: 8px;
-      padding: 10px;
-    }
+    .ty-btn-secondary svg { width: 14px; height: 14px; }
+    .ty-indicator { font-size: 0.62rem; }
+    .ty-slot { gap: 8px; padding: 10px; }
     .ty-slot-reel,
     .ty-slot-window,
     .ty-slot-symbol {
       min-height: 92px;
       height: 92px;
     }
-    .ty-slot-symbol {
-      font-size: 1.85rem;
-    }
-    .ty-minigame-summary-grid {
-      grid-template-columns: 1fr;
-    }
-    .ty-minigame-modal {
-      padding: 10px;
-    }
+    .ty-slot-symbol { font-size: 1.85rem; }
+    .ty-minigame-summary-grid { grid-template-columns: 1fr; }
+    .ty-minigame-modal { padding: 10px; }
     .ty-minigame-dialog {
       padding: 16px 14px;
       border-radius: 20px;
@@ -666,71 +951,6 @@
       min-width: 0;
     }
   }
-
-  /* ── PIN display section ── */
-  .ty-pins-section {
-    display: none;
-    margin-top: 16px;
-    width: 100%;
-  }
-  .ty-pins-section.visible {
-    display: block;
-  }
-  .ty-pins-title {
-    color: #dbe5ef;
-    font-size: 0.92rem;
-    font-weight: 700;
-    margin: 0 0 10px;
-  }
-  .ty-pin-card {
-    background: linear-gradient(135deg, rgba(0,255,136,.08), rgba(0,255,136,.02));
-    border: 1px solid rgba(0,255,136,.22);
-    border-radius: 14px;
-    padding: 14px 18px;
-    margin-bottom: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-  .ty-pin-info {
-    flex: 1;
-    min-width: 180px;
-  }
-  .ty-pin-label {
-    color: #8b949e;
-    font-size: 0.78rem;
-    display: block;
-    margin-bottom: 2px;
-  }
-  .ty-pin-code {
-    font-family: 'Courier New', monospace;
-    font-size: 1.2rem;
-    font-weight: 900;
-    color: var(--ty-accent);
-    letter-spacing: .05em;
-    word-break: break-all;
-  }
-  .ty-pin-copy-btn {
-    background: rgba(0,255,136,.12);
-    border: 1px solid rgba(0,255,136,.28);
-    color: var(--ty-accent);
-    padding: 6px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 700;
-    font-size: 0.82rem;
-    transition: background .2s;
-    white-space: nowrap;
-  }
-  .ty-pin-copy-btn:hover {
-    background: rgba(0,255,136,.22);
-  }
-  .ty-pin-copy-btn.copied {
-    background: var(--ty-accent);
-    color: #080a0c;
-  }
 </style>
 {% endblock %}
 
@@ -755,43 +975,90 @@
 {% block content %}
 <section class="ty-wrap">
   <div class="ty-card">
-    <div class="ty-header">
-      <span class="ty-badge">ORDEN #{{ order_id }}</span>
-      <div class="ty-info-row">
-        <div class="ty-pill">Jugador:<strong>{{ player_display or 'No especificado' }}</strong></div>
-        <div class="ty-pill">Paquete:<strong>{{ package_display or 'No especificado' }}</strong></div>
-      </div>
-    </div>
+    <div class="ty-card-blur ty-card-blur--green"></div>
+    <div class="ty-card-blur ty-card-blur--gold"></div>
 
-    <div class="ty-status">
-      <div id="ty-progress" class="ty-progress" data-order-id="{{ order_id }}" aria-live="polite">
-        <h3 id="ty-progress-title" class="ty-progress-title">Estado de procesamiento</h3>
-        <ul id="ty-steps" class="ty-steps"></ul>
-        <div id="ty-pins-section" class="ty-pins-section">
-          <h4 class="ty-pins-title">Tus PINs de Recarga</h4>
-          <div id="ty-pins-list"></div>
+    <div class="ty-top-row">
+      <div class="ty-top-left">
+        <div id="ty-status-badge" class="ty-status-badge is-processing">
+          <span id="ty-status-dot" class="ty-status-dot"></span>
+          <span id="ty-status-badge-text">PROCESANDO ORDEN #{{ order_id }}</span>
+        </div>
+        <h2 id="ty-order-title" class="ty-order-title">¡Tu pedido se est&aacute; procesando!</h2>
+      </div>
+      <div class="ty-meta-card">
+        <div class="ty-meta-block">
+          <div class="ty-meta-ico ty-meta-ico--green">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div class="ty-meta-text">
+            <span class="ty-meta-label">Jugador</span>
+            <span class="ty-meta-value ty-meta-value--green">{{ player_display or 'No especificado' }}</span>
+          </div>
+        </div>
+        <div class="ty-meta-divider"></div>
+        <div class="ty-meta-block">
+          <div class="ty-meta-ico ty-meta-ico--gold">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          </div>
+          <div class="ty-meta-text">
+            <span class="ty-meta-label">Paquete</span>
+            <span class="ty-meta-value">{{ package_display or 'No especificado' }}</span>
+          </div>
         </div>
       </div>
+    </div>
+
+    <div class="ty-grid">
+      <div class="ty-grid-left">
+        <h3 class="ty-section-title">
+          <span class="ty-section-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="11" height="11"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </span>
+          Estado de la Entrega en Tiempo Real
+        </h3>
+        <div id="ty-progress" class="ty-progress" data-order-id="{{ order_id }}" aria-live="polite">
+          <h3 id="ty-progress-title" class="ty-progress-title">Estado de procesamiento</h3>
+          <ul id="ty-steps" class="ty-steps"></ul>
+          <div id="ty-pins-section" class="ty-pins-section">
+            <h4 class="ty-pins-title">Tus PINs de Recarga</h4>
+            <div id="ty-pins-list"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ty-grid-right">
+        <div id="ty-bubble" class="ty-bubble waiting">ESPERA ESTAMOS VALIDANDO</div>
+        <div class="ty-ill">
+          {% set ty_img = get_config_value('thanks_image_path', '') %}
+          {% if ty_img %}
+            <img src="{{ ty_img }}" alt="Gracias">
+          {% else %}
+            <img src="{{ url_for('static', filename='img/thanks-mascot.png') }}" alt="Gracias">
+          {% endif %}
+        </div>
+        <span class="ty-trust">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+          Verificado por INEFABLE Security
+        </span>
+      </div>
+    </div>
+
+    <div class="ty-actions">
       <div id="ty-minigame" class="ty-minigame" hidden data-player-display="{{ player_display or '' }}" data-package-display="{{ package_display or '' }}">
-        <button id="ty-minigame-open" class="ty-minigame-trigger" type="button">Jugar por premio</button>
+        <button id="ty-minigame-open" class="ty-minigame-trigger" type="button">
+          <span class="ty-trigger-ping"><span></span></span>
+          <span>&iexcl;JUGAR POR PREMIO AHORA!</span>
+          <span class="ty-trigger-spark">&#10022;</span>
+        </button>
       </div>
-    </div>
-
-    <div class="ty-character">
-      <div id="ty-bubble" class="ty-bubble">ESPERA ESTAMOS VALIDANDO</div>
-      <div class="ty-ill">
-        {% set ty_img = get_config_value('thanks_image_path', '') %}
-        {% if ty_img %}
-          <img src="{{ ty_img }}" alt="Gracias">
-        {% else %}
-          <img src="{{ url_for('static', filename='img/thanks-mascot.png') }}" alt="Gracias">
-        {% endif %}
+      <a class="ty-btn-secondary" href="/">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        Regresar a la Tienda
+      </a>
+      <div class="ty-indicator">
+        <span id="ty-indicator-dot" class="ty-indicator-dot is-processing"></span>
+        <span id="ty-indicator-text">Sincronizando con el servidor en tiempo real</span>
       </div>
-    </div>
-
-    <div class="ty-footer">
-      <a class="ty-btn" href="/">REGRESAR A COMPRAR</a>
-      <span class="ty-cta-note">Seguimiento activo en tiempo real</span>
     </div>
   </div>
 </section>
@@ -1442,6 +1709,43 @@
     buildReels();
     fetchState();
     timer = setInterval(fetchState, 6000);
+  })();
+
+  // ── Dynamic UI hook: update badge / title / indicator on progress state ──
+  (function () {
+    var progressRoot = document.getElementById('ty-progress');
+    var badge = document.getElementById('ty-status-badge');
+    var badgeText = document.getElementById('ty-status-badge-text');
+    var orderTitle = document.getElementById('ty-order-title');
+    var indicatorDot = document.getElementById('ty-indicator-dot');
+    var indicatorText = document.getElementById('ty-indicator-text');
+    var orderId = progressRoot ? (progressRoot.getAttribute('data-order-id') || '') : '';
+
+    function applyState(done) {
+      if (badge) {
+        badge.classList.toggle('is-success', done);
+        badge.classList.toggle('is-processing', !done);
+      }
+      if (badgeText) {
+        badgeText.textContent = (done ? 'ENTREGADO - ORDEN #' : 'PROCESANDO ORDEN #') + orderId;
+      }
+      if (orderTitle) {
+        orderTitle.textContent = done ? '\u00a1Tu pedido ha sido procesado!' : '\u00a1Tu pedido se est\u00e1 procesando!';
+        orderTitle.classList.toggle('is-success', done);
+      }
+      if (indicatorDot) {
+        indicatorDot.classList.toggle('is-success', done);
+        indicatorDot.classList.toggle('is-processing', !done);
+      }
+      if (indicatorText) {
+        indicatorText.textContent = done ? 'Seguimiento activo en tiempo real' : 'Sincronizando con el servidor en tiempo real';
+      }
+    }
+
+    document.addEventListener('ty-progress-state', function (event) {
+      var done = !!(event && event.detail && event.detail.completed);
+      applyState(done);
+    });
   })();
 </script>
 {% endblock %}
