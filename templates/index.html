@@ -357,30 +357,26 @@
     </div>
 
     <!-- FLOATING MOBILE CHECKOUT BAR (solo en telefono, oculta hasta seleccionar item) -->
-    <div id="mobile-checkout-bar" class="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#0c0c0e] border-t border-[#222226] px-3 py-2 space-y-1.5 translate-y-full opacity-0 pointer-events-none transition-all duration-300 ease-out" style="-webkit-backdrop-filter:none; backdrop-filter:none">
-        <!-- Fila 1: Juego + Item + Cantidad -->
-        <div class="flex items-center gap-2">
-            <div id="mob-badge" class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-600 to-cyan-500 flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0">---</div>
+    <div id="mobile-checkout-bar" class="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#0c0c0e] border-t border-[#222226] px-3 py-2 translate-y-full opacity-0 pointer-events-none transition-all duration-300 ease-out" style="-webkit-backdrop-filter:none; backdrop-filter:none">
+        <div class="flex items-center gap-2.5">
+            <!-- Badge del juego -->
+            <div id="mob-badge" class="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-600 to-cyan-500 flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0">---</div>
+
+            <!-- Info juego + item -->
             <div class="min-w-0 flex-1">
                 <div id="mob-game-name" class="text-[10px] font-extrabold text-white truncate uppercase tracking-wide leading-tight">---</div>
                 <div id="mob-item-name" class="text-[9px] text-gray-400 truncate leading-tight">---</div>
+                <div class="flex items-baseline gap-1.5 mt-0.5">
+                    <span id="mob-price" class="text-sm font-black text-emerald-400 leading-none">Bs. --</span>
+                    <span id="mob-price-usd" class="text-[9px] text-gray-500 font-semibold leading-none">$-- USD</span>
+                </div>
             </div>
+
+            <!-- Selector de cantidad -->
             <div class="flex items-center gap-0.5 bg-[#121214] border border-[#222226] rounded-lg shrink-0">
-                <button type="button" data-delta="-1" class="min-w-[36px] h-9 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-red-600 active:scale-90 transition-all text-base font-black select-none cursor-pointer" style="touch-action:manipulation; -webkit-tap-highlight-color:transparent">−</button>
-                <span id="mob-qty" class="min-w-[22px] text-center text-sm font-black text-white px-0.5">1</span>
-                <button type="button" data-delta="1" class="min-w-[36px] h-9 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-emerald-500 active:scale-90 transition-all text-base font-black select-none cursor-pointer" style="touch-action:manipulation; -webkit-tap-highlight-color:transparent">+</button>
-            </div>
-            <span class="text-[8px] font-extrabold text-gray-500 uppercase tracking-wider shrink-0">Combos</span>
-        </div>
-        <!-- Fila 2: Subtotal | Total -->
-        <div class="flex items-center justify-between">
-            <div class="text-left">
-                <span class="text-[7px] text-gray-500 uppercase font-black tracking-wider block leading-tight">Subtotal</span>
-                <span id="mob-subtotal" class="text-[10px] font-bold text-gray-300 block leading-tight">Bs. --</span>
-            </div>
-            <div class="text-right">
-                <span class="text-[7px] text-gray-500 uppercase font-black tracking-wider block leading-tight">Total</span>
-                <span id="mob-price" class="text-sm font-black text-emerald-400 leading-tight">Bs. --</span>
+                <button type="button" data-delta="-1" class="min-w-[32px] h-8 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-red-600 active:scale-90 transition-all text-base font-black select-none cursor-pointer" style="touch-action:manipulation; -webkit-tap-highlight-color:transparent">−</button>
+                <span id="mob-qty" class="min-w-[20px] text-center text-sm font-black text-white px-0.5">1</span>
+                <button type="button" data-delta="1" class="min-w-[32px] h-8 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-emerald-500 active:scale-90 transition-all text-base font-black select-none cursor-pointer" style="touch-action:manipulation; -webkit-tap-highlight-color:transparent">+</button>
             </div>
         </div>
     </div>
@@ -980,8 +976,8 @@
 
             // Si no hay tasa configurada en admin, mostrar solo USD
             if (exchangeRateBs > 0) {
-                const totalBs = totalUSD * exchangeRateBs;
-                const formattedBs = totalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const totalBs = Math.round(totalUSD * exchangeRateBs);
+                const formattedBs = totalBs.toLocaleString('es-VE', { maximumFractionDigits: 0 });
                 const formattedUSD = totalUSD.toFixed(2);
                 document.getElementById('summary-subtotal').innerHTML = 'Bs. ' + formattedBs + ' <span class="text-gray-500 font-normal">($' + formattedUSD + ' USD)</span>';
                 document.getElementById('summary-total-bs').innerText = formattedBs;
@@ -998,13 +994,13 @@
             const mobGame2 = document.getElementById('mob-game-name');
             const mobItem2 = document.getElementById('mob-item-name');
             const mobPrice2 = document.getElementById('mob-price');
-            const mobSubtotal2 = document.getElementById('mob-subtotal');
+            const mobPriceUsd2 = document.getElementById('mob-price-usd');
             if (mobBadge2) {
                 if (pkg.image_path) {
-                    mobBadge2.innerHTML = '<img src="' + pkg.image_path + '" alt="' + pkg.name + '" class="w-full h-full object-contain rounded-lg" onerror="this.style.display=\'none\';this.parentElement.className=\'w-8 h-8 rounded-lg bg-gradient-to-br ' + grad + ' flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0\';this.parentElement.innerText=\'' + (pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0,3).toUpperCase() || '?') + '\';">';
-                    mobBadge2.className = 'w-8 h-8 rounded-lg bg-[#0c0c0e] flex items-center justify-center shadow-lg shrink-0 overflow-hidden';
+                    mobBadge2.innerHTML = '<img src="' + pkg.image_path + '" alt="' + pkg.name + '" class="w-full h-full object-contain rounded-lg" onerror="this.style.display=\'none\';this.parentElement.className=\'w-10 h-10 rounded-lg bg-gradient-to-br ' + grad + ' flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0\';this.parentElement.innerText=\'' + (pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0,3).toUpperCase() || '?') + '\';">';
+                    mobBadge2.className = 'w-10 h-10 rounded-lg bg-[#0c0c0e] flex items-center justify-center shadow-lg shrink-0 overflow-hidden';
                 } else {
-                    mobBadge2.className = 'w-8 h-8 rounded-lg bg-gradient-to-br ' + grad + ' flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0';
+                    mobBadge2.className = 'w-10 h-10 rounded-lg bg-gradient-to-br ' + grad + ' flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0';
                     let short2 = pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase();
                     if (!short2) short2 = pkg.name.substring(0, 3).toUpperCase();
                     mobBadge2.innerText = short2;
@@ -1012,25 +1008,40 @@
             }
             if (mobGame2) mobGame2.innerText = pkg.name;
             if (mobItem2) mobItem2.innerText = item.title + (item.subtitle ? ' (' + item.subtitle + ')' : '');
-            if (mobSubtotal2) {
+            if (mobPrice2 && mobPriceUsd2) {
                 if (exchangeRateBs > 0) {
-                    const subtotalBs = totalUSD * exchangeRateBs;
-                    mobSubtotal2.innerText = 'Bs. ' + subtotalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                } else {
-                    mobSubtotal2.innerText = '$' + totalUSD.toFixed(2) + ' USD';
-                }
-            }
-            if (mobPrice2) {
-                if (exchangeRateBs > 0) {
-                    const totalBs = totalUSD * exchangeRateBs;
-                    mobPrice2.innerText = 'Bs. ' + totalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    const totalBs = Math.round(totalUSD * exchangeRateBs);
+                    mobPrice2.innerText = 'Bs. ' + totalBs.toLocaleString('es-VE', { maximumFractionDigits: 0 });
+                    mobPriceUsd2.innerText = '$' + totalUSD.toFixed(2) + ' USD';
+                    mobPriceUsd2.classList.remove('hidden');
                 } else {
                     mobPrice2.innerText = '$' + totalUSD.toFixed(2) + ' USD';
+                    mobPriceUsd2.innerText = '';
+                    mobPriceUsd2.classList.add('hidden');
                 }
             }
         }
 
         // ============ CHECKOUT REDIRECT ============
+        function focusVerificationField(inputEl, message) {
+            const section = document.getElementById('verification-section');
+            if (section) {
+                section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Efecto visual: borde rojo temporal en la seccion
+                section.classList.add('ring-2', 'ring-red-500', 'border-red-500');
+                setTimeout(() => {
+                    section.classList.remove('ring-2', 'ring-red-500', 'border-red-500');
+                }, 2000);
+            }
+            if (inputEl) {
+                // Esperar al scroll antes de hacer focus en movil (evita teclado abriendo a media animacion)
+                setTimeout(() => {
+                    try { inputEl.focus({ preventScroll: true }); } catch (e) { inputEl.focus(); }
+                }, 350);
+            }
+            if (message) showToast(message, true);
+        }
+
         function goToCheckout() {
             const pkg = getCurrentPackage();
             const item = getCurrentItem();
@@ -1038,6 +1049,28 @@
             if (!item) {
                 showToast("Por favor, selecciona un paquete.", true);
                 return;
+            }
+
+            // Validar ID de jugador antes de continuar (solo para juegos mobile que no son gift card)
+            let playerIdValue = '';
+            if (currentCategory === 'mobile' && !selectedPkgDirectToPin) {
+                const idInputEl = document.getElementById('id-verification-input');
+                playerIdValue = idInputEl ? idInputEl.value.trim() : '';
+
+                if (!playerIdValue) {
+                    focusVerificationField(idInputEl, 'Ingresa tu ID de jugador antes de continuar.');
+                    return;
+                }
+
+                // Si el paquete requiere Zone ID (ej. Mobile Legends), tambien validarlo
+                if (requiresZonePkg) {
+                    const zoneInputEl = document.getElementById('zone-verification-input');
+                    const zoneValue = zoneInputEl ? zoneInputEl.value.trim() : '';
+                    if (!zoneValue) {
+                        focusVerificationField(zoneInputEl, 'Ingresa tu Zone ID antes de continuar.');
+                        return;
+                    }
+                }
             }
 
             // Find the item index in the FULL (unfiltered) currentItems array from the API
@@ -1054,8 +1087,7 @@
 
             // Player ID and nickname for mobile games
             if (currentCategory === 'mobile' && !selectedPkgDirectToPin) {
-                const playerId = document.getElementById('id-verification-input').value.trim();
-                if (playerId) params.set('cid', playerId);
+                if (playerIdValue) params.set('cid', playerIdValue);
                 if (verifiedNick) params.set('nn', verifiedNick);
             }
 
