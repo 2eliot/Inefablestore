@@ -239,12 +239,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function inferStoredZoneId(uid) {
+    const safeUid = String(uid || '').trim();
+    if (!safeUid) return '';
+    try {
+      const soPrefix = `sonick:${String(gid || '').trim()}:${safeUid}:`;
+      const mlPrefix = `mlnick:${safeUid}:`;
+      for (let idx = 0; idx < localStorage.length; idx += 1) {
+        const key = String(localStorage.key(idx) || '');
+        let zone = '';
+        if (key.startsWith(soPrefix)) {
+          zone = key.slice(soPrefix.length).trim();
+        } else if (key.startsWith(mlPrefix)) {
+          zone = key.slice(mlPrefix.length).trim();
+        }
+        if (!zone || !/^\d+$/.test(zone)) continue;
+        const value = String(localStorage.getItem(key) || '').trim();
+        if (isValidVerifiedNick(value)) return zone;
+      }
+    } catch (_) {}
+    return '';
+  }
+
   function getEffectivePlayerContext(overrides) {
     const uid = String((overrides && overrides.uid != null ? overrides.uid : qCid) || '').trim();
     const explicitZid = String((overrides && overrides.zid != null ? overrides.zid : qZid) || '').trim();
     const explicitNick = String((overrides && overrides.nick != null ? overrides.nick : qNick) || '').trim();
     const stored = getStoredVerifiedPlayerContext(uid);
-    const zid = explicitZid || (stored ? stored.zid : '');
+    const inferredZid = inferStoredZoneId(uid);
+    const zid = explicitZid || (stored ? stored.zid : '') || inferredZid;
     const nick = explicitNick || getStoredVerifiedNick(uid, zid) || (stored ? stored.nick : '');
     return { uid, zid, nick };
   }

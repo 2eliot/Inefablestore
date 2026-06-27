@@ -526,6 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const nick0 = uid0 ? getCachedNick(uid0, zid0) : '';
       if (uid0 && nick0) {
         lastVerifySuccess = verificationKey(uid0, zid0);
+        persistVerifiedPlayerContext(uid0, zid0, nick0);
         setNickUIOk(nick0);
       }
     } catch (_) {}
