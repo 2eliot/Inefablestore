@@ -28,15 +28,56 @@
   }
   .thanks-order-page .main-footer { margin-top: 18px; }
 
+  /* ===== Header: centered logo (matches checkout) ===== */
+  .site-header.co-header .container {
+    position: relative;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-start;
+    grid-template-columns: none !important;
+    gap: 0;
+  }
+  .site-header.co-header .left-actions {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+  }
+  .site-header.co-header .brand {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    pointer-events: auto;
+    z-index: 1;
+  }
+  .site-header.co-header .logo {
+    height: 40px !important;
+    width: auto;
+    max-width: min(260px, 60vw);
+    object-fit: contain;
+    display: block;
+  }
+  .site-header.co-header .logo-text {
+    display: inline-block;
+    text-align: center;
+  }
+  @media (max-width: 700px) {
+    .site-header.co-header .logo {
+      height: 32px !important;
+      max-width: min(200px, 55vw);
+    }
+  }
+
   /* ===== Page wrap ===== */
   .ty-wrap {
     max-width: 1080px;
     margin: 0 auto;
-    padding: 28px 16px 18px;
-    min-height: calc(100vh - 120px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 18px 16px;
+    display: block;
   }
   .ty-card {
     position: relative;
@@ -830,8 +871,7 @@
   /* ===== Mobile (preserve all small font sizes that work) ===== */
   @media (max-width: 760px) {
     .ty-wrap {
-      padding: 18px 10px 12px;
-      min-height: auto;
+      padding: 12px 10px;
     }
     .ty-card {
       padding: 20px 16px;
@@ -955,7 +995,7 @@
 {% endblock %}
 
 {% block header %}
-<header class="site-header">
+<header class="site-header co-header">
   <div class="container">
     <div class="left-actions">
       <a href="/" class="icon-btn" aria-label="Inicio" title="Inicio">‹</a>
@@ -967,7 +1007,6 @@
         <span class="logo-text">{{ site_name|default('InefableStore') }}</span>
       {% endif %}
     </a>
-    <div class="right-actions"></div>
   </div>
 </header>
 {% endblock %}
