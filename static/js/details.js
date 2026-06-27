@@ -274,6 +274,21 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (_) {}
     }
 
+    function persistVerifiedPlayerContext(uid, zid, nick) {
+      try {
+        const safeUid = String(uid || '').trim();
+        if (!safeUid) return;
+        const payload = {
+          gid: String(gid || '').trim(),
+          uid: safeUid,
+          zid: String(zid || '').trim(),
+          nick: String(nick || '').trim(),
+          ts: Date.now(),
+        };
+        localStorage.setItem(`checkout_verified_player:${payload.gid}:${payload.uid}`, JSON.stringify(payload));
+      } catch (_) {}
+    }
+
     function setNickUIOk(nick) {
       verifiedNick = nick || '';
       try { root.dataset.verifiedNick = verifiedNick; } catch (_) {}
@@ -370,12 +385,16 @@ document.addEventListener('DOMContentLoaded', () => {
       clearVerifyTimer();
       if (verifyKey === lastVerifySuccess) {
         const n0 = getCachedNick(uid, zid);
-        if (n0) setNickUIOk(n0);
+        if (n0) {
+          persistVerifiedPlayerContext(uid, zid, n0);
+          setNickUIOk(n0);
+        }
         return;
       }
       const cached = getCachedNick(uid, zid);
       if (cached) {
         lastVerifySuccess = verifyKey;
+        persistVerifiedPlayerContext(uid, zid, cached);
         setNickUIOk(cached);
         return;
       }
@@ -410,6 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const nick = (data.nick || '').toString().trim();
         if (!nick) throw new Error('ID no encontrado');
         setCachedNick(uid, nick, zid);
+        persistVerifiedPlayerContext(uid, zid, nick);
         lastVerifySuccess = verifyKey;
         setNickUIOk(nick);
       } catch (e) {

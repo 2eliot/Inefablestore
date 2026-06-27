@@ -220,23 +220,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function getStoredVerifiedPlayerContext(uid) {
+    const safeUid = String(uid || '').trim();
+    if (!safeUid) return null;
+    try {
+      const raw = localStorage.getItem(`checkout_verified_player:${String(gid || '').trim()}:${safeUid}`) || '';
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || String(parsed.uid || '').trim() !== safeUid) return null;
+      if (String(parsed.gid || '').trim() !== String(gid || '').trim()) return null;
+      return {
+        uid: safeUid,
+        zid: String(parsed.zid || '').trim(),
+        nick: String(parsed.nick || '').trim(),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function getEffectivePlayerContext() {
+    const uid = String(qCid || '').trim();
+    const explicitZid = String(qZid || '').trim();
+    const explicitNick = String(qNick || '').trim();
+    const stored = getStoredVerifiedPlayerContext(uid);
+    const zid = explicitZid || (stored ? stored.zid : '');
+    const nick = explicitNick || getStoredVerifiedNick(uid, zid) || (stored ? stored.nick : '');
+    return { uid, zid, nick };
+  }
+
   // Render basic game block immediately to avoid waiting for fetches
   (function initialHeader(){
     if (!coTotal) return;
     const qs0 = new URLSearchParams(window.location.search);
     const qCid0 = (qs0.get('cid') || '').trim();
-    const qNick0 = (qs0.get('nn') || '').trim();
-    const qZid0 = (qs0.get('zid') || '').trim();
+    const initialCtx = qCid0 ? getEffectivePlayerContext() : { uid: '', zid: '', nick: '' };
     const leftImg = gimg ? `<img class="co-summary-art" src="${gimg}" alt="${gname || 'Juego'}">` : '';
     const gameLabel = gname ? `<div class="co-summary-game">${gname}</div>` : '';
     let playerMeta = '';
     if (!directToPin && qCid0) {
-      let nn0 = qNick0;
-      if (!nn0) {
-        nn0 = getStoredVerifiedNick(qCid0, qZid0);
-      }
-      const idLabel0 = qZid0 ? 'ID/Zona ID' : 'ID';
-      const idValue0 = qZid0 ? `${qCid0}/${qZid0}` : qCid0;
+      const nn0 = initialCtx.nick || '';
+      const zid0 = initialCtx.zid || '';
+      const idLabel0 = zid0 ? 'ID/Zona ID' : 'ID';
+      const idValue0 = zid0 ? `${qCid0}/${zid0}` : qCid0;
       const idLine = `<div class="co-summary-id">${idLabel0}: ${idValue0}</div>`;
       const nameLine = nn0 ? `<div class="co-summary-nick">Nick: ${nn0}</div>` : '';
       playerMeta = `
@@ -540,13 +566,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Build player meta block (ID + Nick) only if CID is present (skip for gift cards)
     let playerMeta = '';
-    const uid = (qCid || '').trim();
+    const playerCtx = getEffectivePlayerContext();
+    const uid = playerCtx.uid;
     if (!directToPin && uid) {
-      let nn = (qNick || '').trim();
-      const zid = (qZid || '').trim();
-      if (!nn && uid) {
-        nn = getStoredVerifiedNick(uid, zid);
-      }
+      const nn = playerCtx.nick || '';
+      const zid = playerCtx.zid || '';
       const safeName = nn || '';
       const nameLine = safeName ? `<div class="co-summary-nick">Nick: ${safeName}</div>` : '';
       const idLabel = zid ? 'ID/Zona ID' : 'ID';
@@ -1050,10 +1074,11 @@ document.addEventListener('DOMContentLoaded', () => {
           releaseCheckoutRequest();
           return;
         }
-        const customer_id = qs.get('cid') || '';
-        const customer_zone = qs.get('zid') || '';
+        const playerCtx = getEffectivePlayerContext();
+        const customer_id = playerCtx.uid || '';
+        const customer_zone = playerCtx.zid || '';
         const nn = (function() {
-          if (qNick) return qNick;
+          if (playerCtx.nick) return playerCtx.nick;
           const uid = customer_id;
           if (!uid) return '';
           return getStoredVerifiedNick(uid, customer_zone || '');
@@ -1155,10 +1180,11 @@ document.addEventListener('DOMContentLoaded', () => {
         releaseCheckoutRequest();
         return;
       }
-      const customer_id = qs.get('cid') || '';
-      const customer_zone = qs.get('zid') || '';
+      const playerCtx = getEffectivePlayerContext();
+      const customer_id = playerCtx.uid || '';
+      const customer_zone = playerCtx.zid || '';
       const nn = (function() {
-        if (qNick) return qNick;
+        if (playerCtx.nick) return playerCtx.nick;
         const uid = customer_id;
         if (!uid) return '';
         return getStoredVerifiedNick(uid, customer_zone || '');
