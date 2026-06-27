@@ -4,17 +4,14 @@
 <link rel="stylesheet" href="{{ static_url('css/store.css') }}">
 <style>
   /* ======================================================
-     CHECKOUT — NEON CYAN REDESIGN
+     CHECKOUT â€” MATTE EMERALD GAMING REDESIGN
      Mantiene IDs y clases originales (JS depende de ellas)
+     Acento: #15c26b sobre charcoal #0f0f10 / cards #161618
      ====================================================== */
   body {
-    background-color: #030303 !important;
+    background-color: #0f0f10 !important;
     background-image:
-      linear-gradient(rgba(18,18,18,0.95), rgba(3,3,3,0.98)),
-      radial-gradient(circle at 50% 0%, rgba(6,182,212,0.10), transparent 60%),
-      linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px) !important;
-    background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px !important;
+      radial-gradient(circle at 50% 0%, rgba(21,194,107,0.06), transparent 55%) !important;
     background-attachment: fixed !important;
     color: #e5e7eb;
   }
@@ -22,7 +19,7 @@
   .co-wrap {
     max-width: 760px;
     margin: 0 auto;
-    padding: 20px 14px 36px;
+    padding: 18px 14px 36px;
     position: relative;
     z-index: 1;
   }
@@ -33,54 +30,48 @@
     align-items: center;
     justify-content: center;
     gap: 10px;
-    color: #64748b;
-    font-size: 10px;
-    font-weight: 700;
+    color: #6b7280;
+    font-size: 9px;
+    font-weight: 800;
     letter-spacing: .28em;
     text-transform: uppercase;
-    margin: -6px 0 16px;
+    margin: -4px 0 14px;
   }
   .co-subtitle-dot {
     width: 4px;
     height: 4px;
     border-radius: 999px;
-    background: rgba(6,182,212,0.6);
-    box-shadow: 0 0 6px rgba(6,182,212,0.5);
+    background: #15c26b;
+    box-shadow: 0 0 6px rgba(21,194,107,0.6);
   }
 
   /* ---------- Cards comunes ---------- */
   .co-banner,
   .co-card,
   #co-disc-note {
-    background: rgba(11,11,11,0.82);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: #161618;
     color: #f8fafc;
-    border: 1px solid rgba(6,182,212,0.22);
-    border-radius: 16px;
-    padding: 18px;
-    margin-bottom: 14px;
-    box-shadow: 0 0 18px rgba(6,182,212,0.10), 0 12px 30px rgba(0,0,0,0.45);
-    transition: border-color .2s ease, box-shadow .2s ease;
+    border: 1px solid #27272a;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    transition: border-color .2s ease;
   }
-  .co-banner:hover,
-  .co-card:hover {
-    border-color: rgba(6,182,212,0.35);
-    box-shadow: 0 0 22px rgba(6,182,212,0.18), 0 14px 34px rgba(0,0,0,0.5);
-  }
+  .co-banner:hover, .co-card:hover { border-color: #3f3f46; }
   .co-banner[hidden] { display: none !important; }
 
-  /* ---------- Headers de sección dentro de las cards ---------- */
+  /* ---------- Headers de seccion ---------- */
   .co-card h3 {
-    margin: 0 0 14px;
-    color: #94a3b8;
+    margin: 0 0 12px;
+    color: #9ca3af;
     font-weight: 700;
-    font-size: 12px;
-    letter-spacing: .18em;
+    font-size: 11px;
+    letter-spacing: .16em;
     text-transform: uppercase;
     text-align: left;
     padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -90,101 +81,71 @@
     width: 6px;
     height: 6px;
     border-radius: 999px;
-    background: #06b6d4;
-    box-shadow: 0 0 8px #06b6d4;
+    background: #15c26b;
+    box-shadow: 0 0 6px rgba(21,194,107,0.7);
   }
 
-  /* ---------- Resumen de compra (co-banner) ---------- */
-  .co-summary {
-    display: grid;
-    gap: 12px;
-  }
+  /* ---------- Resumen de compra (compacto horizontal) ---------- */
+  .co-summary { display: grid; gap: 8px; }
   .co-summary-head {
     width: 100%;
     display: grid;
-    grid-template-columns: 92px 1px minmax(0, 1fr);
-    gap: 18px;
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    gap: 14px;
     align-items: center;
-    justify-content: center;
   }
-  .co-summary-media {
-    display: grid;
-    justify-items: center;
-    gap: 8px;
-  }
-  .co-summary-mid-divider {
-    width: 1px;
-    height: 82px;
-    border-radius: 999px;
-    background: linear-gradient(
-      to bottom,
-      rgba(6,182,212,0),
-      rgba(6,182,212,0.10),
-      rgba(6,182,212,0.35),
-      rgba(6,182,212,0.10),
-      rgba(6,182,212,0)
-    );
-    justify-self: center;
-  }
+  .co-summary-media { display: grid; justify-items: center; gap: 4px; }
+  .co-summary-mid-divider { display: none; }
   .co-summary-copy {
     display: grid;
-    gap: 5px;
-    text-align: center;
-    justify-items: center;
+    gap: 3px;
+    text-align: left;
+    justify-items: start;
     min-width: 0;
   }
   .co-summary-art {
-    width: 68px;
-    height: 68px;
+    width: 56px;
+    height: 56px;
     object-fit: cover;
-    border-radius: 14px;
-    border: 1px solid rgba(6,182,212,0.25);
-    box-shadow: 0 8px 22px rgba(0,0,0,0.45), 0 0 14px rgba(6,182,212,0.15);
+    border-radius: 10px;
+    border: 1px solid #27272a;
   }
   .co-summary-game {
-    font-size: 11px;
+    font-size: 9px;
     line-height: 1.15;
     font-weight: 700;
-    color: #06b6d4;
+    color: #9ca3af;
     text-align: center;
-    max-width: 90px;
+    max-width: 60px;
     letter-spacing: .12em;
     text-transform: uppercase;
   }
   .co-summary-item {
-    font-size: 17px;
+    font-size: 14px;
     line-height: 1.2;
-    font-weight: 900;
+    font-weight: 800;
     color: #ffffff;
-    letter-spacing: .01em;
   }
-  .co-summary-meta {
-    display: grid;
-    gap: 3px;
-    justify-items: center;
-  }
+  .co-summary-meta { display: grid; gap: 1px; justify-items: start; }
   .co-summary-nick {
-    color: #34d399;
-    font-size: 12px;
+    color: #15c26b;
+    font-size: 11px;
     font-weight: 700;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   .co-summary-id {
-    color: #cbd5e1;
-    font-size: 12px;
+    color: #d1d5db;
+    font-size: 11px;
     font-weight: 600;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   .co-summary-divider {
     width: 100%;
     height: 1px;
-    background: rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.04);
+    margin: 4px 0 0;
   }
-  .co-summary-body {
-    width: 100%;
-    display: grid;
-    gap: 6px;
-  }
+  .co-summary-body { width: 100%; display: grid; gap: 4px; }
   .co-summary-row {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -192,154 +153,126 @@
     align-items: center;
   }
   .co-summary-row--total {
-    margin-top: 4px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(6,182,212,0.15);
+    margin-top: 2px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.04);
   }
   .co-summary-label {
-    color: #94a3b8;
-    font-size: 12px;
+    color: #9ca3af;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .08em;
     text-align: left;
   }
   .co-summary-value {
-    color: #f8fafc;
-    font-size: 14px;
-    font-weight: 800;
+    color: #e5e7eb;
+    font-size: 13px;
+    font-weight: 700;
     text-align: right;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
-  .co-summary-value--muted {
-    color: #64748b;
-    text-decoration: line-through;
-  }
-  .co-summary-value--discount {
-    color: #f43f5e;
-  }
+  .co-summary-value--muted { color: #6b7280; text-decoration: line-through; font-weight: 500; }
+  .co-summary-value--discount { color: #f43f5e; }
   .co-summary-value--total {
-    color: #10b981;
-    font-size: 24px;
+    color: #15c26b;
+    font-size: 20px;
     font-weight: 900;
     line-height: 1;
-    text-shadow: 0 0 12px rgba(16,185,129,0.25);
   }
   .co-summary-empty {
-    color: #94a3b8;
-    font-size: 14px;
-    font-weight: 700;
+    color: #9ca3af;
+    font-size: 13px;
+    font-weight: 600;
     text-align: center;
     padding: 8px 0;
   }
 
-  /* ---------- Comprobante / referencia extraída ---------- */
+  /* ---------- Comprobante / referencia extraida ---------- */
   .capture-ref-box {
-    margin: 0 0 14px;
-    border-radius: 12px;
-    border: 1px solid rgba(16,185,129,0.32);
-    background: rgba(6,78,59,0.18);
-    padding: 12px 14px;
+    margin: 0 0 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(21,194,107,0.3);
+    background: rgba(21,194,107,0.06);
+    padding: 10px 12px;
     text-align: center;
   }
   .capture-ref-box[hidden] { display: none !important; }
   .capture-ref-label {
-    color: #a7f3d0;
-    font-size: 11px;
+    color: #6ee7b7;
+    font-size: 10px;
     font-weight: 800;
     letter-spacing: .14em;
     text-transform: uppercase;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
   .capture-ref-value {
     color: #f8fafc;
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 900;
     line-height: 1.1;
     word-break: break-word;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
-  .capture-ref-box--loading {
-    border-color: rgba(245,158,11,0.38);
-    background: rgba(120,53,15,0.18);
-  }
+  .capture-ref-box--loading { border-color: rgba(245,158,11,0.38); background: rgba(120,53,15,0.18); }
   .capture-ref-box--loading .capture-ref-label { color: #fbbf24; }
-  .capture-ref-box--error {
-    border-color: rgba(239,68,68,0.34);
-    background: rgba(127,29,29,0.18);
-  }
+  .capture-ref-box--error { border-color: rgba(239,68,68,0.34); background: rgba(127,29,29,0.18); }
   .capture-ref-box--error .capture-ref-label { color: #fca5a5; }
-  .capture-ref-hint {
-    color: #94a3b8;
-    font-size: 12px;
-    margin-top: 6px;
-    line-height: 1.45;
-  }
+  .capture-ref-hint { color: #9ca3af; font-size: 11px; margin-top: 4px; line-height: 1.4; }
 
   /* ---------- Información de pago ---------- */
-  #co-info { display:grid; gap:12px; }
+  #co-info { display: grid; gap: 10px; }
   .co-info-shell {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 148px;
-    gap: 14px;
+    grid-template-columns: minmax(0, 1fr) 132px;
+    gap: 12px;
     align-items: stretch;
     width: 100%;
   }
-  .co-info-list {
-    display: grid;
-    gap: 10px;
-    min-width: 0;
-  }
+  .co-info-list { display: grid; gap: 8px; min-width: 0; }
   .co-item {
     display: grid;
-    grid-template-columns: 36px 1fr auto;
+    grid-template-columns: 32px 1fr auto;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    background: rgba(255,255,255,0.02);
-    border: 1px solid rgba(255,255,255,0.05);
-    border-radius: 12px;
+    gap: 10px;
+    padding: 9px 10px;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid #27272a;
+    border-radius: 10px;
     transition: background .15s ease, border-color .15s ease;
   }
-  .co-item:hover {
-    background: rgba(6,182,212,0.04);
-    border-color: rgba(6,182,212,0.18);
-  }
+  .co-item:hover { background: rgba(0,0,0,0.45); border-color: #3f3f46; }
   .co-ico {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: rgba(6,182,212,0.1);
-    border: 1px solid rgba(6,182,212,0.2);
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(21,194,107,0.10);
+    border: 1px solid rgba(21,194,107,0.25);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #06b6d4;
+    color: #15c26b;
   }
   .co-val {
-    color: #e2e8f0;
+    color: #e5e7eb;
     font-weight: 700;
-    font-size: 13px;
+    font-size: 12px;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   .copy-btn {
-    border: 1px solid rgba(6,182,212,0.25);
-    background: rgba(6,182,212,0.08);
-    color: #67e8f9;
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 11px;
+    border: 1px solid #3f3f46;
+    background: rgba(255,255,255,0.04);
+    color: #d1d5db;
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-size: 10px;
     font-weight: 700;
     cursor: pointer;
     letter-spacing: .04em;
     text-transform: uppercase;
     transition: all .15s ease;
   }
-  .copy-btn:hover {
-    background: rgba(6,182,212,0.18);
-    border-color: rgba(6,182,212,0.45);
-    color: #ffffff;
-  }
+  .copy-btn:hover { background: rgba(21,194,107,0.12); border-color: rgba(21,194,107,0.5); color: #15c26b; }
 
   /* ---------- QR ---------- */
   .co-qr-card {
@@ -347,23 +280,20 @@
     gap: 6px;
     justify-items: center;
     align-content: center;
-    width: 148px;
+    width: 132px;
     justify-self: end;
-    padding: 12px;
+    padding: 10px;
     min-height: 100%;
-    border: 1px solid rgba(6,182,212,0.18);
-    border-radius: 12px;
-    background: rgba(255,255,255,0.02);
+    border: 1px solid #27272a;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.25);
     box-sizing: border-box;
     transition: transform .25s ease, border-color .2s ease;
   }
-  .co-qr-card:hover {
-    transform: translateY(-1px);
-    border-color: rgba(6,182,212,0.4);
-  }
+  .co-qr-card:hover { transform: translateY(-1px); border-color: rgba(21,194,107,0.4); }
   .co-qr-title {
-    color: #94a3b8;
-    font-size: 10px;
+    color: #9ca3af;
+    font-size: 9px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: .14em;
@@ -372,7 +302,7 @@
   .co-qr-trigger {
     display: block;
     width: 100%;
-    max-width: 112px;
+    max-width: 100px;
     border: none;
     background: transparent;
     padding: 0;
@@ -383,11 +313,10 @@
     width: 100%;
     aspect-ratio: 1 / 1;
     object-fit: contain;
-    border-radius: 10px;
+    border-radius: 6px;
     background: #ffffff;
-    padding: 6px;
+    padding: 4px;
     box-sizing: border-box;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
   }
   .co-qr-modal {
     position: fixed;
@@ -396,7 +325,7 @@
     display: none;
     align-items: center;
     justify-content: center;
-    background: rgba(2, 6, 23, 0.85);
+    background: rgba(0,0,0,0.85);
     padding: 18px;
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
@@ -405,31 +334,30 @@
   .co-qr-modal.is-open { display: flex; }
   .co-qr-modal-card {
     width: min(92vw, 520px);
-    background: #0b0b0b;
-    border: 1px solid rgba(6,182,212,0.3);
-    border-radius: 18px;
-    padding: 22px;
+    background: #161618;
+    border: 1px solid #27272a;
+    border-radius: 14px;
+    padding: 20px;
     position: relative;
-    box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 30px rgba(6,182,212,0.15);
   }
   .co-qr-modal-close {
     position: absolute;
     top: 10px;
     right: 10px;
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid #3f3f46;
     background: rgba(255,255,255,0.04);
-    color: #e2e8f0;
+    color: #e5e7eb;
     cursor: pointer;
   }
   .co-qr-modal-title {
     color: #f8fafc;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 800;
     text-align: center;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     letter-spacing: .04em;
     text-transform: uppercase;
   }
@@ -439,167 +367,188 @@
     object-fit: contain;
     display: block;
     margin: 0 auto;
-    border-radius: 16px;
+    border-radius: 12px;
     background: #ffffff;
-    padding: 14px;
+    padding: 12px;
     box-sizing: border-box;
   }
 
-  /* ---------- Dropzone del comprobante ---------- */
-  .proof-card h3 { display: none; }
-  .proof-card::before {
-    content: 'Comprobante de pago';
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 14px;
-    color: #94a3b8;
-    font-weight: 700;
-    font-size: 12px;
-    letter-spacing: .18em;
-    text-transform: uppercase;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-  }
-  .proof-dropzone-title { color: #06b6d4; }
+  /* ---------- Tarjeta final (timer + grid 2col + warning + botón) ---------- */
+  .co-final-card { padding: 18px; }
 
-  /* ---------- Timer y formulario ---------- */
   #co-timer {
     text-align: center;
     font-weight: 900;
-    font-size: 22px;
-    color: #f43f5e;
+    font-size: 20px;
+    color: #15c26b;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: .12em;
-    padding: 12px;
-    margin-bottom: 14px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    text-shadow: 0 0 10px rgba(244,63,94,0.3);
-    animation: pulse-timer 2s ease-in-out infinite;
+    letter-spacing: .14em;
+    padding: 4px 0 12px;
+    margin: 0 0 14px;
+    border-bottom: 1px solid #27272a;
+    animation: pulse-timer 2.4s ease-in-out infinite;
+  }
+  .co-timer-label {
+    display: block;
+    color: #6b7280;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+    font-family: 'Inter', sans-serif;
   }
   @keyframes pulse-timer {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.75; }
   }
 
-  /* ---------- Form: referencia, email, teléfono ---------- */
-  .co-actions { margin-top: 4px; }
-  .co-actions .btn { width: 100%; }
-
-  .ref-group {
+  .co-form-grid {
     display: grid;
-    gap: 8px;
-    justify-items: center;
-    margin-bottom: 14px;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 0;
   }
-  .ref-label-row {
+  .co-form-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+  .co-form-block { display: block; }
+  .co-form-label {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 8px;
-    margin-bottom: 4px;
-  }
-  .ref-label {
-    color: #06b6d4 !important;
-    font-weight: 800 !important;
-    font-size: 11px !important;
-    letter-spacing: .18em !important;
-    text-transform: uppercase !important;
-    margin: 0 !important;
-  }
-  .ref-counter-text {
-    color: #94a3b8;
-    font-size: 12px;
-    text-align: center;
-    margin-top: 0;
+    justify-content: space-between;
+    color: #9ca3af;
+    font-size: 9px;
     font-weight: 700;
-    min-width: 22px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .co-form-label-req {
+    color: #15c26b;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .12em;
+  }
+  .co-form-label-opt {
+    color: #6b7280;
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: none;
+  }
+
+  /* ---------- Dropzone del comprobante (inline en col izq) ---------- */
+  .proof-card { display: contents; }
+  .proof-card h3 { display: none; }
+  .proof-card::before { display: none; }
+  .proof-warning {
+    margin: 12px 0 4px;
+    padding: 10px 12px 0;
+    text-align: center;
+    font-size: 10px;
+    color: rgba(21,194,107,0.9);
+    line-height: 1.5;
+    border-top: 1px solid #27272a;
+  }
+  .proof-warning strong {
+    color: #15c26b;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    font-weight: 800;
+    margin-right: 4px;
+  }
+  .proof-dropzone-title { color: #15c26b !important; font-size: 12px !important; }
+
+  /* ---------- Form: referencia, email, teléfono ---------- */
+  .ref-group { display: block; margin: 0; }
+  .ref-label-row { display: none !important; }
+  .ref-label { display: none !important; }
+  .ref-counter-text {
+    color: #6b7280;
+    font-size: 10px;
+    text-align: right;
+    margin-top: 4px;
+    font-weight: 700;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
-  .ref-input-wrap {
-    position: relative;
-    width: 100%;
-    max-width: 480px;
-    margin: 0 auto;
-  }
+  .ref-input-wrap { position: relative; width: 100%; margin: 0; }
   #co-ref.input {
     width: 100%;
     box-sizing: border-box;
-    padding: 13px 16px;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-    background: #070707;
+    padding: 11px 14px;
+    border: 1px solid #27272a;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.4);
     color: #ffffff;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 14px;
-    letter-spacing: .12em;
+    font-size: 12px;
+    letter-spacing: .14em;
     text-align: center;
     outline: none;
     transition: border-color .15s ease, box-shadow .15s ease;
   }
-  #co-ref.input::placeholder {
-    color: #4b5563;
-    font-size: 12px;
-    letter-spacing: .08em;
-  }
+  #co-ref.input::placeholder { color: #4b5563; font-size: 11px; letter-spacing: .08em; }
   #co-ref.input:focus {
-    border-color: rgba(6,182,212,0.5);
-    box-shadow: 0 0 0 3px rgba(6,182,212,0.18);
+    border-color: rgba(21,194,107,0.5);
+    box-shadow: 0 0 0 3px rgba(21,194,107,0.18);
   }
 
   .checkout-contact-fields {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 10px;
-    margin: 0 0 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0;
   }
   .checkout-contact-fields .input {
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    padding: 13px 14px;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-    background: #070707;
+    padding: 11px 14px;
+    border: 1px solid #27272a;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.4);
     color: #ffffff;
-    font-size: 13px;
+    font-size: 12px;
     outline: none;
     transition: border-color .15s ease, box-shadow .15s ease;
   }
   .checkout-contact-fields .input::placeholder { color: #4b5563; }
   .checkout-contact-fields .input:focus {
-    border-color: rgba(6,182,212,0.5);
-    box-shadow: 0 0 0 3px rgba(6,182,212,0.18);
+    border-color: rgba(21,194,107,0.5);
+    box-shadow: 0 0 0 3px rgba(21,194,107,0.18);
   }
-
   .checkout-contact-fields .phone-field {
-    height: 48px;
-    background: #070707;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
+    height: 42px;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid #27272a;
+    border-radius: 10px;
     overflow: hidden;
     display: flex;
     align-items: center;
     transition: border-color .15s ease, box-shadow .15s ease;
   }
   .checkout-contact-fields .phone-field:focus-within {
-    border-color: rgba(6,182,212,0.5);
-    box-shadow: 0 0 0 3px rgba(6,182,212,0.18);
+    border-color: rgba(21,194,107,0.5);
+    box-shadow: 0 0 0 3px rgba(21,194,107,0.18);
   }
   .checkout-contact-fields .phone-cc-btn {
-    padding: 0 12px;
-    border-right: 1px solid rgba(255,255,255,0.06);
-    background: #0c0c0c;
-    color: #94a3b8;
-    font-size: 12px;
+    padding: 0 10px;
+    border-right: 1px solid #27272a;
+    background: rgba(0,0,0,0.3);
+    color: #9ca3af;
+    font-size: 11px;
     height: 100%;
     display: flex;
     align-items: center;
     gap: 6px;
   }
   .checkout-contact-fields .phone-cc-btn img {
-    width: 18px;
-    height: 12px;
+    width: 16px;
+    height: 11px;
     border-radius: 2px;
     display: block;
     flex: 0 0 auto;
@@ -615,105 +564,75 @@
     flex: 1;
   }
   .checkout-contact-fields .phone-field .input#checkout-phone-local:focus { box-shadow: none; }
-  @media (max-width: 460px) {
-    .checkout-contact-fields .phone-prefix { flex: 0 0 auto; }
-    .checkout-contact-fields .phone-cc-btn {
-      min-width: 44px; width: 44px;
-      justify-content: center; gap: 0; padding: 0 8px;
-    }
-    .checkout-contact-fields #checkout-phone-cc-label,
-    .checkout-contact-fields .phone-cc-btn .phone-caret { display: none; }
-    .checkout-contact-fields .phone-field .input#checkout-phone-local { padding-left: 10px; }
-  }
 
-  .checkout-save-row {
-    display: flex;
-    justify-content: center;
-    margin: 4px 0 14px;
-  }
+  .checkout-save-row { display: flex; justify-content: flex-start; margin: 0; }
   .checkout-save-label {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #94a3b8;
-    font-size: 12px;
+    color: #9ca3af;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     user-select: none;
   }
-  .checkout-save-label input {
-    width: 16px;
-    height: 16px;
-    accent-color: #06b6d4;
-  }
+  .checkout-save-label input { width: 14px; height: 14px; accent-color: #15c26b; }
 
-  /* ---------- Botón confirmar ---------- */
+  /* ---------- Botón confirmar (verde sólido) ---------- */
   #btn-co-confirm,
   .btn.primary {
     width: 100%;
-    background: linear-gradient(180deg, #22d3ee 0%, #06b6d4 100%) !important;
-    color: #03212b !important;
-    font-weight: 900 !important;
+    background: #15c26b !important;
+    color: #062a17 !important;
+    font-weight: 800 !important;
     font-size: 12px !important;
-    letter-spacing: .22em !important;
+    letter-spacing: .18em !important;
     text-transform: uppercase !important;
-    padding: 16px !important;
+    padding: 14px !important;
     border: none !important;
-    border-radius: 12px !important;
+    border-radius: 10px !important;
     cursor: pointer;
-    box-shadow: 0 8px 24px rgba(6,182,212,0.25), 0 0 0 0 rgba(6,182,212,0.5);
-    transition: all .2s ease;
+    box-shadow: none;
+    transition: all .15s ease;
   }
-  #btn-co-confirm {
-    position: relative;
-    transition: all 0.3s ease;
-    margin-top: 10px;
+  #btn-co-confirm { margin-top: 12px; }
+  #btn-co-confirm:hover:not(:disabled),
+  .btn.primary:hover:not(:disabled) {
+    background: #12a35a !important;
+    filter: brightness(1.02);
   }
-  #btn-co-confirm:hover:not(:disabled) {
-    filter: brightness(1.1);
-    transform: translateY(-1px);
-  }
-  #btn-co-confirm:active:not(:disabled) { transform: scale(0.98); }
+  #btn-co-confirm:active:not(:disabled) { transform: scale(0.99); }
   #btn-co-confirm:disabled {
-    opacity: 0.4;
+    opacity: 0.5;
     cursor: not-allowed;
-    background: rgba(43,47,54,0.3) !important;
+    background: #3f3f46 !important;
     color: #6b7280 !important;
-    border: 1px dashed rgba(148,163,184,0.18) !important;
     transform: none !important;
     filter: grayscale(1);
-    box-shadow: none;
-  }
-  #btn-co-confirm:not(:disabled) {
-    animation: pulse-ready 2.5s infinite;
-  }
-  @keyframes pulse-ready {
-    0%, 100% { box-shadow: 0 8px 24px rgba(6,182,212,0.25), 0 0 0 0 rgba(6,182,212,0.45); }
-    50% { box-shadow: 0 8px 24px rgba(6,182,212,0.25), 0 0 0 10px rgba(6,182,212,0); }
   }
 
   /* ---------- Descuento ---------- */
   #co-disc-note {
     text-align: center;
-    color: #e2e8f0;
+    color: #e5e7eb;
     font-weight: 800;
     width: 100%;
     max-width: 100%;
     border-color: rgba(244,63,94,0.25);
     background: rgba(127,29,29,0.12);
   }
-  .co-disc-note { text-align: center; color: #e2e8f0; font-weight: 800; }
+  .co-disc-note { text-align: center; color: #e5e7eb; font-weight: 800; }
   .co-disc-note[hidden] { display: none; }
 
   .price-old {
     text-decoration: line-through;
-    color: rgba(148,163,184,0.6);
+    color: #6b7280;
     margin-right: 8px;
     font-weight: 700;
   }
   .price-new {
-    color: #03212b;
-    background: rgba(34,211,238,0.85);
+    color: #062a17;
+    background: #15c26b;
     padding: 2px 8px;
     border-radius: 6px;
     font-weight: 900;
@@ -721,18 +640,18 @@
   .discount-badge {
     text-decoration: line-through;
     color: #cbd5e1;
-    border: 1px solid rgba(148,163,184,0.25);
+    border: 1px solid #3f3f46;
     padding: 2px 6px;
     border-radius: 6px;
     font-weight: 800;
     margin-right: 8px;
-    background: rgba(148,163,184,0.08);
+    background: rgba(148,163,184,0.06);
   }
 
-  /* ---------- Advertencia bloqueado ---------- */
+  /* ---------- Modal bloqueado ---------- */
   .blocked-overlay {
     position: fixed; inset: 0;
-    background: rgba(2,6,23,0.75);
+    background: rgba(0,0,0,0.78);
     display: none; align-items: center; justify-content: center;
     z-index: 1000;
     backdrop-filter: blur(4px);
@@ -741,11 +660,10 @@
   .blocked-card {
     position: relative;
     width: min(92vw, 520px);
-    background: #0b0b0b;
+    background: #161618;
     border: 1px solid rgba(244,63,94,0.3);
     border-radius: 14px;
     padding: 18px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 22px rgba(244,63,94,0.15);
     color: #e5e7eb;
   }
   .blocked-close {
@@ -757,7 +675,7 @@
   .blocked-text { color: #cbd5e1; line-height: 1.45; }
   .blocked-actions { display: flex; gap: 8px; margin-top: 12px; }
   .btn-whatsapp {
-    background: #22c55e; color: #062a1d;
+    background: #15c26b; color: #062a17;
     border: none; border-radius: 10px;
     padding: 10px 12px; font-weight: 900;
     cursor: pointer; text-decoration: none;
@@ -768,25 +686,29 @@
   /* ---------- Responsive ---------- */
   @media (max-width: 700px) {
     .co-wrap { padding-left: 12px; padding-right: 12px; }
-    .co-banner, .co-card { padding: 16px; border-radius: 14px; }
-    .co-summary-head { grid-template-columns: 82px 1px minmax(0, 1fr); gap: 14px; }
-    .co-summary-mid-divider { height: 72px; }
-    .co-summary-game { font-size: 10px; max-width: 78px; }
-    .co-summary-item { font-size: 16px; }
-    .co-summary-value--total { font-size: 22px; }
-    .co-summary-art { width: 60px; height: 60px; border-radius: 12px; }
+    .co-banner, .co-card { padding: 14px; border-radius: 12px; }
+    .co-form-grid { grid-template-columns: 1fr; gap: 14px; }
+    .co-final-card { padding: 16px; }
+    .co-summary-head { grid-template-columns: 48px minmax(0,1fr) auto; gap: 12px; }
+    .co-summary-art { width: 48px; height: 48px; border-radius: 10px; }
+    .co-summary-item { font-size: 13px; }
+    .co-summary-value--total { font-size: 18px; }
   }
-  @media (max-width: 480px) {
-    .ref-input-wrap { max-width: 100%; }
-    #co-ref.input { padding: 12px 14px; font-size: 13px; }
-    .checkout-contact-fields { grid-template-columns: 1fr 1fr; gap: 8px; }
-    .checkout-contact-fields .input,
-    .checkout-contact-fields .phone-field { min-width: 0; }
-    #co-timer { font-size: 20px; }
+  @media (max-width: 460px) {
+    .checkout-contact-fields .phone-prefix { flex: 0 0 auto; }
+    .checkout-contact-fields .phone-cc-btn {
+      min-width: 44px; width: 44px;
+      justify-content: center; gap: 0; padding: 0 8px;
+    }
+    .checkout-contact-fields #checkout-phone-cc-label,
+    .checkout-contact-fields .phone-cc-btn .phone-caret { display: none; }
+    .checkout-contact-fields .phone-field .input#checkout-phone-local { padding-left: 10px; }
+    #co-timer { font-size: 18px; }
+    #co-ref.input { padding: 10px 12px; font-size: 12px; }
   }
   @media (max-width: 380px) {
     .co-info-shell { grid-template-columns: minmax(0, 1fr); }
-    .co-qr-card { justify-self: center; }
+    .co-qr-card { justify-self: center; width: 100%; max-width: 200px; }
   }
 </style>
 {% endblock %}
@@ -823,6 +745,7 @@
     <span>Pasarela de Pago Segura</span>
     <span class="co-subtitle-dot"></span>
   </div>
+
   <div class="co-banner" id="co-total">
     <div class="co-summary-empty">Cargando resumen...</div>
   </div>
@@ -841,70 +764,99 @@
     </div>
   </div>
 
-  <div class="co-card proof-card">
-    <h3>Comprobante de pago</h3>
-    <div id="captureRefBox" class="capture-ref-box" hidden>
-      <div id="captureRefLabel" class="capture-ref-label">Analizando comprobante</div>
-      <div id="captureRefValue" class="capture-ref-value">...</div>
-      <div id="captureRefHint" class="capture-ref-hint"></div>
+  <!-- TARJETA FINAL UNIFICADA: timer + 2 columnas (upload+ref | email+phone+save) + warning + botón -->
+  <div class="co-card co-final-card">
+    <div id="co-timer">
+      <span class="co-timer-label">La sesión de pago expira en</span>
+      30:00
     </div>
-    <div class="proof-dropzone" id="proofDropzone">
-      <input type="file" id="payment_capture" name="payment_capture" accept="image/*" style="display:none;">
-      <div class="proof-dropzone-inner" id="proofDropzoneInner">
-        <svg class="proof-dropzone-icon" viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#64748b;">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-        </svg>
-        <img class="proof-preview" id="proofPreview" alt="Vista previa del comprobante" style="display:none;" />
-        <div class="proof-dropzone-title">Toca para subir captura</div>
-        <div class="proof-dropzone-sub">Toca aquí para seleccionar o cambiar la imagen</div>
-        <div class="proof-file-name" id="proofFileName" style="display:none;"></div>
-      </div>
-    </div>
-    <p class="proof-warning"><strong>Leer importante:</strong> subir comprobantes falsos resultará en el bloqueo permanente de tu cuenta.</p>
-  </div>
 
-  <div class="co-card">
-    <div id="co-timer" style="text-align:center; font-weight:800;">30:00</div>
-    <div class="co-actions">
-      <div class="ref-group">
-        <div class="ref-label-row" style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:6px;">
-          <label for="co-ref" class="ref-label" style="text-align: center; font-weight: 800; margin:0;">COLOCA TU REFERENCIA AQUI</label>
-          <div class="ref-counter-text" id="ref-counter" style="text-align:center;">0</div>
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true" style="color:#94a3b8;">
-            <path d="M12 16l-6-6h12l-6 6z"/>
-          </svg>
-        </div>
-        <div class="ref-input-wrap">
-          <input id="co-ref" class="input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="NUMERO DE REFERENCIA DE PAGO" required style="text-align: center;">
-        </div>
-        <div id="ref-error" style="color: #ef4444; font-size: 12px; margin-top: 4px; display: none;"></div>
-      </div>
-      <div class="checkout-contact-fields">
-        <input id="checkout-email" class="input" type="email" placeholder="Correo" autocomplete="email">
-        <div class="phone-field">
-          <div class="phone-prefix">
-            <button id="checkout-phone-cc-btn" class="phone-cc-btn" type="button" aria-label="Código de país" aria-expanded="false">
-              <img src="https://flagcdn.com/w20/ve.png" alt="VE" width="16" height="12" loading="lazy">
-              <span id="checkout-phone-cc-label">+58</span>
-              <span class="phone-caret" aria-hidden="true">▾</span>
-            </button>
-            <div class="phone-cc-menu" id="checkout-phone-cc-menu" hidden>
-              <button type="button" data-cc="+58" data-flag="ve">🇻🇪 +58</button>
-            </div>
-            <input id="checkout-phone-cc" type="hidden" value="+58">
+    <div class="co-form-grid">
+      <!-- COL IZQ: Captura + Referencia -->
+      <div class="co-form-col">
+        <div class="co-form-block proof-card">
+          <div class="co-form-label">
+            <span>Captura de Comprobante</span>
+            <span class="co-form-label-req">Obligatorio</span>
           </div>
-          <input id="checkout-phone-local" class="input" type="tel" inputmode="tel" placeholder="Teléfono" autocomplete="tel-national">
-          <input id="checkout-phone" type="hidden">
+          <div id="captureRefBox" class="capture-ref-box" hidden>
+            <div id="captureRefLabel" class="capture-ref-label">Analizando comprobante</div>
+            <div id="captureRefValue" class="capture-ref-value">...</div>
+            <div id="captureRefHint" class="capture-ref-hint"></div>
+          </div>
+          <div class="proof-dropzone" id="proofDropzone">
+            <input type="file" id="payment_capture" name="payment_capture" accept="image/*" style="display:none;">
+            <div class="proof-dropzone-inner" id="proofDropzoneInner">
+              <svg class="proof-dropzone-icon" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#6b7280;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <img class="proof-preview" id="proofPreview" alt="Vista previa del comprobante" style="display:none;" />
+              <div class="proof-dropzone-title">Subir captura</div>
+              <div class="proof-dropzone-sub">Toca para seleccionar la imagen</div>
+              <div class="proof-file-name" id="proofFileName" style="display:none;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="co-form-block ref-group">
+          <div class="co-form-label">
+            <span>Número de referencia</span>
+            <span class="co-form-label-req">Obligatorio</span>
+          </div>
+          <div class="ref-input-wrap">
+            <input id="co-ref" class="input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="NUMERO DE REFERENCIA DE PAGO" required>
+          </div>
+          <div class="ref-counter-text" id="ref-counter">0</div>
+          <div id="ref-error" style="color: #ef4444; font-size: 11px; margin-top: 4px; display: none;"></div>
         </div>
       </div>
-      <div class="checkout-save-row">
-        <label class="checkout-save-label" for="checkout-save-contact">
-          <input id="checkout-save-contact" type="checkbox">
-          <span>Guardar datos para futuras compras</span>
-        </label>
+
+      <!-- COL DER: Email + Telefono + Save -->
+      <div class="co-form-col">
+        <div class="co-form-block">
+          <div class="co-form-label">
+            <span>Correo Electrónico</span>
+          </div>
+          <div class="checkout-contact-fields" style="display:block;">
+            <input id="checkout-email" class="input" type="email" placeholder="ejemplo@correo.com" autocomplete="email">
+          </div>
+        </div>
+
+        <div class="co-form-block">
+          <div class="co-form-label">
+            <span>Teléfono</span>
+          </div>
+          <div class="checkout-contact-fields" style="display:block;">
+            <div class="phone-field">
+              <div class="phone-prefix">
+                <button id="checkout-phone-cc-btn" class="phone-cc-btn" type="button" aria-label="Código de país" aria-expanded="false">
+                  <img src="https://flagcdn.com/w20/ve.png" alt="VE" width="16" height="12" loading="lazy">
+                  <span id="checkout-phone-cc-label">+58</span>
+                  <span class="phone-caret" aria-hidden="true">▾</span>
+                </button>
+                <div class="phone-cc-menu" id="checkout-phone-cc-menu" hidden>
+                  <button type="button" data-cc="+58" data-flag="ve">🇻🇪 +58</button>
+                </div>
+                <input id="checkout-phone-cc" type="hidden" value="+58">
+              </div>
+              <input id="checkout-phone-local" class="input" type="tel" inputmode="tel" placeholder="Teléfono" autocomplete="tel-national">
+              <input id="checkout-phone" type="hidden">
+            </div>
+          </div>
+        </div>
+
+        <div class="checkout-save-row">
+          <label class="checkout-save-label" for="checkout-save-contact">
+            <input id="checkout-save-contact" type="checkbox">
+            <span>Guardar datos para futuras compras</span>
+          </label>
+        </div>
       </div>
-      <button id="btn-co-confirm" class="btn primary" type="button" style="margin-top:10px;">Confirmar Pago</button>
     </div>
+
+    <p class="proof-warning"><strong>Importante:</strong> subir comprobantes falsos resultará en el bloqueo permanente de tu cuenta.</p>
+
+    <button id="btn-co-confirm" class="btn primary" type="button">Confirmar Pago</button>
   </div>
 </section>
 <div id="blocked-overlay" class="blocked-overlay" role="dialog" aria-modal="true" aria-labelledby="blocked-title" aria-hidden="true">
