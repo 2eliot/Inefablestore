@@ -2628,6 +2628,12 @@ def _package_effective_requires_zone(store_package_id) -> bool:
             return True
     except Exception:
         pass
+    try:
+        so_conn = SmileOneConnection.query.filter_by(store_package_id=package_id, active=True).first()
+        if so_conn and bool(getattr(so_conn, "requires_zone", False)):
+            return True
+    except Exception:
+        pass
     return False
 
 

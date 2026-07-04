@@ -1053,6 +1053,7 @@
 
             // Validar ID de jugador antes de continuar (solo para juegos mobile que no son gift card)
             let playerIdValue = '';
+            let zoneIdValue = '';
             if (currentCategory === 'mobile' && !selectedPkgDirectToPin) {
                 const idInputEl = document.getElementById('id-verification-input');
                 playerIdValue = idInputEl ? idInputEl.value.trim() : '';
@@ -1062,14 +1063,13 @@
                     return;
                 }
 
+                const zoneInputEl = document.getElementById('zone-verification-input');
+                zoneIdValue = zoneInputEl ? zoneInputEl.value.trim() : '';
+
                 // Si el paquete requiere Zone ID (ej. Mobile Legends), tambien validarlo
-                if (requiresZonePkg) {
-                    const zoneInputEl = document.getElementById('zone-verification-input');
-                    const zoneValue = zoneInputEl ? zoneInputEl.value.trim() : '';
-                    if (!zoneValue) {
-                        focusVerificationField(zoneInputEl, 'Ingresa tu Zone ID antes de continuar.');
-                        return;
-                    }
+                if (requiresZonePkg && !zoneIdValue) {
+                    focusVerificationField(zoneInputEl, 'Ingresa tu Zone ID antes de continuar.');
+                    return;
                 }
             }
 
@@ -1088,6 +1088,7 @@
             // Player ID and nickname for mobile games
             if (currentCategory === 'mobile' && !selectedPkgDirectToPin) {
                 if (playerIdValue) params.set('cid', playerIdValue);
+                if (zoneIdValue) params.set('zid', zoneIdValue);
                 if (verifiedNick) params.set('nn', verifiedNick);
             }
 
