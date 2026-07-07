@@ -650,7 +650,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </select>
             <div style="display:flex; align-items:center; gap:8px;">
               <div class="order-meta rev-map-info" data-current-mapping="${mappingJson}" style="line-height:1.45;"></div>
-              ${syncedBadge}
             </div>
             <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#cbd5e1;">
               <input type="checkbox" class="rev-auto-enabled" data-store-item-id="${it.id}" ${(mapping && mapping.auto_enabled) ? 'checked' : ''}>
