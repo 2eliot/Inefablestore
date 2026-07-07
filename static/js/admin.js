@@ -616,7 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Build rows with sync status — synced rows hidden by default
     let syncedCount = 0;
-    let html = '<div class="rev-map-summary" id="rev-map-summary" data-show-synced="false"></div>';
+    let html = '<div class="rev-map-summary" id="rev-map-summary" data-show-synced="true"></div>';
     items.forEach((it) => {
       const mapping = it.mapping || null;
       let mappedCatalogId = null;
@@ -708,7 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
       summary.setAttribute('data-show-synced', newShow ? 'true' : '');
       allRows.forEach((row) => {
         if (row.classList.contains('rev-map-synced')) {
-          row.classList.toggle('rev-map-visible', newShow);
+          row.classList.toggle('rev-map-hidden', !newShow);
         }
       });
       updateRevMapSummary();

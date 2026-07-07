@@ -413,16 +413,15 @@ body { overflow-x: hidden; }
    MAPEO REVENDEDORES — Sync status
    ============================================= */
 .rev-map-synced {
-  display: none;
-}
-.rev-map-synced.rev-map-visible {
-  display: block;
-  opacity: 0.4;
+  opacity: 0.45;
   pointer-events: none;
   transition: opacity 0.3s ease;
 }
-.rev-map-synced.rev-map-visible .row-actions > * {
+.rev-map-synced .row-actions > * {
   opacity: 0.3;
+}
+.rev-map-synced.rev-map-hidden {
+  display: none;
 }
 .rev-map-summary {
   display: flex;
