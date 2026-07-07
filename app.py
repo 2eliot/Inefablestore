@@ -19,6 +19,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import smtplib
 import threading
+import uuid
+from email.utils import formatdate, make_msgid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import secrets
@@ -1491,6 +1493,31 @@ _ensure_direct_to_pin_column()
 # ==============================
 # Email helper
 # ==============================
+# ── Email anti-spam helpers ──────────────────────────────────────
+def _friendly_from() -> str:
+    """Return a 'Name <email>' From header using the site brand."""
+    brand = get_config_value("site_name", "InefableStore")
+    return f"{brand} <{MAIL_USER}>"
+
+
+def _inject_deliverability_headers(msg) -> None:
+    """Add standard headers that improve Gmail/Outlook deliverability."""
+    if 'Message-ID' not in msg:
+        msg['Message-ID'] = make_msgid(domain=MAIL_USER.split('@')[-1] if '@' in MAIL_USER else 'inefablestore.com')
+    if 'Date' not in msg:
+        msg['Date'] = formatdate(localtime=True)
+    if 'Reply-To' not in msg:
+        msg['Reply-To'] = MAIL_USER
+    if 'X-Mailer' not in msg:
+        msg['X-Mailer'] = 'InefableStore/1.0'
+    if 'X-Auto-Response-Suppress' not in msg:
+        msg['X-Auto-Response-Suppress'] = 'OOF, AutoReply, DR, NDR, RN, NRN'
+    # Overwrite From with friendly name if it's still raw
+    if msg['From'] == MAIL_USER or not msg['From']:
+        msg.replace_header('From', _friendly_from())
+    # Make sure To is preserved
+
+
 def _smtp_send_starttls(msg, to_email):
     # STARTTLS on port (default 587)
     with smtplib.SMTP(MAIL_SMTP_HOST, MAIL_SMTP_PORT, timeout=15) as server:
@@ -1517,6 +1544,7 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
         msg['From'] = MAIL_USER
         msg['To'] = to_email
         msg['Subject'] = subject
+        _inject_deliverability_headers(msg)
         msg.attach(MIMEText(body or "", 'plain'))
         try:
             _smtp_send_starttls(msg, to_email)
@@ -1553,6 +1581,7 @@ def send_email_html(to_email: str, subject: str, html_body: str, text_body: str 
         msg['From'] = MAIL_USER
         msg['To'] = to_email
         msg['Subject'] = subject
+        _inject_deliverability_headers(msg)
         if text_body:
             msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
         msg.attach(MIMEText(html_body or "", 'html', 'utf-8'))
