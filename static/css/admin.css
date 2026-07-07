@@ -410,63 +410,18 @@ body { overflow-x: hidden; }
 }
 
 /* =============================================
-   MAPEO REVENDEDORES — Sync status
+   MAPEO REVENDEDORES — Synced badge
    ============================================= */
-.rev-map-synced {
-  opacity: 0.45;
-  pointer-events: none;
-  transition: opacity 0.3s ease;
-}
-.rev-map-synced .row-actions > * {
-  opacity: 0.3;
-}
-.rev-map-synced.rev-map-hidden {
-  display: none;
-}
-.rev-map-summary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: rgba(3,7,18,0.4);
-  border: 1px solid rgba(148,163,184,0.15);
-  border-radius: 10px;
-  margin-bottom: 14px;
-  font-size: 13px;
-  color: #94a3b8;
-}
-.rev-map-summary strong {
-  color: #e2e8f0;
-}
-.rev-map-summary .badge-synced {
+.rev-sync-badge {
+  display: inline-block;
   background: #10b98122;
   color: #10b981;
-  padding: 2px 10px;
-  border-radius: 999px;
+  font-size: 11px;
   font-weight: 700;
-  font-size: 12px;
-}
-.rev-map-summary .badge-pending {
-  background: #f59e0b22;
-  color: #f59e0b;
-  padding: 2px 10px;
+  padding: 1px 8px;
   border-radius: 999px;
-  font-weight: 700;
-  font-size: 12px;
-}
-.rev-toggle-synced {
-  margin-left: auto;
-  font-size: 12px;
-  color: #5A4FCF;
-  cursor: pointer;
-  background: none;
-  border: 1px solid #5A4FCF44;
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-weight: 600;
-}
-.rev-toggle-synced:hover {
-  background: #5A4FCF22;
+  margin-left: 8px;
+  vertical-align: middle;
 }
 .btn + .btn { margin-left: 8px; }
 .btn:disabled { cursor: not-allowed; opacity: 0.6; }

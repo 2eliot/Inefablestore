@@ -614,9 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Build rows with sync status — synced rows hidden by default
-    let syncedCount = 0;
-    let html = '<div class="rev-map-summary" id="rev-map-summary" data-show-synced="true"></div>';
+    let html = '';
     items.forEach((it) => {
       const mapping = it.mapping || null;
       let mappedCatalogId = null;
@@ -632,15 +630,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       const isSynced = !!(mapping && mappedCatalogId);
-      if (isSynced) syncedCount++;
       const mappingJson = escapeAdminHtml(JSON.stringify(mapping || null));
-      const syncedClass = isSynced ? ' rev-map-synced' : '';
+      const syncedBadge = isSynced ? '<span class="rev-sync-badge">✓ Sincronizado</span>' : '';
 
       html += `
-        <div class="order-card rev-map-row${syncedClass}" data-store-item-id="${it.id}">
+        <div class="order-card rev-map-row" data-store-item-id="${it.id}">
           <div class="order-head">
             <div>
-              <div class="order-id">${it.title || ('Item #' + it.id)}</div>
+              <div class="order-id">${it.title || ('Item #' + it.id)} ${syncedBadge}</div>
               <div class="order-meta">
                 <span>ID ${it.id}</span>
                 <span>USD ${Number(it.price || 0).toFixed(2)}</span>
@@ -684,34 +681,6 @@ document.addEventListener('DOMContentLoaded', () => {
         catalogSelect.style.display = '';
       }
       renderRevCatalogMappingInfo(row, catalogSelect ? catalogSelect.value : '');
-    });
-
-    updateRevMapSummary();
-  }
-
-  function updateRevMapSummary() {
-    const summary = document.getElementById('rev-map-summary');
-    if (!summary) return;
-    const allRows = document.querySelectorAll('.rev-map-row');
-    const total = allRows.length;
-    const synced = document.querySelectorAll('.rev-map-row.rev-map-synced').length;
-    const pending = total - synced;
-    const showSynced = summary.getAttribute('data-show-synced') === 'true';
-    summary.innerHTML = `
-      <span class="badge-pending">${pending} pendientes</span>
-      <span class="badge-synced">${synced} sincronizados</span>
-      <span><strong>${total}</strong> total</span>
-      <button type="button" class="rev-toggle-synced">${showSynced ? 'Ocultar sincronizados' : 'Ver sincronizados'}</button>
-    `;
-    summary.querySelector('.rev-toggle-synced')?.addEventListener('click', () => {
-      const newShow = summary.getAttribute('data-show-synced') !== 'true';
-      summary.setAttribute('data-show-synced', newShow ? 'true' : '');
-      allRows.forEach((row) => {
-        if (row.classList.contains('rev-map-synced')) {
-          row.classList.toggle('rev-map-hidden', !newShow);
-        }
-      });
-      updateRevMapSummary();
     });
   }
 
@@ -1415,13 +1384,6 @@ window.fetchPayments = fetchPayments;
 
       if (target instanceof HTMLSelectElement && target.classList.contains('rev-catalog-select')) {
         renderRevCatalogMappingInfo(row, target.value || '');
-        // Mark/unmark as synced when catalog changes
-        if (target.value) {
-          row.classList.add('rev-map-synced');
-        } else {
-          row.classList.remove('rev-map-synced');
-        }
-        updateRevMapSummary();
         return;
       }
 
