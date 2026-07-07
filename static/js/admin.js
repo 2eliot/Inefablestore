@@ -1420,6 +1420,9 @@ window.fetchPayments = fetchPayments;
         btnRevSave.disabled = true;
         await saveRevMappings();
         toast('Mapeo guardado');
+        if (revStorePackage && revStorePackage.value) {
+          await fetchRevMappingData(revStorePackage.value);
+        }
         await fetchRevMappingData(revStorePackage ? revStorePackage.value : '');
       } catch (e) {
         toast(e.message || 'Error al guardar mapeo');
