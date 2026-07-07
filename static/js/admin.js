@@ -614,7 +614,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    let html = '';
+    // Build rows with sync status — synced rows hidden by default
+    let syncedCount = 0;
+    let html = '<div class="rev-map-summary" id="rev-map-summary" data-show-synced="false"></div>';
     items.forEach((it) => {
       const mapping = it.mapping || null;
       let mappedCatalogId = null;
@@ -629,10 +631,13 @@ document.addEventListener('DOMContentLoaded', () => {
           mappedGameName = (found.remote_product_name || '').trim() || 'Otro';
         }
       }
+      const isSynced = !!(mapping && mappedCatalogId);
+      if (isSynced) syncedCount++;
       const mappingJson = escapeAdminHtml(JSON.stringify(mapping || null));
+      const syncedClass = isSynced ? ' rev-map-synced' : '';
 
       html += `
-        <div class="order-card rev-map-row" data-store-item-id="${it.id}">
+        <div class="order-card rev-map-row${syncedClass}" data-store-item-id="${it.id}">
           <div class="order-head">
             <div>
               <div class="order-id">${it.title || ('Item #' + it.id)}</div>
@@ -680,6 +685,34 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       renderRevCatalogMappingInfo(row, catalogSelect ? catalogSelect.value : '');
     });
+
+    updateRevMapSummary();
+  }
+
+  function updateRevMapSummary() {
+    const summary = document.getElementById('rev-map-summary');
+    if (!summary) return;
+    const allRows = document.querySelectorAll('.rev-map-row');
+    const total = allRows.length;
+    const synced = document.querySelectorAll('.rev-map-row.rev-map-synced').length;
+    const pending = total - synced;
+    const showSynced = summary.getAttribute('data-show-synced') === 'true';
+    summary.innerHTML = `
+      <span class="badge-pending">${pending} pendientes</span>
+      <span class="badge-synced">${synced} sincronizados</span>
+      <span><strong>${total}</strong> total</span>
+      <button type="button" class="rev-toggle-synced">${showSynced ? 'Ocultar sincronizados' : 'Ver sincronizados'}</button>
+    `;
+    summary.querySelector('.rev-toggle-synced')?.addEventListener('click', () => {
+      const newShow = summary.getAttribute('data-show-synced') !== 'true';
+      summary.setAttribute('data-show-synced', newShow ? 'true' : '');
+      allRows.forEach((row) => {
+        if (row.classList.contains('rev-map-synced')) {
+          row.classList.toggle('rev-map-visible', newShow);
+        }
+      });
+      updateRevMapSummary();
+    });
   }
 
   // Helper: populate a catalog select with packages for a specific game
@@ -718,13 +751,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const chk = row.querySelector('.rev-auto-enabled');
       const directChk = row.querySelector('.rev-direct-script');
       const directToScript = !!(directChk && directChk.checked);
+      const catalogId = sel ? (sel.value || '') : '';
       return {
         store_item_id: storeItemId,
-        catalog_id: sel ? (sel.value || '') : '',
+        catalog_id: catalogId,
         auto_enabled: !!(chk && chk.checked) || directToScript,
         direct_to_script: directToScript,
       };
-    }).filter((x) => x.store_item_id > 0);
+    }).filter((x) => x.store_item_id > 0 && x.catalog_id); // only save rows that have a catalog selected — preserve others
 
     const res = await fetch('/admin/revendedores/mappings/bulk', {
       method: 'POST',
@@ -1358,11 +1392,36 @@ window.fetchPayments = fetchPayments;
           }
         }
         renderRevCatalogMappingInfo(row, catalogSelect ? catalogSelect.value : '');
+        // Sync the same game filter to ALL other rows in the same package
+        const allRows = revMapList.querySelectorAll('.rev-map-row');
+        allRows.forEach((otherRow) => {
+          if (otherRow === row) return;
+          const otherGameSelect = otherRow.querySelector('.rev-game-filter');
+          const otherCatalogSelect = otherRow.querySelector('.rev-catalog-select');
+          if (!otherGameSelect || !otherCatalogSelect) return;
+          if (otherGameSelect.value === gameName) return; // already same
+          otherGameSelect.value = gameName;
+          if (gameName) {
+            populateCatalogSelect(otherCatalogSelect, gameName, remoteCatalog);
+            otherCatalogSelect.style.display = '';
+          } else {
+            otherCatalogSelect.style.display = 'none';
+            otherCatalogSelect.innerHTML = '<option value="">Manual (sin mapeo automático)</option>';
+          }
+          renderRevCatalogMappingInfo(otherRow, otherCatalogSelect.value || '');
+        });
         return;
       }
 
       if (target instanceof HTMLSelectElement && target.classList.contains('rev-catalog-select')) {
         renderRevCatalogMappingInfo(row, target.value || '');
+        // Mark/unmark as synced when catalog changes
+        if (target.value) {
+          row.classList.add('rev-map-synced');
+        } else {
+          row.classList.remove('rev-map-synced');
+        }
+        updateRevMapSummary();
         return;
       }
 

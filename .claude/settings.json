@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile app.py)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'fix\\(index\\): forward zone id to checkout URL and detect SmileOne zone requirement *)",
+      "Read(//c/Users/user/.ssh/**)",
+      "Bash(git push *)",
+      "Bash(ssh -o BatchMode=yes -o ConnectTimeout=10 socialcircle-vps \"ls -d /var/www/* /root/* /home/*/* 2>/dev/null | grep -i inefable; pgrep -af gunicorn | head -5\")",
+      "Bash(ssh -o BatchMode=yes socialcircle-vps \"find / -maxdepth 4 -iname '*inefable*' -not -path '/proc/*' 2>/dev/null | head -20; echo ---; docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | head -20\")",
+      "Bash(nslookup inefablestor.com)",
+      "Bash(nslookup www.inefablestor.com)",
+      "Bash(ssh -o BatchMode=yes -o ConnectTimeout=10 root@187.124.144.222 \"hostname; ls -d /root/* /var/www/* /home/* 2>/dev/null | head -20\")",
+      "Bash(ssh -o BatchMode=yes root@187.124.144.222 \"ls /home/apps 2>/dev/null; echo ---; pgrep -af 'gunicorn' | grep -v grep | head -8\")",
+      "Bash(ssh -o BatchMode=yes root@187.124.144.222 \"cd /home/apps/web-a-inefablestore && git remote -v && git log --oneline -3 && git status --short | head -20\")",
+      "Bash(ssh -o BatchMode=yes root@187.124.144.222 \"cd /home/apps/web-a-inefablestore && git pull origin main && git log --oneline -1\")",
+      "Bash(ssh -o BatchMode=yes root@187.124.144.222 'PID=$\\(pgrep -f '\\\\''gunicorn.*web-a-inefablestore'\\\\'' -o\\); echo master PID: $PID; kill -HUP $PID && sleep 2 && pgrep -f '\\\\''gunicorn.*web-a-inefablestore'\\\\'' | wc -l && curl -s -o /dev/null -w '\\\\''%{http_code}'\\\\'' http://127.0.0.1:5000/')",
+      "Bash(ssh -o BatchMode=yes root@187.124.144.222 \"pgrep -af '[g]unicorn' | grep inefablestore; echo ---; curl -s -o /dev/null -w '%{http_code}\\\\n' http://127.0.0.1:5000/\")",
+      "Bash(ssh -o BatchMode=yes root@187.124.144.222 'MPID=$\\(pgrep -f '\\\\''[g]unicorn -w 2 -b 127.0.0.1:5000'\\\\'' -o\\); echo master: $MPID; kill -HUP $MPID; sleep 3; pgrep -af '\\\\''[g]unicorn -w 2 -b 127.0.0.1:5000'\\\\''; curl -s -o /dev/null -w '\\\\''health: %{http_code}\\\\n'\\\\'' http://127.0.0.1:5000/')",
+      "Bash(curl -s https://inefablestor.com/)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}\\\\n' https://inefablestor.com/)"
+    ]
+  }
+}

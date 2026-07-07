@@ -1,0 +1,908 @@
+import os
+
+html = r'''<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ site_name|default('InefableStore') }} - Recargas y Tarjetas de Regalo</title>
+    <link rel="icon" href="{{ url_for('static', filename='561553627_18409264204136226_1099017029378111495_n.ico') }}" type="image/x-icon">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='561553627_18409264204136226_1099017029378111495_n.ico') }}" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0c0c0e; }
+        .color-dark-bg { background-color: #121214; }
+        .color-card-bg { background-color: #1a1a1e; }
+        .color-border { border-color: #2a2a30; }
+        .bg-gradient-verde {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 50%, #16a34a 100%);
+        }
+        .text-neon-verde {
+            color: #4ade80;
+            text-shadow: 0 0 10px rgba(74, 222, 128, 0.2);
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .transition-all-custom {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="text-gray-100 flex flex-col min-h-screen">
+
+    <!-- HEADER -->
+    <header class="sticky top-0 z-50 bg-[#0c0c0e]/95 backdrop-blur-md border-b border-[#222226] px-4 py-3">
+        <div class="max-w-md md:max-w-2xl mx-auto flex flex-col items-center justify-center">
+            {% if logo_url %}
+            <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="h-10 object-contain mb-1">
+            {% else %}
+            <h1 class="text-xl md:text-2xl font-black tracking-widest text-white flex items-center gap-1.5">
+                INEFABLE <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 font-extrabold">STORE</span>
+            </h1>
+            {% endif %}
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="flex-grow max-w-md md:max-w-2xl w-full mx-auto px-4 py-5 space-y-6">
+
+        <!-- CARRUSEL PROMOCIONAL -->
+        <section class="relative overflow-hidden rounded-2xl bg-[#141418] h-32 flex items-center justify-center border border-[#222226]">
+            <div class="absolute inset-0 flex transition-transform duration-500" id="image-carousel">
+                <div class="carousel-slide min-w-full h-full bg-gradient-to-r from-emerald-950/40 via-emerald-900/10 to-[#0c0c0e] flex items-center justify-between p-6 shrink-0">
+                    <div>
+                        <p class="text-[10px] text-emerald-400 font-extrabold uppercase tracking-widest mb-1">PROMO EXCLUSIVA</p>
+                        <h3 class="text-base font-black text-white">Recargas al Instante</h3>
+                        <p class="text-[11px] text-gray-400 mt-0.5">Entrega inmediata en tu juego favorito</p>
+                    </div>
+                    <div class="w-16 h-16 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-500/5">
+                        <i class="fa-solid fa-gem text-3xl"></i>
+                    </div>
+                </div>
+                <div class="carousel-slide min-w-full h-full bg-gradient-to-r from-yellow-950/30 via-[#141418] to-[#0c0c0e] flex items-center justify-between p-6 shrink-0 hidden">
+                    <div>
+                        <p class="text-[10px] text-yellow-500 font-extrabold uppercase tracking-widest mb-1">NUEVO PRODUCTO</p>
+                        <h3 class="text-base font-black text-white">Tarjetas de Regalo</h3>
+                        <p class="text-[11px] text-gray-400 mt-0.5">Codigos digitales al instante</p>
+                    </div>
+                    <div class="w-16 h-16 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-500 border border-yellow-500/20 shadow-lg shadow-yellow-500/5">
+                        <i class="fa-solid fa-gift text-3xl"></i>
+                    </div>
+                </div>
+            </div>
+            <button onclick="prevSlide()" class="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/40 hover:bg-black/75 flex items-center justify-center text-white text-xs transition-all border border-[#222226]">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <button onclick="nextSlide()" class="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/40 hover:bg-black/75 flex items-center justify-center text-white text-xs transition-all border border-[#222226]">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <div class="absolute bottom-2 flex gap-1.5" id="carousel-dots">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span class="w-1.5 h-1.5 rounded-full bg-gray-600"></span>
+            </div>
+        </section>
+
+        <!-- SELECTOR DE CATEGORIAS -->
+        <section class="color-card-bg p-1.5 rounded-2xl flex border border-[#222226] shadow-md shadow-black/20">
+            <button id="tab-juegos" onclick="setCategory('mobile')" class="flex-1 py-3 text-xs md:text-sm font-bold rounded-xl transition-all-custom flex items-center justify-center gap-2 bg-gradient-verde text-[#0c0c0e] shadow-lg shadow-emerald-500/20">
+                <i class="fa-solid fa-gamepad"></i>Juegos
+            </button>
+            <button id="tab-tarjetas" onclick="setCategory('gift')" class="flex-1 py-3 text-xs md:text-sm font-semibold rounded-xl transition-all-custom flex items-center justify-center gap-2 text-gray-400 hover:text-white">
+                <i class="fa-solid fa-credit-card"></i>Tarjetas
+            </button>
+        </section>
+
+        <!-- CARRUSEL DE JUEGOS/TARJETAS (Horizontal) -->
+        <section class="space-y-3">
+            <div class="flex justify-between items-center px-1">
+                <h2 class="text-[11px] font-bold uppercase tracking-wider text-gray-400">Selecciona el Producto</h2>
+                <span class="text-[10px] text-emerald-400/80 italic">Desliza para ver mas <i class="fa-solid fa-chevron-right text-[8px]"></i></span>
+            </div>
+            <div id="mosaic-container" class="flex gap-3 overflow-x-auto pb-2 pt-1 no-scrollbar snap-x">
+                <!-- Se llena dinamicamente -->
+            </div>
+        </section>
+
+        <!-- FORMULARIO DE VERIFICACION DE ID (oculto en Tarjetas) -->
+        <section id="verification-section" class="space-y-2 bg-[#141418] p-4 rounded-2xl border border-[#222226]">
+            <div class="flex justify-between items-center px-1">
+                <label id="verification-label" class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">ID de Jugador</label>
+            </div>
+            <div class="flex gap-2">
+                <input type="text" id="id-verification-input" placeholder="Ingresa tu ID de jugador" class="flex-grow bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <button onclick="verifyId()" id="btn-verify-id" class="px-5 py-2.5 bg-gradient-verde text-[#0c0c0e] font-black text-xs rounded-xl tracking-wider uppercase transition-all-custom shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/25 active:scale-[0.98]">
+                    Verificar
+                </button>
+            </div>
+            <div id="verification-status" class="hidden text-[11px] font-semibold flex items-center gap-1.5 px-1">
+            </div>
+        </section>
+
+        <!-- DESPLIEGUE DE PAQUETES -->
+        <section class="space-y-3">
+            <div class="flex justify-between items-center px-1">
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                    Paquetes de <span id="selected-item-name" class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-400">---</span>
+                </h2>
+                <span class="text-[11px] text-emerald-400 bg-emerald-950/30 px-2 py-0.5 rounded-md border border-emerald-900/50">Entrega Inmediata</span>
+            </div>
+            <div id="packages-container" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <!-- Paquetes dinamicos -->
+            </div>
+        </section>
+
+        <!-- CODIGO DE DESCUENTO (solo Tarjetas) -->
+        <section id="discount-section" class="space-y-2 bg-[#141418] p-4 rounded-2xl border border-[#222226] hidden">
+            <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider px-1">Tienes un codigo de descuento?</label>
+            <div class="flex gap-2">
+                <input type="text" id="discount-code-input" placeholder="Ingresa tu codigo" class="flex-grow bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all uppercase">
+                <button onclick="applyDiscountCode()" id="btn-discount" class="px-5 py-2.5 bg-emerald-950/50 border border-emerald-500/30 text-emerald-400 font-black text-xs rounded-xl tracking-wider uppercase transition-all-custom hover:bg-emerald-500/10">
+                    Aplicar
+                </button>
+            </div>
+            <div id="discount-status" class="hidden text-[11px] font-semibold flex items-center gap-1.5 px-1">
+            </div>
+        </section>
+
+        <!-- RESUMEN DE COMPRA -->
+        <section class="space-y-3">
+            <div class="flex items-center gap-2 px-1">
+                <span class="w-1 h-5 bg-emerald-400 rounded-full"></span>
+                <h2 class="text-xs md:text-sm font-black uppercase tracking-wider text-white italic">
+                    Resumen de <span class="text-emerald-400 font-extrabold text-neon-verde">Venta</span>
+                </h2>
+            </div>
+            <div class="bg-[#141418] border border-[#222226] rounded-2xl p-4 space-y-4 shadow-xl">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0c0c0e]/80 p-3.5 rounded-xl border border-[#1e1e24] transition-all duration-300">
+                    <div class="flex items-center gap-3">
+                        <div id="summary-game-badge" class="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-600 to-amber-500 flex items-center justify-center text-[10px] font-black text-white shadow-lg transition-transform duration-300">
+                            ---
+                        </div>
+                        <div>
+                            <h4 id="summary-game-name" class="font-extrabold text-xs md:text-sm text-white italic tracking-wide uppercase">---</h4>
+                            <div class="flex items-center gap-1.5 mt-1 text-xs text-gray-400 font-semibold">
+                                <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full shadow-sm shadow-cyan-400/50"></span>
+                                <span id="summary-package-qty" class="text-gray-300">---</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#222226]/50">
+                        <span class="text-[9px] font-extrabold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                            Combos <span id="summary-combos-badge" class="bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded text-[8px] font-bold">x1</span>
+                        </span>
+                        <div class="flex items-center bg-[#0c0c0e] border border-[#222226] rounded-xl p-1 shadow-inner">
+                            <button onclick="changeQuantity(-1)" class="w-7 h-7 flex items-center justify-center rounded-lg bg-[#161619] text-gray-400 hover:text-white hover:bg-red-950/40 transition-all text-xs font-black select-none">-</button>
+                            <span id="summary-quantity-val" class="w-9 text-center text-xs font-black text-white italic">1</span>
+                            <button onclick="changeQuantity(1)" class="w-7 h-7 flex items-center justify-center rounded-lg bg-[#161619] text-gray-400 hover:text-white hover:bg-emerald-950/40 transition-all text-xs font-black select-none">+</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 pt-2 border-t border-[#222226]/50 text-xs items-center">
+                    <div class="space-y-0.5">
+                        <span class="text-[9px] text-gray-500 uppercase font-black tracking-wider">Subtotal</span>
+                        <p id="summary-subtotal" class="font-bold text-gray-300">Bs. -- <span class="text-gray-500 font-normal">($-- USD)</span></p>
+                    </div>
+                    <div class="flex flex-col items-end justify-center">
+                        <span class="text-[9px] text-gray-500 uppercase font-black tracking-wider mb-0.5">Total a Pagar</span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[10px] text-emerald-400 font-extrabold">Bs.</span>
+                            <span id="summary-total-bs" class="text-lg md:text-xl font-black text-white tracking-tight leading-none">--</span>
+                            <span id="summary-total-usd" class="text-[9px] text-gray-400 font-medium ml-0.5">($--)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- BOTON SIGUIENTE -->
+        <section class="pt-2">
+            <button onclick="openCheckoutModal()" class="w-full bg-gradient-verde text-[#0c0c0e] font-black py-4 px-6 rounded-2xl shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/25 active:scale-[0.98] transition-all-custom text-center text-sm tracking-widest uppercase flex items-center justify-center gap-2">
+                Siguiente <i class="fa-solid fa-chevron-right text-base"></i>
+            </button>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-[#070709] border-t border-[#1a1a1e] text-gray-400 text-xs py-10 px-4 mt-12">
+        <div class="max-w-md md:max-w-2xl mx-auto space-y-8">
+            <div class="text-center space-y-3">
+                <p class="text-gray-300 leading-relaxed text-sm max-w-sm mx-auto">
+                    Tu tienda de confianza para recargas de juegos, Gift Cards y productos digitales. Entrega inmediata y segura.
+                </p>
+                <div class="flex justify-center gap-3 pt-1">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#121214] text-[11px] text-emerald-400 border border-emerald-950/60 font-semibold">
+                        <i class="fa-solid fa-shield-halved"></i> Compra Segura
+                    </span>
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#121214] text-[11px] text-emerald-400 border border-emerald-950/60 font-semibold">
+                        <i class="fa-solid fa-headset"></i> Soporte 24/7
+                    </span>
+                </div>
+            </div>
+            <hr class="border-[#1a1a1e]">
+            <div class="text-center space-y-4">
+                <div class="space-y-1">
+                    <h4 class="font-bold text-white uppercase tracking-widest text-[10px] text-emerald-400">Contacto y Soporte</h4>
+                    <p class="text-gray-200 text-sm font-medium hover:text-emerald-400 transition-colors">
+                        <i class="fa-regular fa-envelope mr-1.5 text-emerald-500"></i>soporte@inefablestore.com
+                    </p>
+                </div>
+                <div>
+                    <a href="https://wa.me/584125712917" target="_blank" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-emerald-400 font-bold hover:bg-emerald-500/10 transition-all text-xs">
+                        <i class="fa-brands fa-whatsapp text-lg"></i> CONTACTAR POR WHATSAPP
+                    </a>
+                </div>
+            </div>
+            <div class="text-center pt-4 border-t border-[#121214] flex flex-col md:flex-row justify-between items-center gap-2 text-gray-600 text-[10px]">
+                <span>&copy; 2026 {{ site_name|default('InefableStore') }}. Todos los derechos reservados.</span>
+                <a href="/terms" class="hover:text-emerald-400 underline transition-colors">Terminos y Condiciones</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- MODAL DE CHECKOUT -->
+    <div id="checkout-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm hidden">
+        <div class="color-card-bg border border-[#2a2a30] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl transition-all transform scale-95 opacity-0 duration-300" id="modal-content">
+            <div class="p-5 border-b border-[#222226] flex justify-between items-center bg-gradient-to-r from-emerald-950/20 to-transparent">
+                <h3 class="font-black text-white tracking-wide text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-circle-check text-emerald-400"></i> DETALLES DE COMPRA
+                </h3>
+                <button onclick="closeCheckoutModal()" class="text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div class="space-y-3 bg-[#121214] p-4 rounded-xl border border-[#222226]">
+                    <div class="flex justify-between items-center text-xs text-gray-400">
+                        <span>Producto:</span>
+                        <span id="modal-product" class="text-white font-bold">---</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-gray-400">
+                        <span>Cantidad / Combo:</span>
+                        <span id="modal-package" class="text-white font-bold">---</span>
+                    </div>
+                    <hr class="border-[#222226]">
+                    <div class="flex justify-between items-center text-sm font-black">
+                        <span class="text-gray-300">Total a pagar:</span>
+                        <span id="modal-price" class="text-emerald-400 text-sm">---</span>
+                    </div>
+                </div>
+                <!-- Campos de contacto -->
+                <div class="space-y-1.5">
+                    <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">Correo electronico:</label>
+                    <input type="email" id="checkout-email" placeholder="tucorreo@email.com" class="w-full bg-[#121214] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                </div>
+                <div class="space-y-1.5">
+                    <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">Telefono:</label>
+                    <input type="text" id="checkout-phone" placeholder="+58 412 1234567" class="w-full bg-[#121214] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                </div>
+                <div class="space-y-1.5" id="checkout-id-section">
+                    <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider" id="checkout-id-label">ID de Jugador:</label>
+                    <input type="text" id="checkout-player-id" placeholder="Ej: 472938102" class="w-full bg-[#121214] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                </div>
+                <div class="space-y-1.5" id="checkout-ref-section">
+                    <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">Referencia de pago:</label>
+                    <input type="text" id="checkout-reference" placeholder="Ultimos 4 digitos del comprobante" class="w-full bg-[#121214] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                </div>
+                <div class="space-y-1.5">
+                    <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">Metodo de pago:</label>
+                    <div class="flex gap-2">
+                        <select id="checkout-currency" class="flex-1 bg-[#121214] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none transition-all">
+                            <option value="BSD">Bs. (Pago Movil / Transferencia)</option>
+                            <option value="USD">USD (Zelle / PayPal)</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="checkout-loading" class="hidden text-center py-4">
+                    <i class="fa-solid fa-spinner animate-spin text-emerald-400 text-2xl"></i>
+                    <p class="text-xs text-gray-400 mt-2">Procesando pedido...</p>
+                </div>
+            </div>
+            <div class="p-5 border-t border-[#222226] bg-[#121214]/50 flex gap-2">
+                <button onclick="closeCheckoutModal()" class="flex-1 py-2.5 text-xs font-bold text-gray-400 hover:text-white bg-[#222226] rounded-xl transition-all">
+                    Cancelar
+                </button>
+                <button onclick="submitOrder()" id="btn-submit-order" class="flex-1 py-2.5 text-xs font-bold text-[#0c0c0e] bg-gradient-verde rounded-xl transition-all shadow-lg shadow-emerald-500/20 hover:brightness-110">
+                    Confirmar Pedido
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast-success" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-950/95 border-2 border-emerald-500 text-emerald-400 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold transition-all transform translate-y-12 opacity-0">
+        <i class="fa-solid fa-circle-check text-base"></i>
+        <span id="toast-message">Operacion realizada con exito!</span>
+    </div>
+
+    <!-- SCRIPT PRINCIPAL -->
+    <script>
+        // ============ ESTADO GLOBAL ============
+        let currentCategory = 'mobile';        // 'mobile' | 'gift'
+        let currentSelectedPkgId = null;       // store_package_id seleccionado
+        let selectedItemId = null;             // game_package (item) seleccionado
+        let selectedPkgDirectToPin = false;    // el paquete es gift card (direct_to_pin)?
+        let purchaseQuantity = 1;
+        let exchangeRateBs = 45.0;
+        let allPackages = { mobile: [], gift: [] };
+        let currentItems = [];
+        let isIdVerified = false;
+        let verifiedNick = '';
+        let discountPercent = 0;
+        let currentSlide = 0;
+
+        // Colores y gradientes predefinidos para mosaicos (asignados por indice)
+        const GAME_GRADIENTS = [
+            'from-orange-600 to-amber-500',
+            'from-red-600 to-red-800',
+            'from-blue-600 to-indigo-800',
+            'from-emerald-600 to-cyan-500',
+            'from-purple-600 to-pink-500',
+            'from-yellow-600 to-yellow-800',
+            'from-zinc-800 to-zinc-600',
+            'from-green-600 to-teal-500',
+            'from-cyan-600 to-blue-500',
+            'from-rose-600 to-pink-600',
+        ];
+
+        // ============ API FETCHS ============
+        async function fetchJSON(url, options) {
+            const resp = await fetch(url, options);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            return await resp.json();
+        }
+
+        async function loadAllData() {
+            try {
+                const [mobileData, giftData, rateData] = await Promise.all([
+                    fetchJSON('/store/packages?category=mobile'),
+                    fetchJSON('/store/packages?category=gift'),
+                    fetchJSON('/store/rate'),
+                ]);
+                allPackages.mobile = (mobileData.packages || []).filter(p => p.active !== false);
+                allPackages.gift = (giftData.packages || []).filter(p => p.active !== false);
+
+                if (rateData.rate_bsd_per_usd) {
+                    exchangeRateBs = parseFloat(rateData.rate_bsd_per_usd);
+                }
+
+                if (allPackages.mobile.length > 0) {
+                    await selectPackageItem(allPackages.mobile[0].id);
+                } else {
+                    renderCategoryMosaics();
+                }
+            } catch (e) {
+                console.error('Error cargando datos:', e);
+                showToast('Error al cargar productos. Recarga la pagina.', true);
+            }
+        }
+
+        async function selectPackageItem(pkgId) {
+            currentSelectedPkgId = pkgId;
+            try {
+                const data = await fetchJSON('/store/package/' + pkgId + '/items');
+                if (data.ok) {
+                    currentItems = data.items || [];
+                    selectedPkgDirectToPin = !!data.direct_to_pin;
+
+                    if (currentItems.length > 0) {
+                        selectedItemId = currentItems[0].id;
+                    } else {
+                        selectedItemId = null;
+                    }
+
+                    updateVerificationVisibility();
+                    updateDiscountVisibility();
+                    renderSelectedPackages();
+                    updatePurchaseSummary();
+                    renderCategoryMosaics();
+                }
+            } catch (e) {
+                console.error('Error cargando items:', e);
+                currentItems = [];
+                renderSelectedPackages();
+            }
+        }
+
+        // ============ CATEGORIAS ============
+        function setCategory(category) {
+            currentCategory = category;
+            const tabJuegos = document.getElementById('tab-juegos');
+            const tabTarjetas = document.getElementById('tab-tarjetas');
+
+            if (category === 'mobile') {
+                tabJuegos.className = "flex-1 py-3 text-xs md:text-sm font-bold rounded-xl transition-all-custom flex items-center justify-center gap-2 bg-gradient-verde text-[#0c0c0e] shadow-lg shadow-emerald-500/20";
+                tabTarjetas.className = "flex-1 py-3 text-xs md:text-sm font-semibold rounded-xl transition-all-custom flex items-center justify-center gap-2 text-gray-400 hover:text-white";
+                if (allPackages.mobile.length > 0) {
+                    selectPackageItem(allPackages.mobile[0].id);
+                }
+            } else {
+                tabTarjetas.className = "flex-1 py-3 text-xs md:text-sm font-bold rounded-xl transition-all-custom flex items-center justify-center gap-2 bg-gradient-verde text-[#0c0c0e] shadow-lg shadow-emerald-500/20";
+                tabJuegos.className = "flex-1 py-3 text-xs md:text-sm font-semibold rounded-xl transition-all-custom flex items-center justify-center gap-2 text-gray-400 hover:text-white";
+                if (allPackages.gift.length > 0) {
+                    selectPackageItem(allPackages.gift[0].id);
+                }
+            }
+
+            purchaseQuantity = 1;
+            isIdVerified = false;
+            discountPercent = 0;
+            document.getElementById('summary-quantity-val').innerText = '1';
+            document.getElementById('summary-combos-badge').innerText = 'x1';
+            document.getElementById('verification-status').classList.add('hidden');
+            document.getElementById('discount-status').classList.add('hidden');
+            document.getElementById('discount-code-input').value = '';
+            document.getElementById('id-verification-input').value = '';
+        }
+
+        function updateVerificationVisibility() {
+            const section = document.getElementById('verification-section');
+            if (currentCategory === 'gift' || selectedPkgDirectToPin) {
+                section.classList.add('hidden');
+            } else {
+                section.classList.remove('hidden');
+                const pkg = getCurrentPackage();
+                const label = document.getElementById('verification-label');
+                if (pkg) {
+                    label.innerText = 'ID de Jugador (' + pkg.name + ')';
+                    document.getElementById('id-verification-input').placeholder = 'Ingresa tu ID de ' + pkg.name;
+                }
+            }
+        }
+
+        function updateDiscountVisibility() {
+            const section = document.getElementById('discount-section');
+            if (currentCategory === 'gift' || selectedPkgDirectToPin) {
+                section.classList.remove('hidden');
+            } else {
+                section.classList.add('hidden');
+            }
+        }
+
+        function getCurrentPackage() {
+            const pkgs = currentCategory === 'mobile' ? allPackages.mobile : allPackages.gift;
+            return pkgs.find(p => p.id === currentSelectedPkgId) || null;
+        }
+
+        function getCurrentItem() {
+            return currentItems.find(it => it.id === selectedItemId) || null;
+        }
+
+        // ============ RENDER MOSAICOS ============
+        function renderCategoryMosaics() {
+            const container = document.getElementById('mosaic-container');
+            const pkgs = currentCategory === 'mobile' ? allPackages.mobile : allPackages.gift;
+            container.innerHTML = '';
+
+            pkgs.forEach((pkg, idx) => {
+                const isSelected = pkg.id === currentSelectedPkgId;
+                const borderClass = isSelected ? 'border-2 border-emerald-400 scale-105' : 'border border-[#222226] opacity-60 hover:opacity-100';
+
+                let short = pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase();
+                if (!short) short = pkg.name.substring(0, 3).toUpperCase();
+
+                const card = document.createElement('div');
+                card.className = 'snap-start shrink-0 w-28 bg-[#161619] ' + borderClass + ' p-3 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition-all-custom transform';
+                card.onclick = function() { selectPackageItem(pkg.id); };
+
+                const grad = GAME_GRADIENTS[idx % GAME_GRADIENTS.length];
+                card.innerHTML = '<div class="w-10 h-10 bg-gradient-to-br ' + grad + ' rounded-xl flex items-center justify-center text-[10px] font-black text-white mb-2 shadow-md shadow-black/40">' + short + '</div><span class="text-[10px] font-extrabold block truncate w-full tracking-wide text-white">' + pkg.name + '</span>';
+                container.appendChild(card);
+            });
+        }
+
+        // ============ RENDER PAQUETES ============
+        function renderSelectedPackages() {
+            const pkg = getCurrentPackage();
+            const titleSpan = document.getElementById('selected-item-name');
+            if (pkg) {
+                titleSpan.innerText = pkg.name;
+            }
+
+            const container = document.getElementById('packages-container');
+            container.innerHTML = '';
+
+            if (!selectedItemId || !currentItems.length) {
+                container.innerHTML = '<p class="text-gray-500 text-xs col-span-full text-center py-4">Cargando paquetes...</p>';
+                return;
+            }
+
+            currentItems.forEach((item) => {
+                const isSelected = item.id === selectedItemId;
+                const borderClass = isSelected
+                    ? 'border-2 border-emerald-400 bg-[#141418] shadow-md shadow-emerald-500/5'
+                    : 'border border-[#222226] hover:border-emerald-500/30';
+
+                const card = document.createElement('div');
+                card.className = 'group ' + borderClass + ' rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all-custom select-none';
+                card.onclick = function() {
+                    selectedItemId = item.id;
+                    renderSelectedPackages();
+                    updatePurchaseSummary();
+                };
+
+                const extra = item.sticker || item.subtitle || '';
+                let checkBadge = '';
+                if (isSelected) {
+                    checkBadge = '<span class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full border border-[#161619] flex items-center justify-center shadow"><i class="fa-solid fa-check text-[6px] text-[#0c0c0e] font-black"></i></span>';
+                }
+                let extraHtml = '';
+                if (extra) {
+                    extraHtml = '<div class="mt-2.5 px-3 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-900/30 text-emerald-400 text-[10px] font-extrabold tracking-wide text-center">' + extra + '</div>';
+                }
+
+                card.innerHTML = '<div class="flex items-center justify-center gap-2"><span class="font-extrabold text-base text-white group-hover:text-emerald-400 transition-colors leading-none tracking-wide">' + item.title + '</span><div class="shrink-0 w-7 h-7 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400 border border-emerald-500/20 shadow-sm relative"><i class="fa-solid fa-gem text-[10px]"></i>' + checkBadge + '</div></div>' + extraHtml;
+
+                container.appendChild(card);
+            });
+        }
+
+        // ============ VERIFICACION DE ID ============
+        async function verifyId() {
+            const idInput = document.getElementById('id-verification-input').value.trim();
+            const statusDiv = document.getElementById('verification-status');
+            const btn = document.getElementById('btn-verify-id');
+
+            if (idInput === "") {
+                showToast("Por favor, ingresa tu ID primero.", true);
+                return;
+            }
+
+            btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i>';
+            btn.disabled = true;
+
+            try {
+                const pkg = getCurrentPackage();
+                const resp = await fetch('/store/validate-player?gid=' + (pkg ? pkg.id : '') + '&uid=' + encodeURIComponent(idInput));
+                const data = await resp.json();
+
+                btn.innerHTML = 'Verificar';
+                btn.disabled = false;
+
+                if (data.ok && data.nick) {
+                    isIdVerified = true;
+                    verifiedNick = data.nick;
+                    statusDiv.className = "text-[11px] font-semibold flex items-center gap-1.5 px-1 text-emerald-400";
+                    statusDiv.innerHTML = '<i class="fa-solid fa-circle-check"></i> Verificado: <span class="text-white">' + verifiedNick + '</span>';
+                    statusDiv.classList.remove('hidden');
+                    showToast("ID verificado correctamente.");
+                } else {
+                    if (/^\d+$/.test(idInput)) {
+                        isIdVerified = true;
+                        verifiedNick = 'Jugador ' + idInput;
+                        statusDiv.className = "text-[11px] font-semibold flex items-center gap-1.5 px-1 text-emerald-400";
+                        statusDiv.innerHTML = '<i class="fa-solid fa-circle-check"></i> ID: <span class="text-white">' + idInput + '</span>';
+                        statusDiv.classList.remove('hidden');
+                        showToast("ID aceptado.");
+                    } else {
+                        showToast("El ID debe ser numerico.", true);
+                    }
+                }
+            } catch (e) {
+                btn.innerHTML = 'Verificar';
+                btn.disabled = false;
+
+                if (/^\d+$/.test(idInput)) {
+                    isIdVerified = true;
+                    verifiedNick = 'Jugador ' + idInput;
+                    statusDiv.className = "text-[11px] font-semibold flex items-center gap-1.5 px-1 text-emerald-400";
+                    statusDiv.innerHTML = '<i class="fa-solid fa-circle-check"></i> ID: <span class="text-white">' + idInput + '</span>';
+                    statusDiv.classList.remove('hidden');
+                    showToast("ID aceptado.");
+                } else {
+                    showToast("Error al verificar. Intenta de nuevo.", true);
+                }
+            }
+        }
+
+        // ============ CODIGO DE DESCUENTO ============
+        async function applyDiscountCode() {
+            const codeInput = document.getElementById('discount-code-input').value.trim().toUpperCase();
+            const statusDiv = document.getElementById('discount-status');
+            const btn = document.getElementById('btn-discount');
+
+            if (!codeInput) {
+                showToast("Ingresa un codigo primero.", true);
+                return;
+            }
+
+            btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i>';
+            btn.disabled = true;
+
+            try {
+                const resp = await fetchJSON('/store/validate-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: codeInput, package_id: currentSelectedPkgId }),
+                });
+                btn.innerHTML = 'Aplicar';
+                btn.disabled = false;
+
+                if (resp.ok && resp.discount_percent) {
+                    discountPercent = parseFloat(resp.discount_percent);
+                    statusDiv.className = "text-[11px] font-semibold flex items-center gap-1.5 px-1 text-emerald-400";
+                    statusDiv.innerHTML = '<i class="fa-solid fa-circle-check"></i> Codigo aplicado! <span class="text-white">' + discountPercent + '% descuento</span>';
+                    statusDiv.classList.remove('hidden');
+                    updatePurchaseSummary();
+                    showToast(discountPercent + '% de descuento aplicado!');
+                } else {
+                    discountPercent = 0;
+                    statusDiv.className = "text-[11px] font-semibold flex items-center gap-1.5 px-1 text-red-400";
+                    statusDiv.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Codigo invalido o expirado';
+                    statusDiv.classList.remove('hidden');
+                    showToast("Codigo invalido o expirado.", true);
+                }
+            } catch (e) {
+                btn.innerHTML = 'Aplicar';
+                btn.disabled = false;
+                showToast("Error al validar codigo.", true);
+            }
+        }
+
+        // ============ RESUMEN DE COMPRA ============
+        function changeQuantity(amount) {
+            purchaseQuantity += amount;
+            if (purchaseQuantity < 1) purchaseQuantity = 1;
+            if (purchaseQuantity > 10) purchaseQuantity = 10;
+
+            document.getElementById('summary-quantity-val').innerText = purchaseQuantity;
+            document.getElementById('summary-combos-badge').innerText = 'x' + purchaseQuantity;
+            updatePurchaseSummary();
+        }
+
+        function updatePurchaseSummary() {
+            const pkg = getCurrentPackage();
+            const item = getCurrentItem();
+
+            if (!pkg || !item) {
+                document.getElementById('summary-game-badge').innerText = '---';
+                document.getElementById('summary-game-name').innerText = '---';
+                document.getElementById('summary-package-qty').innerText = '---';
+                document.getElementById('summary-subtotal').innerHTML = 'Bs. -- <span class="text-gray-500 font-normal">($-- USD)</span>';
+                document.getElementById('summary-total-bs').innerText = '--';
+                document.getElementById('summary-total-usd').innerText = '($--)';
+                return;
+            }
+
+            const badge = document.getElementById('summary-game-badge');
+            const pkgIdx = allPackages[currentCategory].findIndex(p => p.id === pkg.id);
+            const seq = pkgIdx >= 0 ? pkgIdx : 0;
+            const grad = GAME_GRADIENTS[seq % GAME_GRADIENTS.length];
+            badge.className = 'w-11 h-11 rounded-xl bg-gradient-to-br ' + grad + ' flex items-center justify-center text-[10px] font-black text-white shadow-lg';
+
+            let short = pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase();
+            if (!short) short = pkg.name.substring(0, 3).toUpperCase();
+            badge.innerText = short;
+
+            document.getElementById('summary-game-name').innerText = pkg.name;
+            let qtyText = item.title;
+            if (item.subtitle) qtyText += ' (' + item.subtitle + ')';
+            document.getElementById('summary-package-qty').innerText = qtyText;
+
+            const basePrice = parseFloat(item.price || 0);
+            let totalUSD = basePrice * purchaseQuantity;
+
+            if (discountPercent > 0) {
+                totalUSD = totalUSD * (1 - discountPercent / 100);
+            }
+
+            const totalBs = totalUSD * exchangeRateBs;
+            const formattedBs = totalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const formattedUSD = totalUSD.toFixed(2);
+
+            document.getElementById('summary-subtotal').innerHTML = 'Bs. ' + formattedBs + ' <span class="text-gray-500 font-normal">($' + formattedUSD + ' USD)</span>';
+            document.getElementById('summary-total-bs').innerText = formattedBs;
+            document.getElementById('summary-total-usd').innerText = '($' + formattedUSD + ' USD)';
+        }
+
+        // ============ CHECKOUT MODAL ============
+        function openCheckoutModal() {
+            const pkg = getCurrentPackage();
+            const item = getCurrentItem();
+
+            if (!item) {
+                showToast("Por favor, selecciona un paquete.", true);
+                return;
+            }
+
+            if (currentCategory === 'mobile' && !selectedPkgDirectToPin) {
+                const idInputVal = document.getElementById('id-verification-input').value.trim();
+                if (!idInputVal) {
+                    showToast("Por favor, ingresa y verifica tu ID antes de continuar.", true);
+                    return;
+                }
+                if (!isIdVerified) {
+                    showToast("Haz clic en Verificar para validar tu ID.", true);
+                    return;
+                }
+            }
+
+            const basePrice = parseFloat(item.price || 0);
+            let totalUSD = basePrice * purchaseQuantity;
+            if (discountPercent > 0) {
+                totalUSD = totalUSD * (1 - discountPercent / 100);
+            }
+            const totalBs = totalUSD * exchangeRateBs;
+            const formattedBs = totalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const formattedUSD = totalUSD.toFixed(2);
+
+            document.getElementById('modal-product').innerText = pkg ? pkg.name : '---';
+            document.getElementById('modal-package').innerText = purchaseQuantity + 'x ' + item.title;
+            document.getElementById('modal-price').innerText = 'Bs. ' + formattedBs + ' ($' + formattedUSD + ' USD)';
+
+            document.getElementById('checkout-player-id').value = document.getElementById('id-verification-input').value.trim();
+
+            const idSection = document.getElementById('checkout-id-section');
+            const idLabel = document.getElementById('checkout-id-label');
+            if (currentCategory === 'gift' || selectedPkgDirectToPin) {
+                idSection.classList.add('hidden');
+            } else {
+                idSection.classList.remove('hidden');
+                idLabel.innerText = pkg ? 'ID de Jugador (' + pkg.name + '):' : 'ID de Jugador:';
+            }
+
+            const modal = document.getElementById('checkout-modal');
+            const content = document.getElementById('modal-content');
+            document.getElementById('checkout-loading').classList.add('hidden');
+            document.getElementById('btn-submit-order').classList.remove('hidden');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 50);
+        }
+
+        function closeCheckoutModal() {
+            const modal = document.getElementById('checkout-modal');
+            const content = document.getElementById('modal-content');
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        async function submitOrder() {
+            const email = document.getElementById('checkout-email').value.trim();
+            const phone = document.getElementById('checkout-phone').value.trim();
+            const reference = document.getElementById('checkout-reference').value.trim();
+            const playerId = document.getElementById('checkout-player-id').value.trim();
+            const currency = document.getElementById('checkout-currency').value;
+            const pkg = getCurrentPackage();
+            const item = getCurrentItem();
+
+            if (!email) {
+                showToast("Ingresa tu correo electronico.", true);
+                return;
+            }
+            if (!reference) {
+                showToast("Ingresa la referencia de pago.", true);
+                return;
+            }
+
+            const basePrice = parseFloat(item.price || 0);
+            let totalUSD = basePrice * purchaseQuantity;
+            if (discountPercent > 0) {
+                totalUSD = totalUSD * (1 - discountPercent / 100);
+            }
+            const amountRounded = Math.round(totalUSD * exchangeRateBs);
+            const finalAmount = currency === 'BSD' ? amountRounded : totalUSD.toFixed(2);
+
+            document.getElementById('checkout-loading').classList.remove('hidden');
+            document.getElementById('btn-submit-order').classList.add('hidden');
+
+            const formData = new FormData();
+            formData.append('store_package_id', currentSelectedPkgId);
+            formData.append('item_id', selectedItemId);
+            formData.append('method', currency === 'BSD' ? 'pm' : 'zelle');
+            formData.append('currency', currency);
+            formData.append('amount', finalAmount);
+            formData.append('reference', reference);
+            formData.append('email', email);
+            formData.append('phone', phone);
+            formData.append('name', email.split('@')[0] || 'Cliente');
+            if (playerId && currentCategory === 'mobile' && !selectedPkgDirectToPin) {
+                formData.append('customer_id', playerId);
+            }
+            if (verifiedNick) {
+                formData.append('nn', verifiedNick);
+            }
+            if (discountPercent > 0) {
+                const code = document.getElementById('discount-code-input').value.trim().toUpperCase();
+                formData.append('special_code', code);
+            }
+            if (purchaseQuantity > 1) {
+                const itemsJson = JSON.stringify([{ item_id: selectedItemId, qty: purchaseQuantity }]);
+                formData.append('items', itemsJson);
+            }
+
+            try {
+                const resp = await fetch('/orders', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const data = await resp.json();
+
+                if (data.ok && data.order_id) {
+                    closeCheckoutModal();
+                    window.location.href = '/gracias/' + data.order_id;
+                } else {
+                    document.getElementById('checkout-loading').classList.add('hidden');
+                    document.getElementById('btn-submit-order').classList.remove('hidden');
+                    showToast(data.error || 'Error al crear el pedido.', true);
+                }
+            } catch (e) {
+                document.getElementById('checkout-loading').classList.add('hidden');
+                document.getElementById('btn-submit-order').classList.remove('hidden');
+                showToast('Error de conexion. Intenta de nuevo.', true);
+            }
+        }
+
+        // ============ CARRUSEL ============
+        function showSlide(index) {
+            const slides = document.querySelectorAll('.carousel-slide');
+            const dots = document.querySelectorAll('#carousel-dots span');
+            if (slides.length === 0) return;
+
+            if (index >= slides.length) currentSlide = 0;
+            else if (index < 0) currentSlide = slides.length - 1;
+            else currentSlide = index;
+
+            slides.forEach((slide, i) => {
+                slide.classList.toggle('hidden', i !== currentSlide);
+            });
+            dots.forEach((dot, i) => {
+                dot.className = i === currentSlide
+                    ? "w-1.5 h-1.5 rounded-full bg-emerald-400"
+                    : "w-1.5 h-1.5 rounded-full bg-gray-600";
+            });
+        }
+
+        function nextSlide() { showSlide(currentSlide + 1); }
+        function prevSlide() { showSlide(currentSlide - 1); }
+
+        let carouselInterval = setInterval(nextSlide, 5000);
+
+        // ============ TOAST ============
+        function showToast(message, isError) {
+            isError = isError || false;
+            const toast = document.getElementById('toast-success');
+            const toastMessage = document.getElementById('toast-message');
+            toastMessage.innerText = message;
+
+            if (isError) {
+                toast.className = "fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-red-950/95 border-2 border-red-500 text-red-400 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold transition-all transform duration-300";
+            } else {
+                toast.className = "fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-950/95 border-2 border-emerald-500 text-emerald-400 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold transition-all transform duration-300";
+            }
+
+            toast.classList.remove('translate-y-12', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-12', 'opacity-0');
+            }, 4000);
+        }
+
+        // ============ INIT ============
+        window.onload = function () {
+            loadAllData();
+            showSlide(0);
+        };
+    </script>
+</body>
+</html>'''
+
+filepath = r'c:\Users\user\Inefablestore\templates\index.html'
+with open(filepath, 'w', encoding='utf-8') as f:
+    f.write(html)
+print('OK - index.html written successfully (' + str(len(html)) + ' bytes)')

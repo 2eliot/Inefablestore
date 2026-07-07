@@ -1,0 +1,10 @@
+import psycopg2
+conn = psycopg2.connect('postgresql://inefable_user:InefablePg2026@127.0.0.1:5432/inefablestore')
+cur = conn.cursor()
+cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='store_packages' ORDER BY ordinal_position")
+for r in cur.fetchall(): print(r)
+cur.execute("SELECT id, name, direct_to_pin FROM store_packages ORDER BY id LIMIT 5")
+for r in cur.fetchall(): print(r)
+for r in cur.fetchall(): print(r)
+cur.close()
+conn.close()
