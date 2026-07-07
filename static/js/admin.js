@@ -637,7 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="order-card rev-map-row" data-store-item-id="${it.id}">
           <div class="order-head">
             <div>
-              <div class="order-id">${it.title || ('Item #' + it.id)} ${syncedBadge}</div>
+              <div class="order-id">${it.title || ('Item #' + it.id)}</div>
               <div class="order-meta">
                 <span>ID ${it.id}</span>
                 <span>USD ${Number(it.price || 0).toFixed(2)}</span>
@@ -655,7 +655,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <select class="input rev-catalog-select" data-store-item-id="${it.id}" data-game="${escapeAdminHtml(mappedGameName)}" style="${mappedGameName ? '' : 'display:none;'}">
               <option value="">Manual (sin mapeo automático)</option>
             </select>
-            <div class="order-meta rev-map-info" data-current-mapping="${mappingJson}" style="line-height:1.45;"></div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div class="order-meta rev-map-info" data-current-mapping="${mappingJson}" style="line-height:1.45;"></div>
+              ${syncedBadge}
+            </div>
             <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#cbd5e1;">
               <input type="checkbox" class="rev-auto-enabled" data-store-item-id="${it.id}" ${(mapping && mapping.auto_enabled) ? 'checked' : ''}>
               Activar recarga automática para este ítem
