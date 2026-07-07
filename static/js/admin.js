@@ -554,25 +554,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const mapping = JSON.parse(row.getAttribute('data-current-mapping') || 'null');
 
     if (selected) {
-      const input2 = selected.requires_player_id2
-        ? ` · Requiere ${escapeAdminHtml((selected.field2_label || 'input2').trim() || 'input2')}`
-        : '';
-      const provider = selected.provider_package_id
-        ? ` · Provider ${escapeAdminHtml(selected.provider_package_id)}`
-        : '';
-      const mode = selected.mode
-        ? ` · Mode ${escapeAdminHtml(selected.mode)}`
-        : '';
-      info.innerHTML = `Remoto real: <strong>${escapeAdminHtml(selected.remote_product_name || ('Juego ' + (selected.remote_product_id || '?')))}</strong> / ${escapeAdminHtml(selected.remote_package_name || ('Paquete ' + (selected.remote_package_id || '?')))} · Product ID ${escapeAdminHtml(selected.remote_product_id)} · Package ID ${escapeAdminHtml(selected.remote_package_id)}${provider}${mode}${input2}`;
+      const label = `${escapeAdminHtml(selected.remote_product_name || ('Juego ' + (selected.remote_product_id || '?')))} · ${escapeAdminHtml(selected.remote_package_name || ('Paquete ' + (selected.remote_package_id || '?')))}`;
+      info.innerHTML = `<span class="rev-sync-badge">✓ Sincronizado</span> <strong>${label}</strong>`;
       return;
     }
 
     if (mapping && mapping.remote_package_id) {
-        info.innerHTML = `Mapeo guardado fuera del catálogo actual: Product ID ${escapeAdminHtml(mapping.remote_product_id || '')} · Package ID ${escapeAdminHtml(mapping.remote_package_id)}${mapping.remote_label ? ` · ${escapeAdminHtml(mapping.remote_label)}` : ''}`;
+        const label = mapping.remote_label || `Product ID ${escapeAdminHtml(mapping.remote_product_id || '')} · Package ID ${escapeAdminHtml(mapping.remote_package_id)}`;
+        info.innerHTML = `<span class="rev-sync-badge">✓ Sincronizado</span> <strong>${escapeAdminHtml(label)}</strong>`;
         return;
     }
 
-    info.textContent = 'Sin mapeo automático guardado.';
+    info.textContent = '';
   }
 
   function renderRevMapping() {
