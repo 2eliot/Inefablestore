@@ -1513,6 +1513,11 @@ def _inject_deliverability_headers(msg) -> None:
         msg['X-Mailer'] = 'InefableStore/1.0'
     if 'X-Auto-Response-Suppress' not in msg:
         msg['X-Auto-Response-Suppress'] = 'OOF, AutoReply, DR, NDR, RN, NRN'
+    # List-Unsubscribe: Gmail valora positivamente este header incluso en transaccionales
+    if 'List-Unsubscribe' not in msg:
+        msg['List-Unsubscribe'] = f'<mailto:{MAIL_USER}?subject=unsubscribe>'
+    if 'List-Id' not in msg:
+        msg['List-Id'] = f'<{MAIL_USER.split("@")[-1] if "@" in MAIL_USER else "inefablestore.com"}>'
     # Overwrite From with friendly name if it's still raw
     if msg['From'] == MAIL_USER or not msg['From']:
         msg.replace_header('From', _friendly_from())
