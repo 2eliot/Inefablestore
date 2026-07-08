@@ -1364,10 +1364,11 @@ def _auto_approve_order(order, *, source_label: str = "AutoApprove", binance_aut
                 it = GamePackageItem.query.get(order.item_id) if order.item_id else None
                 brand = _email_brand()
                 html, text = build_order_approved_email(order, pkg, it)
+                subject = _email_subject_for_order(order, pkg, brand)
                 try:
-                    send_email_html(order.email, f"Orden #{order.id} aprobada - {brand}", html, text)
+                    send_email_html(order.email, subject, html, text)
                 except Exception:
-                    send_email_async(order.email, f"Orden #{order.id} aprobada - {brand}", text)
+                    send_email_async(order.email, subject, text)
         except Exception:
             pass
 
@@ -1745,6 +1746,18 @@ def _email_delivery_codes(o):
     except Exception:
         pass
     return codes
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Email subject helper — friendly subjects to avoid spam filters
+# ──────────────────────────────────────────────────────────────────────
+
+def _email_subject_for_order(order: 'Order', pkg: 'StorePackage' or None, brand: str) -> str:
+    """Return a natural, non-spammy subject depending on order type."""
+    is_gift = (pkg and pkg.category or '').lower() == 'gift' if pkg else False
+    if is_gift:
+        return f"Tu codigo de regalo - {brand}"
+    return f"Orden #{order.id} aprobada - {brand}"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -4273,11 +4286,11 @@ def _send_order_completed_email_if_needed(order_obj, state: dict | None = None) 
     it = GamePackageItem.query.get(order_obj.item_id) if order_obj.item_id else None
     brand = _email_brand()
     html, text = build_order_approved_email(order_obj, pkg, it)
-
+    subject = _email_subject_for_order(order_obj, pkg, brand)
     try:
-        send_email_html(order_obj.email, f"Orden #{order_obj.id} aprobada - {brand}", html, text)
+        send_email_html(order_obj.email, subject, html, text)
     except Exception:
-        send_email_async(order_obj.email, f"Orden #{order_obj.id} aprobada - {brand}", text)
+        send_email_async(order_obj.email, subject, text)
 
     auto_state["completion_email_sent"] = True
     auto_state["completion_email_sent_at"] = datetime.utcnow().isoformat()
@@ -8771,10 +8784,11 @@ def admin_orders_set_status(oid: int):
             brand = _email_brand()
             if to_addr:
                 html, text = build_order_approved_email(o, pkg, it)
+                subject = _email_subject_for_order(o, pkg, brand)
                 try:
-                    send_email_html(to_addr, f"Orden #{o.id} aprobada - {brand}", html, text)
+                    send_email_html(to_addr, subject, html, text)
                 except Exception:
-                    send_email_async(to_addr, f"Orden #{o.id} aprobada - {brand}", text)
+                    send_email_async(to_addr, subject, text)
     except Exception:
         pass
     # Notify buyer on rejection (HTML email)
