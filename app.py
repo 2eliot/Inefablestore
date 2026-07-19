@@ -8931,46 +8931,27 @@ def admin_orders_verify_ubii(oid: int):
     return jsonify({"ok": True, "payment_verify": result, "order_status": o.status})
 
 
-@app.route("/admin/orders/<int:oid>/verify-recharge", methods=["POST"])
-def admin_orders_verify_recharge(oid: int):
-    """Verifica si la recarga automática realmente se completó."""
-    user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return jsonify({"ok": False, "error": "No autorizado"}), 401
+def _verify_order_processing_units(o):
+    """Re-consulta contra el proveedor las unidades 'processing' de una orden y
+    actualiza su estado/emails. Lógica compartida por el botón 'Verificar' del
+    admin y el hilo de auto-verificación (recargas lentas como pases de Blood
+    Strike que tardan más de 60s en Revendedores).
 
-    o = Order.query.get(oid)
-    if not o:
-        return jsonify({"ok": False, "error": "No existe"}), 404
-    if o.status not in ("pending",):
-        return jsonify({"ok": True, "result": "already_processed", "order_status": o.status})
-
+    Returns dict: {"ok": bool, "error": str (solo si ok=False),
+                   "summary": dict, "units": list}
+    """
     auto_resp = _load_order_automation_state(o)
     units = _build_order_auto_recharge_units(o, auto_resp)
     summary = _summarize_order_auto_recharges(units)
 
-    if summary.get("total_units", 0) <= 0:
-        return jsonify({"ok": True, "result": "no_verification_needed", "can_approve": True})
-    if summary.get("processing_units", 0) <= 0:
-        if summary.get("completed_units", 0) >= summary.get("total_units", 0):
-            return jsonify({
-                "ok": True,
-                "result": "completed",
-                "order_status": "delivered",
-                "summary": summary,
-            })
-        return jsonify({
-            "ok": True,
-            "result": "no_verification_needed",
-            "can_approve": summary.get("retryable_units", 0) > 0,
-            "summary": summary,
-        })
-
     processing_units = [unit for unit in units if (unit.get("status") or "") == "processing"]
+    if not processing_units:
+        return {"ok": True, "summary": summary, "units": units}
+
     webb_url, webb_api_key, _, _ = _revendedores_env()
     needs_revendedores = any(_unit_delivery_source(unit) == "revendedores_api" for unit in processing_units)
-
     if needs_revendedores and (not webb_url or not webb_api_key):
-        return jsonify({"ok": False, "error": "Revendedores API no configurada"})
+        return {"ok": False, "error": "Revendedores API no configurada", "summary": summary, "units": units}
 
     for unit in processing_units:
         unit["last_checked_at"] = datetime.utcnow().isoformat()
@@ -8989,7 +8970,7 @@ def admin_orders_verify_recharge(oid: int):
             )
             data = resp.json() if resp.ok else {}
         except Exception as e:
-            return jsonify({"ok": False, "error": f"No se pudo verificar: {e}", "can_approve": False})
+            return {"ok": False, "error": f"No se pudo verificar: {e}", "summary": summary, "units": units}
 
         if resp.status_code in (404, 405):
             unit["last_checked_at"] = datetime.utcnow().isoformat()
@@ -9038,6 +9019,51 @@ def admin_orders_verify_recharge(oid: int):
     db.session.commit()
     if auto_resp.get("success"):
         _ensure_minigame_assignment(o)
+    if summary.get("total_units", 0) > 0 and summary.get("completed_units", 0) >= summary.get("total_units", 0):
+        _send_order_completed_email_if_needed(o)
+    return {"ok": True, "summary": summary, "units": units}
+
+
+@app.route("/admin/orders/<int:oid>/verify-recharge", methods=["POST"])
+def admin_orders_verify_recharge(oid: int):
+    """Verifica si la recarga automática realmente se completó."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    o = Order.query.get(oid)
+    if not o:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    if o.status not in ("pending",):
+        return jsonify({"ok": True, "result": "already_processed", "order_status": o.status})
+
+    auto_resp = _load_order_automation_state(o)
+    units = _build_order_auto_recharge_units(o, auto_resp)
+    summary = _summarize_order_auto_recharges(units)
+
+    if summary.get("total_units", 0) <= 0:
+        return jsonify({"ok": True, "result": "no_verification_needed", "can_approve": True})
+    if summary.get("processing_units", 0) <= 0:
+        if summary.get("completed_units", 0) >= summary.get("total_units", 0):
+            return jsonify({
+                "ok": True,
+                "result": "completed",
+                "order_status": "delivered",
+                "summary": summary,
+            })
+        return jsonify({
+            "ok": True,
+            "result": "no_verification_needed",
+            "can_approve": summary.get("retryable_units", 0) > 0,
+            "summary": summary,
+        })
+
+    verify_result = _verify_order_processing_units(o)
+    if not verify_result.get("ok"):
+        return jsonify({"ok": False, "error": verify_result.get("error") or "No se pudo verificar", "can_approve": False})
+    summary = verify_result["summary"]
+    units = verify_result["units"]
+    auto_resp = _load_order_automation_state(o)
 
     if summary.get("processing_units", 0) <= 0 and summary.get("pending_units", 0) > 0 and summary.get("failed_units", 0) <= 0:
         queued_result = _dispatch_order_auto_recharges(o, binance_auto=bool(auto_resp.get("binance_auto")))
@@ -9090,6 +9116,46 @@ def admin_orders_verify_recharge(oid: int):
         "message": f"Quedan {summary.get('retryable_units', 0)} recarga(s) por reenviar.",
         "summary": summary,
     })
+
+
+def _revendedores_pending_verification_loop():
+    """Background: cada 60s re-verifica órdenes pendientes cuyas recargas siguen
+    'processing' en el proveedor (p.ej. pases de Blood Strike, que tardan más de
+    los 60s que espera el dispatch). Así la orden se aprueba y entrega sola sin
+    que el admin tenga que darle a 'Verificar'."""
+    import time as _t
+    _t.sleep(75)  # esperar a que la app termine de arrancar
+    while True:
+        try:
+            with app.app_context():
+                cutoff = datetime.utcnow() - timedelta(hours=48)
+                pending_orders = Order.query.filter(
+                    Order.status == "pending",
+                    Order.created_at >= cutoff,
+                ).all()
+                for order in pending_orders:
+                    try:
+                        state = _load_order_automation_state(order)
+                        if not state or not state.get("pending_verification"):
+                            continue
+                        result = _verify_order_processing_units(order)
+                        summary = result.get("summary") or {}
+                        if result.get("ok") and summary.get("processing_units", 0) <= 0:
+                            print(
+                                f"[RevAutoVerify] Orden #{order.id} resuelta: "
+                                f"{summary.get('completed_units', 0)}/{summary.get('total_units', 0)} "
+                                f"completadas, estado={order.status}"
+                            )
+                    except Exception as exc:
+                        print(f"[RevAutoVerify] Error orden #{order.id}: {exc}")
+                    _t.sleep(2)  # rate-limit entre órdenes
+        except Exception as exc:
+            print(f"[RevAutoVerify] Thread error: {exc}")
+        _t.sleep(60)
+
+
+_rev_verify_thread = threading.Thread(target=_revendedores_pending_verification_loop, daemon=True)
+_rev_verify_thread.start()
 
 
 @app.route("/admin/minigames/config", methods=["GET"])
