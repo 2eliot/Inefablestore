@@ -4625,31 +4625,17 @@ def _get_auto_mappings_for_item_ids(item_ids):
     if not ids:
         return {}
     try:
+        # El checkbox "recarga automática" (auto_enabled) manda: direct_to_pin es
+        # solo el modo de entrega y ya no incluye mapeos con el automático apagado.
         rows = RevendedoresItemMapping.query.filter(
             RevendedoresItemMapping.store_item_id.in_(ids),
             RevendedoresItemMapping.active == True,
             (
                 (RevendedoresItemMapping.auto_enabled == True)
                 | (RevendedoresItemMapping.direct_to_script == True)
-                | (RevendedoresItemMapping.direct_to_pin == True)
             ),
         ).all()
-        result = {int(row.store_item_id): row for row in rows}
-        # Also include active mappings for items whose package has direct_to_pin=True
-        # even if the mapping itself doesn't have direct_to_pin set yet
-        missing_ids = [i for i in ids if i not in result]
-        if missing_ids:
-            extra_rows = RevendedoresItemMapping.query.filter(
-                RevendedoresItemMapping.store_item_id.in_(missing_ids),
-                RevendedoresItemMapping.active == True,
-            ).all()
-            for row in extra_rows:
-                item = GamePackageItem.query.get(row.store_item_id)
-                if item:
-                    pkg = StorePackage.query.get(item.store_package_id)
-                    if pkg and bool(pkg.direct_to_pin):
-                        result[int(row.store_item_id)] = row
-        return result
+        return {int(row.store_item_id): row for row in rows}
     except Exception:
         return {}
 
@@ -4693,22 +4679,9 @@ def _build_order_auto_recharge_units(order_obj, automation_state=None):
                 pkg_direct_pin_by_item[int(item_id)] = bool(pkg_direct_pin)
         except Exception:
             pass
-    # Also pull active mappings for items whose package has direct_to_pin, even if the mapping
-    # itself doesn't have auto_enabled/direct_to_pin set yet
-    extra_mapping_ids = [
-        sid for sid in store_item_ids
-        if sid not in mappings_by_item and pkg_direct_pin_by_item.get(sid)
-    ]
-    if extra_mapping_ids:
-        try:
-            extra_rows = RevendedoresItemMapping.query.filter(
-                RevendedoresItemMapping.store_item_id.in_(extra_mapping_ids),
-                RevendedoresItemMapping.active == True,
-            ).all()
-            for row in extra_rows:
-                mappings_by_item[int(row.store_item_id)] = row
-        except Exception:
-            pass
+    # Nota: ya no se re-incluyen mapeos con el automático apagado solo porque el
+    # paquete sea direct_to_pin — el checkbox "recarga automática" manda.
+    # pkg_direct_pin_by_item se conserva para decidir el MODO de entrega (abajo).
     planned_units = []
     for entry in entries:
         mapping = mappings_by_item.get(int(entry.get("item_id") or 0))
@@ -9592,7 +9565,9 @@ def admin_revendedores_mappings_bulk_save():
             pkg = StorePackage.query.get(item.store_package_id)
             pkg_direct_to_pin = bool(pkg.direct_to_pin) if pkg else False
             direct_to_pin = bool(ent.get("direct_to_pin")) or pkg_direct_to_pin
-            auto_enabled = bool(ent.get("auto_enabled")) or direct_to_script or direct_to_pin
+            # direct_to_pin es modo de ENTREGA, no fuerza el automático: si el admin
+            # desmarca "recarga automática" debe respetarse aunque sea gift card
+            auto_enabled = bool(ent.get("auto_enabled")) or direct_to_script
 
             row = RevendedoresItemMapping.query.filter_by(store_item_id=store_item_id).first()
 

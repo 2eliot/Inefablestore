@@ -627,7 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const syncedBadge = isSynced ? '<span class="rev-sync-badge">✓ Sincronizado</span>' : '';
 
       html += `
-        <div class="order-card rev-map-row" data-store-item-id="${it.id}">
+        <div class="order-card rev-map-row" data-store-item-id="${it.id}" data-mapped-catalog-id="${mappedCatalogId || ''}">
           <div class="order-head">
             <div>
               <div class="order-id">${it.title || ('Item #' + it.id)}</div>
@@ -674,6 +674,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (currentGame) {
         populateCatalogSelect(catalogSelect, currentGame, remoteCatalog);
         catalogSelect.style.display = '';
+        // Preseleccionar el mapeo guardado: el select recién renderizado no tiene
+        // valor previo, así que populateCatalogSelect solo deja "Manual" sin esto
+        const mappedId = row.getAttribute('data-mapped-catalog-id') || '';
+        if (mappedId && !catalogSelect.value) {
+          catalogSelect.value = mappedId;
+        }
       }
       renderRevCatalogMappingInfo(row, catalogSelect ? catalogSelect.value : '');
     });
@@ -722,7 +728,7 @@ document.addEventListener('DOMContentLoaded', () => {
         auto_enabled: !!(chk && chk.checked) || directToScript,
         direct_to_script: directToScript,
       };
-    }).filter((x) => x.store_item_id > 0 && x.catalog_id); // only save rows that have a catalog selected — preserve others
+    }).filter((x) => x.store_item_id > 0); // enviar TODAS las filas: catalog_id vacío = quitar mapeo/desactivar (el backend lo maneja); antes se filtraban y desactivar nunca persistía
 
     const res = await fetch('/admin/revendedores/mappings/bulk', {
       method: 'POST',
