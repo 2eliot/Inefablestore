@@ -1203,10 +1203,53 @@ def _aggregate_and_cleanup_orders():
         return -1
 
 
+# Distinct Postgres advisory-lock keys, one per background loop below.
+_LOCK_ORDER_CLEANUP = 911001
+_LOCK_BINANCE_VERIFY = 911002
+_LOCK_REV_VERIFY = 911003
+_LOCK_PABILO_VERIFY = 911004
+_SINGLETON_LOCK_CONNS = {}
+
+
+def _acquire_singleton_lock(lock_key: int) -> bool:
+    """Claim exclusive ownership of a background loop across gunicorn workers.
+
+    Each worker process runs its own copy of these daemon threads; without this,
+    two workers would both poll/verify/dispatch the same pending orders at once,
+    double-charging Revendedores or stomping each other's automation state. The
+    Postgres advisory lock is held on a dedicated connection for the process
+    lifetime, so if the holder dies (worker restart), Postgres auto-releases it
+    and another worker's thread picks it up on its next retry.
+    Under SQLite (single-process dev) there is nothing to arbitrate.
+    """
+    if lock_key in _SINGLETON_LOCK_CONNS:
+        return True
+    try:
+        from sqlalchemy import text
+        with app.app_context():
+            if db.engine.dialect.name != "postgresql":
+                return True
+            conn = db.engine.connect()
+            got = conn.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": lock_key}).scalar()
+        # conn is a raw checked-out Connection independent of the app context /
+        # Flask-SQLAlchemy scoped session — it stays open (and the lock held)
+        # after the `with` block above exits.
+        if got:
+            _SINGLETON_LOCK_CONNS[lock_key] = conn
+            return True
+        conn.close()
+        return False
+    except Exception as exc:
+        print(f"[SingletonLock] Error acquiring lock {lock_key}: {exc}")
+        return True  # fail open — better a rare duplicate run than none at all
+
+
 def _order_cleanup_loop():
     """Background thread: periodically clean up old orders."""
     import time as _t
     _t.sleep(60)  # Wait for app startup
+    while not _acquire_singleton_lock(_LOCK_ORDER_CLEANUP):
+        _t.sleep(30)
     while True:
         try:
             with app.app_context():
@@ -1334,6 +1377,28 @@ def _binance_verify_payment(order_reference: str, expected_usdt: float, since_ms
     return False
 
 
+def _try_transition_order_to_approved(order_obj) -> bool:
+    """Atomically flip a pending order to 'approved'.
+
+    Multiple gunicorn workers can race to auto-approve the same order (e.g. the
+    checkout-time Pabilo check and the RevAutoVerify/Binance loops all call into
+    this). A plain read-then-write of order.status lets two of them both pass the
+    pending check and both dispatch the recharge. The conditional UPDATE only
+    succeeds for whichever process gets there first; the loser sees rowcount=0
+    and backs off instead of double-dispatching.
+    """
+    updated = db.session.query(Order).filter(
+        Order.id == order_obj.id,
+        Order.status == "pending",
+    ).update({"status": "approved"}, synchronize_session=False)
+    db.session.commit()
+    if updated:
+        order_obj.status = "approved"
+    else:
+        db.session.refresh(order_obj)
+    return bool(updated)
+
+
 def _auto_approve_order(order, *, source_label: str = "AutoApprove", binance_auto: bool = False):
     """Approve a pending order, credit affiliate commission, notify user, and dispatch auto recharges."""
     if (order.status or "").lower() != "pending":
@@ -1343,8 +1408,9 @@ def _auto_approve_order(order, *, source_label: str = "AutoApprove", binance_aut
         print(f"[{source_label}] Reference '{order.reference}' already used in another approved order. Aborting auto-approve for order #{order.id}.")
         return
     try:
-        order.status = "approved"
-        db.session.commit()
+        if not _try_transition_order_to_approved(order):
+            print(f"[{source_label}] Order #{order.id} was already transitioned by another process. Skipping.")
+            return
     except Exception as exc:
         try:
             db.session.rollback()
@@ -1410,6 +1476,8 @@ def _binance_order_verification_loop():
     """
     import time as _t
     _t.sleep(45)  # extra startup delay
+    while not _acquire_singleton_lock(_LOCK_BINANCE_VERIFY):
+        _t.sleep(30)
     while True:
         try:
             with app.app_context():
@@ -5213,7 +5281,73 @@ def _dispatch_minigame_reward(order_obj, prize_item_id: int, tier: int):
     }
 
 
+_ORDER_DISPATCH_LOCK_BASE = 5_000_000_000
+
+
+def _order_dispatch_lock_acquire(order_id: int):
+    """Try to become the exclusive dispatcher/verifier for one order's recargas.
+
+    Checkout auto-verify (Pabilo/Binance), an admin's manual approve/verify click,
+    and the background retry loops can all race to dispatch or verify the SAME
+    order's auto-recharge units from different gunicorn workers at once, which
+    would double-send the recharge to Revendedores or stomp each other's
+    automation_json. This takes a short-lived Postgres advisory lock keyed by the
+    order id on a dedicated connection so at most one such call proceeds at a
+    time; callers must release it via _order_dispatch_lock_release when done.
+    Returns a falsy value (None) if another process already holds it.
+    """
+    try:
+        if db.engine.dialect.name != "postgresql":
+            return True  # SQLite: single-process, nothing to arbitrate
+        from sqlalchemy import text
+        conn = db.engine.connect()
+        got = conn.execute(
+            text("SELECT pg_try_advisory_lock(:k)"),
+            {"k": _ORDER_DISPATCH_LOCK_BASE + int(order_id)},
+        ).scalar()
+        if got:
+            return conn
+        conn.close()
+        return None
+    except Exception as exc:
+        print(f"[OrderDispatchLock] Error orden #{order_id}: {exc}")
+        return True  # fail open — better a rare duplicate run than a stuck order
+
+
+def _order_dispatch_lock_release(lock_handle, order_id: int):
+    if lock_handle in (True, None):
+        return
+    try:
+        from sqlalchemy import text
+        lock_handle.execute(
+            text("SELECT pg_advisory_unlock(:k)"),
+            {"k": _ORDER_DISPATCH_LOCK_BASE + int(order_id)},
+        )
+    except Exception:
+        pass
+    try:
+        lock_handle.close()
+    except Exception:
+        pass
+
+
 def _dispatch_order_auto_recharges(order_obj, *, binance_auto=False):
+    lock_handle = _order_dispatch_lock_acquire(order_obj.id)
+    if not lock_handle:
+        return {
+            "ok": False,
+            "error": "Esta orden ya se está procesando en otro proceso, intenta de nuevo en unos segundos",
+            "pending_verification": True,
+            "order_id": order_obj.id,
+            "summary": _summarize_order_auto_recharges(_build_order_auto_recharge_units(order_obj)),
+        }
+    try:
+        return _dispatch_order_auto_recharges_locked(order_obj, binance_auto=binance_auto)
+    finally:
+        _order_dispatch_lock_release(lock_handle, order_obj.id)
+
+
+def _dispatch_order_auto_recharges_locked(order_obj, *, binance_auto=False):
     max_attempts = 3
     retry_delay_seconds = 2
     state = _load_order_automation_state(order_obj)
@@ -8749,8 +8883,13 @@ def admin_orders_set_status(oid: int):
     except Exception:
         pass
     prev_status = (o.status or '').lower()
-    o.status = status
-    db.session.commit()
+    if status == "approved" and prev_status == "pending":
+        db.session.flush()  # persist delivery_code(s) above before the conditional status UPDATE
+        if not _try_transition_order_to_approved(o):
+            return jsonify({"ok": False, "error": "La orden ya fue procesada por otro proceso (verificación automática)."}), 409
+    else:
+        o.status = status
+        db.session.commit()
     if status == "approved" and prev_status != "approved":
         _credit_affiliate_commission(o)
     # Notify buyer on approval (HTML email)
@@ -8940,6 +9079,21 @@ def _verify_order_processing_units(o):
     Returns dict: {"ok": bool, "error": str (solo si ok=False),
                    "summary": dict, "units": list}
     """
+    lock_handle = _order_dispatch_lock_acquire(o.id)
+    if not lock_handle:
+        return {
+            "ok": False,
+            "error": "Esta orden ya se está verificando en otro proceso, intenta de nuevo en unos segundos",
+            "summary": _summarize_order_auto_recharges(_build_order_auto_recharge_units(o)),
+            "units": [],
+        }
+    try:
+        return _verify_order_processing_units_locked(o)
+    finally:
+        _order_dispatch_lock_release(lock_handle, o.id)
+
+
+def _verify_order_processing_units_locked(o):
     auto_resp = _load_order_automation_state(o)
     units = _build_order_auto_recharge_units(o, auto_resp)
     summary = _summarize_order_auto_recharges(units)
@@ -9118,13 +9272,21 @@ def admin_orders_verify_recharge(oid: int):
     })
 
 
+_REV_AUTO_RETRY_MAX_ATTEMPTS_PER_UNIT = 8
+
+
 def _revendedores_pending_verification_loop():
     """Background: cada 60s re-verifica órdenes pendientes cuyas recargas siguen
     'processing' en el proveedor (p.ej. pases de Blood Strike, que tardan más de
-    los 60s que espera el dispatch). Así la orden se aprueba y entrega sola sin
-    que el admin tenga que darle a 'Verificar'."""
+    los 60s que espera el dispatch), y además reintenta automáticamente las
+    unidades que quedaron 'failed'/'not_found' (p.ej. por un timeout o error de
+    red puntual al hablar con Revendedores) hasta un máximo de intentos. Así la
+    orden se aprueba y entrega sola sin que el admin tenga que darle a
+    'Verificar' o 'Reenviar' manualmente."""
     import time as _t
     _t.sleep(75)  # esperar a que la app termine de arrancar
+    while not _acquire_singleton_lock(_LOCK_REV_VERIFY):
+        _t.sleep(30)
     while True:
         try:
             with app.app_context():
@@ -9136,16 +9298,34 @@ def _revendedores_pending_verification_loop():
                 for order in pending_orders:
                     try:
                         state = _load_order_automation_state(order)
-                        if not state or not state.get("pending_verification"):
+                        if not state:
                             continue
-                        result = _verify_order_processing_units(order)
-                        summary = result.get("summary") or {}
-                        if result.get("ok") and summary.get("processing_units", 0) <= 0:
-                            print(
-                                f"[RevAutoVerify] Orden #{order.id} resuelta: "
-                                f"{summary.get('completed_units', 0)}/{summary.get('total_units', 0)} "
-                                f"completadas, estado={order.status}"
+                        summary = state.get("summary") or {}
+                        if state.get("pending_verification") or summary.get("processing_units", 0) > 0:
+                            result = _verify_order_processing_units(order)
+                            summary = result.get("summary") or {}
+                            if result.get("ok") and summary.get("processing_units", 0) <= 0:
+                                print(
+                                    f"[RevAutoVerify] Orden #{order.id} resuelta: "
+                                    f"{summary.get('completed_units', 0)}/{summary.get('total_units', 0)} "
+                                    f"completadas, estado={order.status}"
+                                )
+                            state = _load_order_automation_state(order)
+                            summary = state.get("summary") or {}
+
+                        if summary.get("processing_units", 0) <= 0 and summary.get("retryable_units", 0) > 0:
+                            units = state.get("units") or []
+                            has_retries_left = any(
+                                (unit.get("status") or "") in ("failed", "not_found", "pending")
+                                and int(unit.get("attempt_count") or 0) < _REV_AUTO_RETRY_MAX_ATTEMPTS_PER_UNIT
+                                for unit in units
                             )
+                            if has_retries_left:
+                                retry_result = _dispatch_order_auto_recharges(order, binance_auto=bool(state.get("binance_auto")))
+                                retry_summary = retry_result.get("summary") or {}
+                                if retry_summary.get("total_units", 0) > 0 and retry_summary.get("completed_units", 0) >= retry_summary.get("total_units", 0):
+                                    _send_order_completed_email_if_needed(order)
+                                    print(f"[RevAutoVerify] Orden #{order.id} completada tras reintento automático.")
                     except Exception as exc:
                         print(f"[RevAutoVerify] Error orden #{order.id}: {exc}")
                     _t.sleep(2)  # rate-limit entre órdenes
@@ -9156,6 +9336,65 @@ def _revendedores_pending_verification_loop():
 
 _rev_verify_thread = threading.Thread(target=_revendedores_pending_verification_loop, daemon=True)
 _rev_verify_thread.start()
+
+
+_PABILO_AUTO_RETRY_WINDOW_MINUTES = 20
+_PABILO_AUTO_RETRY_MAX_ATTEMPTS = 8
+
+
+def _pabilo_pending_verification_loop():
+    """Background: reintenta la verificación de pago Pabilo de órdenes pending
+    durante los primeros ~20 minutos tras la creación.
+
+    _start_checkout_automation solo intenta verificar una vez, justo al crear la
+    orden. Si el pago del cliente aún no aparecía reflejado en Pabilo en ese
+    instante (el banco puede tardar unos segundos/minutos), la orden se quedaba
+    'procesando' para siempre hasta que un admin le diera a 'Verificar' a mano.
+    Este loop reintenta cada ~45s con un tope de intentos, así la mayoría de las
+    órdenes se aprueban solas apenas el pago aparece en Pabilo.
+    """
+    import time as _t
+    _t.sleep(50)
+    while not _acquire_singleton_lock(_LOCK_PABILO_VERIFY):
+        _t.sleep(30)
+    while True:
+        try:
+            with app.app_context():
+                if _payment_verification_provider() == "pabilo":
+                    cutoff = datetime.utcnow() - timedelta(minutes=_PABILO_AUTO_RETRY_WINDOW_MINUTES)
+                    candidates = Order.query.filter(
+                        Order.status == "pending",
+                        Order.created_at >= cutoff,
+                    ).all()
+                    for order in candidates:
+                        try:
+                            payment_state = _pabilo_get_payment_state(order)
+                            if payment_state.get("verified"):
+                                continue
+                            attempts = int(payment_state.get("attempts") or 0)
+                            if attempts >= _PABILO_AUTO_RETRY_MAX_ATTEMPTS:
+                                continue
+                            request_info = _pabilo_request_info(order)
+                            if not request_info.get("requestable"):
+                                continue
+                            eligibility = _pabilo_eligibility_info(order)
+                            result = _pabilo_verify_and_update_order(
+                                order,
+                                auto_approve_on_verified=bool(eligibility.get("eligible")),
+                                source="pabilo_auto_retry",
+                            )
+                            if result.get("verified"):
+                                print(f"[PabiloAutoRetry] Orden #{order.id} verificada, estado={order.status}")
+                        except Exception as exc:
+                            print(f"[PabiloAutoRetry] Error orden #{order.id}: {exc}")
+                        _t.sleep(2)  # rate-limit entre órdenes
+        except Exception as exc:
+            print(f"[PabiloAutoRetry] Thread error: {exc}")
+        _t.sleep(45)
+
+
+_pabilo_verify_thread = threading.Thread(target=_pabilo_pending_verification_loop, daemon=True)
+_pabilo_verify_thread.start()
 
 
 @app.route("/admin/minigames/config", methods=["GET"])
