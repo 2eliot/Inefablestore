@@ -1301,8 +1301,9 @@
         // ============ TICKER DE RECARGAS RECIENTES ============
         function timeAgoEs(iso) {
             if (!iso) return '';
-            // created_at viene en UTC naive — tratarlo como UTC
-            const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
+            // created_at viene en UTC — puede traer offset (+00:00) o venir naive
+            const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(iso);
+            const d = new Date(hasTz ? iso : iso + 'Z');
             if (isNaN(d.getTime())) return '';
             const secs = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
             if (secs < 90) return 'ahora';
