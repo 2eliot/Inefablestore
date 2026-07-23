@@ -566,6 +566,22 @@
           </div>
 
           <hr style="margin:24px 0; opacity:0.5;">
+          <h3 style="margin:0 0 12px;">Video de fondo (página de inicio)</h3>
+          <div class="form-row">
+            <label>Video (MP4/WebM)</label>
+            <div>
+              <input id="bg-video-file" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-m4v" style="display:none">
+              <button id="btn-upload-bg-video" class="btn primary" type="button">Subir video</button>
+              <button id="btn-remove-bg-video" class="btn" type="button">Quitar video</button>
+              <div id="bg-video-current" style="margin-top:8px; color:#64748b; font-size:13px;">Sin video configurado</div>
+              <video id="bg-video-preview" muted loop playsinline controls style="display:none; margin-top:8px; max-width:320px; border-radius:8px;"></video>
+            </div>
+          </div>
+          <div style="margin-left:200px; color:#64748b; font-size:13px;">
+            Se reproduce en bucle como fondo de la página principal. Usa un MP4 corto y comprimido (máximo 50MB) para que la web cargue rápido.
+          </div>
+
+          <hr style="margin:24px 0; opacity:0.5;">
           <h3 style="margin:0 0 12px;">Tasa de cambio</h3>
           <div class="form-row">
             <label for="rate-bsd">BsD por 1 USD</label>

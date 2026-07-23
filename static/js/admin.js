@@ -866,6 +866,77 @@ document.addEventListener('DOMContentLoaded', () => {
     return res.json();
   }
 
+  // =====================
+  // Config: video de fondo del home
+  // =====================
+  function renderBgVideo(path) {
+    const cur = document.getElementById('bg-video-current');
+    const prev = document.getElementById('bg-video-preview');
+    if (cur) cur.textContent = path || 'Sin video configurado';
+    if (prev) {
+      if (path) { prev.src = path; prev.style.display = ''; }
+      else { prev.removeAttribute('src'); prev.style.display = 'none'; }
+    }
+  }
+
+  async function fetchBgVideo() {
+    try {
+      const res = await fetch('/admin/config/bg_video');
+      const data = await res.json();
+      renderBgVideo((data && data.bg_video_path) || '');
+    } catch (_) { /* ignore */ }
+  }
+
+  {
+    const bgVideoFile = document.getElementById('bg-video-file');
+    const btnUploadBgVideo = document.getElementById('btn-upload-bg-video');
+    const btnRemoveBgVideo = document.getElementById('btn-remove-bg-video');
+
+    if (btnUploadBgVideo && bgVideoFile) {
+      btnUploadBgVideo.addEventListener('click', () => bgVideoFile.click());
+      bgVideoFile.addEventListener('change', async () => {
+        const file = bgVideoFile.files && bgVideoFile.files[0];
+        bgVideoFile.value = '';
+        if (!file) return;
+        if (file.size > 50 * 1024 * 1024) {
+          toast('El video supera 50MB — comprímelo antes de subirlo', 'error');
+          return;
+        }
+        try {
+          btnUploadBgVideo.disabled = true;
+          btnUploadBgVideo.textContent = 'Subiendo...';
+          const fd = new FormData();
+          fd.append('video', file);
+          const res = await fetch('/admin/config/bg_video/upload', { method: 'POST', body: fd });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo subir el video');
+          renderBgVideo(data.bg_video_path || '');
+          toast('Video de fondo actualizado');
+        } catch (e) {
+          toast(e.message || 'No se pudo subir el video', 'error');
+        } finally {
+          btnUploadBgVideo.disabled = false;
+          btnUploadBgVideo.textContent = 'Subir video';
+        }
+      });
+    }
+
+    if (btnRemoveBgVideo) {
+      btnRemoveBgVideo.addEventListener('click', async () => {
+        try {
+          const res = await fetch('/admin/config/bg_video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bg_video_path: '' })
+          });
+          if (!res.ok) throw new Error();
+          renderBgVideo('');
+          toast('Video de fondo quitado');
+        } catch (_) { toast('No se pudo quitar el video', 'error'); }
+      });
+    }
+  }
+
   async function fetchThanksImage() {
     try {
       const res = await fetch('/admin/config/thanks_image');
@@ -1274,6 +1345,7 @@ window.fetchPayments = fetchPayments;
       fetchLogo();
       fetchMidBanner();
       fetchThanksImage();
+      fetchBgVideo();
       fetchActiveLoginGame();
       fetchPayments();
       fetchRate();

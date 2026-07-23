@@ -33,9 +33,32 @@
         .transition-all-custom {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
+        /* Video de fondo (configurable desde el admin) */
+        body.has-bg-video { background-color: transparent; }
+        #bg-video-wrap { position: fixed; inset: 0; z-index: -1; pointer-events: none; display: none; }
+        #bg-video-wrap video { width: 100%; height: 100%; object-fit: cover; }
+        #bg-video-overlay { position: absolute; inset: 0; background: rgba(12, 12, 14, 0.82); }
+        /* Ticker de recargas recientes */
+        @keyframes ticker-scroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        #ticker-track {
+            display: flex;
+            align-items: center;
+            width: max-content;
+            animation: ticker-scroll 40s linear infinite;
+        }
+        #recharge-ticker:hover #ticker-track { animation-play-state: paused; }
     </style>
 </head>
 <body class="text-gray-100 flex flex-col min-h-screen">
+
+    <!-- VIDEO DE FONDO EN BUCLE (se configura en el admin) -->
+    <div id="bg-video-wrap" aria-hidden="true">
+        <video id="bg-video" autoplay muted loop playsinline preload="metadata"></video>
+        <div id="bg-video-overlay"></div>
+    </div>
 
     <!-- HEADER -->
     <header class="sticky top-0 z-50 bg-[#0c0c0e]/95 backdrop-blur-md border-b border-[#222226] px-4 py-3">
@@ -55,6 +78,13 @@
             </button>
         </div>
     </header>
+
+    <!-- TICKER DE RECARGAS RECIENTES (juegos automaticos) -->
+    <div id="recharge-ticker" class="w-full bg-gradient-to-r from-[#0d1326] via-[#101a33] to-[#0d1326] border-b border-[#1b2440] overflow-hidden" style="display:none">
+        <div class="py-1.5 overflow-hidden">
+            <div id="ticker-track"></div>
+        </div>
+    </div>
 
     <!-- MAIN CONTAINER -->
     <main class="flex-grow max-w-md md:max-w-2xl w-full mx-auto px-4 py-5 space-y-6">
@@ -442,6 +472,9 @@
 
                 // Cargar imagenes del carrusel desde el admin
                 buildHeroCarousel(heroData.images || []);
+
+                // Video de fondo en bucle (config del admin)
+                setupBgVideo(heroData.video || '');
 
                 // Cargar tasa de cambio desde el admin (0 es valido, usar != null)
                 if (rateData.rate_bsd_per_usd != null) {
@@ -1246,6 +1279,76 @@
 
         let carouselInterval = null;
 
+        // ============ VIDEO DE FONDO (config del admin) ============
+        function setupBgVideo(src) {
+            const wrap = document.getElementById('bg-video-wrap');
+            const vid = document.getElementById('bg-video');
+            if (!wrap || !vid) return;
+            if (!src) {
+                wrap.style.display = 'none';
+                document.body.classList.remove('has-bg-video');
+                vid.removeAttribute('src');
+                return;
+            }
+            if (vid.getAttribute('src') !== src) vid.src = src;
+            wrap.style.display = 'block';
+            document.body.classList.add('has-bg-video');
+            // Algunos navegadores bloquean autoplay hasta interaccion — reintentar silenciosamente
+            const p = vid.play();
+            if (p && p.catch) p.catch(() => {});
+        }
+
+        // ============ TICKER DE RECARGAS RECIENTES ============
+        function timeAgoEs(iso) {
+            if (!iso) return '';
+            // created_at viene en UTC naive — tratarlo como UTC
+            const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
+            if (isNaN(d.getTime())) return '';
+            const secs = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+            if (secs < 90) return 'ahora';
+            const mins = Math.floor(secs / 60);
+            if (mins < 60) return mins + 'min';
+            const hours = Math.floor(mins / 60);
+            if (hours < 24) return hours + 'h';
+            return Math.floor(hours / 24) + 'd';
+        }
+
+        function buildRechargeTicker(recharges) {
+            const bar = document.getElementById('recharge-ticker');
+            const track = document.getElementById('ticker-track');
+            if (!bar || !track) return;
+            const list = (recharges || []).filter(r => r && r.user && r.product);
+            if (!list.length) {
+                bar.style.display = 'none';
+                track.innerHTML = '';
+                return;
+            }
+            const itemHtml = list.map(r => {
+                const ago = timeAgoEs(r.created_at);
+                return '<span class="inline-flex items-center gap-1.5 px-4 text-[11px] font-semibold text-gray-300 whitespace-nowrap">' +
+                    '<i class="fa-solid fa-fire text-orange-400 text-[10px]"></i>' +
+                    '<span class="text-white font-bold">' + r.user + '</span>' +
+                    '<span class="text-gray-400">recargó</span>' +
+                    '<span class="text-yellow-400 font-bold">' + r.product + '</span>' +
+                    (ago ? '<span class="text-gray-500 text-[10px]">· ' + ago + '</span>' : '') +
+                '</span>';
+            }).join('');
+            // Duplicar el contenido para que el scroll infinito no tenga cortes
+            track.innerHTML = itemHtml + itemHtml;
+            // Velocidad proporcional a la cantidad de items
+            track.style.animationDuration = Math.max(20, list.length * 5) + 's';
+            bar.style.display = 'block';
+        }
+
+        async function loadRecentRecharges() {
+            try {
+                const data = await fetchJSON('/store/recent-recharges');
+                buildRechargeTicker(data.recharges || []);
+            } catch (e) {
+                // Silencioso — si falla se oculta el ticker en el proximo intento exitoso
+            }
+        }
+
         // ============ LOGIN MODAL ============
         function openLoginModal() {
             loginMode = 'login';
@@ -1425,6 +1528,9 @@
             checkSession();
             loadAllData();
             showSlide(0);
+            loadRecentRecharges();
+            // Refrescar el ticker con ordenes nuevas cada 60s
+            setInterval(loadRecentRecharges, 60000);
         };
     </script>
 </body>

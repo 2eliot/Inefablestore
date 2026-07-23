@@ -138,9 +138,11 @@ try:
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 except Exception:
     pass
-app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB
+app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024  # 60MB (permite subir el video de fondo)
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # Disable static caching in debug
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+VIDEO_ALLOWED_EXTENSIONS = {"mp4", "webm", "m4v", "mov"}
+BG_VIDEO_MAX_BYTES = 50 * 1024 * 1024  # 50MB máximo para el video de fondo
 FAVICON_FILENAME = "561553627_18409264204136226_1099017029378111495_n.ico"
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@inefablestore.com")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "123456")
@@ -6384,8 +6386,100 @@ def store_hero():
             get_config_value("hero_1", ""),
             get_config_value("hero_2", ""),
             get_config_value("hero_3", ""),
-        ]
+        ],
+        "video": get_config_value("bg_video_path", ""),
     })
+
+
+def _mask_ticker_name(order_obj) -> str:
+    """Nombre censurado para el ticker público: nick del jugador si existe,
+    si no el ID de jugador; siempre 2 caracteres visibles + ***."""
+    raw = (order_obj.customer_name or "").strip()
+    cid = (order_obj.customer_id or "").strip()
+    # customer_name puede traer un email (fallback al crear la orden) — quedarse con el prefijo
+    if "@" in raw:
+        raw = raw.split("@")[0].strip()
+    # Si no hay nombre real, usar el ID de jugador
+    if not raw or raw == cid:
+        raw = cid
+    if not raw:
+        raw = ((order_obj.name or "").strip() or (order_obj.email or "").split("@")[0]).strip()
+    if not raw:
+        return "an***"
+    return f"{raw[:2]}***"
+
+
+@app.route("/store/recent-recharges")
+def store_recent_recharges():
+    """Public: últimas recargas de juegos con recarga automática, para el ticker del home.
+
+    Solo se incluyen órdenes entregadas/aprobadas cuyos items tienen mapeo
+    automático activo. El nombre/ID se censura en el servidor — nunca sale completo.
+    """
+    try:
+        auto_item_ids = [
+            int(m.store_item_id)
+            for m in RevendedoresItemMapping.query.filter_by(auto_enabled=True, active=True).all()
+        ]
+    except Exception:
+        auto_item_ids = []
+
+    out = []
+    if auto_item_ids:
+        try:
+            orders = (
+                Order.query
+                .filter(Order.status.in_(("delivered", "approved")))
+                .filter(Order.item_id.in_(auto_item_ids))
+                .order_by(Order.id.desc())
+                .limit(12)
+                .all()
+            )
+        except Exception:
+            orders = []
+
+        item_ids = sorted({int(o.item_id) for o in orders if o.item_id})
+        items_by_id = {}
+        pkgs_by_id = {}
+        if item_ids:
+            try:
+                items_by_id = {
+                    int(it.id): it
+                    for it in GamePackageItem.query.filter(GamePackageItem.id.in_(item_ids)).all()
+                }
+                pkg_ids = sorted({int(it.store_package_id) for it in items_by_id.values()})
+                pkgs_by_id = {
+                    int(p.id): p
+                    for p in StorePackage.query.filter(StorePackage.id.in_(pkg_ids)).all()
+                }
+            except Exception:
+                items_by_id = {}
+                pkgs_by_id = {}
+
+        for o in orders:
+            try:
+                it = items_by_id.get(int(o.item_id or 0))
+                product = (it.title or "").strip() if it else ""
+                # Títulos numéricos (ej. "1166") se complementan con la subcategoría ("Diamantes")
+                if it and re.fullmatch(r"[\d\s\.,\+xX]+", product or " "):
+                    pkg = pkgs_by_id.get(int(it.store_package_id or 0))
+                    if pkg:
+                        label = (pkg.subcat_label_b if it.is_subcat_b else pkg.subcat_label_a) or ""
+                        product = f"{product} {label}".strip()
+                if not product:
+                    product = "Producto"
+                out.append({
+                    "id": o.id,
+                    "user": _mask_ticker_name(o),
+                    "product": product,
+                    "created_at": o.created_at.isoformat() if o.created_at else "",
+                })
+            except Exception:
+                continue
+
+    resp = jsonify({"ok": True, "recharges": out})
+    resp.headers["Cache-Control"] = "public, max-age=20"
+    return resp
 
 
 @app.route("/store/rate")
@@ -6659,6 +6753,68 @@ def admin_config_thanks_image_set():
     except Exception as exc:
         return jsonify({"ok": False, "error": f"No se pudo guardar imagen de gracias: {exc}"}), 500
     return jsonify({"ok": True})
+
+
+@app.route("/admin/config/bg_video", methods=["GET"])
+def admin_config_bg_video_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "bg_video_path": get_config_value("bg_video_path", "")})
+
+
+@app.route("/admin/config/bg_video", methods=["POST"])
+def admin_config_bg_video_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        set_config_values({"bg_video_path": (data.get("bg_video_path") or "").strip()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar video: {exc}"}), 500
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/config/bg_video/upload", methods=["POST"])
+def admin_config_bg_video_upload():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    file = request.files.get("video")
+    if not file or file.filename == "":
+        return jsonify({"ok": False, "error": "Archivo requerido"}), 400
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in VIDEO_ALLOWED_EXTENSIONS:
+        return jsonify({"ok": False, "error": "Formato no permitido (usa MP4 o WebM)"}), 400
+    if request.content_length and request.content_length > BG_VIDEO_MAX_BYTES:
+        return jsonify({"ok": False, "error": "El video supera el máximo de 50MB. Comprímelo antes de subirlo"}), 400
+    fname = secure_filename(file.filename)
+    ts = now_ve().strftime("%Y%m%d%H%M%S%f")
+    base, fext = os.path.splitext(fname)
+    fname = f"{base}_{ts}{fext}"
+    try:
+        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    except Exception:
+        pass
+    fpath = os.path.join(app.config["UPLOAD_FOLDER"], fname)
+    file.save(fpath)
+    public_path = f"{app.config['UPLOAD_URL_PREFIX'].rstrip('/')}/{fname}"
+    # Borrar el video anterior del disco para no acumular archivos grandes
+    old_path = get_config_value("bg_video_path", "")
+    try:
+        old_name = os.path.basename(old_path or "")
+        if old_name and old_name != fname:
+            old_fpath = os.path.join(app.config["UPLOAD_FOLDER"], old_name)
+            if os.path.isfile(old_fpath):
+                os.remove(old_fpath)
+    except Exception:
+        pass
+    try:
+        set_config_values({"bg_video_path": public_path})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar video: {exc}"}), 500
+    return jsonify({"ok": True, "bg_video_path": public_path})
 
 
 @app.route("/admin/config/rate", methods=["GET"])
