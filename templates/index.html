@@ -80,7 +80,7 @@
     </header>
 
     <!-- TICKER DE RECARGAS RECIENTES (juegos automaticos) -->
-    <div id="recharge-ticker" class="w-full bg-gradient-to-r from-[#0d1326] via-[#101a33] to-[#0d1326] border-b border-[#1b2440] overflow-hidden" style="display:none">
+    <div id="recharge-ticker" class="w-full bg-[#121214] border-b border-[#1a1a1e] overflow-hidden" style="display:none">
         <div class="py-1.5 overflow-hidden">
             <div id="ticker-track"></div>
         </div>
@@ -1327,10 +1327,10 @@
             const itemHtml = list.map(r => {
                 const ago = timeAgoEs(r.created_at);
                 return '<span class="inline-flex items-center gap-1.5 px-4 text-[11px] font-semibold text-gray-300 whitespace-nowrap">' +
-                    '<i class="fa-solid fa-fire text-orange-400 text-[10px]"></i>' +
+                    '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 shrink-0"></span>' +
                     '<span class="text-white font-bold">' + r.user + '</span>' +
                     '<span class="text-gray-400">recargó</span>' +
-                    '<span class="text-yellow-400 font-bold">' + r.product + '</span>' +
+                    '<span class="text-emerald-400 font-bold">' + r.product + '</span>' +
                     (ago ? '<span class="text-gray-500 text-[10px]">· ' + ago + '</span>' : '') +
                 '</span>';
             }).join('');
