@@ -1346,6 +1346,7 @@
                     '<span class="text-white font-bold">' + r.user + '</span>' +
                     '<span class="text-gray-400">recargó</span>' +
                     '<span class="text-emerald-400 font-bold">' + r.product + '</span>' +
+                    (r.game ? '<span class="text-gray-400">de</span> <span class="text-white font-semibold">' + r.game + '</span>' : '') +
                     (ago ? '<span class="text-gray-500 text-[10px]">· ' + ago + '</span>' : '') +
                 '</span>';
             }).join('');

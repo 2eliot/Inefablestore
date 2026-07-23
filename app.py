@@ -6460,19 +6460,19 @@ def store_recent_recharges():
         for o in orders:
             try:
                 it = items_by_id.get(int(o.item_id or 0))
+                pkg = pkgs_by_id.get(int(it.store_package_id or 0)) if it else None
                 product = (it.title or "").strip() if it else ""
                 # Títulos numéricos (ej. "1166") se complementan con la subcategoría ("Diamantes")
-                if it and re.fullmatch(r"[\d\s\.,\+xX]+", product or " "):
-                    pkg = pkgs_by_id.get(int(it.store_package_id or 0))
-                    if pkg:
-                        label = (pkg.subcat_label_b if it.is_subcat_b else pkg.subcat_label_a) or ""
-                        product = f"{product} {label}".strip()
+                if it and pkg and re.fullmatch(r"[\d\s\.,\+xX]+", product or " "):
+                    label = (pkg.subcat_label_b if it.is_subcat_b else pkg.subcat_label_a) or ""
+                    product = f"{product} {label}".strip()
                 if not product:
                     product = "Producto"
                 out.append({
                     "id": o.id,
                     "user": _mask_ticker_name(o),
                     "product": product,
+                    "game": (pkg.name or "").strip() if pkg else "",
                     "created_at": o.created_at.isoformat() if o.created_at else "",
                 })
             except Exception:
