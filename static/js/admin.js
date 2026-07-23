@@ -887,6 +887,37 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (_) { /* ignore */ }
   }
 
+  const inputBgImage = document.getElementById('bg-image');
+
+  async function fetchBgImage() {
+    try {
+      const res = await fetch('/admin/config/bg_image');
+      const data = await res.json();
+      if (inputBgImage) {
+        inputBgImage.value = (data && data.bg_image_path) || '';
+        syncDropdown(inputBgImage);
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  {
+    const btnRemoveBgImage = document.getElementById('btn-remove-bg-image');
+    if (btnRemoveBgImage) {
+      btnRemoveBgImage.addEventListener('click', async () => {
+        try {
+          const res = await fetch('/admin/config/bg_image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bg_image_path: '' })
+          });
+          if (!res.ok) throw new Error();
+          if (inputBgImage) { inputBgImage.value = ''; syncDropdown(inputBgImage); }
+          toast('Imagen de fondo quitada');
+        } catch (_) { toast('No se pudo quitar la imagen', 'error'); }
+      });
+    }
+  }
+
   {
     const bgVideoFile = document.getElementById('bg-video-file');
     const btnUploadBgVideo = document.getElementById('btn-upload-bg-video');
@@ -1346,6 +1377,7 @@ window.fetchPayments = fetchPayments;
       fetchMidBanner();
       fetchThanksImage();
       fetchBgVideo();
+      fetchBgImage();
       fetchActiveLoginGame();
       fetchPayments();
       fetchRate();
@@ -3213,6 +3245,14 @@ window.fetchHero = fetchHero;
     } catch (_) { toast('No se pudo guardar el banner', 'error'); }
   });
   mountConfigDropdown('slot-thanks-image', inputThanksImage);
+  // Imagen de fondo del home — auto-guarda al elegir
+  mountConfigDropdown('slot-bg-image', inputBgImage, async (path) => {
+    try {
+      const res = await fetch('/admin/config/bg_image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bg_image_path: path }) });
+      if (!res.ok) throw new Error();
+      toast('Imagen de fondo actualizada');
+    } catch (_) { toast('No se pudo guardar la imagen de fondo', 'error'); }
+  });
   mountConfigDropdown('slot-hero-1', hero1);
   mountConfigDropdown('slot-hero-2', hero2);
   mountConfigDropdown('slot-hero-3', hero3);

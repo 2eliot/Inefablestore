@@ -566,7 +566,7 @@
           </div>
 
           <hr style="margin:24px 0; opacity:0.5;">
-          <h3 style="margin:0 0 12px;">Video de fondo (página de inicio)</h3>
+          <h3 style="margin:0 0 12px;">Fondo de la página de inicio (video o imagen)</h3>
           <div class="form-row">
             <label>Video (MP4/WebM)</label>
             <div>
@@ -577,8 +577,15 @@
               <video id="bg-video-preview" muted loop playsinline controls style="display:none; margin-top:8px; max-width:320px; border-radius:8px;"></video>
             </div>
           </div>
+          <div class="form-row">
+            <label>Imagen de fondo</label>
+            <div>
+              <div id="slot-bg-image"></div><input id="bg-image" type="hidden">
+              <button id="btn-remove-bg-image" class="btn" type="button" style="margin-top:8px;">Quitar imagen</button>
+            </div>
+          </div>
           <div style="margin-left:200px; color:#64748b; font-size:13px;">
-            Se reproduce en bucle como fondo de la página principal. Usa un MP4 corto y comprimido (máximo 50MB) para que la web cargue rápido.
+            El fondo se muestra a pantalla completa detrás del contenido. Si configuras video e imagen a la vez, el video tiene prioridad. Para el video usa un MP4 corto y comprimido (máximo 50MB).
           </div>
 
           <hr style="margin:24px 0; opacity:0.5;">

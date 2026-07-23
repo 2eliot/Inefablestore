@@ -36,7 +36,7 @@
         /* Video de fondo (configurable desde el admin) */
         body.has-bg-video { background-color: transparent; }
         #bg-video-wrap { position: fixed; inset: 0; z-index: -1; pointer-events: none; display: none; }
-        #bg-video-wrap video { width: 100%; height: 100%; object-fit: cover; }
+        #bg-video-wrap video, #bg-video-wrap img { width: 100%; height: 100%; object-fit: cover; }
         #bg-video-overlay { position: absolute; inset: 0; background: rgba(12, 12, 14, 0.82); }
         /* Ticker de recargas recientes */
         @keyframes ticker-scroll {
@@ -54,9 +54,10 @@
 </head>
 <body class="text-gray-100 flex flex-col min-h-screen">
 
-    <!-- VIDEO DE FONDO EN BUCLE (se configura en el admin) -->
+    <!-- FONDO DE PAGINA: video en bucle o imagen (se configura en el admin) -->
     <div id="bg-video-wrap" aria-hidden="true">
-        <video id="bg-video" autoplay muted loop playsinline preload="metadata"></video>
+        <video id="bg-video" autoplay muted loop playsinline preload="metadata" style="display:none"></video>
+        <img id="bg-image" alt="" style="display:none">
         <div id="bg-video-overlay"></div>
     </div>
 
@@ -473,8 +474,8 @@
                 // Cargar imagenes del carrusel desde el admin
                 buildHeroCarousel(heroData.images || []);
 
-                // Video de fondo en bucle (config del admin)
-                setupBgVideo(heroData.video || '');
+                // Fondo de pagina: video en bucle o imagen (config del admin)
+                setupBgMedia(heroData.video || '', heroData.bg_image || '');
 
                 // Cargar tasa de cambio desde el admin (0 es valido, usar != null)
                 if (rateData.rate_bsd_per_usd != null) {
@@ -1279,23 +1280,37 @@
 
         let carouselInterval = null;
 
-        // ============ VIDEO DE FONDO (config del admin) ============
-        function setupBgVideo(src) {
+        // ============ FONDO DE PAGINA: video o imagen (config del admin) ============
+        function setupBgMedia(videoSrc, imageSrc) {
             const wrap = document.getElementById('bg-video-wrap');
             const vid = document.getElementById('bg-video');
-            if (!wrap || !vid) return;
-            if (!src) {
+            const img = document.getElementById('bg-image');
+            if (!wrap || !vid || !img) return;
+            if (videoSrc) {
+                // El video tiene prioridad sobre la imagen
+                img.style.display = 'none';
+                img.removeAttribute('src');
+                if (vid.getAttribute('src') !== videoSrc) vid.src = videoSrc;
+                vid.style.display = 'block';
+                wrap.style.display = 'block';
+                document.body.classList.add('has-bg-video');
+                // Algunos navegadores bloquean autoplay hasta interaccion — reintentar silenciosamente
+                const p = vid.play();
+                if (p && p.catch) p.catch(() => {});
+            } else if (imageSrc) {
+                if (vid.pause) vid.pause();
+                vid.removeAttribute('src');
+                vid.style.display = 'none';
+                if (img.getAttribute('src') !== imageSrc) img.src = imageSrc;
+                img.style.display = 'block';
+                wrap.style.display = 'block';
+                document.body.classList.add('has-bg-video');
+            } else {
                 wrap.style.display = 'none';
                 document.body.classList.remove('has-bg-video');
                 vid.removeAttribute('src');
-                return;
+                img.removeAttribute('src');
             }
-            if (vid.getAttribute('src') !== src) vid.src = src;
-            wrap.style.display = 'block';
-            document.body.classList.add('has-bg-video');
-            // Algunos navegadores bloquean autoplay hasta interaccion — reintentar silenciosamente
-            const p = vid.play();
-            if (p && p.catch) p.catch(() => {});
         }
 
         // ============ TICKER DE RECARGAS RECIENTES ============

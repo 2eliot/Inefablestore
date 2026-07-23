@@ -6388,6 +6388,7 @@ def store_hero():
             get_config_value("hero_3", ""),
         ],
         "video": get_config_value("bg_video_path", ""),
+        "bg_image": get_config_value("bg_image_path", ""),
     })
 
 
@@ -6773,6 +6774,27 @@ def admin_config_bg_video_set():
         set_config_values({"bg_video_path": (data.get("bg_video_path") or "").strip()})
     except Exception as exc:
         return jsonify({"ok": False, "error": f"No se pudo guardar video: {exc}"}), 500
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/config/bg_image", methods=["GET"])
+def admin_config_bg_image_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({"ok": True, "bg_image_path": get_config_value("bg_image_path", "")})
+
+
+@app.route("/admin/config/bg_image", methods=["POST"])
+def admin_config_bg_image_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        set_config_values({"bg_image_path": (data.get("bg_image_path") or "").strip()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar imagen de fondo: {exc}"}), 500
     return jsonify({"ok": True})
 
 
