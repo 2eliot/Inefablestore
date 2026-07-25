@@ -2704,7 +2704,7 @@ window.refreshGallery = refreshGallery;
             <div class="aff-edit-field"><label>Bono a pagar (USD)</label><input class="vid-reward" type="number" min="0" step="0.01" value="${Number(v.tier_reward_usd || 0)}" /></div>
             <div class="aff-edit-field"><label>Nota (opcional)</label><input class="vid-note" type="text" placeholder="Motivo o comentario" /></div>
           </div>
-          <div class="aff-vid-suggested">Tramo <span class="vid-tier-label">${escAttr(v.tier_label || 'Sin tramo')}</span> → sugerido <span class="vid-tier-amount">${fmtUSD(v.tier_reward_usd)}</span>. Podés cambiar el monto antes de aprobar.</div>
+          <div class="aff-vid-suggested">Tramo <span class="vid-tier-label">${escAttr(v.tier_label || 'Sin tramo')}</span> → sugerido <span class="vid-tier-amount">${fmtUSD(v.tier_reward_usd)}</span>. Puedes cambiar el monto antes de aprobar.</div>
           <div class="aff-wd-actions">
             <button class="btn primary btn-vid-approve" data-id="${v.id}" type="button">Aprobar y pagar</button>
             <button class="btn btn-vid-reject" data-id="${v.id}" type="button">Rechazar</button>

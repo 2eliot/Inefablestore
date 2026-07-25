@@ -364,6 +364,51 @@
         </div>
     </div>
 
+    <!-- POPUP CANAL DE WHATSAPP -->
+    <div id="wa-popup" class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
+        <div id="wa-popup-card" class="relative bg-[#141418] border border-[#2a2a30] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl transition-all transform scale-95 opacity-0 duration-300">
+            <!-- Contador y cierre -->
+            <div class="absolute top-4 right-4 flex items-center gap-3 z-10">
+                <div id="wa-countdown" class="relative w-7 h-7 flex items-center justify-center">
+                    <svg class="w-7 h-7 -rotate-90" viewBox="0 0 32 32">
+                        <circle cx="16" cy="16" r="14" fill="none" stroke="#2a2a30" stroke-width="2.5"></circle>
+                        <circle id="wa-ring" cx="16" cy="16" r="14" fill="none" stroke="#22c55e" stroke-width="2.5"
+                                stroke-linecap="round" stroke-dasharray="87.96" stroke-dashoffset="0"
+                                style="transition: stroke-dashoffset 1s linear"></circle>
+                    </svg>
+                    <span id="wa-count" class="absolute inset-0 flex items-center justify-center text-[11px] font-black text-gray-300">3</span>
+                </div>
+                <button id="wa-close" onclick="closeWaPopup()" aria-label="Cerrar"
+                        class="text-gray-500 text-xl leading-none transition-all duration-200 opacity-0 pointer-events-none hover:text-white">&times;</button>
+            </div>
+
+            <div class="px-6 pt-9 pb-6 text-center">
+                <!-- Icono -->
+                <div class="mx-auto w-16 h-16 rounded-full bg-gradient-verde flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-5">
+                    <i class="fa-brands fa-whatsapp text-3xl text-[#0c0c0e]"></i>
+                </div>
+
+                <h3 class="text-xl font-black text-white leading-tight mb-6">¡Únete a nuestra Comunidad!</h3>
+
+                <a href="https://whatsapp.com/channel/0029Vajpy7c5a23zC8NDdk1p" target="_blank" rel="noopener noreferrer"
+                   onclick="joinWaChannel()"
+                   class="w-full flex items-center justify-center gap-2.5 py-3.5 bg-gradient-verde text-[#0c0c0e] font-black text-xs rounded-xl tracking-wider uppercase transition-all-custom shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 active:scale-[0.98]">
+                    <i class="fa-brands fa-whatsapp text-lg"></i> Unirme al canal
+                </a>
+
+                <button onclick="closeWaPopup()" type="button"
+                        class="w-full mt-3 py-3 bg-[#1a1a1e] border border-[#2a2a30] text-gray-300 font-bold text-xs rounded-xl transition-all-custom hover:border-emerald-500/40 hover:text-white active:scale-[0.98]">
+                    Continuar a la página
+                </button>
+
+                <button onclick="dismissWaPopupToday()" type="button"
+                        class="mt-4 inline-flex items-center gap-2 text-[11px] text-gray-500 hover:text-gray-300 transition-colors">
+                    <i class="fa-solid fa-bell-slash text-[10px]"></i> No mostrar más por hoy
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL DE CHECKOUT -->
     <div id="checkout-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm hidden">
         <div class="color-card-bg border border-[#2a2a30] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl transition-all transform scale-95 opacity-0 duration-300" id="modal-content">
@@ -1453,6 +1498,123 @@
             }
         }
 
+        // ============ POPUP CANAL DE WHATSAPP ============
+        const WA_POPUP_DAY_KEY = 'inefable_wa_popup_hidden_until';
+        const WA_POPUP_SESSION_KEY = 'inefable_wa_popup_seen';
+        const WA_COUNTDOWN_SECONDS = 3;
+        const WA_RING_LENGTH = 87.96; // 2 * PI * r (r = 14)
+        let waCountdownTimer = null;
+
+        function waPopupSuppressed() {
+            try {
+                // "No mostrar mas por hoy" gana sobre todo lo demas
+                const until = localStorage.getItem(WA_POPUP_DAY_KEY);
+                if (until && Date.now() < Number(until)) return true;
+                // Y dentro de la misma visita solo se muestra una vez
+                return sessionStorage.getItem(WA_POPUP_SESSION_KEY) === '1';
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function markWaPopupSeen() {
+            try { sessionStorage.setItem(WA_POPUP_SESSION_KEY, '1'); } catch (e) {}
+        }
+
+        function openWaPopup() {
+            const popup = document.getElementById('wa-popup');
+            const card = document.getElementById('wa-popup-card');
+            if (!popup || !card) return;
+            popup.style.display = 'flex';
+            requestAnimationFrame(() => {
+                card.classList.remove('scale-95', 'opacity-0');
+                card.classList.add('scale-100', 'opacity-100');
+            });
+            markWaPopupSeen();
+            startWaCountdown();
+        }
+
+        function startWaCountdown() {
+            const ring = document.getElementById('wa-ring');
+            const label = document.getElementById('wa-count');
+            const closeBtn = document.getElementById('wa-close');
+            let left = WA_COUNTDOWN_SECONDS;
+            if (label) label.innerText = left;
+            if (ring) ring.setAttribute('stroke-dashoffset', '0');
+
+            clearInterval(waCountdownTimer);
+            waCountdownTimer = setInterval(() => {
+                left -= 1;
+                const done = left <= 0;
+                if (ring) {
+                    const progress = (WA_COUNTDOWN_SECONDS - left) / WA_COUNTDOWN_SECONDS;
+                    ring.setAttribute('stroke-dashoffset', String(WA_RING_LENGTH * progress));
+                }
+                if (label) label.innerText = done ? '' : left;
+                if (done) {
+                    clearInterval(waCountdownTimer);
+                    // Recien ahora se habilita la X
+                    const counter = document.getElementById('wa-countdown');
+                    if (counter) counter.style.display = 'none';
+                    if (closeBtn) {
+                        closeBtn.classList.remove('opacity-0', 'pointer-events-none');
+                        closeBtn.classList.add('opacity-100');
+                    }
+                }
+            }, 1000);
+        }
+
+        function closeWaPopup() {
+            const popup = document.getElementById('wa-popup');
+            const card = document.getElementById('wa-popup-card');
+            if (!popup) return;
+            clearInterval(waCountdownTimer);
+            if (card) {
+                card.classList.remove('scale-100', 'opacity-100');
+                card.classList.add('scale-95', 'opacity-0');
+            }
+            setTimeout(() => { popup.style.display = 'none'; }, 200);
+        }
+
+        function dismissWaPopupToday() {
+            try {
+                const midnight = new Date();
+                midnight.setHours(24, 0, 0, 0); // vuelve a aparecer manana
+                localStorage.setItem(WA_POPUP_DAY_KEY, String(midnight.getTime()));
+            } catch (e) {}
+            closeWaPopup();
+        }
+
+        function joinWaChannel() {
+            // El enlace abre en otra pestana; aca solo cerramos el popup
+            markWaPopupSeen();
+            setTimeout(closeWaPopup, 150);
+        }
+
+        function initWaPopup() {
+            if (waPopupSuppressed()) return;
+            setTimeout(openWaPopup, 1500);
+        }
+
+        // Cerrar con ESC o tocando afuera, una vez terminado el contador
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            const popup = document.getElementById('wa-popup');
+            if (!popup || popup.style.display === 'none') return;
+            const closeBtn = document.getElementById('wa-close');
+            if (closeBtn && !closeBtn.classList.contains('pointer-events-none')) closeWaPopup();
+        });
+        document.addEventListener('click', (e) => {
+            const popup = document.getElementById('wa-popup');
+            if (!popup || popup.style.display === 'none') return;
+            const card = document.getElementById('wa-popup-card');
+            const closeBtn = document.getElementById('wa-close');
+            if (e.target === popup && card && !card.contains(e.target)
+                && closeBtn && !closeBtn.classList.contains('pointer-events-none')) {
+                closeWaPopup();
+            }
+        });
+
         // ============ MINI INFLUENCER ============
         function openMiniModal() {
             closeLoginModal();
@@ -1670,6 +1832,7 @@
             loadRecentRecharges();
             // Refrescar el ticker con ordenes nuevas cada 60s
             setInterval(loadRecentRecharges, 60000);
+            initWaPopup();
         };
     </script>
 </body>
