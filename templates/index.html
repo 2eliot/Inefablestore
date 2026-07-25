@@ -314,6 +314,52 @@
                     ¿No tienes cuenta?
                     <button onclick="showRegisterForm()" class="text-emerald-400 font-bold hover:underline">Regístrate</button>
                 </p>
+                <div class="pt-3 border-t border-[#222226]">
+                    <button onclick="openMiniModal()" type="button" class="w-full py-2.5 bg-[#0c0c0e] border border-purple-500/40 hover:border-purple-400 text-purple-300 font-black text-[11px] rounded-xl tracking-wider uppercase transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-star"></i> Registro de mini influencer
+                    </button>
+                    <p class="text-center text-[10px] text-gray-500 mt-2">Crea contenido y gana con tu propio código</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE REGISTRO MINI INFLUENCER -->
+    <div id="mini-modal" class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
+        <div class="bg-[#141418] border border-[#2a2a30] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
+            <div class="p-5 border-b border-[#222226] flex justify-between items-center bg-gradient-to-r from-purple-950/30 to-transparent flex-shrink-0">
+                <h3 class="font-black text-white tracking-wide text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-star text-purple-400"></i> MINI INFLUENCER
+                </h3>
+                <button onclick="closeMiniModal()" class="text-gray-400 hover:text-white text-lg leading-none">&times;</button>
+            </div>
+            <div class="p-5 space-y-3 overflow-y-auto">
+                <p class="text-[11px] text-gray-400 leading-relaxed">
+                    Registra tu perfil, elige tu código y compártelo con tu audiencia.
+                    Ganas comisión por cada recarga hecha con tu código, más bonos por tus videos.
+                    <span class="text-purple-300 font-bold">Tu perfil pasa por revisión antes de activarse.</span>
+                </p>
+                <input type="text" id="mini-name" placeholder="Tu nombre o nombre de creador" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <input type="email" id="mini-email" placeholder="Email (para entrar a tu panel)" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <div class="relative">
+                    <input type="password" id="mini-password" placeholder="Contraseña (mín. 6 caracteres)" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all pr-10">
+                    <button onclick="toggleMiniPassword()" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                        <i id="mini-eye" class="fa-solid fa-eye text-xs"></i>
+                    </button>
+                </div>
+                <input type="text" id="mini-channel" placeholder="Link de tu canal (TikTok, YouTube...)" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <div>
+                    <input type="text" id="mini-code" placeholder="Código que quieres usar (ej: TUNOMBRE)" maxlength="20" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all uppercase">
+                    <p class="text-[10px] text-gray-500 mt-1">Solo letras, números, guion y guion bajo.</p>
+                </div>
+                <div id="mini-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
+                <button onclick="doMiniRegister()" id="btn-do-mini" class="w-full py-2.5 bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white font-black text-xs rounded-xl tracking-wider uppercase transition-all active:scale-[0.98]">
+                    Enviar solicitud
+                </button>
+                <p class="text-center text-[11px] text-gray-500">
+                    ¿Ya tienes perfil?
+                    <button onclick="closeMiniModal(); openLoginModal();" class="text-emerald-400 font-bold hover:underline">Inicia sesión</button>
+                </p>
             </div>
         </div>
     </div>
@@ -1375,6 +1421,7 @@
             document.getElementById('login-error').style.display = 'none';
             document.getElementById('login-modal-title').innerText = 'Iniciar Sesión';
             document.getElementById('btn-do-login').innerText = 'Entrar';
+            document.getElementById('login-email').placeholder = 'Email o código de creador';
             document.getElementById('login-email').focus();
         }
         function closeLoginModal() {
@@ -1390,6 +1437,7 @@
             document.getElementById('login-email').value = '';
             document.getElementById('login-password').value = '';
             document.getElementById('btn-do-login').innerText = 'Registrarme';
+            document.getElementById('login-email').placeholder = 'Email';
             document.getElementById('login-email').focus();
         }
 
@@ -1402,6 +1450,80 @@
             } else {
                 input.type = 'password';
                 eye.className = 'fa-solid fa-eye text-xs';
+            }
+        }
+
+        // ============ MINI INFLUENCER ============
+        function openMiniModal() {
+            closeLoginModal();
+            document.getElementById('mini-modal').style.display = 'flex';
+            ['mini-name', 'mini-email', 'mini-password', 'mini-channel', 'mini-code'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            document.getElementById('mini-error').style.display = 'none';
+            document.getElementById('mini-name').focus();
+        }
+        function closeMiniModal() {
+            document.getElementById('mini-modal').style.display = 'none';
+        }
+        function toggleMiniPassword() {
+            const input = document.getElementById('mini-password');
+            const eye = document.getElementById('mini-eye');
+            if (input.type === 'password') {
+                input.type = 'text';
+                eye.className = 'fa-solid fa-eye-slash text-xs';
+            } else {
+                input.type = 'password';
+                eye.className = 'fa-solid fa-eye text-xs';
+            }
+        }
+
+        async function doMiniRegister() {
+            const errorDiv = document.getElementById('mini-error');
+            const btn = document.getElementById('btn-do-mini');
+            const payload = {
+                name: document.getElementById('mini-name').value.trim(),
+                email: document.getElementById('mini-email').value.trim(),
+                password: document.getElementById('mini-password').value,
+                channel_url: document.getElementById('mini-channel').value.trim(),
+                code: document.getElementById('mini-code').value.trim().toUpperCase(),
+            };
+
+            const fail = (msg) => {
+                errorDiv.style.display = 'block';
+                errorDiv.innerText = msg;
+            };
+            if (!payload.name) return fail('Escribe tu nombre');
+            if (!payload.email) return fail('Escribe tu email');
+            if (payload.password.length < 6) return fail('La contraseña debe tener al menos 6 caracteres');
+            if (!payload.channel_url) return fail('Escribe el link de tu canal');
+            if (!payload.code) return fail('Elige el código que quieres usar');
+
+            errorDiv.style.display = 'none';
+            btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i>';
+            btn.disabled = true;
+            try {
+                const resp = await fetch('/mini/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                btn.innerHTML = 'Enviar solicitud';
+                btn.disabled = false;
+                if (data.ok) {
+                    closeMiniModal();
+                    showToast('Solicitud enviada — te avisamos cuando sea aprobada');
+                    window.location.href = '/user';
+                } else {
+                    fail(data.error || 'No se pudo registrar');
+                    showToast(data.error || 'Error', true);
+                }
+            } catch (e) {
+                btn.innerHTML = 'Enviar solicitud';
+                btn.disabled = false;
+                fail('Error de conexión');
+                showToast('Error de conexión', true);
             }
         }
 

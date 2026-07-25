@@ -1018,6 +1018,69 @@
             <div class="empty-state">
               <h3>Sin solicitudes</h3>
               <p>Cuando los afiliados pidan retiro aparecerán aquí.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de recompensas de mini influencers -->
+        <div class="aff-withdrawals-section">
+          <div class="aff-withdrawals-header">
+            <h3>Tabla de recompensas (mini influencers)</h3>
+            <button id="btn-mini-tiers-save" class="btn primary" type="button">Guardar tabla</button>
+          </div>
+          <p class="tier-help">
+            Esto es la referencia que ven los minis en su panel. Al revisar un video se te propone
+            el monto del tramo, pero el pago siempre lo confirmas tú.
+          </p>
+          <div class="tier-editor-grid">
+            <div class="tier-editor">
+              <div class="tier-editor-head">
+                <h4>Bono por video (vistas → USD)</h4>
+                <button id="btn-tier-add" class="btn" type="button">+ Tramo</button>
+              </div>
+              <div class="tier-rows tier-rows--views">
+                <div class="tier-row tier-row--head">
+                  <span>Desde</span><span>Hasta</span><span>Bono USD</span><span></span>
+                </div>
+                <div id="tier-view-rows"></div>
+              </div>
+              <p class="tier-help">Deja "Hasta" vacío en el último tramo para que sea "o más".</p>
+            </div>
+            <div class="tier-editor">
+              <div class="tier-editor-head">
+                <h4>Rangos (usos del código → USD)</h4>
+                <button id="btn-rank-add" class="btn" type="button">+ Rango</button>
+              </div>
+              <div class="tier-rows tier-rows--ranks">
+                <div class="tier-row tier-row--head">
+                  <span>Nombre</span><span>Usos</span><span>Bono USD</span><span></span>
+                </div>
+                <div id="tier-rank-rows"></div>
+              </div>
+              <p class="tier-help">Cuando un mini llega a un rango, su tarjeta muestra el botón para pagarle el bono.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Videos de mini influencers -->
+        <div class="aff-withdrawals-section">
+          <div class="aff-withdrawals-header">
+            <h3>Videos de mini influencers</h3>
+            <div class="aff-vid-header-actions">
+              <select id="mini-vid-filter" class="input">
+                <option value="pending" selected>Pendientes</option>
+                <option value="approved">Aprobados</option>
+                <option value="rejected">Rechazados</option>
+                <option value="">Todos</option>
+              </select>
+              <button id="btn-mini-vid-refresh" class="btn" type="button">Refrescar</button>
+            </div>
+          </div>
+          <div id="mini-vid-list" class="aff-wd-grid">
+            <div class="empty-state">
+              <h3>Sin videos</h3>
+              <p>Cuando los mini influencers suban sus videos aparecerán aquí.</p>
+            </div>
           </div>
         </div>
       </div>

@@ -21,6 +21,59 @@
   .pill { display:inline-flex; align-items:center; gap:6px; background: rgba(148,163,184,0.12); border:1px solid #484f59; color:#cbd5e1; padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px; }
   @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
   @media (max-width: 900px) { .user-grid { grid-template-columns: 1fr; } }
+
+  /* Mini influencer panel */
+  .mini-banner { border-radius: 14px; padding: 12px 14px; font-weight: 700; font-size: 13px; line-height: 1.5; margin-top: 16px; border: 1px solid transparent; }
+  .mini-banner--pending { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.35); color: #fcd34d; }
+  .mini-banner--rejected { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.35); color: #fca5a5; }
+  .mini-banner--approved { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.35); color: #6ee7b7; }
+  .mini-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .mini-stat { background: rgba(12,12,14,0.5); border: 1px solid rgba(148,163,184,0.12); border-radius: 12px; padding: 12px; display: grid; gap: 4px; }
+  .mini-stat--total { border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.08); }
+  .mini-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #94a3b8; font-weight: 700; }
+  .mini-stat-value { font-size: 20px; font-weight: 900; color: #e5e7eb; }
+  .mini-stat--total .mini-stat-value { color: #34d399; }
+  .mini-terms { font-size: 12px; }
+  .mini-video-counters { font-size: 12px; }
+  .mini-video-form { display: grid; grid-template-columns: 2fr 1fr auto; gap: 8px; align-items: center; }
+  .mini-video-list { display: grid; gap: 8px; }
+  .mini-video-item { border: 1px solid rgba(148,163,184,0.15); border-radius: 10px; padding: 10px 12px; display: grid; gap: 4px; }
+  .mini-video-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .mini-video-link { font-weight: 700; color: #93c5fd; word-break: break-all; font-size: 13px; text-decoration: none; }
+  .mini-video-link:hover { text-decoration: underline; }
+  .mini-video-meta { font-size: 12px; color: #94a3b8; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .mini-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; border: 1px solid currentColor; white-space: nowrap; }
+  .mini-video-del { background: transparent; border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; border-radius: 8px; padding: 3px 8px; font-size: 11px; font-weight: 800; cursor: pointer; }
+
+  /* Ladders: ranks by code usage + reward by views */
+  .mini-section { border-top: 1px solid rgba(148,163,184,0.12); padding-top: 14px; margin-top: 4px; display: grid; gap: 12px; }
+  .mini-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .mini-section-kicker { font-size: 11px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: #34d399; }
+  .mini-section-title { font-size: 17px; font-weight: 900; color: #e5e7eb; }
+  .mini-rank-badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 900; background: rgba(148,163,184,0.14); border: 1px solid rgba(148,163,184,0.28); color: #cbd5e1; white-space: nowrap; }
+  .mini-progress-wrap { display: grid; gap: 6px; }
+  .mini-progress { height: 8px; border-radius: 999px; background: rgba(148,163,184,0.16); overflow: hidden; }
+  .mini-progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #10b981, #34d399); transition: width .4s ease; }
+  .mini-rank-grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(140px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+  .mini-rank-card { border: 1px solid rgba(148,163,184,0.16); background: rgba(12,12,14,0.5); border-radius: 12px; padding: 12px; display: grid; gap: 4px; justify-items: center; text-align: center; opacity: .55; }
+  .mini-rank-card--unlocked { opacity: 1; border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.08); }
+  .mini-rank-card--current { border-color: #34d399; box-shadow: 0 0 0 1px rgba(52,211,153,0.35); }
+  .mini-rank-name { font-size: 14px; font-weight: 900; color: #e5e7eb; }
+  .mini-rank-uses { font-size: 11px; color: #94a3b8; font-weight: 700; }
+  .mini-rank-bonus { font-size: 18px; font-weight: 900; color: #fbbf24; }
+  .mini-rank-tag { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: #34d399; }
+  .mini-tier-table { border: 1px solid rgba(148,163,184,0.16); border-radius: 12px; overflow: hidden; }
+  .mini-tier-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 9px 12px; font-size: 13px; font-weight: 700; color: #e5e7eb; border-top: 1px solid rgba(148,163,184,0.1); }
+  .mini-tier-row:first-child { border-top: 0; }
+  .mini-tier-row--head { background: rgba(16,185,129,0.14); color: #6ee7b7; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; font-weight: 800; }
+  .mini-tier-row--alt { background: rgba(148,163,184,0.05); }
+  .mini-tier-reward { color: #34d399; font-weight: 900; }
+  .mini-tier-note { font-size: 12px; }
+  @media (max-width: 700px) {
+    .mini-stats { grid-template-columns: 1fr 1fr; }
+    .mini-video-form { grid-template-columns: 1fr; }
+    .mini-rank-grid { grid-auto-columns: minmax(126px, 1fr); }
+  }
 </style>
 {% endblock %}
 
@@ -63,7 +116,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="user-page" data-is-admin="{{ 1 if is_admin else 0 }}" data-is-affiliate="{{ 1 if is_affiliate else 0 }}">
+<div class="user-page" data-is-admin="{{ 1 if is_admin else 0 }}" data-is-affiliate="{{ 1 if is_affiliate else 0 }}" data-is-mini="{{ 1 if is_mini else 0 }}" data-mini-status="{{ mini_status|default('') }}">
   <div class="profile-hero">
     <div class="avatar" id="avatar-initials">U</div>
     <div class="who">
@@ -118,12 +171,13 @@
       {% if is_affiliate %}
       <hr style="margin:14px 0; opacity:.35;">
       <div style="display:flex; align-items:center; justify-content: space-between;">
-        <strong>Resumen de afiliado</strong>
-        <span class="pill">10% comisión</span>
+        <strong>{% if is_mini %}Resumen de creador{% else %}Resumen de afiliado{% endif %}</strong>
+        <span class="pill" id="aff-comm-pill">Comisión</span>
       </div>
       <div id="aff-summary" class="muted" style="display:grid; gap:6px;">
         <div>Mi código: <strong id="aff-code">-</strong></div>
-        <div>Órdenes referidas aprobadas: <strong id="aff-approved">0</strong></div>
+        <div>{% if is_mini %}Veces que se usó mi código{% else %}Órdenes referidas aprobadas{% endif %}: <strong id="aff-approved">0</strong></div>
+        {% if is_mini %}<div>Bonos recibidos (USD): <strong id="aff-bonus">$0.00</strong></div>{% endif %}
         <div>Saldo acumulado (USD): <strong id="aff-balance">$0.00</strong></div>
       </div>
 
@@ -167,6 +221,100 @@
       {% endif %}
     </div>
   </div>
+
+  {% if is_mini %}
+  <div class="mini-panel">
+    <div id="mini-status-banner" class="mini-banner" hidden></div>
+
+    <div class="user-card" style="margin-top:16px;">
+      <div class="user-header">
+        <div class="user-title">Mi panel de creador</div>
+        <span class="pill" id="mini-code-pill">-</span>
+      </div>
+      <div class="user-body">
+        <div class="mini-stats">
+          <div class="mini-stat">
+            <span class="mini-stat-label">Usos de mi código</span>
+            <span class="mini-stat-value" id="mini-uses">0</span>
+          </div>
+          <div class="mini-stat">
+            <span class="mini-stat-label">Comisión ganada</span>
+            <span class="mini-stat-value" id="mini-commission">$0.00</span>
+          </div>
+          <div class="mini-stat">
+            <span class="mini-stat-label">Bonos por videos</span>
+            <span class="mini-stat-value" id="mini-bonus">$0.00</span>
+          </div>
+          <div class="mini-stat mini-stat--total">
+            <span class="mini-stat-label">Total disponible</span>
+            <span class="mini-stat-value" id="mini-total">$0.00</span>
+          </div>
+        </div>
+        <div class="mini-terms muted">
+          Tus seguidores reciben <strong id="mini-discount">0%</strong> de descuento ·
+          Tú ganas <strong id="mini-comm-pct">0%</strong> por venta
+        </div>
+
+        <div class="mini-section">
+          <div class="mini-section-head">
+            <div>
+              <div class="mini-section-kicker">Sistema de rangos</div>
+              <div class="mini-section-title">Cuanto más vendés, más alto llegás</div>
+            </div>
+            <span class="mini-rank-badge" id="mini-rank-current">Sin rango</span>
+          </div>
+          <div class="mini-progress-wrap">
+            <div class="mini-progress"><div class="mini-progress-fill" id="mini-rank-fill" style="width:0%"></div></div>
+            <div class="muted" style="font-size:12px;" id="mini-rank-hint">—</div>
+          </div>
+          <div class="mini-rank-grid" id="mini-rank-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="user-card" style="margin-top:16px;">
+      <div class="user-header">
+        <div class="user-title">Mis videos</div>
+        <div class="mini-video-counters muted">
+          <span id="mini-videos-count">0 videos</span> ·
+          <span id="mini-views-count">0 vistas aprobadas</span>
+        </div>
+      </div>
+      <div class="user-body">
+        <div class="muted" style="font-size:12px;">
+          Sube el link de cada video donde menciones la tienda. Los revisamos y, según su alcance,
+          se te acredita un bono además de tu comisión.
+        </div>
+
+        <div class="mini-section">
+          <div class="mini-section-head">
+            <div>
+              <div class="mini-section-kicker">Recompensas extra</div>
+              <div class="mini-section-title">Bono por video</div>
+            </div>
+          </div>
+          <div class="mini-tier-table" id="mini-tier-table">
+            <div class="mini-tier-row mini-tier-row--head">
+              <span>Vistas</span>
+              <span>Recompensa</span>
+            </div>
+          </div>
+          <div class="muted mini-tier-note">
+            El bono se acredita cuando revisamos el video y confirmamos sus vistas reales.
+            Se suma a tu comisión del <strong id="mini-tier-comm">0%</strong> por ventas.
+          </div>
+        </div>
+        <div class="mini-video-form">
+          <input id="mini-video-url" class="input" type="url" placeholder="https://www.tiktok.com/@tu/video/...">
+          <input id="mini-video-views" class="input" type="number" min="0" step="1" placeholder="Vistas actuales">
+          <button id="btn-mini-video-add" class="btn primary" type="button">Agregar video</button>
+        </div>
+        <div id="mini-video-alert" class="muted" style="font-size:12px;"></div>
+        <div id="mini-video-list" class="mini-video-list"></div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
 
@@ -174,7 +322,7 @@
 <!-- Shared header behaviors -->
 <script src="{{ url_for('static', filename='js/store.js', v='5') }}" defer></script>
 <!-- User page logic -->
-<script src="{{ url_for('static', filename='js/user.js', v='2') }}" defer></script>
+<script src="{{ url_for('static', filename='js/user.js', v='3') }}" defer></script>
 {% endblock %}
 
 {# Overlays and Drawer for header consistency #}

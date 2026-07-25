@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const root = document.querySelector('.user-page');
   const IS_ADMIN = !!(root && root.dataset && root.dataset.isAdmin === '1');
   const IS_AFFILIATE = !!(root && root.dataset && root.dataset.isAffiliate === '1');
+  const IS_MINI = !!(root && root.dataset && root.dataset.isMini === '1');
   const affCodeEl = document.getElementById('aff-code');
   const affApprovedEl = document.getElementById('aff-approved');
   const affBalanceEl = document.getElementById('aff-balance');
@@ -200,6 +201,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (affCodeEl) affCodeEl.textContent = data.code || '-';
         if (affApprovedEl) affApprovedEl.textContent = String(data.approved_orders || 0);
         if (affBalanceEl) affBalanceEl.textContent = `$${Number(data.balance_usd || 0).toFixed(2)}`;
+        const affBonusEl = document.getElementById('aff-bonus');
+        if (affBonusEl) affBonusEl.textContent = `$${Number(data.bonus_usd || 0).toFixed(2)}`;
+        const affPill = document.getElementById('aff-comm-pill');
+        if (affPill) affPill.textContent = `${Number(data.commission_percent || 0)}% comisión`;
       }
     } catch (_) {}
   }
@@ -305,4 +310,266 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnAwSend) btnAwSend.addEventListener('click', sendWithdrawal);
 
   fetchWithdrawals();
+
+  // =====================
+  // Mini influencer panel
+  // =====================
+  const miniBanner = document.getElementById('mini-status-banner');
+  const miniCodePill = document.getElementById('mini-code-pill');
+  const miniUses = document.getElementById('mini-uses');
+  const miniCommission = document.getElementById('mini-commission');
+  const miniBonus = document.getElementById('mini-bonus');
+  const miniTotal = document.getElementById('mini-total');
+  const miniDiscount = document.getElementById('mini-discount');
+  const miniCommPct = document.getElementById('mini-comm-pct');
+  const miniVideosCount = document.getElementById('mini-videos-count');
+  const miniViewsCount = document.getElementById('mini-views-count');
+  const miniVideoUrl = document.getElementById('mini-video-url');
+  const miniVideoViews = document.getElementById('mini-video-views');
+  const btnMiniVideoAdd = document.getElementById('btn-mini-video-add');
+  const miniVideoAlert = document.getElementById('mini-video-alert');
+  const miniVideoList = document.getElementById('mini-video-list');
+
+  const money = (n) => `$${Number(n || 0).toFixed(2)}`;
+  const num = (n) => Number(n || 0).toLocaleString('es-VE');
+
+  function miniAlert(msg, kind) {
+    if (!miniVideoAlert) return;
+    miniVideoAlert.textContent = msg || '';
+    miniVideoAlert.style.color = kind === 'error' ? '#fecaca' : (kind === 'ok' ? '#86efac' : '#94a3b8');
+  }
+
+  function setMiniStatus(status) {
+    if (!miniBanner) return;
+    const st = String(status || 'approved');
+    if (st === 'pending') {
+      miniBanner.className = 'mini-banner mini-banner--pending';
+      miniBanner.innerHTML = 'Tu perfil está <strong>en revisión</strong>. Tu código se activa cuando lo aprobemos, '
+        + 'y ahí podrás empezar a cargar tus videos.';
+      miniBanner.removeAttribute('hidden');
+    } else if (st === 'rejected') {
+      miniBanner.className = 'mini-banner mini-banner--rejected';
+      miniBanner.innerHTML = 'Tu perfil <strong>no fue aprobado</strong>. Si crees que es un error, escríbenos.';
+      miniBanner.removeAttribute('hidden');
+    } else {
+      miniBanner.className = 'mini-banner mini-banner--approved';
+      miniBanner.innerHTML = 'Tu perfil está <strong>activo</strong>. Comparte tu código y sube tus videos para ganar bonos.';
+      miniBanner.removeAttribute('hidden');
+    }
+    // Uploading videos and withdrawing only make sense once approved
+    const approved = (st === 'approved');
+    if (miniVideoUrl) miniVideoUrl.disabled = !approved;
+    if (miniVideoViews) miniVideoViews.disabled = !approved;
+    if (btnMiniVideoAdd) btnMiniVideoAdd.disabled = !approved;
+    if (!approved) {
+      if (btnAffWithdraw) btnAffWithdraw.style.display = 'none';
+      if (withdrawPanel) withdrawPanel.style.display = 'none';
+    }
+  }
+
+  const miniRankCurrent = document.getElementById('mini-rank-current');
+  const miniRankFill = document.getElementById('mini-rank-fill');
+  const miniRankHint = document.getElementById('mini-rank-hint');
+  const miniRankGrid = document.getElementById('mini-rank-grid');
+  const miniTierTable = document.getElementById('mini-tier-table');
+  const miniTierComm = document.getElementById('mini-tier-comm');
+
+  function renderRanks(data) {
+    if (!miniRankGrid) return;
+    const ranks = data.ranks || [];
+    const uses = Number(data.code_uses || 0);
+    const currentName = data.rank_current ? data.rank_current.name : '';
+    if (miniRankCurrent) miniRankCurrent.textContent = currentName ? `Rango ${currentName}` : 'Sin rango aún';
+    if (miniRankFill) miniRankFill.style.width = `${Number(data.rank_progress || 0)}%`;
+    if (miniRankHint) {
+      if (data.rank_next) {
+        const left = Number(data.rank_uses_to_next || 0);
+        miniRankHint.innerHTML = `Te faltan <strong>${num(left)}</strong> usos para <strong>${escapeHtml(data.rank_next.name)}</strong> `
+          + `(${money(data.rank_next.bonus)} de bono)`;
+      } else if (ranks.length) {
+        miniRankHint.innerHTML = 'Alcanzaste el rango más alto.';
+      } else {
+        miniRankHint.textContent = '';
+      }
+    }
+    miniRankGrid.innerHTML = '';
+    if (!ranks.length) {
+      miniRankGrid.innerHTML = '<div class="muted">Todavía no hay rangos configurados.</div>';
+      return;
+    }
+    ranks.forEach(r => {
+      const unlocked = uses >= Number(r.uses || 0);
+      const isCurrent = (r.name === currentName);
+      const card = document.createElement('div');
+      card.className = 'mini-rank-card'
+        + (unlocked ? ' mini-rank-card--unlocked' : '')
+        + (isCurrent ? ' mini-rank-card--current' : '');
+      card.innerHTML = `
+        <div class="mini-rank-name">${escapeHtml(r.name)}</div>
+        <div class="mini-rank-uses">${num(r.uses)} usos</div>
+        <div class="mini-rank-bonus">${money(r.bonus)}</div>
+        <div class="mini-rank-tag">${isCurrent ? 'Tu rango' : (unlocked ? 'Desbloqueado' : 'Bloqueado')}</div>
+      `;
+      miniRankGrid.appendChild(card);
+    });
+  }
+
+  function renderTierTable(tiers) {
+    if (!miniTierTable) return;
+    const rows = tiers || [];
+    miniTierTable.innerHTML = '<div class="mini-tier-row mini-tier-row--head"><span>Vistas</span><span>Recompensa</span></div>';
+    if (!rows.length) {
+      miniTierTable.insertAdjacentHTML('beforeend', '<div class="mini-tier-row"><span class="muted">Sin tramos configurados</span><span></span></div>');
+      return;
+    }
+    rows.forEach((t, i) => {
+      const label = (t.max === null || t.max === undefined)
+        ? `${num(t.min)} o más`
+        : `${num(t.min)} - ${num(t.max)}`;
+      miniTierTable.insertAdjacentHTML('beforeend',
+        `<div class="mini-tier-row${i % 2 ? ' mini-tier-row--alt' : ''}"><span>${label}</span><span class="mini-tier-reward">${money(t.reward)}</span></div>`);
+    });
+  }
+
+  async function loadMiniSummary() {
+    if (!IS_MINI) return;
+    try {
+      const res = await fetch('/mini/summary');
+      const data = await res.json();
+      if (!res.ok || !data.ok) return;
+      setMiniStatus(data.status);
+      renderRanks(data);
+      renderTierTable(data.view_tiers);
+      if (miniTierComm) miniTierComm.textContent = `${Number(data.commission_percent || 0)}%`;
+      if (miniCodePill) miniCodePill.textContent = data.code || '-';
+      if (miniUses) miniUses.textContent = num(data.code_uses);
+      if (miniCommission) miniCommission.textContent = money(data.commission_usd);
+      if (miniBonus) miniBonus.textContent = money(data.bonus_usd);
+      if (miniTotal) miniTotal.textContent = money(data.balance_usd);
+      if (miniDiscount) miniDiscount.textContent = `${Number(data.discount_percent || 0)}%`;
+      if (miniCommPct) miniCommPct.textContent = `${Number(data.commission_percent || 0)}%`;
+      if (miniVideosCount) {
+        const total = Number(data.videos_total || 0);
+        miniVideosCount.textContent = `${total} ${total === 1 ? 'video' : 'videos'}`;
+      }
+      if (miniViewsCount) miniViewsCount.textContent = `${num(data.views_total)} vistas aprobadas`;
+    } catch (_) {}
+  }
+
+  function renderMiniVideos(items) {
+    if (!miniVideoList) return;
+    miniVideoList.innerHTML = '';
+    if (!items || items.length === 0) {
+      miniVideoList.innerHTML = '<div class="muted">Todavía no cargaste videos.</div>';
+      return;
+    }
+    const meta = (s) => {
+      if (s === 'approved') return { label: 'Aprobado', color: '#34d399' };
+      if (s === 'rejected') return { label: 'Rechazado', color: '#f87171' };
+      return { label: 'En revisión', color: '#fbbf24' };
+    };
+    items.forEach(v => {
+      const st = meta(v.status);
+      const row = document.createElement('div');
+      row.className = 'mini-video-item';
+      let reward = '';
+      if (Number(v.reward_usd || 0) > 0) {
+        reward = `<span>Bono: <strong style="color:#34d399;">${money(v.reward_usd)}</strong></span>`;
+      } else if ((v.status || 'pending') === 'pending' && Number(v.tier_reward_usd || 0) > 0) {
+        // Reference from the tier table, still to be confirmed on review
+        reward = `<span>Estimado por tramo: <strong>${money(v.tier_reward_usd)}</strong></span>`;
+      }
+      const note = v.note ? `<span>${escapeHtml(v.note)}</span>` : '';
+      const canDelete = (v.status || 'pending') === 'pending';
+      row.innerHTML = `
+        <div class="mini-video-top">
+          <a class="mini-video-link" href="${encodeURI(v.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(v.url)}</a>
+          <span class="mini-badge" style="color:${st.color};">${st.label}</span>
+        </div>
+        <div class="mini-video-meta">
+          <span>${escapeHtml((v.platform || 'otro').toUpperCase())}</span>
+          <span>${num(v.views_declared)} vistas</span>
+          ${reward}
+          ${note}
+          ${canDelete ? `<button class="mini-video-del" type="button" data-id="${v.id}">Quitar</button>` : ''}
+        </div>
+      `;
+      miniVideoList.appendChild(row);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  async function fetchMiniVideos() {
+    if (!IS_MINI || !miniVideoList) return;
+    try {
+      const res = await fetch('/mini/videos');
+      const data = await res.json();
+      renderMiniVideos((data && data.items) || []);
+    } catch (_) {
+      renderMiniVideos([]);
+    }
+  }
+
+  async function addMiniVideo() {
+    if (!IS_MINI) return;
+    const url = miniVideoUrl ? miniVideoUrl.value.trim() : '';
+    const views = miniVideoViews ? miniVideoViews.value : '';
+    if (!url) { miniAlert('Pega el link de tu video', 'error'); return; }
+    try {
+      if (btnMiniVideoAdd) btnMiniVideoAdd.disabled = true;
+      miniAlert('Enviando...');
+      const res = await fetch('/mini/videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, views })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo agregar');
+      if (miniVideoUrl) miniVideoUrl.value = '';
+      if (miniVideoViews) miniVideoViews.value = '';
+      miniAlert('Video enviado a revisión', 'ok');
+      await fetchMiniVideos();
+      await loadMiniSummary();
+    } catch (e) {
+      miniAlert(e.message || 'Error', 'error');
+    } finally {
+      if (btnMiniVideoAdd) btnMiniVideoAdd.disabled = false;
+    }
+  }
+
+  if (btnMiniVideoAdd) btnMiniVideoAdd.addEventListener('click', addMiniVideo);
+  if (miniVideoUrl) {
+    miniVideoUrl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addMiniVideo(); }
+    });
+  }
+  if (miniVideoList) {
+    miniVideoList.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.mini-video-del');
+      if (!btn) return;
+      const id = btn.getAttribute('data-id');
+      try {
+        btn.disabled = true;
+        const res = await fetch(`/mini/videos/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo quitar');
+        await fetchMiniVideos();
+        await loadMiniSummary();
+      } catch (err) {
+        miniAlert(err.message || 'Error', 'error');
+        btn.disabled = false;
+      }
+    });
+  }
+
+  loadMiniSummary();
+  fetchMiniVideos();
 });

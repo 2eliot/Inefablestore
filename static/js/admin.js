@@ -757,6 +757,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const affList = document.getElementById('aff-list');
   const btnAffWdRefresh = document.getElementById('btn-aff-wd-refresh');
   const affWdList = document.getElementById('aff-wd-list');
+  // Mini influencer videos
+  const miniVidList = document.getElementById('mini-vid-list');
+  const miniVidFilter = document.getElementById('mini-vid-filter');
+  const btnMiniVidRefresh = document.getElementById('btn-mini-vid-refresh');
+  // Mini influencer reward tiers
+  const tierViewRows = document.getElementById('tier-view-rows');
+  const tierRankRows = document.getElementById('tier-rank-rows');
+  const btnTierAdd = document.getElementById('btn-tier-add');
+  const btnRankAdd = document.getElementById('btn-rank-add');
+  const btnTiersSave = document.getElementById('btn-mini-tiers-save');
   // Mobile drawer elements
   const adminHamburger = document.getElementById('admin-hamburger');
   const adminDrawer = document.getElementById('admin-drawer');
@@ -1388,6 +1398,8 @@ window.fetchPayments = fetchPayments;
     if (target === '#tab-affiliates') {
       fetchAffiliates();
       fetchAffWithdrawals();
+      fetchMiniTiers();
+      fetchMiniVideos();
       populatePackagesSelect();
       updatePkgSelectEnabled();
     }
@@ -2350,14 +2362,59 @@ window.refreshGallery = refreshGallery;
     items.forEach(u => {
       const card = document.createElement('div');
       card.className = 'aff-card';
-      const statusCls = u.active ? 'aff-status--active' : 'aff-status--inactive';
-      const statusTxt = u.active ? 'Activo' : 'Inactivo';
+      const isMini = (u.kind === 'mini');
+      const profStatus = u.status || 'approved';
+      const isPending = (profStatus === 'pending');
+      if (isMini) card.classList.add('aff-card--mini');
+      if (isPending) card.classList.add('aff-card--pending');
+      // Pending profiles show their review state; the rest show their on/off switch
+      const statusCls = isPending ? 'aff-status--pending' : (profStatus === 'rejected' ? 'aff-status--inactive' : (u.active ? 'aff-status--active' : 'aff-status--inactive'));
+      const statusTxt = isPending ? 'Por aprobar' : (profStatus === 'rejected' ? 'Rechazado' : (u.active ? 'Activo' : 'Inactivo'));
       const scopeTxt = u.scope === 'package' ? `Juego #${u.scope_package_id || '?'}` : 'Todos';
+      const channelCell = u.channel_url
+        ? `<div class="aff-meta-item"><span class="aff-meta-label">Canal</span><a class="aff-meta-value aff-meta-link" href="${encodeURI(u.channel_url)}" target="_blank" rel="noopener noreferrer">Ver canal</a></div>`
+        : '';
+      const rankTxt = u.rank_current ? u.rank_current.name : 'Sin rango';
+      const nextTxt = u.rank_next ? `faltan ${u.rank_uses_to_next} para ${u.rank_next.name}` : 'rango m\u00e1ximo';
+      const miniCells = isMini ? `
+          <div class="aff-meta-item"><span class="aff-meta-label">Usos del c\u00f3digo</span><span class="aff-meta-value">${u.code_uses || 0}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Rango</span><span class="aff-meta-value">${escAttr(rankTxt)}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Bonos pagados</span><span class="aff-meta-value">${fmtUSD(u.bonus_usd)}</span></div>
+          ${channelCell}` : '';
+      // Ranks the mini already unlocked but has not been paid for
+      const unpaidRanks = (isMini && !isPending) ? (u.ranks_unpaid || []) : [];
+      const rankBlock = (isMini && !isPending) ? `
+        <div class="aff-rank-row">
+          <span class="aff-rank-hint">Rango: <strong>${escAttr(rankTxt)}</strong> \u00b7 ${escAttr(nextTxt)}</span>
+          ${unpaidRanks.map(r => `<button class="btn primary btn-aff-rank" data-id="${u.id}" data-rank="${escAttr(r.name)}" data-bonus="${r.bonus}" type="button">Pagar ${escAttr(r.name)} (${fmtUSD(r.bonus)})</button>`).join('')}
+        </div>` : '';
+      // Accept/reject panel for a self-registered profile awaiting review
+      const reviewBlock = isPending ? `
+        <div class="aff-review">
+          <div class="aff-review-title">Definir condiciones y decidir</div>
+          <div class="aff-edit-grid aff-edit-grid--3">
+            <div class="aff-edit-field"><label>Descuento al usuario %</label><input class="aff-rev-discount" type="number" step="0.1" min="0" max="100" value="${u.discount_percent || 0}" /></div>
+            <div class="aff-edit-field"><label>Comisi\u00f3n del mini %</label><input class="aff-rev-commission" type="number" step="0.1" min="0" max="100" value="${u.commission_percent || 5}" /></div>
+            <div class="aff-edit-field"><label>Bono inicial (USD)</label><input class="aff-rev-bonus" type="number" step="0.01" min="0" value="0" /></div>
+          </div>
+          <div class="aff-review-actions">
+            <button class="btn primary btn-aff-approve" data-id="${u.id}" type="button">Aceptar perfil</button>
+            <button class="btn btn-aff-reject" data-id="${u.id}" type="button">Rechazar</button>
+          </div>
+        </div>` : '';
+      // Quick bonus for an already active mini
+      const bonusBlock = (isMini && !isPending) ? `
+        <div class="aff-bonus-row">
+          <input class="aff-bonus-amount" type="number" step="0.01" min="0" placeholder="Bono USD" />
+          <button class="btn btn-aff-bonus" data-id="${u.id}" type="button">Dar bono</button>
+        </div>` : '';
       card.innerHTML = `
         <div class="aff-card-head">
           <div class="aff-card-info">
             <div class="aff-card-name">${u.name || 'Sin nombre'}</div>
+            ${isMini ? '<span class="aff-status aff-status--mini">Mini influencer</span>' : ''}
             <span class="aff-status ${statusCls}">${statusTxt}</span>
+            ${u.videos_pending ? `<span class="aff-status aff-status--pending">${u.videos_pending} video(s) por revisar</span>` : ''}
           </div>
           <div class="aff-card-balance">${fmtUSD(u.balance)}</div>
         </div>
@@ -2368,7 +2425,11 @@ window.refreshGallery = refreshGallery;
           <div class="aff-meta-item"><span class="aff-meta-label">Alcance</span><span class="aff-meta-value">${scopeTxt}</span></div>
           <div class="aff-meta-item"><span class="aff-meta-label">Descuento</span><span class="aff-meta-value">${u.discount_percent || 0}%</span></div>
           <div class="aff-meta-item"><span class="aff-meta-label">Comisi\u00f3n</span><span class="aff-meta-value">${u.commission_percent || 0}%</span></div>
+          ${miniCells}
         </div>
+        ${reviewBlock}
+        ${rankBlock}
+        ${bonusBlock}
         <details class="aff-card-edit">
           <summary class="aff-edit-toggle">Editar</summary>
           <div class="aff-edit-body">
@@ -2379,6 +2440,7 @@ window.refreshGallery = refreshGallery;
               <div class="aff-edit-field"><label>C\u00f3digo adicional</label><input class="aff-edit-secondary-code" type="text" value="${u.secondary_code || ''}" /></div>
               <div class="aff-edit-field"><label>Nueva contrase\u00f1a</label><input class="aff-edit-pass" type="password" value="" placeholder="Dejar vac\u00edo para no cambiar" /></div>
               <div class="aff-edit-field"><label>Saldo (USD)</label><input class="aff-edit-balance" type="number" step="0.01" min="0" value="${u.balance || 0}" /></div>
+              <div class="aff-edit-field"><label>Link del canal</label><input class="aff-edit-channel" type="url" value="${(u.channel_url || '').replace(/"/g, '&quot;')}" placeholder="https://..." /></div>
             </div>
             <div class="aff-edit-grid aff-edit-grid--2">
               <div class="aff-edit-field"><label>Descuento al usuario %</label><input class="aff-edit-discount" type="number" step="0.1" min="0" max="100" value="${u.discount_percent || 0}" /></div>
@@ -2454,6 +2516,259 @@ window.refreshGallery = refreshGallery;
       }
     });
   }
+  // =====================
+  // Mini influencer reward tiers (reference table, payout stays manual)
+  // =====================
+  function addTierRow(t) {
+    if (!tierViewRows) return;
+    const row = document.createElement('div');
+    row.className = 'tier-row';
+    row.innerHTML = `
+      <input class="tier-min" type="number" min="0" step="1" value="${t && t.min != null ? t.min : ''}" placeholder="1000" />
+      <input class="tier-max" type="number" min="0" step="1" value="${t && t.max != null ? t.max : ''}" placeholder="o más" />
+      <input class="tier-reward" type="number" min="0" step="0.01" value="${t && t.reward != null ? t.reward : ''}" placeholder="0.00" />
+      <button class="tier-del" type="button" title="Quitar">✕</button>
+    `;
+    tierViewRows.appendChild(row);
+  }
+
+  function addRankRow(r) {
+    if (!tierRankRows) return;
+    const row = document.createElement('div');
+    row.className = 'tier-row';
+    row.innerHTML = `
+      <input class="rank-name" type="text" value="${escAttr(r && r.name ? r.name : '')}" placeholder="Bronce" />
+      <input class="rank-uses" type="number" min="1" step="1" value="${r && r.uses != null ? r.uses : ''}" placeholder="100" />
+      <input class="rank-bonus" type="number" min="0" step="0.01" value="${r && r.bonus != null ? r.bonus : ''}" placeholder="5.00" />
+      <button class="tier-del" type="button" title="Quitar">✕</button>
+    `;
+    tierRankRows.appendChild(row);
+  }
+
+  async function fetchMiniTiers() {
+    if (!tierViewRows && !tierRankRows) return;
+    try {
+      const res = await fetch('/admin/mini/tiers');
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar la tabla');
+      if (tierViewRows) {
+        tierViewRows.innerHTML = '';
+        (data.view_tiers || []).forEach(addTierRow);
+      }
+      if (tierRankRows) {
+        tierRankRows.innerHTML = '';
+        (data.ranks || []).forEach(addRankRow);
+      }
+    } catch (e) {
+      toast(e.message || 'Error');
+    }
+  }
+
+  async function saveMiniTiers() {
+    const view_tiers = [];
+    if (tierViewRows) {
+      tierViewRows.querySelectorAll('.tier-row').forEach(row => {
+        const min = row.querySelector('.tier-min')?.value;
+        const max = row.querySelector('.tier-max')?.value;
+        const reward = row.querySelector('.tier-reward')?.value;
+        if (min === '' && reward === '') return;
+        view_tiers.push({
+          min: parseInt(min || '0', 10) || 0,
+          max: (max === '' || max == null) ? null : (parseInt(max, 10) || 0),
+          reward: parseFloat(reward || '0') || 0
+        });
+      });
+    }
+    const ranks = [];
+    if (tierRankRows) {
+      tierRankRows.querySelectorAll('.tier-row').forEach(row => {
+        const name = row.querySelector('.rank-name')?.value.trim();
+        const uses = row.querySelector('.rank-uses')?.value;
+        const bonus = row.querySelector('.rank-bonus')?.value;
+        if (!name) return;
+        ranks.push({
+          name,
+          uses: parseInt(uses || '0', 10) || 0,
+          bonus: parseFloat(bonus || '0') || 0
+        });
+      });
+    }
+    if (!view_tiers.length) { toast('Agrega al menos un tramo de vistas'); return; }
+    if (!ranks.length) { toast('Agrega al menos un rango'); return; }
+    try {
+      if (btnTiersSave) btnTiersSave.disabled = true;
+      const res = await fetch('/admin/mini/tiers', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view_tiers, ranks })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar');
+      toast('Tabla de recompensas guardada');
+      await fetchMiniTiers();
+      await fetchMiniVideos();
+      await fetchAffiliates();
+    } catch (e) {
+      toast(e.message || 'Error');
+    } finally {
+      if (btnTiersSave) btnTiersSave.disabled = false;
+    }
+  }
+
+  if (btnTierAdd) btnTierAdd.addEventListener('click', () => addTierRow(null));
+  if (btnRankAdd) btnRankAdd.addEventListener('click', () => addRankRow(null));
+  if (btnTiersSave) btnTiersSave.addEventListener('click', saveMiniTiers);
+  [tierViewRows, tierRankRows].forEach(container => {
+    if (!container) return;
+    container.addEventListener('click', (e) => {
+      const del = e.target.closest('.tier-del');
+      if (del) del.closest('.tier-row').remove();
+    });
+  });
+
+  // =====================
+  // Mini influencer videos moderation
+  // =====================
+  function escAttr(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Kept in memory so the suggested bonus can follow the views the admin types
+  let miniViewTiersCache = [];
+
+  function tierForViews(views) {
+    const v = Number(views || 0);
+    return miniViewTiersCache.find(t => v >= t.min && (t.max === null || t.max === undefined || v <= t.max)) || null;
+  }
+
+  function tierLabel(t) {
+    if (!t) return 'Sin tramo';
+    const fmt = (n) => Number(n || 0).toLocaleString('es-VE');
+    return (t.max === null || t.max === undefined) ? `${fmt(t.min)} o más` : `${fmt(t.min)} - ${fmt(t.max)}`;
+  }
+
+  async function fetchMiniVideos() {
+    if (!miniVidList) return;
+    const status = miniVidFilter ? miniVidFilter.value : 'pending';
+    try {
+      const res = await fetch(`/admin/mini/videos${status ? `?status=${encodeURIComponent(status)}` : ''}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo listar videos');
+      miniViewTiersCache = data.view_tiers || [];
+      renderMiniVideos(data.items || []);
+    } catch (e) {
+      miniVidList.innerHTML = `<div class="empty-state"><p>${escAttr(e.message || 'Error')}</p></div>`;
+    }
+  }
+
+  function renderMiniVideos(items) {
+    if (!miniVidList) return;
+    miniVidList.innerHTML = '';
+    if (!items || items.length === 0) {
+      miniVidList.innerHTML = '<div class="empty-state"><h3>Sin videos</h3><p>No hay videos con este filtro.</p></div>';
+      return;
+    }
+    const fmtUSD = (n) => {
+      try { return Number(n||0).toLocaleString('en-US', { style:'currency', currency:'USD', maximumFractionDigits: 2 }); } catch(_) { return `$${n}`; }
+    };
+    items.forEach(v => {
+      const tile = document.createElement('div');
+      tile.className = 'aff-wd-card';
+      const when = v.created_at ? new Date(v.created_at).toLocaleString() : '-';
+      const statusCls = v.status === 'approved' ? 'aff-status--active' : v.status === 'rejected' ? 'aff-status--inactive' : 'aff-status--pending';
+      const statusTxt = v.status === 'approved' ? 'Aprobado' : v.status === 'rejected' ? 'Rechazado' : 'Pendiente';
+      const views = Number(v.views_declared || 0).toLocaleString('es-VE');
+      tile.innerHTML = `
+        <div class="aff-wd-head">
+          <div class="aff-wd-info">
+            <div class="aff-wd-name">${escAttr(v.affiliate_name)}</div>
+            <span class="aff-status ${statusCls}">${statusTxt}</span>
+          </div>
+          <div class="aff-wd-amount">${views} vistas</div>
+        </div>
+        <div class="aff-card-meta">
+          <div class="aff-meta-item"><span class="aff-meta-label">Código</span><span class="aff-meta-value">${escAttr(v.affiliate_code)}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Plataforma</span><span class="aff-meta-value">${escAttr((v.platform || 'otro').toUpperCase())}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Fecha</span><span class="aff-meta-value">${when}</span></div>
+          <div class="aff-meta-item"><span class="aff-meta-label">Video</span><a class="aff-meta-value aff-meta-link" href="${encodeURI(v.url)}" target="_blank" rel="noopener noreferrer">Abrir video</a></div>
+          ${Number(v.reward_usd || 0) > 0 ? `<div class="aff-meta-item"><span class="aff-meta-label">Bono pagado</span><span class="aff-meta-value">${fmtUSD(v.reward_usd)}</span></div>` : ''}
+          ${v.note ? `<div class="aff-meta-item"><span class="aff-meta-label">Nota</span><span class="aff-meta-value">${escAttr(v.note)}</span></div>` : ''}
+        </div>
+        ${v.status === 'pending' ? `
+        <div class="aff-vid-review">
+          <div class="aff-edit-grid aff-edit-grid--3">
+            <div class="aff-edit-field"><label>Vistas verificadas</label><input class="vid-views" type="number" min="0" step="1" value="${Number(v.views_declared || 0)}" /></div>
+            <div class="aff-edit-field"><label>Bono a pagar (USD)</label><input class="vid-reward" type="number" min="0" step="0.01" value="${Number(v.tier_reward_usd || 0)}" /></div>
+            <div class="aff-edit-field"><label>Nota (opcional)</label><input class="vid-note" type="text" placeholder="Motivo o comentario" /></div>
+          </div>
+          <div class="aff-vid-suggested">Tramo <span class="vid-tier-label">${escAttr(v.tier_label || 'Sin tramo')}</span> → sugerido <span class="vid-tier-amount">${fmtUSD(v.tier_reward_usd)}</span>. Podés cambiar el monto antes de aprobar.</div>
+          <div class="aff-wd-actions">
+            <button class="btn primary btn-vid-approve" data-id="${v.id}" type="button">Aprobar y pagar</button>
+            <button class="btn btn-vid-reject" data-id="${v.id}" type="button">Rechazar</button>
+          </div>
+        </div>` : ''}
+      `;
+      miniVidList.appendChild(tile);
+    });
+  }
+
+  if (miniVidList) {
+    // Retyping the verified views re-suggests the bonus from the tier table
+    miniVidList.addEventListener('input', (e) => {
+      const viewsInput = e.target.closest('.vid-views');
+      if (!viewsInput) return;
+      const card = viewsInput.closest('.aff-wd-card');
+      const t = tierForViews(viewsInput.value);
+      const amount = t ? Number(t.reward || 0) : 0;
+      const label = card.querySelector('.vid-tier-label');
+      const amountEl = card.querySelector('.vid-tier-amount');
+      const rewardInput = card.querySelector('.vid-reward');
+      if (label) label.textContent = tierLabel(t);
+      if (amountEl) amountEl.textContent = `$${amount.toFixed(2)}`;
+      // Only overwrite while the admin has not typed their own figure
+      if (rewardInput && !rewardInput.dataset.touched) rewardInput.value = amount;
+    });
+    miniVidList.addEventListener('input', (e) => {
+      const rewardInput = e.target.closest('.vid-reward');
+      if (rewardInput) rewardInput.dataset.touched = '1';
+    });
+
+    miniVidList.addEventListener('click', async (e) => {
+      const app = e.target.closest('.btn-vid-approve');
+      const rej = e.target.closest('.btn-vid-reject');
+      if (!app && !rej) return;
+      const trigger = app || rej;
+      const id = trigger.getAttribute('data-id');
+      const card = trigger.closest('.aff-wd-card');
+      const payload = {
+        status: app ? 'approved' : 'rejected',
+        views: parseInt(card.querySelector('.vid-views')?.value || '0', 10) || 0,
+        note: card.querySelector('.vid-note')?.value.trim() || '',
+      };
+      if (app) payload.reward_usd = parseFloat(card.querySelector('.vid-reward')?.value || '0') || 0;
+      try {
+        trigger.disabled = true;
+        const res = await fetch(`/admin/mini/videos/${id}/review`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo actualizar');
+        toast(app ? 'Video aprobado' : 'Video rechazado');
+        await fetchMiniVideos();
+        await fetchAffiliates(); // balances/bonos changed
+      } catch (err) {
+        toast(err.message || 'Error');
+        trigger.disabled = false;
+      }
+    });
+  }
+
+  if (btnMiniVidRefresh) btnMiniVidRefresh.addEventListener('click', fetchMiniVideos);
+  if (miniVidFilter) miniVidFilter.addEventListener('change', fetchMiniVideos);
+
   if (btnAffRefresh) btnAffRefresh.addEventListener('click', fetchAffiliates);
   if (btnAffWdRefresh) btnAffWdRefresh.addEventListener('click', fetchAffWithdrawals);
   if (btnOrdersWdRefresh) btnOrdersWdRefresh.addEventListener('click', fetchAffWithdrawalsForOrders);
@@ -2461,6 +2776,87 @@ window.refreshGallery = refreshGallery;
     affList.addEventListener('click', async (e) => {
       const btnSave = e.target.closest('.btn-aff-save');
       const btnDel = e.target.closest('.btn-aff-del');
+      const btnApprove = e.target.closest('.btn-aff-approve');
+      const btnReject = e.target.closest('.btn-aff-reject');
+      const btnBonus = e.target.closest('.btn-aff-bonus');
+
+      // Accept a pending mini influencer profile with the terms typed on the card
+      if (btnApprove || btnReject) {
+        const trigger = btnApprove || btnReject;
+        const id = trigger.getAttribute('data-id');
+        const container = trigger.closest('.aff-card');
+        if (btnReject && !confirm('¿Rechazar este perfil? Su código no se activará.')) return;
+        const payload = { status: btnApprove ? 'approved' : 'rejected' };
+        if (btnApprove) {
+          payload.discount_percent = parseFloat(container.querySelector('.aff-rev-discount')?.value || '0') || 0;
+          payload.commission_percent = parseFloat(container.querySelector('.aff-rev-commission')?.value || '0') || 0;
+          payload.bonus_usd = parseFloat(container.querySelector('.aff-rev-bonus')?.value || '0') || 0;
+        }
+        try {
+          trigger.disabled = true;
+          const res = await fetch(`/admin/special/users/${id}/status`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo actualizar');
+          toast(btnApprove ? 'Perfil aceptado' : 'Perfil rechazado');
+          await fetchAffiliates();
+        } catch (err) {
+          toast(err.message || 'Error');
+          trigger.disabled = false;
+        }
+        return;
+      }
+
+      // Pay the bonus of an unlocked rank (amount confirmed by the admin)
+      const btnRank = e.target.closest('.btn-aff-rank');
+      if (btnRank) {
+        const id = btnRank.getAttribute('data-id');
+        const rank = btnRank.getAttribute('data-rank');
+        const suggested = btnRank.getAttribute('data-bonus');
+        const typed = prompt(`Bono por el rango ${rank} (USD):`, suggested);
+        if (typed === null) return;
+        const amount = parseFloat(typed) || 0;
+        if (amount <= 0) { toast('Monto inválido'); return; }
+        try {
+          btnRank.disabled = true;
+          const res = await fetch(`/admin/special/users/${id}/rank-award`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rank, amount_usd: amount })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo pagar el rango');
+          toast(`Bono de ${rank} acreditado`);
+          await fetchAffiliates();
+        } catch (err) {
+          toast(err.message || 'Error');
+          btnRank.disabled = false;
+        }
+        return;
+      }
+
+      // Grant a bonus on top of the current balance
+      if (btnBonus) {
+        const id = btnBonus.getAttribute('data-id');
+        const container = btnBonus.closest('.aff-card');
+        const input = container.querySelector('.aff-bonus-amount');
+        const amount = parseFloat(input?.value || '0') || 0;
+        if (amount <= 0) { toast('Escribe el monto del bono'); return; }
+        try {
+          btnBonus.disabled = true;
+          const res = await fetch(`/admin/special/users/${id}/bonus`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount_usd: amount })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo dar el bono');
+          toast('Bono acreditado');
+          await fetchAffiliates();
+        } catch (err) {
+          toast(err.message || 'Error');
+          btnBonus.disabled = false;
+        }
+        return;
+      }
+
       if (btnSave) {
         const id = btnSave.getAttribute('data-id');
         const container = btnSave.closest('.aff-card');
@@ -2474,11 +2870,12 @@ window.refreshGallery = refreshGallery;
         const scope = container.querySelector('.aff-edit-scope')?.value || 'all';
         const scope_package_id = container.querySelector('.aff-edit-pkgid')?.value ? parseInt(container.querySelector('.aff-edit-pkgid').value, 10) : null;
         const balance = parseFloat(container.querySelector('.aff-edit-balance')?.value || '0') || 0;
+        const channel_url = container.querySelector('.aff-edit-channel')?.value.trim() || '';
         const active = !!container.querySelector('.aff-edit-active')?.checked;
         try {
           btnSave.disabled = true;
           const res = await fetch(`/admin/special/users/${id}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, code, secondary_code, email, password, discount_percent, commission_percent, scope, scope_package_id, balance, active })
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, code, secondary_code, email, password, discount_percent, commission_percent, scope, scope_package_id, balance, channel_url, active })
           });
           if (!res.ok) throw new Error('No se pudo guardar');
           await fetchAffiliates();

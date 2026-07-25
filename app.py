@@ -2244,6 +2244,12 @@ class SpecialUser(db.Model):
     commission_percent = db.Column(db.Float, default=10.0)  # percent the affiliate earns
     scope = db.Column(db.String(20), default="all")  # 'all' | 'package'
     scope_package_id = db.Column(db.Integer, nullable=True)
+    # Mini influencer support
+    kind = db.Column(db.String(20), default="affiliate")  # 'affiliate' | 'mini'
+    status = db.Column(db.String(20), default="approved")  # 'pending' | 'approved' | 'rejected'
+    channel_url = db.Column(db.String(400), default="")
+    bonus_usd = db.Column(db.Float, default=0.0)  # cumulative bonuses granted by admin
+    ranks_paid = db.Column(db.Text, default="")  # comma separated rank names already paid
 
 
 class AffiliateWithdrawal(db.Model):
@@ -2263,6 +2269,21 @@ class AffiliateWithdrawal(db.Model):
     status = db.Column(db.String(20), default="pending")  # pending | approved | rejected
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     processed_at = db.Column(db.DateTime, nullable=True)
+
+
+class MiniVideo(db.Model):
+    """A video link submitted by a mini influencer to prove reach."""
+    __tablename__ = "mini_videos"
+    id = db.Column(db.Integer, primary_key=True)
+    special_user_id = db.Column(db.Integer, nullable=False)
+    url = db.Column(db.String(500), nullable=False)
+    platform = db.Column(db.String(20), default="")  # tiktok | youtube | instagram | otro
+    views_declared = db.Column(db.Integer, default=0)
+    status = db.Column(db.String(20), default="pending")  # pending | approved | rejected
+    reward_usd = db.Column(db.Float, default=0.0)
+    note = db.Column(db.String(300), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
 
 
 class SpecialCodeUsage(db.Model):
@@ -2404,6 +2425,210 @@ def _credit_affiliate_commission(order_obj) -> bool:
         except Exception:
             pass
         return False
+
+
+def _special_code_uses(su) -> int:
+    """How many approved/delivered orders were placed with this affiliate's codes."""
+    try:
+        from sqlalchemy import or_
+        code_filters = [db.func.lower(Order.special_code) == (su.code or "").lower()]
+        if (su.secondary_code or "").strip():
+            code_filters.append(db.func.lower(Order.special_code) == su.secondary_code.lower())
+        return int(Order.query.filter(
+            Order.status.in_(["approved", "delivered"]),
+            or_(Order.special_user_id == su.id, *code_filters)
+        ).count())
+    except Exception:
+        return 0
+
+
+def _mini_videos_pending_count(su_id: int) -> int:
+    try:
+        return int(MiniVideo.query.filter_by(special_user_id=su_id, status="pending").count())
+    except Exception:
+        return 0
+
+
+def _detect_video_platform(url: str) -> str:
+    u = (url or "").lower()
+    if "tiktok." in u:
+        return "tiktok"
+    if "youtube." in u or "youtu.be" in u:
+        return "youtube"
+    if "instagram." in u:
+        return "instagram"
+    if "facebook." in u or "fb.watch" in u:
+        return "facebook"
+    if "kwai" in u:
+        return "kwai"
+    return "otro"
+
+
+def _mini_video_payload(v, tiers=None) -> dict:
+    views = int(v.views_declared or 0)
+    tier = _tier_for_views(views, tiers)
+    return {
+        "id": v.id,
+        "url": v.url,
+        "platform": v.platform or "otro",
+        "views_declared": views,
+        "status": v.status or "pending",
+        "reward_usd": float(v.reward_usd or 0.0),
+        "note": v.note or "",
+        "created_at": v.created_at.isoformat() if v.created_at else None,
+        "reviewed_at": v.reviewed_at.isoformat() if v.reviewed_at else None,
+        # What the tier table says this view count is worth — a reference, not a payment
+        "tier_reward_usd": float(tier["reward"]) if tier else 0.0,
+        "tier_label": _tier_label(tier) if tier else "Sin tramo",
+    }
+
+
+def _tier_label(tier) -> str:
+    if not tier:
+        return "Sin tramo"
+    if tier.get("max") is None:
+        return f"{tier['min']:,}+".replace(",", ".")
+    return f"{tier['min']:,} - {tier['max']:,}".replace(",", ".")
+
+
+def _credit_special_user_bonus(su, amount_usd: float) -> float:
+    """Add a bonus to an affiliate/mini: goes to the withdrawable balance and to the bonus tally."""
+    inc = round(float(amount_usd or 0.0), 2)
+    if inc <= 0:
+        return 0.0
+    su.balance = round(float(su.balance or 0.0) + inc, 2)
+    su.bonus_usd = round(float(su.bonus_usd or 0.0) + inc, 2)
+    return inc
+
+
+# ==============================
+# Mini influencer tiers
+# Two ladders, both editable from the admin panel:
+#   - view tiers: how much a video is worth according to its views
+#   - ranks: a bonus unlocked by the number of times the code gets used
+# The amounts are only a reference: the admin always confirms the payout by hand.
+# ==============================
+CFG_MINI_VIEW_TIERS = "mini_view_tiers"
+CFG_MINI_RANKS = "mini_ranks"
+
+DEFAULT_MINI_VIEW_TIERS = [
+    {"min": 1000, "max": 3999, "reward": 0.86},
+    {"min": 4000, "max": 9999, "reward": 2.84},
+    {"min": 10000, "max": 29999, "reward": 4.02},
+    {"min": 30000, "max": 49999, "reward": 7.46},
+    {"min": 50000, "max": 99999, "reward": 14.65},
+    {"min": 100000, "max": 249999, "reward": 36.90},
+    {"min": 250000, "max": 499999, "reward": 75.00},
+    {"min": 500000, "max": None, "reward": 145.00},
+]
+
+DEFAULT_MINI_RANKS = [
+    {"name": "Bronce", "uses": 100, "bonus": 5.0},
+    {"name": "Plata", "uses": 250, "bonus": 12.0},
+    {"name": "Oro", "uses": 500, "bonus": 25.0},
+]
+
+
+def _sanitize_view_tiers(raw) -> list:
+    out = []
+    for ent in (raw or []):
+        try:
+            vmin = int(float(ent.get("min") or 0))
+            vmax_raw = ent.get("max")
+            vmax = None if vmax_raw in (None, "", "null") else int(float(vmax_raw))
+            reward = round(float(ent.get("reward") or 0.0), 2)
+        except Exception:
+            continue
+        if vmin < 0 or reward < 0:
+            continue
+        if vmax is not None and vmax < vmin:
+            continue
+        out.append({"min": vmin, "max": vmax, "reward": reward})
+    out.sort(key=lambda t: t["min"])
+    return out
+
+
+def _sanitize_ranks(raw) -> list:
+    out = []
+    for ent in (raw or []):
+        try:
+            name = (ent.get("name") or "").strip()[:40]
+            uses = int(float(ent.get("uses") or 0))
+            bonus = round(float(ent.get("bonus") or 0.0), 2)
+        except Exception:
+            continue
+        if not name or uses <= 0 or bonus < 0:
+            continue
+        out.append({"name": name, "uses": uses, "bonus": bonus})
+    out.sort(key=lambda r: r["uses"])
+    return out
+
+
+def _mini_view_tiers() -> list:
+    try:
+        raw = json.loads(get_config_value(CFG_MINI_VIEW_TIERS, "") or "[]")
+        tiers = _sanitize_view_tiers(raw)
+        if tiers:
+            return tiers
+    except Exception:
+        pass
+    return [dict(t) for t in DEFAULT_MINI_VIEW_TIERS]
+
+
+def _mini_ranks() -> list:
+    try:
+        raw = json.loads(get_config_value(CFG_MINI_RANKS, "") or "[]")
+        ranks = _sanitize_ranks(raw)
+        if ranks:
+            return ranks
+    except Exception:
+        pass
+    return [dict(r) for r in DEFAULT_MINI_RANKS]
+
+
+def _tier_for_views(views: int, tiers=None) -> dict:
+    """The tier a view count falls into, or None when it is below the first one."""
+    v = int(views or 0)
+    for t in (tiers if tiers is not None else _mini_view_tiers()):
+        if v >= t["min"] and (t["max"] is None or v <= t["max"]):
+            return t
+    return None
+
+
+def _suggested_reward_for_views(views: int, tiers=None) -> float:
+    t = _tier_for_views(views, tiers)
+    return float(t["reward"]) if t else 0.0
+
+
+def _ranks_paid_list(su) -> list:
+    return [p for p in (su.ranks_paid or "").split(",") if p.strip()]
+
+
+def _mini_rank_state(su, uses: int = None) -> dict:
+    """Where this mini stands on the rank ladder and which bonuses are still owed."""
+    ranks = _mini_ranks()
+    used = _special_code_uses(su) if uses is None else int(uses)
+    paid = set(_ranks_paid_list(su))
+    reached = [r for r in ranks if used >= r["uses"]]
+    upcoming = [r for r in ranks if used < r["uses"]]
+    current = reached[-1] if reached else None
+    nxt = upcoming[0] if upcoming else None
+    progress = 100.0
+    if nxt:
+        base = current["uses"] if current else 0
+        span = max(nxt["uses"] - base, 1)
+        progress = round(min(max((used - base) / span * 100.0, 0.0), 100.0), 1)
+    return {
+        "uses": used,
+        "current": current,
+        "next": nxt,
+        "uses_to_next": max(nxt["uses"] - used, 0) if nxt else 0,
+        "progress_percent": progress,
+        "paid": sorted(paid),
+        # Reached but not paid yet — the admin decides when to hand these over
+        "unpaid": [r for r in reached if r["name"] not in paid],
+        "ranks": ranks,
+    }
 
 
 def _revendedores_env():
@@ -5854,9 +6079,29 @@ with app.app_context():
                 db.session.execute(text("ALTER TABLE special_users ADD COLUMN scope_package_id INTEGER"))
             if "commission_percent" not in aff_cols:
                 db.session.execute(text("ALTER TABLE special_users ADD COLUMN commission_percent REAL DEFAULT 10.0"))
+            # Mini influencer columns: existing rows stay regular approved affiliates
+            if "kind" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN kind TEXT DEFAULT 'affiliate'"))
+            if "status" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN status TEXT DEFAULT 'approved'"))
+            if "channel_url" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN channel_url TEXT DEFAULT ''"))
+            if "bonus_usd" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN bonus_usd REAL DEFAULT 0.0"))
+            if "ranks_paid" not in aff_cols:
+                db.session.execute(text("ALTER TABLE special_users ADD COLUMN ranks_paid TEXT DEFAULT ''"))
             db.session.commit()
         except Exception:
             pass
+        # Ensure mini_videos exists
+        try:
+            db.session.execute(text("SELECT 1 FROM mini_videos LIMIT 1"))
+        except Exception:
+            try:
+                db.session.rollback()
+                db.create_all()
+            except Exception:
+                pass
         # Ensure affiliate_withdrawals exists (create_all covers it, but keep for safety)
         try:
             db.session.execute(text("SELECT 1 FROM affiliate_withdrawals LIMIT 1"))
@@ -5916,16 +6161,35 @@ def admin_special_users_list():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     rows = SpecialUser.query.order_by(SpecialUser.created_at.desc()).all()
-    return jsonify({
-        "ok": True,
-        "users": [
-            {"id": u.id, "name": u.name, "code": u.code, "secondary_code": u.secondary_code or "", "email": u.email or "", "balance": float(u.balance or 0.0), "active": bool(u.active),
-             "discount_percent": float(u.discount_percent or 0.0),
-             "commission_percent": float(u.commission_percent or 0.0),
-             "scope": u.scope or 'all', "scope_package_id": u.scope_package_id}
-            for u in rows
-        ]
-    })
+    # Pending mini influencer profiles bubble to the top so they get reviewed first
+    rows.sort(key=lambda u: 0 if (u.status or "approved") == "pending" else 1)
+    out = []
+    for u in rows:
+        uses = _special_code_uses(u)
+        entry = {
+            "id": u.id, "name": u.name, "code": u.code, "secondary_code": u.secondary_code or "", "email": u.email or "", "balance": float(u.balance or 0.0), "active": bool(u.active),
+            "discount_percent": float(u.discount_percent or 0.0),
+            "commission_percent": float(u.commission_percent or 0.0),
+            "scope": u.scope or 'all', "scope_package_id": u.scope_package_id,
+            "kind": u.kind or "affiliate",
+            "status": u.status or "approved",
+            "channel_url": u.channel_url or "",
+            "bonus_usd": float(u.bonus_usd or 0.0),
+            "code_uses": uses,
+            "videos_pending": _mini_videos_pending_count(u.id),
+        }
+        if (u.kind or "affiliate") == "mini":
+            rank = _mini_rank_state(u, uses)
+            entry.update({
+                "rank_current": rank["current"],
+                "rank_next": rank["next"],
+                "rank_uses_to_next": rank["uses_to_next"],
+                "rank_progress": rank["progress_percent"],
+                "ranks_unpaid": rank["unpaid"],
+                "ranks_paid": rank["paid"],
+            })
+        out.append(entry)
+    return jsonify({"ok": True, "users": out})
 
 @app.route("/admin/special/users", methods=["POST"])
 def admin_special_users_create():
@@ -5968,10 +6232,15 @@ def admin_special_users_create():
             return float(data.get(key) or default)
         except Exception:
             return default
+    kind = (data.get("kind") or "affiliate").strip().lower()
     su = SpecialUser(name=name, code=code, secondary_code=secondary_code or None, email=email or None, active=bool(data.get("active", True)), balance=float(data.get("balance") or 0.0),
                      discount_percent=discount_percent,
                      commission_percent=fget("commission_percent", 10.0),
-                     scope=scope if scope in ("all","package") else "all", scope_package_id=scope_package_id)
+                     scope=scope if scope in ("all","package") else "all", scope_package_id=scope_package_id,
+                     kind=kind if kind in ("affiliate", "mini") else "affiliate",
+                     status="approved",
+                     channel_url=(data.get("channel_url") or "").strip(),
+                     bonus_usd=fget("bonus_usd", 0.0))
     if password:
         su.password_hash = generate_password_hash(password)
     db.session.add(su)
@@ -5979,7 +6248,8 @@ def admin_special_users_create():
     return jsonify({"ok": True, "user": {"id": su.id, "name": su.name, "code": su.code, "secondary_code": su.secondary_code or "", "email": su.email or "", "balance": su.balance, "active": su.active,
             "discount_percent": su.discount_percent,
             "commission_percent": su.commission_percent,
-            "scope": su.scope, "scope_package_id": su.scope_package_id }})
+            "scope": su.scope, "scope_package_id": su.scope_package_id,
+            "kind": su.kind, "status": su.status, "channel_url": su.channel_url or "", "bonus_usd": su.bonus_usd }})
 
 @app.route("/admin/special/users/<int:uid>", methods=["PATCH", "PUT"])
 def admin_special_users_update(uid: int):
@@ -6052,8 +6322,301 @@ def admin_special_users_update(uid: int):
             su.scope_package_id = int(val) if val is not None and f"{val}" != "" else None
         except Exception:
             su.scope_package_id = None
+    if "kind" in data:
+        k = (data.get("kind") or "").strip().lower()
+        if k in ("affiliate", "mini"):
+            su.kind = k
+    if "channel_url" in data:
+        su.channel_url = (data.get("channel_url") or "").strip()
+    if "bonus_usd" in data:
+        # Absolute value of the bonus tally (use /bonus to add on top instead)
+        try:
+            su.bonus_usd = float(data.get("bonus_usd") or 0.0)
+        except Exception:
+            pass
     db.session.commit()
     return jsonify({"ok": True})
+
+
+# ==============================
+# Admin: mini influencer moderation
+# ==============================
+@app.route("/admin/special/users/<int:uid>/status", methods=["POST"])
+def admin_special_users_set_status(uid: int):
+    """Accept or reject a self-registered profile (mini influencer)."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    su = SpecialUser.query.get(uid)
+    if not su:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    data = request.get_json(silent=True) or {}
+    status = (data.get("status") or "").strip().lower()
+    if status not in ("approved", "rejected", "pending"):
+        return jsonify({"ok": False, "error": "Estado inválido"}), 400
+
+    def fnum(key):
+        try:
+            val = data.get(key)
+            return float(val) if val is not None and f"{val}" != "" else None
+        except Exception:
+            return None
+
+    if status == "approved":
+        # The admin can set the terms of the deal at the moment of approving
+        disc = fnum("discount_percent")
+        comm = fnum("commission_percent")
+        bonus = fnum("bonus_usd")
+        if disc is not None:
+            su.discount_percent = disc
+        if comm is not None:
+            su.commission_percent = comm
+        if bonus is not None and bonus > 0:
+            _credit_special_user_bonus(su, bonus)
+        su.status = "approved"
+        su.active = True
+    elif status == "rejected":
+        su.status = "rejected"
+        su.active = False
+    else:
+        su.status = "pending"
+        su.active = False
+    db.session.commit()
+
+    # Let the mini influencer know the outcome
+    try:
+        if su.email:
+            if su.status == "approved":
+                body = "\n".join([
+                    f"Hola {su.name or ''},",
+                    "",
+                    "Tu perfil de mini influencer fue aprobado.",
+                    f"Tu código activo es: {su.code}",
+                    f"Descuento para tus seguidores: {float(su.discount_percent or 0.0):g}%",
+                    f"Tu comisión por venta: {float(su.commission_percent or 0.0):g}%",
+                    "",
+                    "Ya puedes entrar a tu panel y empezar a cargar tus videos.",
+                ])
+                send_email(su.email, "Tu perfil de mini influencer fue aprobado", body)
+            elif su.status == "rejected":
+                body = "\n".join([
+                    f"Hola {su.name or ''},",
+                    "",
+                    "Tu solicitud de mini influencer no fue aprobada por ahora.",
+                    "Si crees que es un error puedes responder a este correo.",
+                ])
+                send_email(su.email, "Sobre tu solicitud de mini influencer", body)
+    except Exception:
+        pass
+    return jsonify({"ok": True, "status": su.status})
+
+
+@app.route("/admin/special/users/<int:uid>/bonus", methods=["POST"])
+def admin_special_users_add_bonus(uid: int):
+    """Add a bonus in USD on top of the affiliate's current balance."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    su = SpecialUser.query.get(uid)
+    if not su:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        amount = float(data.get("amount_usd") or 0)
+    except Exception:
+        amount = 0.0
+    if amount <= 0:
+        return jsonify({"ok": False, "error": "Monto inválido"}), 400
+    inc = _credit_special_user_bonus(su, amount)
+    db.session.commit()
+    try:
+        if su.email:
+            send_email(
+                su.email,
+                "Recibiste un bono",
+                f"Se acreditó un bono de ${inc:.2f} USD a tu cuenta.\nSaldo actual: ${float(su.balance or 0.0):.2f} USD.",
+            )
+    except Exception:
+        pass
+    return jsonify({"ok": True, "balance_usd": float(su.balance or 0.0), "bonus_usd": float(su.bonus_usd or 0.0)})
+
+
+@app.route("/mini/tiers")
+def mini_tiers_public():
+    """The two reward ladders. Public so the panel and the sign-up can show them."""
+    return jsonify({
+        "ok": True,
+        "view_tiers": _mini_view_tiers(),
+        "ranks": _mini_ranks(),
+    })
+
+
+@app.route("/admin/mini/tiers", methods=["GET"])
+def admin_mini_tiers_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify({
+        "ok": True,
+        "view_tiers": _mini_view_tiers(),
+        "ranks": _mini_ranks(),
+        "defaults": {"view_tiers": DEFAULT_MINI_VIEW_TIERS, "ranks": DEFAULT_MINI_RANKS},
+    })
+
+
+@app.route("/admin/mini/tiers", methods=["POST"])
+def admin_mini_tiers_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    updates = {}
+    if "view_tiers" in data:
+        tiers = _sanitize_view_tiers(data.get("view_tiers"))
+        if not tiers:
+            return jsonify({"ok": False, "error": "Los tramos de vistas son inválidos"}), 400
+        # Overlapping ranges would make the suggested reward ambiguous
+        for prev, nxt in zip(tiers, tiers[1:]):
+            if prev["max"] is None or nxt["min"] <= prev["max"]:
+                return jsonify({"ok": False, "error": "Los tramos de vistas se solapan o quedan abiertos en medio"}), 400
+        updates[CFG_MINI_VIEW_TIERS] = json.dumps(tiers)
+    if "ranks" in data:
+        ranks = _sanitize_ranks(data.get("ranks"))
+        if not ranks:
+            return jsonify({"ok": False, "error": "Los rangos son inválidos"}), 400
+        names = [r["name"].lower() for r in ranks]
+        if len(names) != len(set(names)):
+            return jsonify({"ok": False, "error": "Hay rangos con el mismo nombre"}), 400
+        uses = [r["uses"] for r in ranks]
+        if len(uses) != len(set(uses)):
+            return jsonify({"ok": False, "error": "Hay rangos con la misma cantidad de usos"}), 400
+        updates[CFG_MINI_RANKS] = json.dumps(ranks)
+    if not updates:
+        return jsonify({"ok": False, "error": "Nada que guardar"}), 400
+    try:
+        set_config_values(updates)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar: {exc}"}), 500
+    return jsonify({"ok": True, "view_tiers": _mini_view_tiers(), "ranks": _mini_ranks()})
+
+
+@app.route("/admin/special/users/<int:uid>/rank-award", methods=["POST"])
+def admin_special_users_rank_award(uid: int):
+    """Pay the bonus of a rank the mini already unlocked (amount editable by the admin)."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    su = SpecialUser.query.get(uid)
+    if not su:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    data = request.get_json(silent=True) or {}
+    rank_name = (data.get("rank") or "").strip()
+    if not rank_name:
+        return jsonify({"ok": False, "error": "Rango requerido"}), 400
+    state = _mini_rank_state(su)
+    match = next((r for r in state["unpaid"] if r["name"].lower() == rank_name.lower()), None)
+    if not match:
+        return jsonify({"ok": False, "error": "Ese rango no está pendiente de pago"}), 400
+    try:
+        amount = float(data.get("amount_usd")) if f"{data.get('amount_usd')}" not in ("", "None") else float(match["bonus"])
+    except Exception:
+        amount = float(match["bonus"])
+    inc = _credit_special_user_bonus(su, amount)
+    su.ranks_paid = ",".join(_ranks_paid_list(su) + [match["name"]])
+    db.session.commit()
+    try:
+        if su.email:
+            send_email(
+                su.email,
+                f"Desbloqueaste el rango {match['name']}",
+                "\n".join([
+                    f"Llegaste al rango {match['name']} con {state['uses']} usos de tu código.",
+                    f"Bono acreditado: ${inc:.2f} USD",
+                    f"Saldo actual: ${float(su.balance or 0.0):.2f} USD",
+                ]),
+            )
+    except Exception:
+        pass
+    return jsonify({"ok": True, "balance_usd": float(su.balance or 0.0), "paid": _ranks_paid_list(su)})
+
+
+@app.route("/admin/mini/videos")
+def admin_mini_videos_list():
+    """All video submissions, pending first."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    status = (request.args.get("status") or "").strip().lower()
+    q = MiniVideo.query
+    if status in ("pending", "approved", "rejected"):
+        q = q.filter_by(status=status)
+    rows = q.order_by(MiniVideo.created_at.desc()).all()
+    rows.sort(key=lambda v: 0 if (v.status or "pending") == "pending" else 1)
+    tiers = _mini_view_tiers()
+    items = []
+    for v in rows:
+        su = SpecialUser.query.get(v.special_user_id)
+        payload = _mini_video_payload(v, tiers)
+        payload.update({
+            "affiliate_id": v.special_user_id,
+            "affiliate_name": (su.name if su else "") or "Mini influencer",
+            "affiliate_code": (su.code if su else "") or "",
+            "channel_url": (su.channel_url if su else "") or "",
+        })
+        items.append(payload)
+    return jsonify({"ok": True, "items": items, "view_tiers": tiers})
+
+
+@app.route("/admin/mini/videos/<int:v_id>/review", methods=["POST"])
+def admin_mini_videos_review(v_id: int):
+    """Approve a video (optionally paying a reward) or reject it."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    v = MiniVideo.query.get(v_id)
+    if not v:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    data = request.get_json(silent=True) or {}
+    status = (data.get("status") or "").strip().lower()
+    if status not in ("approved", "rejected"):
+        return jsonify({"ok": False, "error": "Estado inválido"}), 400
+    if (v.status or "pending") == "approved" and status == "approved":
+        return jsonify({"ok": False, "error": "Este video ya fue aprobado"}), 400
+
+    su = SpecialUser.query.get(v.special_user_id)
+    try:
+        reward = float(data.get("reward_usd") or 0)
+    except Exception:
+        reward = 0.0
+    try:
+        views = int(float(data.get("views") or v.views_declared or 0))
+    except Exception:
+        views = int(v.views_declared or 0)
+
+    v.note = (data.get("note") or v.note or "").strip()[:300]
+    v.views_declared = max(views, 0)
+    v.reviewed_at = datetime.utcnow()
+    if status == "approved":
+        v.status = "approved"
+        v.reward_usd = round(max(reward, 0.0), 2)
+        if su and v.reward_usd > 0:
+            _credit_special_user_bonus(su, v.reward_usd)
+    else:
+        v.status = "rejected"
+        v.reward_usd = 0.0
+    db.session.commit()
+
+    try:
+        if su and su.email:
+            if v.status == "approved":
+                extra = f"\nRecompensa acreditada: ${float(v.reward_usd or 0.0):.2f} USD" if float(v.reward_usd or 0.0) > 0 else ""
+                send_email(su.email, "Tu video fue aprobado", f"Video: {v.url}{extra}")
+            else:
+                reason = f"\nMotivo: {v.note}" if v.note else ""
+                send_email(su.email, "Tu video no fue aprobado", f"Video: {v.url}{reason}")
+    except Exception:
+        pass
+    return jsonify({"ok": True, "video": _mini_video_payload(v)})
 
 
 # ==============================
@@ -6068,21 +6631,226 @@ def affiliate_summary():
     su = SpecialUser.query.get(aff_id) if aff_id else None
     if not su:
         return jsonify({"ok": False, "error": "Afiliado no encontrado"}), 404
-    from sqlalchemy import or_
-    code_filters = [db.func.lower(Order.special_code) == (su.code or "").lower()]
-    if (su.secondary_code or "").strip():
-        code_filters.append(db.func.lower(Order.special_code) == su.secondary_code.lower())
-    approved_q = Order.query.filter(
-        Order.status.in_(["approved", "delivered"]),
-        or_(Order.special_user_id == su.id, *code_filters)
-    )
-    approved_count = approved_q.count()
+    approved_count = _special_code_uses(su)
+    bonus = float(su.bonus_usd or 0.0)
+    balance = float(su.balance or 0.0)
     return jsonify({
         "ok": True,
         "code": su.code or "",
         "approved_orders": int(approved_count),
-        "balance_usd": float(su.balance or 0.0),
+        "balance_usd": balance,
+        "bonus_usd": bonus,
+        "commission_usd": round(max(balance - bonus, 0.0), 2),
+        "commission_percent": float(su.commission_percent or 0.0),
+        "discount_percent": float(su.discount_percent or 0.0),
+        "kind": su.kind or "affiliate",
+        "status": su.status or "approved",
+        "channel_url": su.channel_url or "",
+        "name": su.name or "",
     })
+
+
+# ==============================
+# Mini influencers: public registration + self-service panel
+# ==============================
+@app.route("/mini/register", methods=["POST"])
+def mini_register():
+    """Public sign-up for a mini influencer. Stays pending until an admin accepts it."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    password = data.get("password") or ""
+    channel_url = (data.get("channel_url") or "").strip()
+    code = (data.get("code") or "").strip()
+
+    if not name:
+        return jsonify({"ok": False, "error": "El nombre es requerido"}), 400
+    if not email or "@" not in email:
+        return jsonify({"ok": False, "error": "Email inválido"}), 400
+    if len(password) < 6:
+        return jsonify({"ok": False, "error": "La contraseña debe tener al menos 6 caracteres"}), 400
+    if not channel_url:
+        return jsonify({"ok": False, "error": "El link de tu canal es requerido"}), 400
+    if not (channel_url.startswith("http://") or channel_url.startswith("https://")):
+        channel_url = "https://" + channel_url
+    if not code:
+        return jsonify({"ok": False, "error": "El código es requerido"}), 400
+    if len(code) < 3 or len(code) > 20:
+        return jsonify({"ok": False, "error": "El código debe tener entre 3 y 20 caracteres"}), 400
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", code):
+        return jsonify({"ok": False, "error": "El código solo puede tener letras, números, guion y guion bajo"}), 400
+
+    # The code must be free across both code columns
+    if SpecialUser.query.filter(db.func.lower(SpecialUser.code) == code.lower()).first():
+        return jsonify({"ok": False, "error": "Ese código ya está en uso, elige otro"}), 400
+    if SpecialUser.query.filter(db.func.lower(SpecialUser.secondary_code) == code.lower()).first():
+        return jsonify({"ok": False, "error": "Ese código ya está en uso, elige otro"}), 400
+    # The email must be free as an affiliate and as a customer
+    if SpecialUser.query.filter(db.func.lower(SpecialUser.email) == email.lower()).first():
+        return jsonify({"ok": False, "error": "Ya existe una cuenta con ese email"}), 400
+    if email.lower() == (ADMIN_EMAIL or "").lower():
+        return jsonify({"ok": False, "error": "Ya existe una cuenta con ese email"}), 400
+
+    su = SpecialUser(
+        name=name,
+        code=code,
+        email=email,
+        password_hash=generate_password_hash(password),
+        channel_url=channel_url,
+        kind="mini",
+        status="pending",
+        active=False,          # the code stays dead until the profile is accepted
+        balance=0.0,
+        bonus_usd=0.0,
+        discount_percent=0.0,
+        commission_percent=5.0,
+        scope="all",
+    )
+    db.session.add(su)
+    db.session.commit()
+
+    session["user"] = {
+        "email": su.email,
+        "role": "affiliate",
+        "affiliate_id": su.id,
+        "name": su.name,
+        "kind": "mini",
+        "status": su.status,
+    }
+
+    # Notify admin there is a profile to review
+    try:
+        to_addr = get_config_value("admin_notify_email", ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL)
+        send_email(to_addr, f"Nuevo mini influencer pendiente: {su.name}", "\n".join([
+            "Se registró un mini influencer y está esperando aprobación.",
+            f"Nombre: {su.name}",
+            f"Email: {su.email}",
+            f"Código solicitado: {su.code}",
+            f"Canal: {su.channel_url}",
+            "",
+            "Acéptalo o recházalo desde Admin > Afiliados.",
+        ]))
+    except Exception:
+        pass
+    return jsonify({"ok": True, "user": session["user"], "status": su.status})
+
+
+def _current_mini():
+    """The SpecialUser behind the session, or None."""
+    user = session.get("user")
+    if not user or user.get("role") != "affiliate":
+        return None
+    aff_id = user.get("affiliate_id")
+    return SpecialUser.query.get(aff_id) if aff_id else None
+
+
+@app.route("/mini/summary")
+def mini_summary():
+    su = _current_mini()
+    if not su:
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    balance = float(su.balance or 0.0)
+    bonus = float(su.bonus_usd or 0.0)
+    videos = MiniVideo.query.filter_by(special_user_id=su.id).all()
+    uses = _special_code_uses(su)
+    rank = _mini_rank_state(su, uses)
+    return jsonify({
+        "ok": True,
+        "name": su.name or "",
+        "code": su.code or "",
+        "status": su.status or "approved",
+        "kind": su.kind or "affiliate",
+        "channel_url": su.channel_url or "",
+        "code_uses": uses,
+        "view_tiers": _mini_view_tiers(),
+        "ranks": rank["ranks"],
+        "rank_current": rank["current"],
+        "rank_next": rank["next"],
+        "rank_uses_to_next": rank["uses_to_next"],
+        "rank_progress": rank["progress_percent"],
+        "ranks_unlocked": [r["name"] for r in rank["ranks"] if uses >= r["uses"]],
+        "balance_usd": balance,
+        "bonus_usd": bonus,
+        "commission_usd": round(max(balance - bonus, 0.0), 2),
+        "commission_percent": float(su.commission_percent or 0.0),
+        "discount_percent": float(su.discount_percent or 0.0),
+        "videos_total": len(videos),
+        "videos_approved": sum(1 for v in videos if (v.status or "") == "approved"),
+        "videos_pending": sum(1 for v in videos if (v.status or "pending") == "pending"),
+        "views_total": sum(int(v.views_declared or 0) for v in videos if (v.status or "") == "approved"),
+    })
+
+
+@app.route("/mini/videos", methods=["GET"])
+def mini_videos_list():
+    su = _current_mini()
+    if not su:
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    rows = MiniVideo.query.filter_by(special_user_id=su.id).order_by(MiniVideo.created_at.desc()).all()
+    return jsonify({"ok": True, "items": [_mini_video_payload(v) for v in rows]})
+
+
+@app.route("/mini/videos", methods=["POST"])
+def mini_videos_create():
+    su = _current_mini()
+    if not su:
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    if (su.status or "approved") != "approved":
+        return jsonify({"ok": False, "error": "Tu perfil todavía no fue aprobado"}), 403
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "El link del video es requerido"}), 400
+    if not (url.startswith("http://") or url.startswith("https://")):
+        url = "https://" + url
+    if len(url) > 500:
+        return jsonify({"ok": False, "error": "El link es demasiado largo"}), 400
+    try:
+        views = int(float(data.get("views") or 0))
+    except Exception:
+        views = 0
+    exists = MiniVideo.query.filter(
+        MiniVideo.special_user_id == su.id,
+        db.func.lower(MiniVideo.url) == url.lower(),
+    ).first()
+    if exists:
+        return jsonify({"ok": False, "error": "Ya cargaste ese video"}), 400
+    v = MiniVideo(
+        special_user_id=su.id,
+        url=url,
+        platform=_detect_video_platform(url),
+        views_declared=max(views, 0),
+        status="pending",
+    )
+    db.session.add(v)
+    db.session.commit()
+    try:
+        to_addr = get_config_value("admin_notify_email", ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL)
+        send_email(to_addr, f"Nuevo video de {su.name or su.code}", "\n".join([
+            f"Mini influencer: {su.name or ''} ({su.code})",
+            f"Video: {v.url}",
+            f"Vistas declaradas: {v.views_declared}",
+            "",
+            "Revísalo desde Admin > Afiliados > Videos de mini influencers.",
+        ]))
+    except Exception:
+        pass
+    return jsonify({"ok": True, "video": _mini_video_payload(v)})
+
+
+@app.route("/mini/videos/<int:v_id>", methods=["DELETE"])
+def mini_videos_delete(v_id: int):
+    su = _current_mini()
+    if not su:
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    v = MiniVideo.query.get(v_id)
+    if not v or v.special_user_id != su.id:
+        return jsonify({"ok": False, "error": "No existe"}), 404
+    if (v.status or "pending") != "pending":
+        return jsonify({"ok": False, "error": "Solo puedes borrar videos pendientes"}), 400
+    db.session.delete(v)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 # ==============================
@@ -6367,9 +7135,21 @@ def user_page():
     role = u.get("role")
     is_admin = (role == "admin")
     is_affiliate = (role == "affiliate")
+    # Mini influencers are affiliates with their own panel; read the live row so an
+    # approval that happened after login is reflected without re-logging in.
+    is_mini = False
+    mini_status = ""
+    if is_affiliate:
+        su = SpecialUser.query.get(u.get("affiliate_id")) if u.get("affiliate_id") else None
+        if su:
+            is_mini = (su.kind or "affiliate") == "mini"
+            mini_status = su.status or "approved"
+            session["user"] = {**u, "kind": su.kind or "affiliate", "status": mini_status}
     logo_url = get_config_value("logo_path", "")
     site_name = get_config_value("site_name", "InefableStore")
-    return render_template("user.html", is_admin=is_admin, is_affiliate=is_affiliate, logo_url=logo_url, site_name=site_name)
+    return render_template("user.html", is_admin=is_admin, is_affiliate=is_affiliate,
+                           is_mini=is_mini, mini_status=mini_status,
+                           logo_url=logo_url, site_name=site_name)
 
 @app.route("/admin")
 def admin_page():
@@ -11062,10 +11842,21 @@ def auth_login():
     if email.lower() == (ADMIN_EMAIL or "").lower() and password == (ADMIN_PASSWORD or ""):
         session["user"] = {"email": ADMIN_EMAIL, "role": "admin"}
         return jsonify({"ok": True, "user": session["user"]})
-    # Affiliate login
+    # Affiliate / mini influencer login (by email, or by their own code)
     su = SpecialUser.query.filter(db.func.lower(SpecialUser.email) == email.lower()).first()
+    if not su:
+        su = SpecialUser.query.filter(db.func.lower(SpecialUser.code) == email.lower()).first()
     if su and su.password_hash and check_password_hash(su.password_hash, password):
-        session["user"] = {"email": su.email or email, "role": "affiliate", "affiliate_id": su.id, "name": su.name}
+        if (su.status or "approved") == "rejected":
+            return jsonify({"ok": False, "error": "Tu perfil no fue aprobado"}), 403
+        session["user"] = {
+            "email": su.email or email,
+            "role": "affiliate",
+            "affiliate_id": su.id,
+            "name": su.name,
+            "kind": su.kind or "affiliate",
+            "status": su.status or "approved",
+        }
         return jsonify({"ok": True, "user": session["user"]})
     # Normal user login
     u = User.query.filter(db.func.lower(User.email) == email.lower()).first()
