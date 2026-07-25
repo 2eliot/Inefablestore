@@ -9507,7 +9507,20 @@ def admin_orders_list():
         per_page = 20
     per_page = 20 if per_page <= 0 else min(per_page, 20)
 
-    base_query = Order.query.order_by(Order.created_at.desc())
+    # Busqueda por ultimos digitos de la referencia o por ID de jugador
+    q = (request.args.get("q") or "").strip()
+    base_query = Order.query
+    if q:
+        # % y _ son comodines de LIKE: se escapan para que se busquen literales
+        safe = q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{safe}%"
+        filters = [
+            db.func.lower(Order.reference).like(like, escape="\\"),
+            db.func.lower(Order.customer_id).like(like, escape="\\"),
+            db.func.lower(Order.capture_reference).like(like, escape="\\"),
+        ]
+        base_query = base_query.filter(db.or_(*filters))
+    base_query = base_query.order_by(Order.created_at.desc())
     total_orders = base_query.count()
     total_pages = max((total_orders + per_page - 1) // per_page, 1)
     if page > total_pages:
@@ -9648,6 +9661,7 @@ def admin_orders_list():
             "total_pages": total_pages,
             "has_prev": page > 1,
             "has_next": page < total_pages,
+            "q": q,
         },
     })
 

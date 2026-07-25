@@ -136,6 +136,16 @@
         </div>
       </div>
       <div class="panel-body">
+        <div class="orders-search">
+          <div class="orders-search-field">
+            <span class="orders-search-icon">🔎</span>
+            <input id="orders-search" type="search" autocomplete="off"
+                   placeholder="Buscar por últimos dígitos de la referencia o ID de jugador">
+            <button id="orders-search-clear" class="orders-search-clear" type="button" title="Limpiar" hidden>✕</button>
+          </div>
+          <button id="btn-orders-search" class="btn primary" type="button">Buscar</button>
+        </div>
+        <div id="orders-search-info" class="orders-search-info" hidden></div>
         <div id="orders-list" class="orders-list">
           <div class="empty-state">
               <h3>Cargando órdenes...</h3>

@@ -500,8 +500,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const ordersPagination = document.getElementById('orders-pagination');
   const btnOrdersWdRefresh = document.getElementById('btn-orders-wd-refresh');
   const ordersWdList = document.getElementById('orders-wd-list');
+  const ordersSearch = document.getElementById('orders-search');
+  const ordersSearchClear = document.getElementById('orders-search-clear');
+  const btnOrdersSearch = document.getElementById('btn-orders-search');
+  const ordersSearchInfo = document.getElementById('orders-search-info');
   let ordersCurrentPage = 1;
   const ordersPerPage = 20;
+  let ordersQuery = '';
   // Revendedores mapping elements
   const btnRevSync = document.getElementById('btn-rev-sync');
   const btnRevRefresh = document.getElementById('btn-rev-refresh');
@@ -2933,20 +2938,78 @@ window.refreshGallery = refreshGallery;
     `;
   }
 
+  function renderOrdersSearchInfo(pagination) {
+    if (!ordersSearchInfo) return;
+    if (!ordersQuery) {
+      ordersSearchInfo.setAttribute('hidden', '');
+      ordersSearchInfo.textContent = '';
+      return;
+    }
+    const total = parseInt(pagination.total_orders || 0, 10) || 0;
+    ordersSearchInfo.textContent = total === 0
+      ? `Sin resultados para "${ordersQuery}"`
+      : `${total} ${total === 1 ? 'orden encontrada' : 'órdenes encontradas'} para "${ordersQuery}"`;
+    ordersSearchInfo.removeAttribute('hidden');
+  }
+
   async function fetchOrders(page = ordersCurrentPage) {
     try {
       const normalizedPage = Math.max(parseInt(page || 1, 10) || 1, 1);
-      const res = await fetch(`/admin/orders?page=${normalizedPage}&per_page=${ordersPerPage}`);
+      const params = new URLSearchParams({ page: normalizedPage, per_page: ordersPerPage });
+      if (ordersQuery) params.set('q', ordersQuery);
+      const res = await fetch(`/admin/orders?${params.toString()}`);
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo listar');
       const pagination = data.pagination || {};
       ordersCurrentPage = Math.max(parseInt(pagination.page || normalizedPage, 10) || normalizedPage, 1);
       renderOrders(data.orders || []);
       renderOrdersPagination(pagination);
+      renderOrdersSearchInfo(pagination);
     } catch (e) {
       if (ordersList) ordersList.innerHTML = `<div class="empty-state"><p>${e.message || 'Error'}</p></div>`;
       if (ordersPagination) ordersPagination.innerHTML = '';
     }
+  }
+
+  // La busqueda siempre vuelve a la primera pagina
+  function runOrdersSearch() {
+    const value = ordersSearch ? ordersSearch.value.trim() : '';
+    if (value === ordersQuery) return;
+    ordersQuery = value;
+    if (ordersSearchClear) {
+      if (value) ordersSearchClear.removeAttribute('hidden');
+      else ordersSearchClear.setAttribute('hidden', '');
+    }
+    ordersCurrentPage = 1;
+    fetchOrders(1);
+  }
+
+  let ordersSearchTimer = null;
+  if (ordersSearch) {
+    ordersSearch.addEventListener('input', () => {
+      clearTimeout(ordersSearchTimer);
+      ordersSearchTimer = setTimeout(runOrdersSearch, 350);
+    });
+    ordersSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        clearTimeout(ordersSearchTimer);
+        runOrdersSearch();
+      }
+    });
+  }
+  if (btnOrdersSearch) {
+    btnOrdersSearch.addEventListener('click', () => {
+      clearTimeout(ordersSearchTimer);
+      runOrdersSearch();
+    });
+  }
+  if (ordersSearchClear) {
+    ordersSearchClear.addEventListener('click', () => {
+      if (ordersSearch) ordersSearch.value = '';
+      clearTimeout(ordersSearchTimer);
+      runOrdersSearch();
+    });
   }
 
   function renderOrders(items) {

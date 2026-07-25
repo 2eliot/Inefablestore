@@ -1138,6 +1138,55 @@ details[open] > .aff-edit-toggle::before { content: '▾ '; }
   border-top: 1px solid #f1f5f9;
 }
 
+/* --- Buscador de ordenes --- */
+.orders-search { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.orders-search-field { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
+.orders-search-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 13px;
+  opacity: .55;
+  pointer-events: none;
+}
+.orders-search-field input {
+  width: 100%;
+  padding: 9px 34px 9px 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  color: #0f172a;
+}
+.orders-search-field input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+.orders-search-field input::-webkit-search-cancel-button { display: none; }
+.orders-search-clear {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: 0;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+  border-radius: 6px;
+}
+.orders-search-clear:hover { color: #0f172a; background: #f1f5f9; }
+.orders-search-info {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin: -4px 0 12px;
+}
+@media (max-width: 600px) {
+  .orders-search { flex-direction: column; align-items: stretch; }
+}
+body.theme-admin-dark .orders-search-field input { background: #0b1220; border-color: #334155; color: #e5e7eb; }
+body.theme-admin-dark .orders-search-field input:focus { border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129,140,248,0.15); }
+body.theme-admin-dark .orders-search-clear:hover { color: #e5e7eb; background: #1f2937; }
+body.theme-admin-dark .orders-search-info { color: #94a3b8; }
+
 /* --- Mini influencers --- */
 .aff-status--mini { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
 .aff-card--mini { border-left: 3px solid #8b5cf6; }
