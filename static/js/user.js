@@ -452,6 +452,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const total = Number(data.videos_total || 0);
         miniVideosCount.textContent = `${total} ${total === 1 ? 'video' : 'videos'}`;
       }
+      // El canje necesita el saldo fresco para validar contra el precio
+      redeemBalance = Number(data.balance_usd || 0);
+      if (redeemBalancePill) redeemBalancePill.textContent = `${money(redeemBalance)} disponible`;
+      updateRedeemSummary();
       if (miniViewsCount) miniViewsCount.textContent = `${num(data.views_total)} vistas aprobadas`;
     } catch (_) {}
   }
@@ -570,6 +574,230 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // =====================
+  // Canje de credito por recarga
+  // =====================
+  const redeemGame = document.getElementById('redeem-game');
+  const redeemItem = document.getElementById('redeem-item');
+  const redeemCustomerId = document.getElementById('redeem-customer-id');
+  const redeemZone = document.getElementById('redeem-zone');
+  const redeemZoneWrap = document.getElementById('redeem-zone-wrap');
+  const redeemPlayerFields = document.getElementById('redeem-player-fields');
+  const redeemEmail = document.getElementById('redeem-email');
+  const redeemEmailWrap = document.getElementById('redeem-email-wrap');
+  const redeemSummary = document.getElementById('redeem-summary');
+  const redeemPrice = document.getElementById('redeem-price');
+  const redeemCurrent = document.getElementById('redeem-current');
+  const redeemAfter = document.getElementById('redeem-after');
+  const btnRedeem = document.getElementById('btn-redeem');
+  const redeemAlert = document.getElementById('redeem-alert');
+  const redeemList = document.getElementById('redeem-list');
+  const redeemBalancePill = document.getElementById('redeem-balance-pill');
+
+  let redeemBalance = 0;
+  let redeemItems = [];
+  let redeemIsPin = false;
+  let redeemRequiresZone = false;
+
+  function redeemMsg(msg, kind) {
+    if (!redeemAlert) return;
+    redeemAlert.textContent = msg || '';
+    redeemAlert.style.color = kind === 'error' ? '#fecaca' : (kind === 'ok' ? '#86efac' : '#94a3b8');
+  }
+
+  function selectedRedeemItem() {
+    if (!redeemItem || !redeemItem.value) return null;
+    return redeemItems.find(i => String(i.id) === String(redeemItem.value)) || null;
+  }
+
+  function updateRedeemSummary() {
+    const item = selectedRedeemItem();
+    if (!item) {
+      if (redeemSummary) redeemSummary.setAttribute('hidden', '');
+      if (btnRedeem) btnRedeem.disabled = true;
+      return;
+    }
+    const price = Number(item.price || 0);
+    const after = redeemBalance - price;
+    if (redeemPrice) redeemPrice.textContent = money(price);
+    if (redeemCurrent) redeemCurrent.textContent = money(redeemBalance);
+    if (redeemAfter) redeemAfter.textContent = money(Math.max(after, 0));
+    const shortRow = redeemAfter ? redeemAfter.closest('.redeem-summary-row') : null;
+    if (shortRow) shortRow.classList.toggle('redeem-summary-row--short', after < 0);
+    if (redeemSummary) redeemSummary.removeAttribute('hidden');
+    // El credito tiene que cubrir el precio completo
+    const enough = after >= 0;
+    if (btnRedeem) {
+      btnRedeem.disabled = !enough;
+      btnRedeem.textContent = enough ? `Canjear por ${money(price)}` : 'Crédito insuficiente';
+    }
+    if (!enough) redeemMsg(`Te faltan ${money(Math.abs(after))} de crédito para este paquete`, 'error');
+    else redeemMsg('');
+  }
+
+  async function loadRedeemGames() {
+    if (!redeemGame) return;
+    try {
+      const res = await fetch('/store/packages');
+      const data = await res.json();
+      const games = (data && (data.packages || data.items)) || [];
+      redeemGame.innerHTML = '<option value="">Elige un juego</option>';
+      games.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.id;
+        opt.textContent = g.name;
+        redeemGame.appendChild(opt);
+      });
+      if (!games.length) redeemGame.innerHTML = '<option value="">No hay juegos disponibles</option>';
+    } catch (_) {
+      redeemGame.innerHTML = '<option value="">No se pudo cargar</option>';
+    }
+  }
+
+  async function loadRedeemItems(gid) {
+    if (!redeemItem) return;
+    redeemItems = [];
+    redeemItem.innerHTML = '<option value="">Cargando...</option>';
+    if (!gid) {
+      redeemItem.innerHTML = '<option value="">Elige un juego primero</option>';
+      updateRedeemSummary();
+      return;
+    }
+    try {
+      const res = await fetch(`/store/package/${gid}/items`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error('No se pudo cargar');
+      redeemItems = data.items || [];
+      redeemIsPin = !!data.direct_to_pin;
+      redeemRequiresZone = !!data.requires_zone;
+      redeemItem.innerHTML = '<option value="">Elige un paquete</option>';
+      redeemItems.forEach(i => {
+        const opt = document.createElement('option');
+        opt.value = i.id;
+        opt.textContent = `${i.title} — ${money(i.price)}`;
+        redeemItem.appendChild(opt);
+      });
+      // Las tarjetas se entregan por correo; los juegos necesitan ID de jugador
+      if (redeemPlayerFields) redeemPlayerFields.hidden = redeemIsPin;
+      if (redeemEmailWrap) redeemEmailWrap.hidden = !redeemIsPin;
+      if (redeemZoneWrap) redeemZoneWrap.hidden = !redeemRequiresZone;
+      updateRedeemSummary();
+    } catch (_) {
+      redeemItem.innerHTML = '<option value="">No se pudo cargar</option>';
+    }
+  }
+
+  function renderRedemptions(items) {
+    if (!redeemList) return;
+    redeemList.innerHTML = '';
+    if (!items || items.length === 0) {
+      redeemList.innerHTML = '<div class="muted">Todavía no hiciste canjes.</div>';
+      return;
+    }
+    const meta = (r) => {
+      if (r.refunded) return { label: 'Reintegrado', color: '#fbbf24' };
+      const s = String(r.status || '').toLowerCase();
+      if (s === 'delivered') return { label: 'Entregada', color: '#34d399' };
+      if (s === 'approved') return { label: 'Procesando', color: '#fbbf24' };
+      if (s === 'rejected') return { label: 'Rechazada', color: '#f87171' };
+      return { label: 'Pendiente', color: '#fbbf24' };
+    };
+    items.forEach(r => {
+      const st = meta(r);
+      const row = document.createElement('div');
+      row.className = 'mini-video-item';
+      row.innerHTML = `
+        <div class="mini-video-top">
+          <span style="font-weight:800;">${escapeHtml(r.package_name)} · ${escapeHtml(r.item_title)}</span>
+          <span class="mini-badge" style="color:${st.color};">${st.label}</span>
+        </div>
+        <div class="mini-video-meta">
+          <span>Orden #${r.order_id}</span>
+          <span>${money(r.amount_usd)}</span>
+          ${r.customer_id ? `<span>ID: ${escapeHtml(r.customer_id)}</span>` : ''}
+          ${r.delivery_code ? `<span>Código: <strong>${escapeHtml(r.delivery_code)}</strong></span>` : ''}
+          <span>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</span>
+        </div>
+      `;
+      redeemList.appendChild(row);
+    });
+  }
+
+  async function fetchRedemptions() {
+    if (!IS_MINI || !redeemList) return;
+    try {
+      const res = await fetch('/mini/redemptions');
+      const data = await res.json();
+      renderRedemptions((data && data.items) || []);
+    } catch (_) {
+      renderRedemptions([]);
+    }
+  }
+
+  function newIdempotencyKey() {
+    try {
+      if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    } catch (_) {}
+    return `redeem-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  // Se genera una sola vez por intento: si el usuario reintenta tras un error de
+  // red, la misma clave evita que se cobre el credito dos veces.
+  let redeemPendingKey = null;
+
+  async function doRedeem() {
+    if (!IS_MINI) return;
+    const item = selectedRedeemItem();
+    if (!item) { redeemMsg('Elige un paquete', 'error'); return; }
+    const payload = {
+      store_package_id: redeemGame ? redeemGame.value : '',
+      item_id: item.id,
+      idempotency_key: (redeemPendingKey = redeemPendingKey || newIdempotencyKey()),
+    };
+    if (redeemIsPin) {
+      payload.email = redeemEmail ? redeemEmail.value.trim() : '';
+      if (!payload.email) { redeemMsg('Escribe el correo donde recibir el código', 'error'); return; }
+    } else {
+      payload.customer_id = redeemCustomerId ? redeemCustomerId.value.trim() : '';
+      if (!payload.customer_id) { redeemMsg('Escribe tu ID de jugador', 'error'); return; }
+      if (redeemRequiresZone) {
+        payload.customer_zone = redeemZone ? redeemZone.value.trim() : '';
+        if (!payload.customer_zone) { redeemMsg('Este juego necesita la Zona ID', 'error'); return; }
+      }
+    }
+    if (!confirm(`¿Confirmas el canje de ${money(item.price)} de tu crédito?`)) return;
+    try {
+      if (btnRedeem) btnRedeem.disabled = true;
+      redeemMsg('Procesando el canje...');
+      const res = await fetch('/mini/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': payload.idempotency_key },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo canjear');
+      redeemPendingKey = null; // exito: el proximo canje usa una clave nueva
+      redeemMsg(`Canje listo — orden #${data.order_id}`, 'ok');
+      if (redeemCustomerId) redeemCustomerId.value = '';
+      if (redeemZone) redeemZone.value = '';
+      await loadMiniSummary();
+      await fetchRedemptions();
+      await loadAffiliateSummary();
+    } catch (e) {
+      redeemMsg(e.message || 'Error', 'error');
+    } finally {
+      updateRedeemSummary();
+    }
+  }
+
+  if (redeemGame) redeemGame.addEventListener('change', () => loadRedeemItems(redeemGame.value));
+  if (redeemItem) redeemItem.addEventListener('change', updateRedeemSummary);
+  if (btnRedeem) btnRedeem.addEventListener('click', doRedeem);
+
   loadMiniSummary();
   fetchMiniVideos();
+  if (IS_MINI) {
+    loadRedeemGames();
+    fetchRedemptions();
+  }
 });

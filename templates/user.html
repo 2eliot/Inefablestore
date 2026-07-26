@@ -69,6 +69,21 @@
   .mini-tier-row--alt { background: rgba(148,163,184,0.05); }
   .mini-tier-reward { color: #34d399; font-weight: 900; }
   .mini-tier-note { font-size: 12px; }
+
+  /* Canje de credito por recarga */
+  .redeem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .redeem-summary { border: 1px solid rgba(148,163,184,0.16); border-radius: 12px; padding: 12px; display: grid; gap: 6px; background: rgba(12,12,14,0.5); }
+  /* display:grid le gana al atributo hidden, hay que restituirlo */
+  .redeem-grid[hidden], .redeem-summary[hidden] { display: none; }
+  .redeem-summary-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #cbd5e1; }
+  .redeem-summary-row strong { color: #e5e7eb; }
+  .redeem-summary-row--after { border-top: 1px solid rgba(148,163,184,0.14); padding-top: 6px; }
+  .redeem-summary-row--after strong { color: #34d399; }
+  .redeem-summary-row--short strong { color: #f87171; }
+  .redeem-history { border-top: 1px solid rgba(148,163,184,0.12); padding-top: 12px; margin-top: 4px; }
+  @media (max-width: 700px) {
+    .redeem-grid { grid-template-columns: 1fr; }
+  }
   @media (max-width: 700px) {
     .mini-stats { grid-template-columns: 1fr 1fr; }
     .mini-video-form { grid-template-columns: 1fr; }
@@ -268,6 +283,66 @@
             <div class="muted" style="font-size:12px;" id="mini-rank-hint">—</div>
           </div>
           <div class="mini-rank-grid" id="mini-rank-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="user-card" style="margin-top:16px;">
+      <div class="user-header">
+        <div class="user-title">Canjear crédito por recarga</div>
+        <span class="pill" id="redeem-balance-pill">$0.00 disponible</span>
+      </div>
+      <div class="user-body">
+        <div class="muted" style="font-size:12px;">
+          Usa tu crédito para pedir una recarga como cualquier cliente. Se descuenta de tu saldo
+          al instante y se procesa automáticamente. Necesitas tener crédito igual o mayor al precio.
+        </div>
+
+        <div class="redeem-grid">
+          <div>
+            <label>Juego</label>
+            <select id="redeem-game" class="input"><option value="">Cargando...</option></select>
+          </div>
+          <div>
+            <label>Paquete</label>
+            <select id="redeem-item" class="input"><option value="">Elige un juego primero</option></select>
+          </div>
+        </div>
+
+        <div class="redeem-grid" id="redeem-player-fields">
+          <div>
+            <label>ID de jugador</label>
+            <input id="redeem-customer-id" class="input" type="text" inputmode="numeric" placeholder="Ej: 472938102">
+          </div>
+          <div id="redeem-zone-wrap" hidden>
+            <label>Zona ID</label>
+            <input id="redeem-zone" class="input" type="text" inputmode="numeric" placeholder="Ej: 1234">
+          </div>
+        </div>
+
+        <div id="redeem-email-wrap" hidden>
+          <label>Correo para recibir el código</label>
+          <input id="redeem-email" class="input" type="email" placeholder="tu@correo.com">
+        </div>
+
+        <div class="redeem-summary" id="redeem-summary" hidden>
+          <div class="redeem-summary-row">
+            <span>Precio</span><strong id="redeem-price">$0.00</strong>
+          </div>
+          <div class="redeem-summary-row">
+            <span>Tu crédito</span><strong id="redeem-current">$0.00</strong>
+          </div>
+          <div class="redeem-summary-row redeem-summary-row--after">
+            <span>Te queda</span><strong id="redeem-after">$0.00</strong>
+          </div>
+        </div>
+
+        <button id="btn-redeem" class="btn primary" type="button" disabled>Canjear</button>
+        <div id="redeem-alert" class="muted" style="font-size:12px;"></div>
+
+        <div class="redeem-history">
+          <div class="mini-section-kicker" style="margin-bottom:8px;">Mis canjes</div>
+          <div id="redeem-list" class="mini-video-list"></div>
         </div>
       </div>
     </div>

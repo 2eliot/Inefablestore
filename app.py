@@ -971,6 +971,12 @@ class Order(db.Model):
     special_code = db.Column(db.String(80), default="")
     idempotency_key = db.Column(db.String(120), nullable=True, default=None)
     special_user_id = db.Column(db.Integer, nullable=True)
+    # Canje de credito: orden pagada con el saldo de un mini influencer.
+    # Se guarda aparte de special_user_id a proposito: usar ese campo haria que
+    # _credit_affiliate_commission le pague comision por su propia compra.
+    credit_user_id = db.Column(db.Integer, nullable=True)
+    credit_amount_usd = db.Column(db.Float, default=0.0)
+    credit_refunded_at = db.Column(db.DateTime, nullable=True)
     # Optional: JSON string with multiple items: [{"item_id": int, "qty": int, "title": str, "price": float}]
     items_json = db.Column(db.Text, default="")
     # Revendedores API automation state (pending_verification, success, etc.)
@@ -2397,6 +2403,10 @@ def _affiliate_commission_subtotal_usd(order_obj) -> float:
 
 def _credit_affiliate_commission(order_obj) -> bool:
     try:
+        # Una orden pagada con credito no genera comision: seria pagarle al mini
+        # por comprarse a si mismo, o sea crear saldo de la nada.
+        if _order_paid_with_credit(order_obj):
+            return False
         su = _resolve_affiliate_for_order(order_obj)
         if not su or not su.active:
             return False
@@ -2489,6 +2499,93 @@ def _tier_label(tier) -> str:
     if tier.get("max") is None:
         return f"{tier['min']:,}+".replace(",", ".")
     return f"{tier['min']:,} - {tier['max']:,}".replace(",", ".")
+
+
+def _order_paid_with_credit(order_obj) -> bool:
+    try:
+        return bool(getattr(order_obj, "credit_user_id", None))
+    except Exception:
+        return False
+
+
+def _try_debit_special_user_credit(su_id: int, amount_usd: float) -> bool:
+    """Atomically take *amount_usd* out of the balance, only if it covers it.
+
+    Same reasoning as _try_transition_order_to_approved: two tabs (or a double
+    click, or two workers) can both read balance=10 and both think they can
+    afford a $10 order. The conditional UPDATE only succeeds for whoever gets
+    there first; the loser sees rowcount=0 and is told there are no funds.
+    Does NOT commit: the caller commits the debit together with the order so a
+    retry can never charge twice.
+    """
+    amount = round(float(amount_usd or 0.0), 2)
+    if amount <= 0:
+        return False
+    updated = db.session.query(SpecialUser).filter(
+        SpecialUser.id == su_id,
+        SpecialUser.balance >= amount,
+    ).update({"balance": SpecialUser.balance - amount}, synchronize_session=False)
+    return bool(updated)
+
+
+def _refund_order_credit(order_obj, *, reason: str = "") -> float:
+    """Give the credit back for a redemption that could not be delivered.
+
+    Idempotent: the conditional UPDATE on credit_refunded_at means a second
+    call (retry, admin rejecting an already-refunded order) returns 0.0
+    instead of paying twice.
+    """
+    try:
+        if not _order_paid_with_credit(order_obj):
+            return 0.0
+        amount = round(float(getattr(order_obj, "credit_amount_usd", 0.0) or 0.0), 2)
+        if amount <= 0:
+            return 0.0
+        marked = db.session.query(Order).filter(
+            Order.id == order_obj.id,
+            Order.credit_refunded_at.is_(None),
+        ).update({"credit_refunded_at": datetime.utcnow()}, synchronize_session=False)
+        if not marked:
+            return 0.0
+        db.session.query(SpecialUser).filter(
+            SpecialUser.id == order_obj.credit_user_id,
+        ).update({"balance": SpecialUser.balance + amount}, synchronize_session=False)
+        db.session.commit()
+        try:
+            db.session.refresh(order_obj)
+        except Exception:
+            pass
+        su = SpecialUser.query.get(order_obj.credit_user_id)
+        try:
+            if su and su.email:
+                send_email(
+                    su.email,
+                    f"Te devolvimos el crédito de la orden #{order_obj.id}",
+                    "\n".join([
+                        f"No pudimos completar la recarga de la orden #{order_obj.id}.",
+                        f"Te reintegramos ${amount:.2f} USD a tu saldo.",
+                        f"Saldo actual: ${float(su.balance or 0.0):.2f} USD",
+                        (f"Motivo: {reason}" if reason else ""),
+                    ]).strip(),
+                )
+        except Exception:
+            pass
+        try:
+            to_addr = get_config_value("admin_notify_email", ADMIN_NOTIFY_EMAIL or ADMIN_EMAIL)
+            send_email(to_addr, f"Canje reintegrado: orden #{order_obj.id}", "\n".join([
+                f"Se devolvio ${amount:.2f} USD de credito por la orden #{order_obj.id}.",
+                f"Mini: {(su.name if su else '')} ({(su.code if su else '')})",
+                (f"Motivo: {reason}" if reason else ""),
+            ]).strip())
+        except Exception:
+            pass
+        return amount
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return 0.0
 
 
 def _credit_special_user_bonus(su, amount_usd: float) -> float:
@@ -3950,6 +4047,9 @@ def _pabilo_payload_movement_type(order_obj) -> str:
 
 
 def _is_pabilo_payment_method_enforced_for_order(order_obj) -> bool:
+    # Los canjes de credito no pasan por Pabilo: el "pago" es el saldo, ya cobrado.
+    if _order_paid_with_credit(order_obj):
+        return False
     cfg = _pabilo_config()
     if not cfg.get("enabled") or not cfg.get("enforce_method"):
         return False
@@ -3969,6 +4069,19 @@ def _pabilo_request_info_with_reference(order_obj, reference_value: str) -> dict
     user_bank_id = _pabilo_user_bank_id_for_method(order_method)
     safe_reference = str(reference_value or "").strip()
     reasons = []
+
+    if _order_paid_with_credit(order_obj):
+        # Pagada con saldo: no hay transferencia bancaria que validar
+        return {
+            "requestable": False,
+            "reason": "Orden pagada con credito de mini influencer",
+            "reasons": ["Orden pagada con credito de mini influencer"],
+            "enabled": enabled,
+            "expected_method": expected_method,
+            "order_method": order_method,
+            "has_api_key": bool(api_key),
+            "user_bank_id": user_bank_id,
+        }
 
     if not enabled:
         reasons.append("Pabilo esta desactivado")
@@ -6042,6 +6155,9 @@ with app.app_context():
             add_order_col('payer_phone', "payer_phone TEXT DEFAULT ''")
             add_order_col('payer_payment_date', "payer_payment_date TEXT DEFAULT ''")
             add_order_col('payer_movement_type', "payer_movement_type TEXT DEFAULT ''")
+            add_order_col('credit_user_id', "credit_user_id INTEGER")
+            add_order_col('credit_amount_usd', "credit_amount_usd REAL DEFAULT 0")
+            add_order_col('credit_refunded_at', f"credit_refunded_at {'TIMESTAMP' if _is_pg else 'TEXT'}")
             add_order_col('payment_verification_id', "payment_verification_id TEXT DEFAULT ''")
             add_order_col('payment_verified_at', f"payment_verified_at {'TIMESTAMP' if _is_pg else 'TEXT'}")
             add_order_col('payment_verification_attempts', "payment_verification_attempts INTEGER DEFAULT 0")
@@ -6779,6 +6895,222 @@ def mini_summary():
         "videos_pending": sum(1 for v in videos if (v.status or "pending") == "pending"),
         "views_total": sum(int(v.views_declared or 0) for v in videos if (v.status or "") == "approved"),
     })
+
+
+@app.route("/mini/redeem", methods=["POST"])
+def mini_redeem_credit():
+    """Canjear credito por una recarga real.
+
+    Es el flujo de compra normal con una sola diferencia: en vez de esperar que
+    Pabilo confirme una transferencia, se descuenta el saldo del mini. El debito
+    y la orden se guardan en la misma transaccion, y si el despacho automatico
+    falla se reintegra el credito.
+    """
+    su = _current_mini()
+    if not su:
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    if (su.kind or "affiliate") != "mini":
+        return jsonify({"ok": False, "error": "Solo disponible para mini influencers"}), 403
+    if (su.status or "approved") != "approved":
+        return jsonify({"ok": False, "error": "Tu perfil todavía no fue aprobado"}), 403
+
+    data = request.get_json(silent=True) or {}
+
+    idempotency_key = _normalize_order_idempotency_key(
+        request.headers.get("X-Idempotency-Key") or data.get("idempotency_key")
+    )
+    if idempotency_key:
+        existing = _find_order_by_idempotency_key(idempotency_key)
+        if existing:
+            return jsonify({"ok": True, "order_id": existing.id, "idempotent": True})
+
+    try:
+        gid = int(data.get("store_package_id") or 0)
+    except Exception:
+        gid = 0
+    try:
+        item_id = int(data.get("item_id") or 0)
+    except Exception:
+        item_id = 0
+    if gid <= 0 or item_id <= 0:
+        return jsonify({"ok": False, "error": "Elige el juego y el paquete"}), 400
+
+    pkg = StorePackage.query.get(gid)
+    if not pkg or not pkg.active:
+        return jsonify({"ok": False, "error": "Ese juego no está disponible"}), 400
+    item = GamePackageItem.query.get(item_id)
+    if not item or not item.active or int(item.store_package_id or 0) != gid:
+        return jsonify({"ok": False, "error": "Ese paquete no está disponible"}), 400
+
+    is_pin = bool(pkg.direct_to_pin)
+    customer_id = (data.get("customer_id") or "").strip()
+    customer_zone = (data.get("customer_zone") or "").strip()
+    email = (data.get("email") or su.email or "").strip()
+
+    if is_pin:
+        # Tarjetas/pines: se entregan por correo, no llevan ID de jugador
+        if not email or "@" not in email:
+            return jsonify({"ok": False, "error": "Necesitamos un correo para enviarte el código"}), 400
+        customer_id = ""
+        customer_zone = ""
+    else:
+        if not customer_id:
+            return jsonify({"ok": False, "error": "Ingresa tu ID de jugador"}), 400
+        if not customer_id.isdigit():
+            return jsonify({"ok": False, "error": "El ID de jugador debe ser numérico"}), 400
+        if customer_zone and not customer_zone.isdigit():
+            return jsonify({"ok": False, "error": "La Zona ID debe ser numérica"}), 400
+        if _package_effective_requires_zone(gid) and not customer_zone:
+            return jsonify({"ok": False, "error": "La Zona ID es requerida para este juego"}), 400
+        if not email or "@" not in email:
+            return jsonify({"ok": False, "error": "Correo inválido"}), 400
+        # Misma lista negra que el checkout publico
+        try:
+            blk = BlockedCustomer.query.filter(
+                db.func.lower(BlockedCustomer.customer_id) == customer_id.lower(),
+                BlockedCustomer.active == True,
+            ).first()
+            if blk:
+                return jsonify({"ok": False, "error": "Este ID de jugador está bloqueado. Contacta soporte"}), 403
+        except Exception:
+            pass
+
+    # Precio publico en USD, sin el descuento del propio mini
+    price_usd = round(float(item.price or 0.0), 2)
+    if price_usd <= 0:
+        return jsonify({"ok": False, "error": "Ese paquete no tiene un precio válido"}), 400
+    balance = round(float(su.balance or 0.0), 2)
+    if balance < price_usd:
+        return jsonify({
+            "ok": False,
+            "error": f"Tu crédito (${balance:.2f}) no alcanza para este paquete (${price_usd:.2f})",
+        }), 400
+
+    reference = f"CREDITO-{uuid.uuid4().hex[:16].upper()}"
+    order = Order(
+        store_package_id=gid,
+        item_id=item.id,
+        method="credito",
+        currency="USD",
+        amount=price_usd,
+        price=price_usd,
+        reference=reference,
+        capture_reference="",
+        name=su.name or "",
+        email=email,
+        phone="",
+        customer_id=customer_id,
+        customer_zone=customer_zone,
+        customer_name=su.name or su.code or email,
+        status="pending",
+        special_code="",          # sin codigo: no debe generar comision
+        special_user_id=None,
+        credit_user_id=su.id,
+        credit_amount_usd=price_usd,
+        idempotency_key=idempotency_key or None,
+        items_json=json.dumps([{
+            "item_id": item.id,
+            "qty": 1,
+            "title": item.title,
+            "price": price_usd,
+            "cost_unit_usd": float(item.profit_net_usd or 0.0),
+        }]),
+    )
+
+    # Debito y orden en la misma transaccion: si algo falla, no se cobra nada
+    try:
+        if not _try_debit_special_user_credit(su.id, price_usd):
+            db.session.rollback()
+            return jsonify({"ok": False, "error": "Tu crédito no alcanza o cambió mientras confirmabas"}), 400
+        db.session.add(order)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        if idempotency_key:
+            existing = _find_order_by_idempotency_key(idempotency_key)
+            if existing:
+                return jsonify({"ok": True, "order_id": existing.id, "idempotent": True})
+        return jsonify({"ok": False, "error": "No se pudo registrar el canje, intenta de nuevo"}), 500
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": f"No se pudo registrar el canje: {exc}"}), 500
+
+    # A partir de aca el saldo ya se cobro: cualquier fallo debe reintegrarlo
+    try:
+        _auto_approve_order(order, source_label="CanjeCredito")
+        db.session.refresh(order)
+    except Exception as exc:
+        _refund_order_credit(order, reason=f"Error al procesar la orden: {exc}")
+        return jsonify({"ok": False, "error": "No se pudo procesar la recarga, te devolvimos el crédito"}), 500
+
+    if (order.status or "").lower() not in ("approved", "delivered"):
+        _refund_order_credit(order, reason="La orden no pudo aprobarse")
+        return jsonify({"ok": False, "error": "No se pudo procesar la recarga, te devolvimos el crédito"}), 500
+
+    # Si el juego tiene recarga automatica y ninguna unidad se completo, se reintegra
+    refunded = 0.0
+    try:
+        summary = _summarize_order_auto_recharges(_build_order_auto_recharge_units(order))
+        total_units = int(summary.get("total_units") or 0)
+        completed = int(summary.get("completed_units") or 0)
+        failed = int(summary.get("failed_units") or 0)
+        if total_units > 0 and completed == 0 and failed >= total_units:
+            refunded = _refund_order_credit(order, reason="La recarga automática no se completó")
+            if refunded > 0:
+                try:
+                    db.session.query(Order).filter(Order.id == order.id).update(
+                        {"status": "rejected"}, synchronize_session=False
+                    )
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                return jsonify({
+                    "ok": False,
+                    "error": "La recarga automática falló, te devolvimos el crédito",
+                }), 502
+    except Exception:
+        pass
+
+    su_fresh = SpecialUser.query.get(su.id)
+    return jsonify({
+        "ok": True,
+        "order_id": order.id,
+        "reference": order.reference,
+        "charged_usd": price_usd,
+        "balance_usd": float(su_fresh.balance or 0.0) if su_fresh else 0.0,
+        "status": order.status,
+    })
+
+
+@app.route("/mini/redemptions")
+def mini_redemptions_list():
+    """Historial de canjes del mini."""
+    su = _current_mini()
+    if not su:
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    rows = (
+        Order.query
+        .filter(Order.credit_user_id == su.id)
+        .order_by(Order.created_at.desc())
+        .limit(30)
+        .all()
+    )
+    items = []
+    for o in rows:
+        pkg = StorePackage.query.get(o.store_package_id) if o.store_package_id else None
+        it = GamePackageItem.query.get(o.item_id) if o.item_id else None
+        items.append({
+            "order_id": o.id,
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+            "package_name": (pkg.name if pkg else ""),
+            "item_title": (it.title if it else ""),
+            "amount_usd": float(o.credit_amount_usd or 0.0),
+            "status": o.status,
+            "customer_id": o.customer_id or "",
+            "refunded": bool(o.credit_refunded_at),
+            "delivery_code": (o.delivery_code or ""),
+        })
+    return jsonify({"ok": True, "items": items})
 
 
 @app.route("/mini/videos", methods=["GET"])
@@ -9864,6 +10196,9 @@ def admin_orders_set_status(oid: int):
         db.session.commit()
     if status == "approved" and prev_status != "approved":
         _credit_affiliate_commission(o)
+    # Rechazar un canje devuelve el credito al mini (idempotente)
+    if status == "rejected" and _order_paid_with_credit(o):
+        _refund_order_credit(o, reason=(data.get("reason") or "Orden rechazada por el administrador").strip())
     # Notify buyer on approval (HTML email)
     try:
         if status == "approved" and (o.email or o.name) and not _order_has_auto_recharges(o):
