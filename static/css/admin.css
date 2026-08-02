@@ -423,6 +423,10 @@ body { overflow-x: hidden; }
   margin-left: 8px;
   vertical-align: middle;
 }
+.rev-sync-badge--off {
+  background: #ef444422;
+  color: #ef4444;
+}
 .btn + .btn { margin-left: 8px; }
 .btn:disabled { cursor: not-allowed; opacity: 0.6; }
 

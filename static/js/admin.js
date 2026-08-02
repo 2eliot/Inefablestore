@@ -556,7 +556,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const remoteCatalog = Array.isArray(revMappingData?.remote_catalog) ? revMappingData.remote_catalog : [];
     const selected = remoteCatalog.find((rc) => String(rc.catalog_id) === String(catalogId || '')) || null;
-    const mapping = JSON.parse(row.getAttribute('data-current-mapping') || 'null');
+    // El atributo vive en el propio .rev-map-info, no en la fila
+    let mapping = null;
+    try { mapping = JSON.parse(info.getAttribute('data-current-mapping') || 'null'); } catch (_) { mapping = null; }
 
     if (selected) {
       const label = `${escapeAdminHtml(selected.remote_product_name || ('Juego ' + (selected.remote_product_id || '?')))} · ${escapeAdminHtml(selected.remote_package_name || ('Paquete ' + (selected.remote_package_id || '?')))}`;
@@ -566,6 +568,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (mapping && mapping.remote_package_id) {
         const label = mapping.remote_label || `Product ID ${escapeAdminHtml(mapping.remote_product_id || '')} · Package ID ${escapeAdminHtml(mapping.remote_package_id)}`;
+        if (row.getAttribute('data-user-cleared') === '1') {
+          info.innerHTML = `<span class="rev-sync-badge rev-sync-badge--off">✕ Se quitará al guardar</span> <strong>${escapeAdminHtml(label)}</strong>`;
+          return;
+        }
         info.innerHTML = `<span class="rev-sync-badge">✓ Sincronizado</span> <strong>${escapeAdminHtml(label)}</strong>`;
         return;
     }
@@ -632,7 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const syncedBadge = isSynced ? '<span class="rev-sync-badge">✓ Sincronizado</span>' : '';
 
       html += `
-        <div class="order-card rev-map-row" data-store-item-id="${it.id}" data-mapped-catalog-id="${mappedCatalogId || ''}">
+        <div class="order-card rev-map-row" data-store-item-id="${it.id}" data-mapped-catalog-id="${mappedCatalogId || ''}" data-has-mapping="${mapping ? '1' : '0'}">
           <div class="order-head">
             <div>
               <div class="order-id">${it.title || ('Item #' + it.id)}</div>
@@ -726,14 +732,27 @@ document.addEventListener('DOMContentLoaded', () => {
       const chk = row.querySelector('.rev-auto-enabled');
       const directChk = row.querySelector('.rev-direct-script');
       const directToScript = !!(directChk && directChk.checked);
-      const catalogId = sel ? (sel.value || '') : '';
+      let catalogId = sel ? (sel.value || '') : '';
+      if (!catalogId && row.getAttribute('data-user-cleared') !== '1') {
+        // El select puede estar vacío por efecto colateral del filtro de juego
+        // (otra fila cambió de juego remoto). Sin intención explícita de quitar
+        // el mapeo, se reenvía el que ya estaba guardado en vez de desactivarlo.
+        catalogId = row.getAttribute('data-mapped-catalog-id') || '';
+      }
+      // Mapeo guardado que no se pudo resolver contra el catálogo actual (el
+      // paquete remoto ya no viene en la sincronización): no se toca salvo que
+      // el admin lo quite a mano, para no borrarlo sin querer.
+      const hasSavedMapping = row.getAttribute('data-has-mapping') === '1';
+      const skip = !catalogId && hasSavedMapping && row.getAttribute('data-user-cleared') !== '1';
       return {
         store_item_id: storeItemId,
         catalog_id: catalogId,
         auto_enabled: !!(chk && chk.checked) || directToScript,
         direct_to_script: directToScript,
+        _skip: skip,
       };
-    }).filter((x) => x.store_item_id > 0); // enviar TODAS las filas: catalog_id vacío = quitar mapeo/desactivar (el backend lo maneja); antes se filtraban y desactivar nunca persistía
+    }).filter((x) => x.store_item_id > 0 && !x._skip) // enviar TODAS las filas: catalog_id vacío = quitar mapeo/desactivar (el backend lo maneja); antes se filtraban y desactivar nunca persistía
+      .map(({ _skip, ...ent }) => ent);
 
     const res = await fetch('/admin/revendedores/mappings/bulk', {
       method: 'POST',
@@ -1482,8 +1501,15 @@ window.fetchPayments = fetchPayments;
             catalogSelect.innerHTML = '<option value="">Manual (sin mapeo automático)</option>';
           }
         }
+        // Al cambiar el juego remoto de una fila, esa fila queda pendiente de
+        // elegir paquete: no es una orden de desmapear (eso solo lo marca el
+        // usuario eligiendo "Manual" o limpiando el filtro de esta fila).
+        row.removeAttribute('data-user-cleared');
+        if (!gameName) row.setAttribute('data-user-cleared', '1');
         renderRevCatalogMappingInfo(row, catalogSelect ? catalogSelect.value : '');
-        // Sync the same game filter to ALL other rows in the same package
+        // Propagar el filtro de juego SOLO a filas todavía sin mapeo: cada ítem
+        // puede apuntar a un juego remoto distinto (ej. FF 100 de un proveedor y
+        // las tarjetas de otro), así que nunca se pisa lo ya sincronizado.
         const allRows = revMapList.querySelectorAll('.rev-map-row');
         allRows.forEach((otherRow) => {
           if (otherRow === row) return;
@@ -1491,6 +1517,8 @@ window.fetchPayments = fetchPayments;
           const otherCatalogSelect = otherRow.querySelector('.rev-catalog-select');
           if (!otherGameSelect || !otherCatalogSelect) return;
           if (otherGameSelect.value === gameName) return; // already same
+          const otherIsMapped = !!(otherCatalogSelect.value || otherRow.getAttribute('data-mapped-catalog-id'));
+          if (otherIsMapped) return; // ya sincronizada: se respeta su juego remoto
           otherGameSelect.value = gameName;
           if (gameName) {
             populateCatalogSelect(otherCatalogSelect, gameName, remoteCatalog);
@@ -1505,6 +1533,12 @@ window.fetchPayments = fetchPayments;
       }
 
       if (target instanceof HTMLSelectElement && target.classList.contains('rev-catalog-select')) {
+        // Elegir "Manual" a mano sí es una orden explícita de quitar el mapeo
+        if (target.value) {
+          row.removeAttribute('data-user-cleared');
+        } else {
+          row.setAttribute('data-user-cleared', '1');
+        }
         renderRevCatalogMappingInfo(row, target.value || '');
         return;
       }
