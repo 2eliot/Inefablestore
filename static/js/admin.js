@@ -560,23 +560,37 @@ document.addEventListener('DOMContentLoaded', () => {
     let mapping = null;
     try { mapping = JSON.parse(info.getAttribute('data-current-mapping') || 'null'); } catch (_) { mapping = null; }
 
+    // Solo las filas marcadas como editadas viajan al guardar
+    const pending = row.getAttribute('data-dirty') === '1'
+      ? ' <span class="rev-pending-badge">● sin guardar</span>'
+      : '';
+
     if (selected) {
       const label = `${escapeAdminHtml(selected.remote_product_name || ('Juego ' + (selected.remote_product_id || '?')))} · ${escapeAdminHtml(selected.remote_package_name || ('Paquete ' + (selected.remote_package_id || '?')))}`;
-      info.innerHTML = `<span class="rev-sync-badge">✓ Sincronizado</span> <strong>${label}</strong>`;
+      info.innerHTML = `<span class="rev-sync-badge">✓ Sincronizado</span> <strong>${label}</strong>${pending}`;
       return;
     }
 
     if (mapping && mapping.remote_package_id) {
         const label = mapping.remote_label || `Product ID ${escapeAdminHtml(mapping.remote_product_id || '')} · Package ID ${escapeAdminHtml(mapping.remote_package_id)}`;
         if (row.getAttribute('data-user-cleared') === '1') {
-          info.innerHTML = `<span class="rev-sync-badge rev-sync-badge--off">✕ Se quitará al guardar</span> <strong>${escapeAdminHtml(label)}</strong>`;
+          info.innerHTML = `<span class="rev-sync-badge rev-sync-badge--off">✕ Se quitará al guardar</span> <strong>${escapeAdminHtml(label)}</strong>${pending}`;
           return;
         }
-        info.innerHTML = `<span class="rev-sync-badge">✓ Sincronizado</span> <strong>${escapeAdminHtml(label)}</strong>`;
+        info.innerHTML = `<span class="rev-sync-badge">✓ Sincronizado</span> <strong>${escapeAdminHtml(label)}</strong>${pending}`;
         return;
     }
 
-    info.textContent = '';
+    info.innerHTML = pending.trim();
+  }
+
+  // Marca una fila como editada: guardar solo envía estas, así cada ítem de
+  // InefableStore es independiente y nunca arrastra a los demás.
+  function markRevRowDirty(row) {
+    if (!row) return;
+    row.setAttribute('data-dirty', '1');
+    const catalogSelect = row.querySelector('.rev-catalog-select');
+    renderRevCatalogMappingInfo(row, catalogSelect ? catalogSelect.value : '');
   }
 
   function renderRevMapping() {
@@ -724,8 +738,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function saveRevMappings() {
-    if (!revMapList) return;
-    const rows = Array.from(revMapList.querySelectorAll('.rev-map-row'));
+    if (!revMapList) return { ok: true, saved: 0, disabled: 0, nothing_to_save: true };
+    // Cada ítem es independiente: solo se envían las filas que el admin editó.
+    // Las que no tocó ni siquiera viajan, así guardar no puede desmapearlas.
+    const rows = Array.from(revMapList.querySelectorAll('.rev-map-row[data-dirty="1"]'));
+    if (!rows.length) return { ok: true, saved: 0, disabled: 0, nothing_to_save: true };
     const entries = rows.map((row) => {
       const storeItemId = parseInt(row.getAttribute('data-store-item-id') || '0', 10);
       const sel = row.querySelector('.rev-catalog-select');
@@ -751,8 +768,10 @@ document.addEventListener('DOMContentLoaded', () => {
         direct_to_script: directToScript,
         _skip: skip,
       };
-    }).filter((x) => x.store_item_id > 0 && !x._skip) // enviar TODAS las filas: catalog_id vacío = quitar mapeo/desactivar (el backend lo maneja); antes se filtraban y desactivar nunca persistía
+    }).filter((x) => x.store_item_id > 0 && !x._skip)
       .map(({ _skip, ...ent }) => ent);
+
+    if (!entries.length) return { ok: true, saved: 0, disabled: 0, nothing_to_save: true };
 
     const res = await fetch('/admin/revendedores/mappings/bulk', {
       method: 'POST',
@@ -1505,8 +1524,12 @@ window.fetchPayments = fetchPayments;
         // elegir paquete: no es una orden de desmapear (eso solo lo marca el
         // usuario eligiendo "Manual" o limpiando el filtro de esta fila).
         row.removeAttribute('data-user-cleared');
-        if (!gameName) row.setAttribute('data-user-cleared', '1');
-        renderRevCatalogMappingInfo(row, catalogSelect ? catalogSelect.value : '');
+        if (!gameName) {
+          row.setAttribute('data-user-cleared', '1');
+          markRevRowDirty(row);
+        } else {
+          renderRevCatalogMappingInfo(row, catalogSelect ? catalogSelect.value : '');
+        }
         // Propagar el filtro de juego SOLO a filas todavía sin mapeo: cada ítem
         // puede apuntar a un juego remoto distinto (ej. FF 100 de un proveedor y
         // las tarjetas de otro), así que nunca se pisa lo ya sincronizado.
@@ -1539,11 +1562,13 @@ window.fetchPayments = fetchPayments;
         } else {
           row.setAttribute('data-user-cleared', '1');
         }
-        renderRevCatalogMappingInfo(row, target.value || '');
+        markRevRowDirty(row);
         return;
       }
 
       if (!(target instanceof HTMLInputElement)) return;
+      if (!target.classList.contains('rev-direct-script') && !target.classList.contains('rev-auto-enabled')) return;
+      markRevRowDirty(row);
       if (!target.classList.contains('rev-direct-script')) return;
       if (!target.checked) return;
       const autoChk = row.querySelector('.rev-auto-enabled');
@@ -1579,11 +1604,14 @@ window.fetchPayments = fetchPayments;
     btnRevSave.addEventListener('click', async () => {
       try {
         btnRevSave.disabled = true;
-        await saveRevMappings();
-        toast('Mapeo guardado');
-        if (revStorePackage && revStorePackage.value) {
-          await fetchRevMappingData(revStorePackage.value);
+        const data = await saveRevMappings();
+        if (data && data.nothing_to_save) {
+          toast('No hay cambios que guardar');
+          return;
         }
+        const saved = data.saved || 0;
+        const disabled = data.disabled || 0;
+        toast(`Guardado: ${saved} ítem(s) mapeado(s)${disabled ? `, ${disabled} desmapeado(s)` : ''}`);
         await fetchRevMappingData(revStorePackage ? revStorePackage.value : '');
       } catch (e) {
         toast(e.message || 'Error al guardar mapeo');

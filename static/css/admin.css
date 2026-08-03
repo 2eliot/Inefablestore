@@ -427,6 +427,17 @@ body { overflow-x: hidden; }
   background: #ef444422;
   color: #ef4444;
 }
+.rev-pending-badge {
+  display: inline-block;
+  background: #f59e0b22;
+  color: #f59e0b;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
 .btn + .btn { margin-left: 8px; }
 .btn:disabled { cursor: not-allowed; opacity: 0.6; }
 
