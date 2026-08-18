@@ -183,6 +183,15 @@
       </div>
       <div id="my-orders" style="display:grid; gap:8px; margin-top:10px;"></div>
 
+      <hr style="margin:14px 0; opacity:.35;">
+      <div style="display:flex; align-items:center; justify-content: space-between;">
+        <strong>Mis códigos</strong>
+        <span class="muted" style="font-size:12px;">Gift Cards</span>
+      </div>
+      <div id="my-codes" style="display:grid; gap:8px; margin-top:10px;">
+        <div class="muted">Aquí verás los códigos de las Gift Cards que compres.</div>
+      </div>
+
       {% if is_affiliate %}
       <hr style="margin:14px 0; opacity:.35;">
       <div style="display:flex; align-items:center; justify-content: space-between;">
@@ -395,9 +404,9 @@
 
 {% block scripts %}
 <!-- Shared header behaviors -->
-<script src="{{ url_for('static', filename='js/store.js', v='5') }}" defer></script>
+<script src="{{ url_for('static', filename='js/store.js', v='6') }}" defer></script>
 <!-- User page logic -->
-<script src="{{ url_for('static', filename='js/user.js', v='3') }}" defer></script>
+<script src="{{ url_for('static', filename='js/user.js', v='4') }}" defer></script>
 {% endblock %}
 
 {# Overlays and Drawer for header consistency #}

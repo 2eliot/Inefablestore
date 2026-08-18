@@ -762,7 +762,11 @@ document.addEventListener('DOMContentLoaded', () => {
             alert(data.error || 'Error al iniciar sesión');
             return;
           }
-          // Login OK: go to /user
+          // Login OK: si vino del popup de Gift Cards, seguir la compra en esta página
+          if (window.__stayAfterLogin) {
+            window.location.reload();
+            return;
+          }
           window.location.href = '/user';
         } catch (e) {
           showAlert(panel, 'error', 'No se pudo iniciar sesión');

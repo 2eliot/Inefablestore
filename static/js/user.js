@@ -123,10 +123,77 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch(url);
       const data = await res.json();
-      renderMyOrders((data && data.orders) || []);
+      const orders = (data && data.orders) || [];
+      renderMyOrders(orders);
+      renderMyCodes(orders);
     } catch (_) {
       renderMyOrders([]);
+      renderMyCodes([]);
     }
+  }
+
+  // Códigos de Gift Cards compradas (órdenes aprobadas/entregadas con código)
+  const myCodes = document.getElementById('my-codes');
+  function renderMyCodes(items) {
+    if (!myCodes) return;
+    const giftOrders = (items || []).filter(o => {
+      const status = String(o.status || '').toLowerCase();
+      const isGift = String(o.package_category || '').toLowerCase() === 'gift';
+      const codes = Array.isArray(o.delivery_codes) && o.delivery_codes.length
+        ? o.delivery_codes
+        : (o.delivery_code ? [o.delivery_code] : []);
+      return isGift && codes.length > 0 && (status === 'approved' || status === 'delivered');
+    });
+    myCodes.innerHTML = '';
+    if (giftOrders.length === 0) {
+      myCodes.innerHTML = '<div class="muted">Aquí verás los códigos de las Gift Cards que compres.</div>';
+      return;
+    }
+    giftOrders.forEach(o => {
+      const codes = Array.isArray(o.delivery_codes) && o.delivery_codes.length
+        ? o.delivery_codes
+        : [o.delivery_code];
+      const row = document.createElement('div');
+      row.style.cssText = 'border:1px solid rgba(16,185,129,0.25); border-radius:10px; padding:8px 10px; display:grid; gap:6px;';
+      const codesHtml = codes.map(c => `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.3); border-radius:8px; padding:6px 10px;">
+          <code style="font-weight:900; color:#34d399; word-break:break-all;">${escapeHtml(c)}</code>
+          <button class="btn code-copy-btn" type="button" data-code="${escapeHtml(c)}" style="padding:4px 10px; font-size:11px;">Copiar</button>
+        </div>`).join('');
+      row.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; font-weight:800;">
+          <span>${escapeHtml(o.package_name || '')}${o.item_title ? ' • ' + escapeHtml(o.item_title) : ''}</span>
+          <span class="muted" style="font-size:11px;">Orden #${o.id}</span>
+        </div>
+        ${codesHtml}
+        <div class="muted" style="font-size:11px;">${o.created_at ? new Date(o.created_at).toLocaleString() : ''}</div>
+      `;
+      myCodes.appendChild(row);
+    });
+  }
+
+  if (myCodes) {
+    myCodes.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.code-copy-btn');
+      if (!btn) return;
+      const code = btn.getAttribute('data-code') || '';
+      if (!code) return;
+      try {
+        await navigator.clipboard.writeText(code);
+        btn.textContent = '¡Copiado!';
+      } catch (_) {
+        try {
+          const tmp = document.createElement('input');
+          tmp.value = code;
+          document.body.appendChild(tmp);
+          tmp.select();
+          document.execCommand('copy');
+          document.body.removeChild(tmp);
+          btn.textContent = '¡Copiado!';
+        } catch (_) { /* ignorar */ }
+      }
+      setTimeout(() => { btn.textContent = 'Copiar'; }, 1200);
+    });
   }
 
   function renderMyOrders(items) {

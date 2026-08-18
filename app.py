@@ -955,6 +955,9 @@ class Order(db.Model):
     name = db.Column(db.String(200), default="")
     email = db.Column(db.String(200), default="")
     phone = db.Column(db.String(80), default="")
+    # Usuario logueado que hizo la compra (users.id); permite listar "Mis códigos"
+    # aunque el correo del checkout sea distinto al de la cuenta.
+    user_id = db.Column(db.Integer, nullable=True)
     # payment
     method = db.Column(db.String(20), default="")  # pm | binance
     currency = db.Column(db.String(10), default="USD")
@@ -1414,6 +1417,7 @@ def _auto_approve_order(order, *, source_label: str = "AutoApprove", binance_aut
         return
     if _is_reference_already_used(order.reference, exclude_order_id=order.id):
         print(f"[{source_label}] Reference '{order.reference}' already used in another approved order. Aborting auto-approve for order #{order.id}.")
+        _auto_reject_order(order, reason="Esa referencia ya fue utilizada en otra orden", source_label=source_label)
         return
     try:
         if not _try_transition_order_to_approved(order):
@@ -1460,6 +1464,64 @@ def _auto_approve_order(order, *, source_label: str = "AutoApprove", binance_aut
     except Exception as exc:
         print(f"[{source_label}] Revendedores error for order #{order.id}: {exc}")
 
+
+def _auto_reject_order(order, *, reason: str = "", source_label: str = "AutoReject") -> bool:
+    """Rechaza una orden pendiente automáticamente (referencia/comprobante ya usados),
+    reintegra el crédito si se pagó con saldo y notifica al comprador por correo."""
+    if (order.status or "").lower() != "pending":
+        return False
+    try:
+        updated = Order.query.filter(
+            Order.id == order.id,
+            Order.status == "pending",
+        ).update({"status": "rejected"}, synchronize_session=False)
+        db.session.commit()
+        if not updated:
+            db.session.refresh(order)
+            return False
+        order.status = "rejected"
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print(f"[{source_label}] DB error rejecting order #{order.id}: {exc}")
+        return False
+
+    # Guardar el motivo para que la página de gracias se lo muestre al cliente
+    try:
+        pay_state = _pabilo_get_payment_state(order)
+        pay_state["auto_reject_reason"] = str(reason or "")
+        pay_state["auto_rejected_at"] = datetime.utcnow().isoformat()
+        _pabilo_set_payment_state(order, pay_state)
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+    if _order_paid_with_credit(order):
+        try:
+            _refund_order_credit(order, reason=reason or "Orden rechazada automáticamente")
+        except Exception:
+            pass
+
+    try:
+        if order.email:
+            pkg = StorePackage.query.get(order.store_package_id)
+            it = GamePackageItem.query.get(order.item_id) if order.item_id else None
+            brand = _email_brand()
+            html, text = build_order_rejected_email(order, pkg, it, reason=reason)
+            subject = f"Orden #{order.id} rechazada - {brand}"
+            try:
+                send_email_html(order.email, subject, html, text)
+            except Exception:
+                send_email_async(order.email, subject, text)
+    except Exception:
+        pass
+    print(f"[{source_label}] Order #{order.id} auto-rejected: {reason}")
+    return True
 
 
 def _binance_auto_approve(order):
@@ -4468,6 +4530,22 @@ def _pabilo_verify_payment_once(
     }
 
 
+_PABILO_NOT_FOUND_HINTS = (
+    "todavía no aparece",
+    "todavia no aparece",
+    "no aparece en pabilo",
+    "no se encontró",
+    "no se encontro",
+    "not found",
+    "payment not found",
+)
+
+# Minutos de gracia antes de rechazar una orden cuyo pago no existe en el banco.
+# Debe quedar por debajo del presupuesto de reintentos del loop de verificación
+# (~6 min con 8 intentos cada 45s) para que el rechazo alcance a ejecutarse.
+_PABILO_NOT_FOUND_REJECT_MINUTES = 4
+
+
 def _pabilo_should_try_capture_reference_fallback(result: dict) -> bool:
     validation = result.get("validation") or {}
     if isinstance(validation, dict) and bool(
@@ -4480,19 +4558,52 @@ def _pabilo_should_try_capture_reference_fallback(result: dict) -> bool:
     request_meta = result.get("request_meta") or {}
     status_code = int((request_meta.get("status_code") or 0)) if isinstance(request_meta, dict) else 0
     message = str(result.get("message") or "").strip().lower()
-    not_found_hints = (
-        "todavía no aparece",
-        "todavia no aparece",
-        "no aparece en pabilo",
-        "no se encontró",
-        "no se encontro",
-        "not found",
-        "payment not found",
-    )
     return bool(
         status_code == 404
-        or any(hint in message for hint in not_found_hints)
+        or any(hint in message for hint in _PABILO_NOT_FOUND_HINTS)
     )
+
+
+def _pabilo_result_is_payment_not_found(result: dict) -> bool:
+    """True cuando Pabilo respondió de forma definitiva que el pago no existe.
+
+    Un error de conexión, timeout, banco caído o HTTP 5xx viene con ok=False y
+    NO cuenta como "no encontrado": en esos casos la orden debe seguir pendiente."""
+    if not isinstance(result, dict) or result.get("verified"):
+        return False
+    if not result.get("ok"):
+        return False
+    request_meta = result.get("request_meta") or {}
+    status_code = int((request_meta.get("status_code") or 0)) if isinstance(request_meta, dict) else 0
+    message = str(result.get("message") or "").strip().lower()
+    return bool(
+        status_code == 404
+        or any(hint in message for hint in _PABILO_NOT_FOUND_HINTS)
+    )
+
+
+def _pabilo_result_confirms_payment_missing(order_obj, result: dict) -> bool:
+    """True cuando el pago no existe en el banco habiendo consultado tanto la
+    referencia manual como la extraída del comprobante (OCR).
+
+    Si el OCR no pudo leer una referencia del comprobante, no se puede confirmar
+    por ambas vías y la orden queda para revisión del admin."""
+    if not isinstance(result, dict):
+        return False
+    if not _pabilo_result_is_payment_not_found(result):
+        return False
+    manual_reference = str(order_obj.reference or "").strip()
+    capture_reference = str(getattr(order_obj, "capture_reference", "") or "").strip()
+    if result.get("fallback_used"):
+        # Se consultó también la referencia del comprobante y tampoco apareció.
+        # El intento manual previo debe haber sido "no encontrado" (no un error).
+        manual_message = str((result.get("manual_result") or {}).get("message") or "").strip().lower()
+        return any(hint in manual_message for hint in _PABILO_NOT_FOUND_HINTS)
+    # Sin fallback: solo es concluyente si la referencia del comprobante existe
+    # y es la misma que la manual (una sola consulta cubrió ambas).
+    if capture_reference and _pabilo_normalize_reference_value(capture_reference) == _pabilo_normalize_reference_value(manual_reference):
+        return True
+    return False
 
 
 def _pabilo_verify_payment(order_obj):
@@ -4574,6 +4685,8 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
     corrected_reference_error = ""
     duplicate_capture_error = ""
     duplicate_capture_order_id = None
+    # True cuando la orden en conflicto ya fue aprobada/entregada: referencia usada de verdad
+    duplicate_conflict_confirmed = False
     matched_reference = str(result.get("matched_reference") or "").strip()
     matched_reference_source = str(result.get("matched_reference_source") or "").strip()
     validation = result.get("validation") or {}
@@ -4608,6 +4721,7 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         if conflicting_order:
             duplicate_capture_error = "La referencia extraída del comprobante ya fue utilizada en otra orden"
             duplicate_capture_order_id = conflicting_order.id
+            duplicate_conflict_confirmed = (str(conflicting_order.status or "").lower() in ("approved", "delivered"))
         else:
             conflicting_order = _find_existing_order_by_capture_fingerprint(
                 str(order_obj.payment_capture or "").strip(),
@@ -4617,6 +4731,7 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
             if conflicting_order:
                 duplicate_capture_error = "Este comprobante ya fue utilizado en otra orden"
                 duplicate_capture_order_id = conflicting_order.id
+                duplicate_conflict_confirmed = (str(conflicting_order.status or "").lower() in ("approved", "delivered"))
 
         if duplicate_capture_error:
             result = {
@@ -4655,6 +4770,7 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         "reported_amount": reported_amount,
         "reported_amount_candidates": reported_amount_candidates,
         "fallback_used": bool(result.get("fallback_used")),
+        "payment_missing_confirmed": _pabilo_result_confirms_payment_missing(order_obj, result),
         "last_request_url": str(((result.get("request_meta") or {}).get("url") or "")),
         "last_request_payload": (result.get("request_meta") or {}).get("payload") or {},
         "last_response_status": int(((result.get("request_meta") or {}).get("status_code") or 0)),
@@ -4662,10 +4778,37 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
     _pabilo_set_payment_state(order_obj, state)
     db.session.commit()
 
+    # Referencia/comprobante ya usados en una orden aprobada: rebotar de una vez
+    # en lugar de dejar la orden pendiente en el admin.
+    if duplicate_capture_error and duplicate_conflict_confirmed and (order_obj.status or "").lower() == "pending":
+        _auto_reject_order(order_obj, reason=duplicate_capture_error, source_label=f"AutoReject:{source}")
+
+    # Pago inexistente en el banco (consultadas la referencia manual y la del
+    # comprobante): rebotar tras el periodo de gracia. Solo en flujos automáticos;
+    # los errores de banco caído/timeout llegan con ok=False y nunca entran aquí.
+    if (
+        state.get("payment_missing_confirmed")
+        and source in ("checkout", "pabilo_auto_retry")
+        and (order_obj.status or "").lower() == "pending"
+    ):
+        order_age_minutes = None
+        try:
+            if order_obj.created_at:
+                order_age_minutes = (datetime.utcnow() - order_obj.created_at).total_seconds() / 60.0
+        except Exception:
+            order_age_minutes = None
+        if order_age_minutes is not None and order_age_minutes >= _PABILO_NOT_FOUND_REJECT_MINUTES:
+            _auto_reject_order(
+                order_obj,
+                reason="Tu pago no se encontró en el banco. Verifica que la referencia y el comprobante sean correctos o escribe al soporte.",
+                source_label=f"AutoReject:{source}",
+            )
+
     if result.get("verified") and auto_approve_on_verified and (order_obj.status or "").lower() == "pending":
         approval_reference = str(matched_reference or order_obj.reference or "").strip()
         if _is_reference_already_used(approval_reference, exclude_order_id=order_obj.id):
-            print(f"[PabiloAuto] Reference '{approval_reference}' already used in another approved order. Skipping auto-approve for order #{order_obj.id}.")
+            print(f"[PabiloAuto] Reference '{approval_reference}' already used in another approved order. Rejecting order #{order_obj.id}.")
+            _auto_reject_order(order_obj, reason="Esa referencia ya fue utilizada en otra orden", source_label="PabiloAuto")
         else:
             _auto_approve_order(order_obj, source_label="PabiloAuto", binance_auto=False)
 
@@ -4784,6 +4927,51 @@ def _thanks_order_display_meta(order_obj):
     }
 
 
+def _auto_recharge_error_is_invalid_player_id(error_text) -> bool:
+    """Heurística sobre el error del proveedor (Revendedores / Game Script):
+    True cuando la recarga falló porque el ID de jugador no existe o es inválido.
+    Errores de configuración, mapeo, saldo o conexión NO cuentan: esos no son
+    culpa del cliente."""
+    text = str(error_text or "").strip().lower()
+    if not text:
+        return False
+    # requestId / referencias internas no son el ID del jugador
+    if re.search(r"request\s*_?\s*id", text):
+        return False
+    excluded_tokens = (
+        "zone", "zona", "input2", "mapeo", "paquete", "package", "api",
+        "saldo", "balance", "conectar", "conexión", "conexion", "timeout",
+        "respondió", "respondio", "cola", "queued", "provider_package_key",
+    )
+    if any(tok in text for tok in excluded_tokens):
+        return False
+    has_id_token = bool(re.search(r"\b(id|uid|jugador|player|usuario|user|role)\b", text))
+    fail_tokens = (
+        "incorrecto", "incorrect", "inválido", "invalido", "invalid",
+        "no existe", "não existe", "nao existe", "not found", "no encontrado",
+        "not exist", "wrong", "no válido", "no valido",
+    )
+    has_fail_token = any(tok in text for tok in fail_tokens)
+    return has_id_token and has_fail_token
+
+
+INVALID_PLAYER_ID_USER_MESSAGE = (
+    "Tu ID de jugador es incorrecto. Por favor verifícalo o escribe al soporte."
+)
+
+
+def _order_invalid_player_id_message(auto_state) -> str:
+    """Mensaje para el cliente cuando alguna recarga automática falló por ID inválido."""
+    for unit in (auto_state or {}).get("units") or []:
+        if not isinstance(unit, dict):
+            continue
+        if (unit.get("status") or "") not in ("failed", "not_found"):
+            continue
+        if _auto_recharge_error_is_invalid_player_id(unit.get("error")):
+            return INVALID_PLAYER_ID_USER_MESSAGE
+    return ""
+
+
 def _thanks_progress_payload(order_obj):
     """Build dynamic progress state for the thank-you page.
 
@@ -4837,12 +5025,20 @@ def _thanks_progress_payload(order_obj):
                     "control_number": str(unit.get("control_number") or ""),
                 })
 
+    # Recarga rechazada por el proveedor por ID de jugador inválido → avisar al cliente
+    invalid_id_message = _order_invalid_player_id_message(auto_state)
+    # Motivo de un rechazo automático (referencia usada, pago inexistente, etc.)
+    rejected_message = ""
+    if order_status == "rejected":
+        rejected_message = str(pay_state.get("auto_reject_reason") or "").strip() \
+            or "Tu pago no se encuentra en nuestro sistema porfavor contacta al soporte para validar tu compra"
+
     if not is_provider_auto:
         payment_checked = bool((order_obj.reference or "").strip() or (order_obj.payment_capture or "").strip())
         payment_verified = bool(order_obj.payment_verified_at) or order_status in ("approved", "delivered")
         order_validated = order_status in ("approved", "delivered")
         if order_status == "rejected":
-            manual_message = "Tu pago no se encuentra en nuestro sistema porfavor contacta al soporte para validar tu compra"
+            manual_message = rejected_message
         elif order_validated:
             manual_message = "Su orden está siendo procesada manualmente. Puede tardar de 5 a 10 minutos."
         else:
@@ -4889,7 +5085,8 @@ def _thanks_progress_payload(order_obj):
             },
             "pins": delivered_pins,
             "completed": False,
-            "current_message": manual_message,
+            "current_message": (rejected_message or invalid_id_message or manual_message),
+            "error_message": (rejected_message or invalid_id_message),
             "player_display": order_meta.get("player_display") or "",
             "package_display": order_meta.get("package_display") or "",
         }
@@ -4950,7 +5147,11 @@ def _thanks_progress_payload(order_obj):
     ]
 
     current_message = "Procesando tu recarga..."
-    if recharge_done:
+    if rejected_message:
+        current_message = rejected_message
+    elif invalid_id_message and not recharge_done:
+        current_message = invalid_id_message
+    elif recharge_done:
         current_message = "Recarga completada"
     elif recharge_connected:
         current_message = "Conectando y procesando recarga"
@@ -4983,6 +5184,7 @@ def _thanks_progress_payload(order_obj):
         "pins": delivered_pins,
         "completed": recharge_done,
         "current_message": current_message,
+        "error_message": (rejected_message or ("" if recharge_done else invalid_id_message)),
         "player_display": order_meta.get("player_display") or "",
         "package_display": order_meta.get("package_display") or "",
     }
@@ -6155,6 +6357,7 @@ with app.app_context():
             add_order_col('payer_phone', "payer_phone TEXT DEFAULT ''")
             add_order_col('payer_payment_date', "payer_payment_date TEXT DEFAULT ''")
             add_order_col('payer_movement_type', "payer_movement_type TEXT DEFAULT ''")
+            add_order_col('user_id', "user_id INTEGER")
             add_order_col('credit_user_id', "credit_user_id INTEGER")
             add_order_col('credit_amount_usd', "credit_amount_usd REAL DEFAULT 0")
             add_order_col('credit_refunded_at', f"credit_refunded_at {'TIMESTAMP' if _is_pg else 'TEXT'}")
@@ -9404,6 +9607,11 @@ def check_reference():
         reference,
         statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
     )
+    if not existing:
+        existing = _find_existing_order_by_capture_reference(
+            reference,
+            statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
+        )
 
     if existing:
         return jsonify({
@@ -9509,6 +9717,20 @@ def create_order():
         if not gid_raw:
             return jsonify({"ok": False, "error": "store_package_id requerido"}), 400
         gid = int(gid_raw)
+        # Gift Cards solo se venden a usuarios logueados: así los códigos
+        # comprados quedan visibles en "Mis códigos" de su perfil.
+        session_user = session.get("user") or {}
+        try:
+            pkg_for_checks = StorePackage.query.get(gid)
+        except Exception:
+            pkg_for_checks = None
+        if pkg_for_checks and str(pkg_for_checks.category or "").strip().lower() in ("gift", "gif", "giftcards"):
+            if not session_user:
+                return jsonify({
+                    "ok": False,
+                    "error": "Debes iniciar sesión para comprar Gift Cards",
+                    "login_required": True,
+                }), 401
         item_id = _get("item_id") or None
         if item_id is not None:
             try:
@@ -9594,6 +9816,12 @@ def create_order():
             reference,
             statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
         )
+        if not existing_order:
+            # También contra referencias extraídas de comprobantes de otras órdenes
+            existing_order = _find_existing_order_by_capture_reference(
+                reference,
+                statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
+            )
         if existing_order:
             return jsonify({"ok": False, "error": _reference_conflict_error_message(existing_order)}), 400
         if amount <= 0:
@@ -9614,6 +9842,7 @@ def create_order():
             name=name,
             email=email,
             phone=phone,
+            user_id=(session_user.get("user_id") or None),
             customer_id=customer_id,
             customer_zone=customer_zone,
             customer_name=verified_nick or name or email or customer_id,
@@ -9842,6 +10071,10 @@ def admin_orders_list():
     # Busqueda por ultimos digitos de la referencia o por ID de jugador
     q = (request.args.get("q") or "").strip()
     base_query = Order.query
+    # Filtro por estado (suiche Todas / Pendientes / etc. en el admin)
+    status_filter = (request.args.get("status") or "").strip().lower()
+    if status_filter in ("pending", "approved", "rejected", "delivered"):
+        base_query = base_query.filter(Order.status == status_filter)
     if q:
         # % y _ son comodines de LIKE: se escapan para que se busquen literales
         safe = q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -10092,9 +10325,15 @@ def orders_my():
         q = q.order_by(Order.created_at.desc()).limit(50)
     elif role == "user":
         email = (user.get("email") or "").strip()
-        if not email:
+        uid = user.get("user_id")
+        filters = []
+        if email:
+            filters.append(Order.email == email)
+        if uid:
+            filters.append(Order.user_id == uid)
+        if not filters:
             return jsonify({"ok": True, "orders": []})
-        q = q.filter(Order.email == email).order_by(Order.created_at.desc()).limit(50)
+        q = q.filter(db.or_(*filters)).order_by(Order.created_at.desc()).limit(50)
     else:
         # Affiliates or other roles: do not expose buyer orders
         return jsonify({"ok": True, "orders": []})
@@ -10112,6 +10351,16 @@ def orders_my():
                     items_payload = parsed
         except Exception:
             items_payload = []
+        delivery_codes = []
+        try:
+            if (x.delivery_codes_json or '').strip():
+                dc_parsed = json.loads(x.delivery_codes_json or '[]')
+                if isinstance(dc_parsed, list):
+                    delivery_codes = [str(c or '').strip() for c in dc_parsed if str(c or '').strip()]
+        except Exception:
+            delivery_codes = []
+        if not delivery_codes and (x.delivery_code or '').strip():
+            delivery_codes = [x.delivery_code.strip()]
         out.append({
             "id": x.id,
             "created_at": (x.created_at.isoformat() if hasattr(x.created_at, 'isoformat') else str(x.created_at)),
@@ -10134,6 +10383,7 @@ def orders_my():
             "reference": x.reference,
             "capture_reference": x.capture_reference or "",
             "delivery_code": x.delivery_code or "",
+            "delivery_codes": delivery_codes,
         })
     return jsonify({"ok": True, "orders": out})
 

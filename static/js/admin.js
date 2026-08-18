@@ -507,6 +507,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let ordersCurrentPage = 1;
   const ordersPerPage = 20;
   let ordersQuery = '';
+  let ordersStatusFilter = '';
+  const ordersStatusFilterWrap = document.getElementById('orders-status-filter');
   // Revendedores mapping elements
   const btnRevSync = document.getElementById('btn-rev-sync');
   const btnRevRefresh = document.getElementById('btn-rev-refresh');
@@ -3019,6 +3021,7 @@ window.refreshGallery = refreshGallery;
       const normalizedPage = Math.max(parseInt(page || 1, 10) || 1, 1);
       const params = new URLSearchParams({ page: normalizedPage, per_page: ordersPerPage });
       if (ordersQuery) params.set('q', ordersQuery);
+      if (ordersStatusFilter) params.set('status', ordersStatusFilter);
       const res = await fetch(`/admin/orders?${params.toString()}`);
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo listar');
@@ -3071,6 +3074,22 @@ window.refreshGallery = refreshGallery;
       if (ordersSearch) ordersSearch.value = '';
       clearTimeout(ordersSearchTimer);
       runOrdersSearch();
+    });
+  }
+
+  // Suiche de estado (Todas / Pendientes / ...) — siempre vuelve a la primera pagina
+  if (ordersStatusFilterWrap) {
+    ordersStatusFilterWrap.addEventListener('click', (e) => {
+      const btn = e.target.closest('.orders-status-btn');
+      if (!btn) return;
+      const status = (btn.getAttribute('data-status') || '').trim();
+      if (status === ordersStatusFilter) return;
+      ordersStatusFilter = status;
+      ordersStatusFilterWrap.querySelectorAll('.orders-status-btn').forEach(b => {
+        b.classList.toggle('primary', b === btn);
+      });
+      ordersCurrentPage = 1;
+      fetchOrders(1);
     });
   }
 

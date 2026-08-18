@@ -145,6 +145,13 @@
           </div>
           <button id="btn-orders-search" class="btn primary" type="button">Buscar</button>
         </div>
+        <div id="orders-status-filter" style="display:flex; gap:8px; flex-wrap:wrap; margin:10px 0;">
+          <button class="btn orders-status-btn primary" data-status="" type="button">Todas</button>
+          <button class="btn orders-status-btn" data-status="pending" type="button">Pendientes</button>
+          <button class="btn orders-status-btn" data-status="approved" type="button">Aprobadas</button>
+          <button class="btn orders-status-btn" data-status="delivered" type="button">Entregadas</button>
+          <button class="btn orders-status-btn" data-status="rejected" type="button">Rechazadas</button>
+        </div>
         <div id="orders-search-info" class="orders-search-info" hidden></div>
         <div id="orders-list" class="orders-list">
           <div class="empty-state">

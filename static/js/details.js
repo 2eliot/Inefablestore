@@ -1020,10 +1020,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1000);
   }
 
+  // ── Gift Cards: exigir sesión iniciada antes de comprar ──
+  const giftLoginModal = document.getElementById('gift-login-modal');
+  const btnGiftLogin = document.getElementById('btn-gift-login');
+  const btnCloseGiftLogin = document.querySelector('[data-close-gift-login]');
+  function openGiftLoginModal() {
+    if (giftLoginModal) giftLoginModal.removeAttribute('hidden');
+  }
+  function closeGiftLoginModal() {
+    if (giftLoginModal) giftLoginModal.setAttribute('hidden', '');
+  }
+  if (btnCloseGiftLogin) btnCloseGiftLogin.addEventListener('click', closeGiftLoginModal);
+  if (giftLoginModal) {
+    giftLoginModal.addEventListener('click', (e) => {
+      if (e.target === giftLoginModal || e.target.classList.contains('modal-backdrop')) closeGiftLoginModal();
+    });
+  }
+  if (btnGiftLogin) {
+    btnGiftLogin.addEventListener('click', () => {
+      closeGiftLoginModal();
+      // Tras el login, recargar esta página en vez de ir a /user (ver store.js)
+      window.__stayAfterLogin = true;
+      const authModal = document.getElementById('auth-modal');
+      if (authModal) authModal.removeAttribute('hidden');
+    });
+  }
+  async function isSessionActive() {
+    try {
+      const res = await fetch('/auth/session');
+      const data = await res.json();
+      return !!(res.ok && data && data.ok && data.user && data.user.email);
+    } catch (_) {
+      return false;
+    }
+  }
+
   if (btnBuy) {
     btnBuy.addEventListener('click', async () => {
       if (selectedItemIndex < 0) return alert('Selecciona un paquete');
       if (!methodChosen) return alert('Selecciona un método de pago');
+      if (isGift) {
+        const logged = await isSessionActive();
+        if (!logged) {
+          openGiftLoginModal();
+          return;
+        }
+      }
       if (!skipPlayerId) {
         if (!inputCustomerId || !inputCustomerId.value.trim()) {
           alert('Ingrese su ID de jugador');

@@ -133,6 +133,22 @@
     </div>
   </div>
 </section>
+<!-- Popup: login requerido para comprar Gift Cards -->
+<div id="gift-login-modal" class="auth-modal" hidden>
+  <div class="auth-card" style="max-width:420px;">
+    <button class="icon-btn auth-close" data-close-gift-login aria-label="Cerrar">✕</button>
+    <div class="auth-body" style="text-align:center; display:grid; gap:12px;">
+      <div style="font-size:40px;" aria-hidden="true">🔒</div>
+      <div class="auth-title" style="margin:0;">Inicia sesión para continuar</div>
+      <p style="margin:0; color:#cbd5e1; font-size:14px; line-height:1.5;">
+        Para comprar Gift Cards necesitas una cuenta. Así tus códigos quedan
+        guardados en <strong>Mis códigos</strong> dentro de tu perfil.
+      </p>
+      <button id="btn-gift-login" class="btn primary full" type="button">Iniciar sesión</button>
+    </div>
+  </div>
+  <div class="modal-backdrop"></div>
+</div>
 <div id="pkg-info-modal" class="auth-modal" hidden>
   <div class="auth-card" style="max-width:720px;">
     <button class="icon-btn auth-close" data-close-pkg-info aria-label="Cerrar">✕</button>
