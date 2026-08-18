@@ -657,6 +657,16 @@ def _scrape_smileone_generic(conn, uid: str, zid: str = "") -> str:
         pid = (conn.smile_pid or "").strip()
         sid = (conn.server_id or "-1").strip()
 
+        # Fallback: derivar el slug de la URL si la conexión no lo tiene guardado
+        # (versiones viejas del auto-detect descartaban slugs con guiones/números).
+        if not slug:
+            try:
+                slug_part = page_url.split("?")[0].rstrip("/").rsplit("/", 1)[-1]
+                if slug_part and re.fullmatch(r"[A-Za-z0-9_-]+", slug_part):
+                    slug = slug_part
+            except Exception:
+                pass
+
         # Build payload variants depending on whether zone is needed
         if conn.requires_zone and zid:
             payload_variants = [
@@ -672,12 +682,15 @@ def _scrape_smileone_generic(conn, uid: str, zid: str = "") -> str:
         # Derive checkrole endpoints from page_url
         # e.g. https://www.smile.one/br/merchant/game/bloodstrike -> checkrole
         base = page_url.split("?")[0].rstrip("/")
+        base_dir = base.rsplit("/", 1)[0]
         endpoints = []
         if slug:
-            endpoints.append(f"https://www.smile.one/merchant/{slug}/checkrole")
-            # Try with /br/ prefix too
+            # Primero el patrón que funciona en producción (Blood Strike):
+            # el checkrole del MISMO directorio regional de la página + ?product=
+            endpoints.append(f"{base_dir}/checkrole?product={slug}")
             endpoints.append(f"https://www.smile.one/br/merchant/game/checkrole?product={slug}")
-        endpoints.append(base.rsplit("/", 1)[0] + "/checkrole")
+            endpoints.append(f"https://www.smile.one/merchant/{slug}/checkrole")
+        endpoints.append(base_dir + "/checkrole")
         endpoints.append("https://www.smile.one/merchant/checkrole")
         # Deduplicate while preserving order
         seen = set()
@@ -8538,9 +8551,10 @@ def admin_smileone_connections_create():
     # Auto-derive product_slug from page_url if not given
     if not product_slug:
         # e.g. https://www.smile.one/br/merchant/game/bloodstrike?... -> bloodstrike
+        # Acepta guiones y números: muchos juegos usan slugs como "honkai-star-rail".
         try:
             slug_part = page_url.split("?")[0].rstrip("/").rsplit("/", 1)[-1]
-            if slug_part and slug_part.isalpha():
+            if slug_part and re.fullmatch(r"[A-Za-z0-9_-]+", slug_part):
                 product_slug = slug_part
         except Exception:
             pass
