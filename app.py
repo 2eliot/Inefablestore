@@ -251,6 +251,9 @@ def _extract_ffmania_nick(raw_html: str) -> str:
         r'"nick"\s*:\s*"([^"\\]+(?:\\.[^"\\]*)*)"',
         r'"nickname"\s*:\s*"([^"\\]+(?:\\.[^"\\]*)*)"',
         r'class="nome"[^>]*>\s*([^<]+?)\s*</',
+        # Rediseño FFMania ~2026-08: el nick también aparece en <h1>/<title>
+        r'(?i)<h1[^>]*>\s*Perfil\s+d[eo]l?\s+J[ou]gador\s+(.+?)\s+[ne][nm]\s+Free\s+Fire\s*</h1>',
+        r'(?i)<title>\s*(.+?)\s*\(ID\s*\d+\)',
         r'<strong>[^<]*(?:Nombre|Nome|Nick)\s*:?\s*</strong>\s*([^<]+?)\s*</',
         r'(?is)<[^>]*>\s*(?:Nombre|Nome|Nick)\s*:?\s*</[^>]*>\s*<[^>]*>\s*([^<]+?)\s*</',
         r'(?im)\b(?:Nombre|Nome|Nick)\s*:\s*([^\n<]+)',
@@ -261,12 +264,15 @@ def _extract_ffmania_nick(raw_html: str) -> str:
             nick = (m.group(1) or "").replace('\\/', '/').replace('\\"', '"')
             nick = _html.unescape(nick)
             nick = re.sub(r"\s+", " ", nick).strip()
+            # Placeholder de página sin datos: "ID 123456" no es un nick real
+            if nick and re.fullmatch(r"(?i)ID\s*\d+", nick):
+                continue
             if nick:
                 return nick
 
     txt = raw_html
-    txt = re.sub(r"(?is)<(script|style)[^>]*>.*?</\\1>", " ", txt)
-    txt = re.sub(r"(?i)<br\\s*/?>", "\n", txt)
+    txt = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", txt)
+    txt = re.sub(r"(?i)<br\s*/?>", "\n", txt)
     txt = re.sub(r"(?i)</(p|div|tr|li|h1|h2|h3|table|section|article|span)>", "\n", txt)
     txt = re.sub(r"(?is)<[^>]+>", " ", txt)
     txt = _html.unescape(txt)
@@ -288,7 +294,52 @@ def _extract_ffmania_nick(raw_html: str) -> str:
     return ""
 
 
+def _ffmania_check_id(uid: str):
+    """Endpoint JSON de FFMania (flujo vigente desde ~2026-08).
+
+    El patrón viejo /cuenta/{uid}.html ya no hace lookup en vivo: solo
+    responde para perfiles que FFMania tiene cacheados; IDs nuevos dan 404.
+    Devuelve (found, nick):
+      - (True, nick)  → jugador encontrado
+      - (False, "")   → la API confirmó que el ID no existe
+      - (None, "")    → el endpoint falló; usar el fallback HTML /cuenta/
+    """
+    try:
+        resp = _FFMANIA_SESSION.post(
+            "https://www.freefiremania.com.br/paginas/perfil-free-fire-check-id.php",
+            data={"id": uid},
+            headers={
+                **_FFMANIA_HEADERS,
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Origin": "https://www.freefiremania.com.br",
+                "Referer": "https://www.freefiremania.com.br/perfil-free-fire-id.html",
+            },
+            timeout=(_FFMANIA_TIMEOUT[0], max(_FFMANIA_TIMEOUT[1], 6.0)),
+        )
+        if resp.status_code != 200:
+            return None, ""
+        data = resp.json()
+        if not data.get("success"):
+            return None, ""
+        if not data.get("found"):
+            return False, ""
+        nick = re.sub(r"\s+", " ", str((data.get("player") or {}).get("nickname") or "")).strip()
+        if nick:
+            return True, nick
+        return None, ""
+    except Exception:
+        return None, ""
+
+
 def _scrape_ffmania_nick(uid: str) -> str:
+    found, nick = _ffmania_check_id(uid)
+    if found is True:
+        return nick
+    if found is False:
+        return ""
+    # Fallback: /cuenta/{uid}.html solo responde para perfiles ya cacheados
     url = f"https://www.freefiremania.com.br/cuenta/{uid}.html"
     try:
         resp = _FFMANIA_SESSION.get(url, headers=_FFMANIA_HEADERS, timeout=_FFMANIA_TIMEOUT)
