@@ -495,6 +495,124 @@
         </div>
     </div>
 
+    <!-- BOTON FLOTANTE DE CANJE (esquina inferior derecha, separado del footer) -->
+    <button id="gift-fab" onclick="openGiftModal()" type="button" aria-label="Redimir código de regalo"
+            class="fixed right-4 bottom-28 md:right-8 md:bottom-8 z-[45] hidden items-center gap-2 pl-3 pr-4 py-2.5 rounded-full bg-gradient-verde text-[#0c0c0e] font-black text-[11px] uppercase tracking-wider shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 active:scale-95 transition-all-custom">
+        <span class="relative flex items-center justify-center w-5 h-5">
+            <span class="absolute inline-flex w-full h-full rounded-full bg-[#0c0c0e]/25 animate-ping"></span>
+            <i class="fa-solid fa-gift text-sm relative"></i>
+        </span>
+        Redimir
+    </button>
+
+    <!-- MODAL DE CANJE DE CODIGOS DE REGALO -->
+    <div id="gift-modal" class="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
+        <div class="bg-[#141418] border border-[#2a2a30] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
+
+            <div class="p-5 border-b border-[#222226] flex justify-between items-center shrink-0">
+                <h3 class="font-black text-white tracking-wide text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-gift text-emerald-400"></i> Redimir código
+                </h3>
+                <button onclick="closeGiftModal()" class="text-gray-400 hover:text-white text-lg leading-none" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <div class="p-5 space-y-4 overflow-y-auto no-scrollbar">
+
+                <!-- PASO 1: el código -->
+                <div id="gift-step-code" class="space-y-4">
+                    <p class="text-[11px] text-gray-400 leading-relaxed">
+                        Escribe el código que recibiste en el canal o en TikTok. Si es válido te vamos a mostrar qué trae antes de canjearlo.
+                    </p>
+                    <input id="gift-code-input" type="text" inputmode="latin" autocomplete="off" autocapitalize="characters"
+                           spellcheck="false" maxlength="14" placeholder="ABCD-EFGH-JKMN"
+                           class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-3 text-center text-base font-black tracking-[0.2em] text-white placeholder-gray-700 focus:outline-none transition-all uppercase">
+                    <div id="gift-code-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
+                    <button onclick="giftValidateCode()" id="gift-btn-check"
+                            class="w-full py-3 bg-gradient-verde text-[#0c0c0e] font-black text-xs rounded-xl tracking-wider uppercase transition-all active:scale-[0.98]">
+                        Continuar
+                    </button>
+                    <p class="text-center text-[11px] text-gray-500">
+                        <button onclick="giftOpenHistory()" type="button" class="text-emerald-400 font-bold hover:underline">Ver mis canjes</button>
+                    </p>
+                </div>
+
+                <!-- PASO 2: el ID del jugador -->
+                <div id="gift-step-player" class="space-y-4" style="display:none">
+                    <div class="flex items-center gap-3 bg-[#0c0c0e] border border-emerald-500/25 rounded-xl p-3">
+                        <img id="gift-prize-img" src="" alt="" class="w-12 h-12 rounded-lg object-cover shrink-0 bg-[#1a1a1e]">
+                        <div class="min-w-0 flex-1">
+                            <div id="gift-prize-game" class="text-[10px] font-extrabold text-white truncate uppercase tracking-wide">---</div>
+                            <div id="gift-prize-item" class="text-sm font-black text-emerald-400 truncate leading-tight">---</div>
+                            <div id="gift-prize-code" class="text-[9px] text-gray-500 font-semibold tracking-widest">---</div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label for="gift-player-input" class="block text-[11px] font-bold text-gray-300">Tu ID de jugador</label>
+                        <input id="gift-player-input" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 123456789"
+                               class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                        <div id="gift-nick" class="text-[11px] font-semibold" style="display:none"></div>
+                    </div>
+
+                    <div id="gift-zone-wrap" class="space-y-2" style="display:none">
+                        <label for="gift-zone-input" class="block text-[11px] font-bold text-gray-300">Zona ID</label>
+                        <input id="gift-zone-input" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 2001"
+                               class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                    </div>
+
+                    <div id="gift-player-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
+
+                    <button onclick="giftRedeem()" id="gift-btn-redeem"
+                            class="w-full py-3 bg-gradient-verde text-[#0c0c0e] font-black text-xs rounded-xl tracking-wider uppercase transition-all active:scale-[0.98]">
+                        Canjear ahora
+                    </button>
+                    <button onclick="giftBackToCode()" type="button" class="w-full py-2 text-[11px] font-bold text-gray-400 hover:text-white transition-colors">
+                        Usar otro código
+                    </button>
+                </div>
+
+                <!-- PASO 3: resultado -->
+                <div id="gift-step-done" class="space-y-4 text-center" style="display:none">
+                    <div id="gift-done-icon" class="mx-auto w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center">
+                        <i class="fa-solid fa-circle-check text-emerald-400 text-2xl"></i>
+                    </div>
+                    <div class="space-y-1">
+                        <div id="gift-done-title" class="text-sm font-black text-white">¡Listo!</div>
+                        <p id="gift-done-message" class="text-[11px] text-gray-400 leading-relaxed"></p>
+                    </div>
+                    <div class="bg-[#0c0c0e] border border-[#222226] rounded-xl p-3 space-y-1">
+                        <div id="gift-done-prize" class="text-sm font-black text-emerald-400"></div>
+                        <div id="gift-done-order" class="text-[10px] text-gray-500 font-semibold"></div>
+                    </div>
+                    <button onclick="giftBackToCode()" type="button"
+                            class="w-full py-3 bg-gradient-verde text-[#0c0c0e] font-black text-xs rounded-xl tracking-wider uppercase transition-all active:scale-[0.98]">
+                        Canjear otro código
+                    </button>
+                    <button onclick="closeGiftModal()" type="button" class="w-full py-2 text-[11px] font-bold text-gray-400 hover:text-white transition-colors">
+                        Volver a la tienda
+                    </button>
+                </div>
+
+                <!-- HISTORIAL -->
+                <div id="gift-step-history" class="space-y-4" style="display:none">
+                    <p class="text-[11px] text-gray-400 leading-relaxed">Escribe el ID de jugador con el que canjeaste para ver tus últimos canjes.</p>
+                    <div class="flex gap-2">
+                        <input id="gift-history-input" type="text" inputmode="numeric" autocomplete="off" placeholder="ID de jugador"
+                               class="flex-1 min-w-0 bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                        <button onclick="giftSearchHistory()" id="gift-btn-history" class="px-4 py-2.5 bg-[#222226] text-white font-black text-[11px] rounded-xl uppercase tracking-wider hover:bg-[#2a2a30] transition-all">Buscar</button>
+                    </div>
+                    <div id="gift-history-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
+                    <div id="gift-history-list" class="space-y-2"></div>
+                    <button onclick="giftBackToCode()" type="button" class="w-full py-2 text-[11px] font-bold text-gray-400 hover:text-white transition-colors">
+                        Volver al canje
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+
     <!-- FLOATING MOBILE CHECKOUT BAR (solo en telefono, oculta hasta seleccionar item) -->
     <div id="mobile-checkout-bar" class="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#0c0c0e] border-t border-[#222226] px-3 py-2 translate-y-full opacity-0 pointer-events-none transition-all duration-300 ease-out" style="-webkit-backdrop-filter:none; backdrop-filter:none">
         <div class="flex items-center gap-2.5">
@@ -1852,5 +1970,319 @@
             initWaPopup();
         };
     </script>
+    <!-- CANJE DE CODIGOS DE REGALO -->
+    <script>
+    (function () {
+        // Dos pasos a proposito: primero el codigo, y solo cuando resulta valido
+        // se pide el ID del jugador. Asi el usuario ve que gano antes de escribir
+        // nada mas, y el servidor no marca el codigo hasta el segundo paso.
+        var validado = null;      // respuesta de /store/gift/validate
+        var verifyTimer = null;
+        var nickVerificado = '';
+
+        function el(id) { return document.getElementById(id); }
+
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+
+        function setError(id, msg) {
+            var box = el(id);
+            if (!box) return;
+            box.innerText = msg || '';
+            box.style.display = msg ? 'block' : 'none';
+        }
+
+        function setBusy(btn, on, textoOcupado) {
+            if (!btn) return;
+            if (on) {
+                btn.dataset.label = btn.dataset.label || btn.innerHTML;
+                btn.disabled = true;
+                btn.classList.add('opacity-60');
+                btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> ' + (textoOcupado || 'Un momento...');
+            } else {
+                btn.disabled = false;
+                btn.classList.remove('opacity-60');
+                if (btn.dataset.label) btn.innerHTML = btn.dataset.label;
+            }
+        }
+
+        function mostrarPaso(paso) {
+            ['code', 'player', 'done', 'history'].forEach(function (p) {
+                var seccion = el('gift-step-' + p);
+                if (seccion) seccion.style.display = (p === paso) ? '' : 'none';
+            });
+        }
+
+        function postJson(url, payload) {
+            return fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload || {})
+            }).then(function (r) {
+                return r.json().catch(function () {
+                    return { ok: false, error: 'No se pudo conectar. Revisa tu internet.' };
+                });
+            });
+        }
+
+        // ============ PASO 1: el codigo ============
+
+        window.openGiftModal = function () {
+            var modal = el('gift-modal');
+            if (!modal) return;
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            mostrarPaso('code');
+            setError('gift-code-error', '');
+            var input = el('gift-code-input');
+            if (input) setTimeout(function () { input.focus(); }, 80);
+        };
+
+        window.closeGiftModal = function () {
+            var modal = el('gift-modal');
+            if (!modal) return;
+            modal.style.display = 'none';
+            document.body.style.overflow = '';
+        };
+
+        window.giftBackToCode = function () {
+            validado = null;
+            nickVerificado = '';
+            mostrarPaso('code');
+            setError('gift-code-error', '');
+            var input = el('gift-code-input');
+            if (input) { input.value = ''; input.focus(); }
+        };
+
+        window.giftValidateCode = function () {
+            var input = el('gift-code-input');
+            var codigo = (input ? input.value : '').trim();
+            if (!codigo) { setError('gift-code-error', 'Escribe tu código.'); return; }
+
+            var btn = el('gift-btn-check');
+            setError('gift-code-error', '');
+            setBusy(btn, true, 'Revisando...');
+
+            postJson('/store/gift/validate', { code: codigo })
+                .then(function (data) {
+                    if (!data.ok) { setError('gift-code-error', data.error || 'Ese código no sirve.'); return; }
+                    validado = data;
+                    nickVerificado = '';
+
+                    var premio = data.prize || {};
+                    el('gift-prize-game').innerText = premio.game || '';
+                    el('gift-prize-item').innerText = premio.package || '';
+                    el('gift-prize-code').innerText = data.code || '';
+                    var img = el('gift-prize-img');
+                    if (premio.image) { img.src = premio.image; img.style.display = ''; }
+                    else { img.style.display = 'none'; }
+
+                    el('gift-zone-wrap').style.display = premio.requires_zone ? '' : 'none';
+                    el('gift-player-input').value = '';
+                    el('gift-zone-input').value = '';
+                    el('gift-nick').style.display = 'none';
+                    setError('gift-player-error', '');
+
+                    mostrarPaso('player');
+                    setTimeout(function () { el('gift-player-input').focus(); }, 80);
+                })
+                .catch(function () { setError('gift-code-error', 'No se pudo conectar. Intenta de nuevo.'); })
+                .finally(function () { setBusy(btn, false); });
+        };
+
+        // ============ PASO 2: el ID del jugador ============
+
+        function verificarNick() {
+            if (!validado || !(validado.prize || {}).can_verify) return;
+            var uid = (el('gift-player-input').value || '').trim();
+            var zid = (el('gift-zone-input').value || '').trim();
+            var premio = validado.prize || {};
+            var caja = el('gift-nick');
+
+            nickVerificado = '';
+            if (!uid || uid.length < 5) { caja.style.display = 'none'; return; }
+            if (premio.requires_zone && !zid) { caja.style.display = 'none'; return; }
+
+            caja.style.display = '';
+            caja.className = 'text-[11px] font-semibold text-gray-400';
+            caja.innerText = 'Verificando ID...';
+
+            var url = '/store/verify-player?gid=' + encodeURIComponent(premio.store_package_id) +
+                      '&uid=' + encodeURIComponent(uid) + (zid ? '&zid=' + encodeURIComponent(zid) : '');
+            fetch(url)
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.ok && data.nick) {
+                        nickVerificado = data.nick;
+                        caja.className = 'text-[11px] font-semibold text-emerald-400';
+                        caja.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + esc(data.nick);
+                    } else {
+                        caja.className = 'text-[11px] font-semibold text-amber-400';
+                        caja.innerText = 'No encontramos ese ID. Revísalo antes de canjear.';
+                    }
+                })
+                .catch(function () { caja.style.display = 'none'; });  // si falla, se canjea igual
+        }
+
+        function programarVerificacion() {
+            if (verifyTimer) clearTimeout(verifyTimer);
+            verifyTimer = setTimeout(verificarNick, 600);
+        }
+
+        window.giftRedeem = function () {
+            if (!validado) { giftBackToCode(); return; }
+            var uid = (el('gift-player-input').value || '').trim();
+            var zid = (el('gift-zone-input').value || '').trim();
+            var premio = validado.prize || {};
+
+            if (!uid) { setError('gift-player-error', 'Escribe tu ID de jugador.'); return; }
+            if (premio.requires_zone && !zid) { setError('gift-player-error', 'Escribe tu Zona ID.'); return; }
+
+            var btn = el('gift-btn-redeem');
+            setError('gift-player-error', '');
+            setBusy(btn, true, 'Canjeando...');
+
+            postJson('/store/gift/redeem', {
+                code: validado.code, player_id: uid, zone_id: zid, nickname: nickVerificado
+            })
+                .then(function (data) {
+                    if (!data.ok) { setError('gift-player-error', data.error || 'No se pudo canjear.'); return; }
+
+                    var entregado = !!data.delivered;
+                    el('gift-done-title').innerText = entregado ? '¡Listo!' : 'Canje registrado';
+                    el('gift-done-message').innerText = data.message || '';
+                    el('gift-done-prize').innerText = ((data.prize || {}).game || '') + ' · ' + ((data.prize || {}).package || '');
+                    el('gift-done-order').innerText = data.order_id ? ('Orden #' + data.order_id) : '';
+
+                    var icono = el('gift-done-icon');
+                    if (entregado) {
+                        icono.className = 'mx-auto w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center';
+                        icono.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400 text-2xl"></i>';
+                    } else {
+                        icono.className = 'mx-auto w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/40 flex items-center justify-center';
+                        icono.innerHTML = '<i class="fa-solid fa-clock text-amber-400 text-2xl"></i>';
+                    }
+                    mostrarPaso('done');
+                })
+                .catch(function () { setError('gift-player-error', 'No se pudo conectar. Intenta de nuevo.'); })
+                .finally(function () { setBusy(btn, false); });
+        };
+
+        // ============ HISTORIAL ============
+
+        window.giftOpenHistory = function () {
+            mostrarPaso('history');
+            setError('gift-history-error', '');
+            el('gift-history-list').innerHTML = '';
+            setTimeout(function () { el('gift-history-input').focus(); }, 80);
+        };
+
+        window.giftSearchHistory = function () {
+            var uid = (el('gift-history-input').value || '').trim();
+            if (!uid) { setError('gift-history-error', 'Escribe tu ID para buscar.'); return; }
+
+            var btn = el('gift-btn-history');
+            setError('gift-history-error', '');
+            setBusy(btn, true, '...');
+
+            postJson('/store/gift/history', { player_id: uid })
+                .then(function (data) {
+                    if (!data.ok) { setError('gift-history-error', data.error || 'No se pudo buscar.'); return; }
+                    var lista = el('gift-history-list');
+                    if (!data.items || !data.items.length) {
+                        lista.innerHTML = '<p class="text-[11px] text-gray-500 text-center py-3">No hay canjes con ese ID.</p>';
+                        return;
+                    }
+                    lista.innerHTML = data.items.map(function (item) {
+                        var estado = item.delivered
+                            ? '<span class="text-[9px] font-black text-emerald-400 uppercase tracking-wider">Entregado</span>'
+                            : '<span class="text-[9px] font-black text-amber-400 uppercase tracking-wider">En proceso</span>';
+                        return '<div class="bg-[#0c0c0e] border border-[#222226] rounded-xl p-3 flex items-center justify-between gap-3">' +
+                               '<div class="min-w-0">' +
+                               '<div class="text-[11px] font-bold text-white truncate">' + esc(item.prize) + '</div>' +
+                               '<div class="text-[9px] text-gray-500 font-semibold tracking-widest">' + esc(item.code) + '</div>' +
+                               '<div class="text-[9px] text-gray-600">' + esc(item.date) + '</div>' +
+                               '</div>' + estado + '</div>';
+                    }).join('');
+                })
+                .catch(function () { setError('gift-history-error', 'No se pudo conectar. Intenta de nuevo.'); })
+                .finally(function () { setBusy(btn, false); });
+        };
+
+        // ============ INIT ============
+
+        var codeInput = el('gift-code-input');
+        if (codeInput) {
+            // Se formatea solo en bloques de 4 para que se lea igual que en el video.
+            codeInput.addEventListener('input', function () {
+                var limpio = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+                this.value = limpio.replace(/(.{4})(?=.)/g, '$1-');
+            });
+            codeInput.addEventListener('keydown', function (evt) {
+                if (evt.key === 'Enter') { evt.preventDefault(); giftValidateCode(); }
+            });
+        }
+
+        var playerInput = el('gift-player-input');
+        if (playerInput) {
+            playerInput.addEventListener('input', programarVerificacion);
+            playerInput.addEventListener('keydown', function (evt) {
+                if (evt.key === 'Enter') { evt.preventDefault(); giftRedeem(); }
+            });
+        }
+        var zoneInput = el('gift-zone-input');
+        if (zoneInput) zoneInput.addEventListener('input', programarVerificacion);
+
+        var historyInput = el('gift-history-input');
+        if (historyInput) {
+            historyInput.addEventListener('keydown', function (evt) {
+                if (evt.key === 'Enter') { evt.preventDefault(); giftSearchHistory(); }
+            });
+        }
+
+        var modal = el('gift-modal');
+        if (modal) {
+            modal.addEventListener('click', function (evt) { if (evt.target === modal) closeGiftModal(); });
+        }
+        document.addEventListener('keydown', function (evt) {
+            if (evt.key === 'Escape' && modal && modal.style.display === 'flex') closeGiftModal();
+        });
+
+        // El boton flota sobre el contenido, pero nunca encima del footer: al
+        // llegar al final se apoya justo arriba de su borde en vez de taparlo.
+        var fab = el('gift-fab');
+        var footer = document.querySelector('footer');
+
+        function ajustarFab() {
+            if (!fab || fab.classList.contains('hidden')) return;
+            var base = window.innerWidth >= 768 ? 32 : 112;   // md:bottom-8 / bottom-28
+            var sobreFooter = base;
+            if (footer) {
+                var tope = footer.getBoundingClientRect().top;
+                sobreFooter = (window.innerHeight - tope) + 16;
+            }
+            fab.style.bottom = Math.max(base, sobreFooter) + 'px';
+        }
+
+        window.addEventListener('scroll', ajustarFab, { passive: true });
+        window.addEventListener('resize', ajustarFab);
+
+        // El boton solo aparece si el canje esta encendido en el admin.
+        fetch('/store/gift/config')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data && data.ok && data.enabled && fab) {
+                    fab.classList.remove('hidden');
+                    fab.classList.add('flex');
+                    ajustarFab();
+                }
+            })
+            .catch(function () { /* si falla, el boton se queda oculto */ });
+    })();
+    </script>
+
 </body>
 </html>

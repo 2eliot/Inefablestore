@@ -386,6 +386,298 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
+  // ===== Códigos de regalo =====
+  // Los códigos son dinero: se generan por lote, se reparten y se canjean una
+  // sola vez desde el botón flotante de la tienda.
+  const giftSummary = document.getElementById('gift-summary');
+  const giftCodesList = document.getElementById('gift-codes-list');
+  const giftGameSelect = document.getElementById('gift-game');
+  const giftItemSelect = document.getElementById('gift-item');
+  const giftBatchFilter = document.getElementById('gift-batch-filter');
+  const giftStatusFilter = document.getElementById('gift-status-filter');
+  const giftEnabledToggle = document.getElementById('gift-enabled-toggle');
+  const btnGiftRefresh = document.getElementById('btn-gift-refresh');
+  const btnGiftGenerate = document.getElementById('btn-gift-generate');
+  const btnGiftExport = document.getElementById('btn-gift-export');
+  const btnGiftBatchDisable = document.getElementById('btn-gift-batch-disable');
+  const btnGiftCopy = document.getElementById('btn-gift-copy');
+  let giftGamesCache = [];
+  let giftStatus = '';
+
+  function giftEsc(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  function renderGiftGames(games) {
+    if (!giftGameSelect) return;
+    const previo = giftGameSelect.value;
+    giftGameSelect.innerHTML = '<option value="">Elige el juego...</option>' +
+      games.map(g => `<option value="${g.id}">${giftEsc(g.name)}</option>`).join('');
+    if (previo && games.some(g => String(g.id) === String(previo))) {
+      giftGameSelect.value = previo;
+      renderGiftItems(previo);
+    }
+  }
+
+  function renderGiftItems(gameId) {
+    if (!giftItemSelect) return;
+    const game = giftGamesCache.find(g => String(g.id) === String(gameId));
+    if (!game || !game.items.length) {
+      giftItemSelect.innerHTML = '<option value="">Elige primero el juego...</option>';
+      giftItemSelect.disabled = true;
+      return;
+    }
+    const previo = giftItemSelect.value;
+    giftItemSelect.innerHTML = '<option value="">Elige el monto...</option>' +
+      game.items.map(it => `<option value="${it.id}">${giftEsc(it.title)} — $${Number(it.price || 0).toFixed(2)}</option>`).join('');
+    giftItemSelect.disabled = false;
+    if (previo && game.items.some(it => String(it.id) === String(previo))) giftItemSelect.value = previo;
+  }
+
+  function renderGiftSummary(stats) {
+    if (!giftSummary) return;
+    giftSummary.innerHTML = `
+      <span class="ty-pill">🎟️ ${stats.total || 0} generados</span>
+      <span class="ty-pill">📤 ${stats.available || 0} sin usar</span>
+      <span class="ty-pill">✅ ${stats.used || 0} canjeados</span>
+    `;
+  }
+
+  function renderGiftBatches(batches) {
+    if (!giftBatchFilter) return;
+    const previo = giftBatchFilter.value;
+    giftBatchFilter.innerHTML = '<option value="">Todos los lotes</option>' +
+      batches.map(b => `<option value="${giftEsc(b)}">${giftEsc(b)}</option>`).join('');
+    if (previo && batches.includes(previo)) giftBatchFilter.value = previo;
+    if (btnGiftBatchDisable) btnGiftBatchDisable.disabled = !giftBatchFilter.value;
+    if (btnGiftExport) {
+      const lote = giftBatchFilter.value;
+      btnGiftExport.href = '/admin/gift-codes/export' + (lote ? `?batch=${encodeURIComponent(lote)}` : '');
+    }
+  }
+
+  function renderGiftCodes(codes) {
+    if (!giftCodesList) return;
+    if (!codes.length) {
+      giftCodesList.innerHTML = '<div class="empty-state"><p>No hay códigos con ese filtro.</p></div>';
+      return;
+    }
+    giftCodesList.innerHTML = codes.map(c => {
+      let estado;
+      if (c.is_used) {
+        estado = c.delivered
+          ? '<span class="badge approved">Canjeado y entregado</span>'
+          : '<span class="badge pending">Canjeado, entrega pendiente</span>';
+      } else if (!c.active) {
+        estado = '<span class="badge">Desactivado</span>';
+      } else if (c.expired) {
+        estado = '<span class="badge rejected">Vencido</span>';
+      } else {
+        estado = '<span class="badge approved">Sin usar</span>';
+      }
+
+      const meta = [];
+      if (c.prize) meta.push(giftEsc(c.prize));
+      if (c.batch) meta.push(`lote: ${giftEsc(c.batch)}`);
+      if (c.source) meta.push(giftEsc(c.source));
+      if (c.expires_at) meta.push(`vence ${giftEsc(c.expires_at)}`);
+
+      const uso = c.is_used
+        ? `<div class="gift-code-meta">Canjeado ${giftEsc(c.used_at)} por ID ${giftEsc(c.used_player_id)}` +
+          (c.used_zone_id ? ` (zona ${giftEsc(c.used_zone_id)})` : '') +
+          (c.used_nickname ? ` — ${giftEsc(c.used_nickname)}` : '') +
+          (c.order_id ? ` — orden #${c.order_id}` : '') + '</div>'
+        : '';
+
+      const accion = c.is_used ? '' :
+        `<button class="btn gift-toggle-btn" type="button" data-id="${c.id}">${c.active ? 'Desactivar' : 'Reactivar'}</button>`;
+
+      return `
+        <div class="gift-code-row ${c.is_used ? 'is-used' : ''} ${c.active ? '' : 'is-disabled'}">
+          <div>
+            <div class="gift-code-value">${giftEsc(c.code)}</div>
+            <div class="gift-code-meta">${meta.join(' · ')}</div>
+            ${uso}
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            ${estado}
+            ${accion}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    giftCodesList.querySelectorAll('.gift-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          btn.disabled = true;
+          const res = await fetch(`/admin/gift-codes/${btn.dataset.id}/toggle`, { method: 'POST' });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cambiar el código');
+          await fetchGiftCodes();
+          toast(data.active ? 'Código reactivado' : 'Código desactivado');
+        } catch (e) {
+          toast(e.message || 'No se pudo cambiar el código', 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  async function fetchGiftCodes() {
+    if (!giftCodesList) return;
+    const params = new URLSearchParams();
+    if (giftStatus) params.set('status', giftStatus);
+    if (giftBatchFilter && giftBatchFilter.value) params.set('batch', giftBatchFilter.value);
+    try {
+      const res = await fetch('/admin/gift-codes?' + params.toString());
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudieron cargar los códigos');
+      giftGamesCache = Array.isArray(data.games) ? data.games : [];
+      renderGiftGames(giftGamesCache);
+      renderGiftSummary(data.stats || {});
+      renderGiftBatches(data.batches || []);
+      renderGiftCodes(data.codes || []);
+      if (giftEnabledToggle) giftEnabledToggle.checked = !!data.enabled;
+    } catch (error) {
+      giftCodesList.innerHTML = `<div class="empty-state"><p>${giftEsc(error.message || 'No se pudieron cargar los códigos')}</p></div>`;
+      if (giftSummary) giftSummary.innerHTML = '<span class="ty-pill">Sin datos</span>';
+    }
+  }
+
+  if (giftGameSelect) {
+    giftGameSelect.addEventListener('change', () => renderGiftItems(giftGameSelect.value));
+  }
+
+  if (giftBatchFilter) {
+    giftBatchFilter.addEventListener('change', () => {
+      if (btnGiftBatchDisable) btnGiftBatchDisable.disabled = !giftBatchFilter.value;
+      if (btnGiftExport) {
+        const lote = giftBatchFilter.value;
+        btnGiftExport.href = '/admin/gift-codes/export' + (lote ? `?batch=${encodeURIComponent(lote)}` : '');
+      }
+      fetchGiftCodes();
+    });
+  }
+
+  if (giftStatusFilter) {
+    giftStatusFilter.querySelectorAll('.gift-status-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        giftStatus = btn.dataset.status || '';
+        giftStatusFilter.querySelectorAll('.gift-status-btn').forEach(b => b.classList.toggle('primary', b === btn));
+        fetchGiftCodes();
+      });
+    });
+  }
+
+  if (btnGiftRefresh) {
+    btnGiftRefresh.addEventListener('click', async () => {
+      btnGiftRefresh.disabled = true;
+      await fetchGiftCodes();
+      btnGiftRefresh.disabled = false;
+      toast('Códigos actualizados');
+    });
+  }
+
+  if (btnGiftGenerate) {
+    btnGiftGenerate.addEventListener('click', async () => {
+      const itemId = Number(giftItemSelect ? giftItemSelect.value : 0);
+      const quantity = Number(document.getElementById('gift-quantity').value || 0);
+      if (!itemId) { toast('Elige el juego y el monto que va a entregar', 'error'); return; }
+      if (!quantity || quantity < 1) { toast('Escribe cuántos códigos generar', 'error'); return; }
+
+      try {
+        btnGiftGenerate.disabled = true;
+        const res = await fetch('/admin/gift-codes/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            item_id: itemId,
+            quantity,
+            batch: document.getElementById('gift-batch').value || '',
+            source: document.getElementById('gift-source').value || '',
+            expires_at: document.getElementById('gift-expires').value || ''
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudieron generar los códigos');
+
+        const caja = document.getElementById('gift-generated');
+        document.getElementById('gift-generated-title').textContent =
+          `${data.created} códigos para ${data.prize || 'el paquete'}`;
+        document.getElementById('gift-generated-list').value = (data.codes || []).join('\n');
+        if (caja) caja.hidden = false;
+
+        await fetchGiftCodes();
+        toast(`${data.created} códigos generados`);
+      } catch (e) {
+        toast(e.message || 'No se pudieron generar los códigos', 'error');
+      } finally {
+        btnGiftGenerate.disabled = false;
+      }
+    });
+  }
+
+  if (btnGiftCopy) {
+    btnGiftCopy.addEventListener('click', async () => {
+      const texto = document.getElementById('gift-generated-list').value || '';
+      if (!texto) return;
+      try {
+        await navigator.clipboard.writeText(texto);
+        toast('Códigos copiados');
+      } catch (e) {
+        document.getElementById('gift-generated-list').select();
+        toast('Selecciona y copia manualmente', 'error');
+      }
+    });
+  }
+
+  if (btnGiftBatchDisable) {
+    btnGiftBatchDisable.addEventListener('click', async () => {
+      const lote = giftBatchFilter ? giftBatchFilter.value : '';
+      if (!lote) return;
+      if (!confirm(`¿Desactivar todos los códigos sin usar del lote "${lote}"?`)) return;
+      try {
+        btnGiftBatchDisable.disabled = true;
+        const res = await fetch('/admin/gift-codes/batch-disable', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch: lote })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo desactivar el lote');
+        await fetchGiftCodes();
+        toast(`${data.disabled} códigos desactivados`);
+      } catch (e) {
+        toast(e.message || 'No se pudo desactivar el lote', 'error');
+      } finally {
+        btnGiftBatchDisable.disabled = false;
+      }
+    });
+  }
+
+  if (giftEnabledToggle) {
+    giftEnabledToggle.addEventListener('change', async () => {
+      const enabled = giftEnabledToggle.checked;
+      try {
+        const res = await fetch('/admin/gift-codes/toggle-enabled', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar');
+        toast(enabled ? 'Botón de canje visible en la tienda' : 'Botón de canje oculto');
+      } catch (e) {
+        giftEnabledToggle.checked = !enabled;
+        toast(e.message || 'No se pudo guardar', 'error');
+      }
+    });
+  }
+
   // Payments config
   const pmBank = document.getElementById('pm-bank');
   const pmName = document.getElementById('pm-name');
@@ -1451,6 +1743,7 @@ window.fetchPayments = fetchPayments;
     if (target === '#tab-packages') { fetchPackages(); }
     if (target === '#tab-rev-map') { fetchRevMappingData(revStorePackage ? revStorePackage.value : ''); }
     if (target === '#tab-minigames') { refreshMinigames(); }
+    if (target === '#tab-gift-codes') { fetchGiftCodes(); }
     if (target === '#tab-stats') { fetchStatsPackages(); fetchGlobalStatsSummary(); }
     if (target === '#tab-smileone') { fetchSmileOneConnections(); }
     if (target === '#tab-blocked') { fetchBlocked(); }

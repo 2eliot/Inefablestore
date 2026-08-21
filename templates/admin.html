@@ -103,6 +103,80 @@
     color: #f8fafc;
     padding: 10px 12px;
   }
+  #btn-gift-export { text-decoration: none; }
+  .gift-filters {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .gift-status-filter {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .gift-filters select {
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(15, 23, 42, 0.9);
+    color: #f8fafc;
+    padding: 8px 12px;
+  }
+  .gift-codes-list {
+    display: grid;
+    gap: 10px;
+  }
+  .gift-code-row {
+    background: rgba(2, 6, 23, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .gift-code-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #f8fafc;
+  }
+  .gift-code-meta {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 2px;
+  }
+  .gift-code-row.is-used .gift-code-value { color: #94a3b8; text-decoration: line-through; }
+  .gift-code-row.is-disabled { opacity: .6; }
+  .gift-generated {
+    margin-top: 16px;
+    border-top: 1px solid rgba(148, 163, 184, 0.16);
+    padding-top: 14px;
+  }
+  .gift-generated-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    color: #d1fae5;
+  }
+  .gift-generated textarea {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(2, 6, 23, 0.6);
+    color: #f8fafc;
+    padding: 10px 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    letter-spacing: 1px;
+    resize: vertical;
+  }
   .minigame-winner-row .badge {
     display: inline-flex;
     align-items: center;
@@ -117,6 +191,7 @@
       <button class="tab" data-target="#tab-packages" aria-selected="false">Paquetes</button>
       <button class="tab" data-target="#tab-rev-map" aria-selected="false">Mapeo Revendedores</button>
       <button class="tab" data-target="#tab-minigames" aria-selected="false">Minijuegos</button>
+      <button class="tab" data-target="#tab-gift-codes" aria-selected="false">Códigos regalo</button>
       <button class="tab" data-target="#tab-stats" aria-selected="false">Estadísticas</button>
       <button class="tab" data-target="#tab-images" aria-selected="false">Imágenes</button>
       <button class="tab" data-target="#tab-config" aria-selected="false">Configuración</button>
@@ -395,6 +470,108 @@
             <div class="empty-state"><p>Cargando ganadores...</p></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Códigos de regalo -->
+    <div id="tab-gift-codes" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Códigos de regalo</h2>
+        <div class="actions" style="gap:8px;">
+          <label class="pkg-toggle" style="margin-right:4px;">
+            <input id="gift-enabled-toggle" type="checkbox">
+            <span class="pkg-toggle-label">Botón visible en la tienda</span>
+          </label>
+          <button id="btn-gift-refresh" class="btn" type="button">Refrescar</button>
+        </div>
+      </div>
+      <div class="panel-body minigame-grid">
+
+        <div class="minigame-summary" id="gift-summary">
+          <span class="ty-pill">Cargando...</span>
+        </div>
+
+        <!-- Generar lote -->
+        <div class="minigame-card">
+          <h3>Generar códigos</h3>
+          <p style="margin:0 0 12px; color:#94a3b8; font-size:13px;">
+            El paquete que elijas ES lo que recibe el usuario al canjear. Solo aparecen recargas por ID de jugador:
+            un código de regalo no entrega gift cards.
+          </p>
+          <form id="gift-form" class="pkg-create-form" onsubmit="return false;">
+            <div class="pkg-form-grid">
+              <div class="pkg-field">
+                <label for="gift-game">Juego</label>
+                <select id="gift-game">
+                  <option value="">Elige el juego...</option>
+                </select>
+              </div>
+              <div class="pkg-field">
+                <label for="gift-item">Cantidad de recarga que entrega</label>
+                <select id="gift-item" disabled>
+                  <option value="">Elige primero el juego...</option>
+                </select>
+              </div>
+              <div class="pkg-field">
+                <label for="gift-quantity">Cuántos códigos</label>
+                <input id="gift-quantity" type="number" min="1" max="500" value="10">
+              </div>
+              <div class="pkg-field">
+                <label for="gift-batch">Nombre del lote</label>
+                <input id="gift-batch" type="text" maxlength="60" placeholder="Ej: sorteo-tiktok-agosto">
+              </div>
+              <div class="pkg-field">
+                <label for="gift-source">Dónde se reparte</label>
+                <select id="gift-source">
+                  <option value="">Sin especificar</option>
+                  <option value="canal">Canal</option>
+                  <option value="tiktok">TikTok</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+              <div class="pkg-field">
+                <label for="gift-expires">Vence el (opcional)</label>
+                <input id="gift-expires" type="date">
+              </div>
+            </div>
+            <div class="pkg-form-actions">
+              <button id="btn-gift-generate" class="btn primary" type="button">Generar códigos</button>
+            </div>
+          </form>
+          <div id="gift-generated" class="gift-generated" hidden>
+            <div class="gift-generated-head">
+              <strong id="gift-generated-title"></strong>
+              <button id="btn-gift-copy" class="btn" type="button">Copiar todos</button>
+            </div>
+            <textarea id="gift-generated-list" readonly rows="6"></textarea>
+          </div>
+        </div>
+
+        <!-- Lista -->
+        <div class="minigame-card">
+          <div class="minigame-row-head">
+            <h3 style="margin:0;">Códigos</h3>
+            <div class="actions" style="display:flex; gap:8px; flex-wrap:wrap;">
+              <a id="btn-gift-export" class="btn" href="/admin/gift-codes/export">Descargar sin usar (.txt)</a>
+              <button id="btn-gift-batch-disable" class="btn btn-reject" type="button" disabled>Desactivar el lote</button>
+            </div>
+          </div>
+          <div class="gift-filters">
+            <div id="gift-status-filter" class="gift-status-filter">
+              <button class="btn gift-status-btn primary" data-status="" type="button">Todos</button>
+              <button class="btn gift-status-btn" data-status="available" type="button">Sin usar</button>
+              <button class="btn gift-status-btn" data-status="used" type="button">Canjeados</button>
+              <button class="btn gift-status-btn" data-status="disabled" type="button">Desactivados</button>
+            </div>
+            <select id="gift-batch-filter">
+              <option value="">Todos los lotes</option>
+            </select>
+          </div>
+          <div id="gift-codes-list" class="gift-codes-list">
+            <div class="empty-state"><p>Cargando códigos...</p></div>
+          </div>
+        </div>
+
       </div>
     </div>
 

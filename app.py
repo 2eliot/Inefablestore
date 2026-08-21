@@ -12,7 +12,7 @@ import hashlib
 import hmac as _hmac_module
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import datetime, timedelta, timezone
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory, current_app
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory, current_app, Response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1086,6 +1086,11 @@ _ORDER_CLEANUP_INTERVAL_HOURS = float(os.environ.get("ORDER_CLEANUP_INTERVAL_HOU
 
 
 def _calculate_profit_components_for_order(order: 'Order', items_by_id: dict[int, 'GamePackageItem']) -> tuple[float, float]:
+    # Un canje de código de regalo no cobra nada. Sin esto el fallback legacy
+    # (`order.price or it.price`) le contaría el precio de venta como ingreso
+    # y la ganancia saldría inflada por cada código redimido.
+    if str(getattr(order, "method", "") or "").strip().lower() == "gift":
+        return 0.0, 0.0
     use_affiliate = False
     su = None
     if order.special_user_id:
@@ -5583,6 +5588,10 @@ def _minigame_mapping_is_id_game(mapping_obj):
 def _minigame_order_is_eligible(order_obj):
     if not order_obj or not _order_has_auto_recharges(order_obj):
         return False
+    # La ruleta premia compras, no regalos: un canje de código no gasta nada,
+    # así que no debe consumir hitos del ciclo ni optar a premio.
+    if str(getattr(order_obj, "method", "") or "").strip().lower() == "gift":
+        return False
     if not str(order_obj.customer_id or "").strip():
         return False
     mapping = _get_order_auto_mapping(order_obj)
@@ -6333,6 +6342,755 @@ class MinigameWinner(db.Model):
     delivered_at = db.Column(db.DateTime, nullable=True)
 
 
+# ==============================
+# CÓDIGOS DE REGALO
+# ==============================
+# Códigos que se reparten en el canal y en TikTok y se canjean desde el botón
+# flotante de la portada. La entrega no se reinventa: pasa por el MISMO camino
+# que cualquier compra (orden + _dispatch_order_auto_recharges), así el canje
+# queda en Órdenes para auditoría y, si el ítem no tiene recarga automática o
+# el proveedor falla, la orden se queda para que el admin la resuelva a mano
+# en vez de perderse.
+#
+# Es una puerta pública que entrega saldo real, así que el canje se apoya en
+# tres cosas: códigos largos y aleatorios, un límite de intentos por IP y un
+# UPDATE condicional que garantiza que un código no se use dos veces aunque
+# lleguen dos peticiones a la vez.
+
+class GiftCode(db.Model):
+    __tablename__ = "gift_codes"
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(40), unique=True, nullable=False, index=True)
+    store_package_id = db.Column(db.Integer, nullable=False)
+    item_id = db.Column(db.Integer, nullable=False)
+    # Snapshot del premio: las órdenes viejas se borran a los 7 días
+    # (_aggregate_and_cleanup_orders), así que el historial no puede depender
+    # de la orden para saber qué entregó el código.
+    prize_title = db.Column(db.String(300), default="")
+    batch = db.Column(db.String(60), default="")
+    source = db.Column(db.String(30), default="")  # canal | tiktok | otro
+    active = db.Column(db.Boolean, default=True)
+    is_used = db.Column(db.Boolean, default=False, index=True)
+    used_at = db.Column(db.DateTime, nullable=True)
+    used_player_id = db.Column(db.String(120), default="", index=True)
+    used_zone_id = db.Column(db.String(120), default="")
+    used_nickname = db.Column(db.String(200), default="")
+    order_id = db.Column(db.Integer, nullable=True)
+    delivered = db.Column(db.Boolean, default=False)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# Sin 0/O/1/I/L para que nadie se equivoque al copiar un código de un video.
+GIFT_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+GIFT_CODE_BLOCK = 4
+GIFT_CODE_BLOCKS = 3  # 3 bloques de 4 = 12 caracteres útiles
+GIFT_MAX_BATCH_SIZE = 500
+GIFT_ATTEMPT_LIMIT = 12
+GIFT_ATTEMPT_WINDOW_MINUTES = 15
+GIFT_ENABLED_KEY = "gift_redeem_enabled"
+GIFT_RATE_LIMIT_MESSAGE = "Demasiados intentos seguidos. Espera unos minutos antes de volver a probar."
+
+# Contador de intentos en memoria del proceso. No hace falta que sea perfecto
+# ni compartido entre workers: sirve para frenar a quien esté probando códigos
+# en serie, y el uso legítimo no llega ni cerca del tope.
+_gift_attempts = {}
+_gift_attempts_lock = threading.Lock()
+
+
+def _gift_client_ip() -> str:
+    """IP real del cliente detrás de nginx.
+
+    X-Real-IP la pone el proxy con $remote_addr y no es falsificable si nginx
+    la sobrescribe. De X-Forwarded-For se toma el ÚLTIMO valor, que es el que
+    añade el propio nginx ($proxy_add_x_forwarded_for): quedarse con el
+    primero dejaría que cualquiera mandara una IP inventada en cada petición y
+    el límite de intentos no serviría de nada.
+    """
+    real_ip = (request.headers.get("X-Real-IP") or "").strip()
+    if real_ip:
+        return real_ip
+    forwarded = [p.strip() for p in (request.headers.get("X-Forwarded-For") or "").split(",") if p.strip()]
+    if forwarded:
+        return forwarded[-1]
+    return (request.remote_addr or "").strip()
+
+
+def _gift_normalize_code(raw) -> str:
+    """Deja el código como se guarda: mayúsculas, sin guiones ni espacios."""
+    return re.sub(r"[^A-Za-z0-9]", "", str(raw or "")).upper()
+
+
+def _gift_format_code(code: str) -> str:
+    """Presenta el código en bloques de 4: ABCD-EFGH-JKMN."""
+    code = _gift_normalize_code(code)
+    return "-".join(code[i:i + GIFT_CODE_BLOCK] for i in range(0, len(code), GIFT_CODE_BLOCK))
+
+
+def _gift_generate_code() -> str:
+    return "".join(secrets.choice(GIFT_CODE_ALPHABET) for _ in range(GIFT_CODE_BLOCK * GIFT_CODE_BLOCKS))
+
+
+def _gift_fmt_ve(value) -> str:
+    """Fecha en hora de Venezuela. Las columnas se guardan en UTC naive."""
+    if not value:
+        return ""
+    try:
+        return value.replace(tzinfo=timezone.utc).astimezone(VE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return ""
+
+
+def _gift_prune_attempts(now) -> None:
+    corte = now - timedelta(minutes=GIFT_ATTEMPT_WINDOW_MINUTES)
+    for key in [k for k, v in _gift_attempts.items() if v["first"] < corte]:
+        _gift_attempts.pop(key, None)
+
+
+def _gift_register_failed_attempt(ip: str) -> int:
+    """Suma un intento fallido y devuelve cuántos van en la ventana."""
+    if not ip:
+        return 0
+    now = datetime.utcnow()
+    with _gift_attempts_lock:
+        _gift_prune_attempts(now)
+        entry = _gift_attempts.get(ip)
+        if not entry or entry["first"] < now - timedelta(minutes=GIFT_ATTEMPT_WINDOW_MINUTES):
+            entry = {"count": 0, "first": now}
+        entry["count"] += 1
+        _gift_attempts[ip] = entry
+        return entry["count"]
+
+
+def _gift_clear_attempts(ip: str) -> None:
+    if not ip:
+        return
+    with _gift_attempts_lock:
+        _gift_attempts.pop(ip, None)
+
+
+def _gift_is_rate_limited(ip: str) -> bool:
+    if not ip:
+        return False
+    now = datetime.utcnow()
+    with _gift_attempts_lock:
+        _gift_prune_attempts(now)
+        entry = _gift_attempts.get(ip)
+        return bool(entry and entry["count"] >= GIFT_ATTEMPT_LIMIT)
+
+
+def _gift_redeem_enabled() -> bool:
+    return (get_config_value(GIFT_ENABLED_KEY, "true") or "true").strip().lower() not in ("false", "0", "no", "off")
+
+
+def _gift_expiry_from_date(raw_date: str):
+    """'YYYY-MM-DD' → fin de ese día en Venezuela, guardado como UTC naive.
+
+    Comparar contra utcnow() una fecha armada en hora local mataría el código
+    cuatro horas antes de lo que el admin cree.
+    """
+    raw_date = (raw_date or "").strip()
+    if not raw_date:
+        return None
+    parsed = datetime.strptime(raw_date, "%Y-%m-%d")
+    end_ve = parsed.replace(hour=23, minute=59, second=59, tzinfo=VE_TIMEZONE)
+    return end_ve.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _gift_is_expired(gift) -> bool:
+    return bool(gift and gift.expires_at and gift.expires_at < datetime.utcnow())
+
+
+def _gift_eligible_item_query():
+    """Ítems que un código puede entregar: recargas por ID de jugador.
+
+    Las gift cards (direct_to_pin) quedan fuera a propósito: el canje pide un
+    ID de jugador y un PIN no se entrega contra un ID.
+    """
+    return (
+        db.session.query(GamePackageItem, StorePackage)
+        .join(StorePackage, GamePackageItem.store_package_id == StorePackage.id)
+        .filter(
+            GamePackageItem.active == True,
+            StorePackage.active == True,
+            db.func.coalesce(StorePackage.category, "mobile") == "mobile",
+            db.func.coalesce(StorePackage.direct_to_pin, 0) == 0,
+        )
+    )
+
+
+def _gift_item_is_eligible(item_id) -> bool:
+    try:
+        return _gift_eligible_item_query().filter(GamePackageItem.id == int(item_id)).first() is not None
+    except Exception:
+        return False
+
+
+def _gift_create_batch(item_id, quantity, batch="", source="", expires_at=None):
+    """Genera `quantity` códigos para un ítem. Devuelve la lista creada."""
+    item = GamePackageItem.query.get(int(item_id or 0))
+    if not item:
+        raise ValueError("El paquete no existe.")
+    if not _gift_item_is_eligible(item.id):
+        raise ValueError("Ese paquete no sirve para códigos de regalo: elige una recarga por ID de jugador.")
+
+    quantity = int(quantity or 0)
+    if quantity < 1:
+        raise ValueError("La cantidad debe ser al menos 1.")
+    if quantity > GIFT_MAX_BATCH_SIZE:
+        raise ValueError(f"Máximo {GIFT_MAX_BATCH_SIZE} códigos por lote.")
+
+    pkg = StorePackage.query.get(int(item.store_package_id))
+    prize_title = f"{pkg.name} - {item.title}" if pkg else str(item.title or "")
+
+    creados = []
+    for _ in range(quantity):
+        # Reintenta si el azar repite un código ya existente.
+        for _ in range(8):
+            code = _gift_generate_code()
+            if not GiftCode.query.filter_by(code=code).first():
+                break
+        else:
+            db.session.rollback()
+            raise RuntimeError("No se pudieron generar códigos únicos, intenta de nuevo.")
+
+        gift = GiftCode(
+            code=code,
+            store_package_id=int(item.store_package_id),
+            item_id=int(item.id),
+            prize_title=prize_title[:300],
+            batch=(batch or "").strip()[:60],
+            source=(source or "").strip()[:30],
+            expires_at=expires_at,
+        )
+        db.session.add(gift)
+        creados.append(gift)
+
+    db.session.commit()
+    return creados
+
+
+def _gift_find_code(raw_code):
+    code = _gift_normalize_code(raw_code)
+    if not code:
+        return None
+    return GiftCode.query.filter_by(code=code).first()
+
+
+def _gift_describe_problem(gift) -> str:
+    """Motivo por el que un código no sirve, o '' si sí sirve."""
+    if not gift:
+        return "Ese código no existe. Revísalo y vuelve a intentar."
+    if not gift.active:
+        return "Ese código fue desactivado."
+    if gift.is_used:
+        return "Ese código ya fue canjeado."
+    if _gift_is_expired(gift):
+        return "Ese código ya venció."
+    item = GamePackageItem.query.get(int(gift.item_id or 0))
+    if not item or not item.active:
+        return "El premio de ese código ya no está disponible. Escríbenos por soporte."
+    pkg = StorePackage.query.get(int(gift.store_package_id or 0))
+    if not pkg or not pkg.active:
+        return "El premio de ese código ya no está disponible. Escríbenos por soporte."
+    return ""
+
+
+def _gift_can_verify_player(store_package_id) -> bool:
+    """¿/store/verify-player sabe resolver el nick de este juego?"""
+    try:
+        gid = int(store_package_id)
+    except (TypeError, ValueError):
+        return False
+    if os.environ.get("SCRAPE_ENABLED", "true").strip().lower() != "true":
+        return False
+    try:
+        if SmileOneConnection.query.filter_by(store_package_id=gid, active=True).first():
+            return True
+    except Exception:
+        pass
+    for cfg_key in ("active_login_game_id", "bs_package_id", "ml_package_id"):
+        if (get_config_value(cfg_key, "") or "").strip() == str(gid):
+            return True
+    return False
+
+
+def _gift_prize_payload(gift) -> dict:
+    item = GamePackageItem.query.get(int(gift.item_id or 0))
+    pkg = StorePackage.query.get(int(gift.store_package_id or 0))
+    return {
+        "game": pkg.name if pkg else "",
+        "package": item.title if item else "",
+        "subtitle": (item.subtitle or "") if item else "",
+        "image": (pkg.image_path or "") if pkg else "",
+        "store_package_id": int(gift.store_package_id or 0),
+        "requires_zone": _package_effective_requires_zone(gift.store_package_id),
+        "can_verify": _gift_can_verify_player(gift.store_package_id),
+    }
+
+
+def _gift_claim(gift_id, player_id, zone_id="", nickname=""):
+    """Marca el código como usado de forma atómica.
+
+    El UPDATE condicional (is_used = False) es lo que impide que dos peticiones
+    simultáneas con el mismo código entreguen dos recargas: solo una ve filas
+    afectadas. Devuelve el GiftCode ya reservado, o None si alguien se adelantó.
+    """
+    ahora = datetime.utcnow()
+    try:
+        tomado = db.session.query(GiftCode).filter(
+            GiftCode.id == gift_id,
+            GiftCode.is_used == False,
+        ).update(
+            {
+                "is_used": True,
+                "used_at": ahora,
+                "used_player_id": str(player_id or "").strip()[:120],
+                "used_zone_id": str(zone_id or "").strip()[:120],
+                "used_nickname": str(nickname or "").strip()[:200],
+            },
+            synchronize_session=False,
+        )
+        if not tomado:
+            db.session.rollback()
+            return None
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        print(f"[GiftCode] Error reservando código #{gift_id}: {exc}")
+        return None
+    return GiftCode.query.get(gift_id)
+
+
+def _gift_release(gift) -> None:
+    """Devuelve el código al estado sin usar si la entrega no se pudo crear."""
+    if not gift:
+        return
+    try:
+        gift.is_used = False
+        gift.used_at = None
+        gift.used_player_id = ""
+        gift.used_zone_id = ""
+        gift.used_nickname = ""
+        gift.order_id = None
+        gift.delivered = False
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def _gift_redeem(gift, player_id, zone_id="", nickname=""):
+    """Canjea un código ya validado y entrega la recarga.
+
+    Devuelve (ok, mensaje, order).
+    """
+    item = GamePackageItem.query.get(int(gift.item_id or 0))
+    if not item:
+        return False, "El premio de ese código ya no está disponible.", None
+
+    reservado = _gift_claim(gift.id, player_id, zone_id=zone_id, nickname=nickname)
+    if not reservado:
+        return False, "Ese código acaba de ser canjeado.", None
+
+    try:
+        order = Order(
+            status="pending",
+            store_package_id=int(item.store_package_id),
+            item_id=int(item.id),
+            customer_name=(nickname or "").strip()[:200],
+            customer_id=str(player_id or "").strip(),
+            customer_zone=str(zone_id or "").strip(),
+            name=f"Canje {_gift_format_code(gift.code)}",
+            method="gift",
+            currency="USD",
+            amount=0.0,
+            price=0.0,
+            reference=f"CANJE-{uuid.uuid4().hex[:10].upper()}",
+            active=True,
+        )
+        db.session.add(order)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        print(f"[GiftCode] No se pudo crear la orden del canje {gift.code}: {exc}")
+        # No llegó ni a crearse la orden: el código vuelve a estar libre para
+        # que el cliente no se quede sin su premio.
+        _gift_release(reservado)
+        return False, "No se pudo procesar el canje, intenta de nuevo en un momento.", None
+
+    reservado.order_id = order.id
+    db.session.commit()
+
+    # Misma vía que cualquier compra aprobada: si el ítem tiene recarga
+    # automática mapeada sale sola; si no, la orden queda aprobada para que el
+    # admin la entregue a mano.
+    entregado = False
+    try:
+        _try_transition_order_to_approved(order)
+        result = _dispatch_order_auto_recharges(order)
+        summary = (result or {}).get("summary") or {}
+        total_units = int(summary.get("total_units") or 0)
+        entregado = total_units > 0 and int(summary.get("completed_units") or 0) >= total_units
+    except Exception as exc:
+        print(f"[GiftCode] Error entregando el canje {gift.code}: {exc}")
+
+    if entregado:
+        reservado.delivered = True
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        return True, "Listo, tu recarga ya fue enviada.", order
+
+    # La orden quedó registrada pero sin entregar (sin mapeo automático, sin
+    # stock o el proveedor no respondió). El código NO se libera: ya tiene su
+    # orden asociada y el admin la completa igual que cualquier compra.
+    return True, (
+        "Tu canje quedó registrado y lo estamos procesando. Si no llega en unos "
+        "minutos, escríbenos por soporte con tu número de orden."
+    ), order
+
+
+def _gift_serialize_redemption(gift) -> dict:
+    """Lo que ve el cliente en su historial: sin datos internos."""
+    return {
+        "code": _gift_format_code(gift.code),
+        "prize": gift.prize_title or "",
+        "date": _gift_fmt_ve(gift.used_at),
+        "order_id": int(gift.order_id or 0),
+        "delivered": bool(gift.delivered),
+    }
+
+
+# --- Rutas públicas del canje ---
+
+@app.route("/store/gift/config")
+def store_gift_config():
+    """Le dice a la portada si debe pintar el botón flotante."""
+    return jsonify({"ok": True, "enabled": _gift_redeem_enabled()})
+
+
+@app.route("/store/gift/validate", methods=["POST"])
+def store_gift_validate():
+    """Paso 1: comprueba el código y devuelve qué premio trae.
+
+    No entrega nada todavía ni marca el código: solo habilita el paso 2.
+    """
+    if not _gift_redeem_enabled():
+        return jsonify({"ok": False, "error": "El canje de códigos está desactivado."}), 403
+
+    ip = _gift_client_ip()
+    if _gift_is_rate_limited(ip):
+        return jsonify({"ok": False, "error": GIFT_RATE_LIMIT_MESSAGE}), 429
+
+    data = request.get_json(silent=True) or request.form
+    code = _gift_normalize_code(data.get("code"))
+    if not code:
+        return jsonify({"ok": False, "error": "Escribe tu código."}), 400
+
+    gift = _gift_find_code(code)
+    problema = _gift_describe_problem(gift)
+    if problema:
+        _gift_register_failed_attempt(ip)
+        return jsonify({"ok": False, "error": problema}), 404
+
+    # Código bueno: se limpia el contador para no castigar a quien se equivocó
+    # un par de veces antes de dar con el correcto.
+    _gift_clear_attempts(ip)
+
+    return jsonify({
+        "ok": True,
+        "code": _gift_format_code(gift.code),
+        "prize": _gift_prize_payload(gift),
+    })
+
+
+@app.route("/store/gift/redeem", methods=["POST"])
+def store_gift_redeem():
+    """Paso 2: con el ID del jugador, canjea y entrega."""
+    if not _gift_redeem_enabled():
+        return jsonify({"ok": False, "error": "El canje de códigos está desactivado."}), 403
+
+    ip = _gift_client_ip()
+    if _gift_is_rate_limited(ip):
+        return jsonify({"ok": False, "error": GIFT_RATE_LIMIT_MESSAGE}), 429
+
+    data = request.get_json(silent=True) or request.form
+    code = _gift_normalize_code(data.get("code"))
+    player_id = (data.get("player_id") or "").strip()
+    zone_id = (data.get("zone_id") or "").strip()
+    nickname = (data.get("nickname") or "").strip()
+
+    if not code:
+        return jsonify({"ok": False, "error": "Falta el código."}), 400
+    if not player_id:
+        return jsonify({"ok": False, "error": "Escribe tu ID de jugador."}), 400
+    if len(player_id) > 120:
+        return jsonify({"ok": False, "error": "Ese ID no es válido."}), 400
+    if zone_id and not zone_id.isdigit():
+        return jsonify({"ok": False, "error": "La Zona ID debe ser numérica."}), 400
+
+    gift = _gift_find_code(code)
+    problema = _gift_describe_problem(gift)
+    if problema:
+        _gift_register_failed_attempt(ip)
+        return jsonify({"ok": False, "error": problema}), 404
+
+    if _package_effective_requires_zone(gift.store_package_id) and not zone_id:
+        return jsonify({"ok": False, "error": "La Zona ID es requerida para este juego."}), 400
+
+    # Misma lista negra que el checkout público.
+    try:
+        blk = BlockedCustomer.query.filter(
+            db.func.lower(BlockedCustomer.customer_id) == player_id.lower(),
+            BlockedCustomer.active == True,
+        ).first()
+        if blk:
+            return jsonify({"ok": False, "error": "Este ID de jugador está bloqueado. Contacta soporte"}), 403
+    except Exception:
+        pass
+
+    ok, mensaje, order = _gift_redeem(gift, player_id, zone_id=zone_id, nickname=nickname)
+    if not ok:
+        return jsonify({"ok": False, "error": mensaje}), 409
+
+    _gift_clear_attempts(ip)
+    return jsonify({
+        "ok": True,
+        "message": mensaje,
+        "order_id": int(order.id) if order else 0,
+        "delivered": bool(gift.delivered),
+        "prize": _gift_prize_payload(gift),
+    })
+
+
+@app.route("/store/gift/history", methods=["POST"])
+def store_gift_history():
+    """Canjes hechos con un ID de jugador, del más nuevo al más viejo."""
+    ip = _gift_client_ip()
+    if _gift_is_rate_limited(ip):
+        return jsonify({"ok": False, "error": GIFT_RATE_LIMIT_MESSAGE}), 429
+
+    data = request.get_json(silent=True) or request.form
+    player_id = (data.get("player_id") or "").strip()
+    if not player_id:
+        return jsonify({"ok": False, "error": "Escribe tu ID para buscar."}), 400
+    if len(player_id) > 120:
+        return jsonify({"ok": False, "error": "Ese ID no es válido."}), 400
+
+    rows = (
+        GiftCode.query
+        .filter(GiftCode.is_used == True, GiftCode.used_player_id == player_id)
+        .order_by(GiftCode.used_at.desc())
+        .limit(20)
+        .all()
+    )
+    if not rows:
+        # Buscar a ciegas IDs ajenos también cuenta como intento fallido.
+        _gift_register_failed_attempt(ip)
+    return jsonify({
+        "ok": True,
+        "player_id": player_id,
+        "items": [_gift_serialize_redemption(g) for g in rows],
+    })
+
+
+# --- Rutas de administración ---
+
+@app.route("/admin/gift-codes", methods=["GET"])
+def admin_gift_codes_list():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    batch_filter = (request.args.get("batch") or "").strip()
+    status_filter = (request.args.get("status") or "").strip()
+    package_id = (request.args.get("store_package_id") or "").strip()
+
+    query = GiftCode.query
+    if batch_filter:
+        query = query.filter(GiftCode.batch == batch_filter)
+    if status_filter == "used":
+        query = query.filter(GiftCode.is_used == True)
+    elif status_filter == "available":
+        query = query.filter(GiftCode.is_used == False, GiftCode.active == True)
+    elif status_filter == "disabled":
+        query = query.filter(GiftCode.active == False)
+    if package_id.isdigit():
+        query = query.filter(GiftCode.store_package_id == int(package_id))
+
+    codes = query.order_by(GiftCode.created_at.desc(), GiftCode.id.desc()).limit(500).all()
+
+    total = GiftCode.query.count()
+    usados = GiftCode.query.filter(GiftCode.is_used == True).count()
+    disponibles = GiftCode.query.filter(GiftCode.is_used == False, GiftCode.active == True).count()
+
+    lotes = sorted({
+        (row[0] or "").strip()
+        for row in db.session.query(GiftCode.batch).distinct().all()
+        if (row[0] or "").strip()
+    })
+
+    # Cada juego con sus ítems: el ítem ES la recarga que va a entregar el
+    # código, así que se elige juego y después monto.
+    games = {}
+    for item, pkg in _gift_eligible_item_query().order_by(
+        StorePackage.sort_order.asc(), StorePackage.name.asc(), GamePackageItem.price.asc()
+    ).all():
+        entry = games.setdefault(pkg.id, {"id": pkg.id, "name": pkg.name, "items": []})
+        entry["items"].append({"id": item.id, "title": item.title, "price": float(item.price or 0.0)})
+
+    ahora = datetime.utcnow()
+    return jsonify({
+        "ok": True,
+        "enabled": _gift_redeem_enabled(),
+        "stats": {"total": total, "used": usados, "available": disponibles},
+        "batches": lotes,
+        "games": list(games.values()),
+        "codes": [
+            {
+                "id": g.id,
+                "code": _gift_format_code(g.code),
+                "prize": g.prize_title or "",
+                "batch": g.batch or "",
+                "source": g.source or "",
+                "active": bool(g.active),
+                "is_used": bool(g.is_used),
+                "delivered": bool(g.delivered),
+                "expired": bool(g.expires_at and g.expires_at < ahora),
+                "expires_at": _gift_fmt_ve(g.expires_at),
+                "used_at": _gift_fmt_ve(g.used_at),
+                "used_player_id": g.used_player_id or "",
+                "used_zone_id": g.used_zone_id or "",
+                "used_nickname": g.used_nickname or "",
+                "order_id": int(g.order_id or 0),
+                "created_at": _gift_fmt_ve(g.created_at),
+            }
+            for g in codes
+        ],
+    })
+
+
+@app.route("/admin/gift-codes/generate", methods=["POST"])
+def admin_gift_codes_generate():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        expires_at = _gift_expiry_from_date(data.get("expires_at"))
+    except ValueError:
+        return jsonify({"ok": False, "error": "La fecha de vencimiento no es válida."}), 400
+
+    try:
+        creados = _gift_create_batch(
+            data.get("item_id"),
+            data.get("quantity"),
+            batch=data.get("batch") or "",
+            source=data.get("source") or "",
+            expires_at=expires_at,
+        )
+    except (ValueError, RuntimeError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": f"No se pudieron generar los códigos: {exc}"}), 500
+
+    return jsonify({
+        "ok": True,
+        "created": len(creados),
+        "prize": creados[0].prize_title if creados else "",
+        "codes": [_gift_format_code(g.code) for g in creados],
+    })
+
+
+@app.route("/admin/gift-codes/export", methods=["GET"])
+def admin_gift_codes_export():
+    """Descarga los códigos sin usar como texto plano, listos para repartir."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    batch_filter = (request.args.get("batch") or "").strip()
+    query = GiftCode.query.filter(GiftCode.is_used == False, GiftCode.active == True)
+    if batch_filter:
+        query = query.filter(GiftCode.batch == batch_filter)
+    codes = query.order_by(GiftCode.created_at.asc()).all()
+
+    cuerpo = "\n".join(_gift_format_code(g.code) for g in codes)
+    nombre = "codigos-{}.txt".format((batch_filter or "todos").replace(" ", "-"))
+    return Response(
+        cuerpo,
+        mimetype="text/plain; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="{}"'.format(nombre)},
+    )
+
+
+@app.route("/admin/gift-codes/<int:code_id>/toggle", methods=["POST"])
+def admin_gift_codes_toggle(code_id: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    gift = GiftCode.query.get(code_id)
+    if not gift:
+        return jsonify({"ok": False, "error": "Ese código no existe"}), 404
+    if gift.is_used:
+        return jsonify({"ok": False, "error": "Ese código ya fue canjeado, no se puede activar ni desactivar"}), 409
+
+    gift.active = not bool(gift.active)
+    db.session.commit()
+    return jsonify({"ok": True, "id": gift.id, "active": bool(gift.active)})
+
+
+@app.route("/admin/gift-codes/batch-disable", methods=["POST"])
+def admin_gift_codes_batch_disable():
+    """Apaga un lote completo, para cuando un video se filtra o se cancela una
+    campaña. Solo toca los que nadie canjeó todavía."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    data = request.get_json(silent=True) or {}
+    batch = (data.get("batch") or "").strip()
+    if not batch:
+        return jsonify({"ok": False, "error": "Elige un lote"}), 400
+
+    afectados = GiftCode.query.filter(
+        GiftCode.batch == batch,
+        GiftCode.is_used == False,
+    ).update({"active": False}, synchronize_session=False)
+    db.session.commit()
+    return jsonify({"ok": True, "disabled": int(afectados or 0), "batch": batch})
+
+
+@app.route("/admin/gift-codes/toggle-enabled", methods=["POST"])
+def admin_gift_codes_toggle_enabled():
+    """Enciende o apaga el botón flotante de canje en la portada."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled"))
+    set_config_value(GIFT_ENABLED_KEY, "true" if enabled else "false")
+    return jsonify({"ok": True, "enabled": enabled})
+
+
+def _ensure_gift_codes_table_ready():
+    try:
+        from sqlalchemy import text
+
+        db.session.execute(text("SELECT 1 FROM gift_codes LIMIT 1"))
+    except Exception:
+        try:
+            db.session.rollback()
+            db.create_all()
+        except Exception:
+            pass
+
+
 def _ensure_minigame_tables_ready():
     try:
         from sqlalchemy import text
@@ -6476,6 +7234,9 @@ with app.app_context():
             db.session.commit()
         except Exception:
             pass
+        # Ensure gift_codes exists (create_all lo cubre, pero si la tabla
+        # falta en una base vieja el canje se cae entero)
+        _ensure_gift_codes_table_ready()
         # Ensure mini_videos exists
         try:
             db.session.execute(text("SELECT 1 FROM mini_videos LIMIT 1"))
@@ -11964,11 +12725,15 @@ def admin_stats_summary():
         cutoff = get_stats_reset_cutoff()
         approved_orders = Order.query.filter(
             Order.status.in_(["approved", "delivered"]),
+            db.func.coalesce(Order.method, "") != "gift",
             Order.created_at >= cutoff,
         ).all()
     else:
         # Lifetime stats: do not restrict by weekly cutoff so resets don't wipe accumulated totals
-        approved_orders = Order.query.filter(Order.status.in_(["approved", "delivered"])).all()
+        approved_orders = Order.query.filter(
+            Order.status.in_(["approved", "delivered"]),
+            db.func.coalesce(Order.method, "") != "gift",
+        ).all()
     for o in approved_orders:
         try:
             use_affiliate = False
@@ -12225,6 +12990,7 @@ def admin_stats_package(pkg_id: int):
         approved_orders = Order.query.filter(
             Order.store_package_id == pkg_id,
             Order.status.in_(["approved", "delivered"]),
+            db.func.coalesce(Order.method, "") != "gift",
             Order.created_at >= cutoff,
         ).all()
     else:
@@ -12232,6 +12998,7 @@ def admin_stats_package(pkg_id: int):
         approved_orders = Order.query.filter(
             Order.store_package_id == pkg_id,
             Order.status.in_(["approved", "delivered"]),
+            db.func.coalesce(Order.method, "") != "gift",
         ).all()
     for o in approved_orders:
         try:
