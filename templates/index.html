@@ -496,13 +496,11 @@
     </div>
 
     <!-- BOTON FLOTANTE DE CANJE (esquina inferior derecha, separado del footer) -->
-    <button id="gift-fab" onclick="openGiftModal()" type="button" aria-label="Redimir código de regalo"
-            class="fixed right-4 bottom-28 md:right-8 md:bottom-8 z-[45] hidden items-center gap-2 pl-3 pr-4 py-2.5 rounded-full bg-gradient-verde text-[#0c0c0e] font-black text-[11px] uppercase tracking-wider shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 active:scale-95 transition-all-custom">
-        <span class="relative flex items-center justify-center w-5 h-5">
-            <span class="absolute inline-flex w-full h-full rounded-full bg-[#0c0c0e]/25 animate-ping"></span>
-            <i class="fa-solid fa-gift text-sm relative"></i>
-        </span>
-        Redimir
+    <button id="gift-fab" onclick="openGiftModal()" type="button"
+            aria-label="Redimir código de regalo" title="Redimir código de regalo"
+            class="fixed right-4 bottom-28 md:right-8 md:bottom-8 z-[45] hidden w-12 h-12 items-center justify-center rounded-full bg-gradient-verde text-[#0c0c0e] shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 active:scale-95 transition-all-custom">
+        <span class="absolute inset-0 rounded-full bg-emerald-400/40 animate-ping"></span>
+        <i class="fa-solid fa-gift text-lg relative"></i>
     </button>
 
     <!-- MODAL DE CANJE DE CODIGOS DE REGALO -->
