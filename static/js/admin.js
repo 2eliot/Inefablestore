@@ -401,6 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnGiftExport = document.getElementById('btn-gift-export');
   const btnGiftBatchDisable = document.getElementById('btn-gift-batch-disable');
   const btnGiftCopy = document.getElementById('btn-gift-copy');
+  const btnGiftVerifyAll = document.getElementById('btn-gift-verify-all');
   let giftGamesCache = [];
   let giftStatus = '';
 
@@ -484,12 +485,18 @@ document.addEventListener('DOMContentLoaded', () => {
       if (c.source) meta.push(giftEsc(c.source));
       if (c.expires_at) meta.push(`vence ${giftEsc(c.expires_at)}`);
 
-      const uso = c.is_used
-        ? `<div class="gift-code-meta">Canjeado ${giftEsc(c.used_at)} por ID ${giftEsc(c.used_player_id)}` +
-          (c.used_zone_id ? ` (zona ${giftEsc(c.used_zone_id)})` : '') +
-          (c.used_nickname ? ` — ${giftEsc(c.used_nickname)}` : '') +
-          (c.order_id ? ` — orden #${c.order_id}` : '') + '</div>'
-        : '';
+      let uso = '';
+      if (c.is_used) {
+        // El nombre del jugador se resuelve aquí, no en el canje: el scraper
+        // tarda y no tiene por qué frenar a quien está redimiendo.
+        const nick = c.used_nickname
+          ? `<span class="gift-nick">👤 ${giftEsc(c.used_nickname)}</span>`
+          : `<button class="btn gift-nick-btn" type="button" data-id="${c.id}">Ver nombre del ID</button>`;
+        uso = `<div class="gift-code-meta">Canjeado ${giftEsc(c.used_at)} por ID ${giftEsc(c.used_player_id)}` +
+              (c.used_zone_id ? ` (zona ${giftEsc(c.used_zone_id)})` : '') +
+              (c.order_id ? ` — orden #${c.order_id}` : '') + '</div>' +
+              `<div class="gift-code-nick">${nick}</div>`;
+      }
 
       const accion = c.is_used ? '' :
         `<button class="btn gift-toggle-btn" type="button" data-id="${c.id}">${c.active ? 'Desactivar' : 'Reactivar'}</button>`;
@@ -509,6 +516,10 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
     }).join('');
 
+    giftCodesList.querySelectorAll('.gift-nick-btn').forEach(btn => {
+      btn.addEventListener('click', () => verificarNickDeCodigo(btn.dataset.id, btn));
+    });
+
     giftCodesList.querySelectorAll('.gift-toggle-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         try {
@@ -525,6 +536,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     });
+  }
+
+  async function verificarNickDeCodigo(codeId, btn, silencioso) {
+    const etiqueta = btn ? btn.textContent : '';
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = 'Buscando...'; }
+      const res = await fetch(`/admin/gift-codes/${codeId}/verify-nick`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo verificar el ID');
+      if (btn) btn.outerHTML = `<span class="gift-nick">👤 ${giftEsc(data.nick)}</span>`;
+      return data.nick || '';
+    } catch (e) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = etiqueta || 'Ver nombre del ID';
+        btn.title = e.message || '';
+      }
+      if (!silencioso) toast(e.message || 'No se pudo verificar el ID', 'error');
+      return '';
+    }
   }
 
   async function fetchGiftCodes() {
@@ -618,6 +649,25 @@ document.addEventListener('DOMContentLoaded', () => {
       } finally {
         btnGiftGenerate.disabled = false;
       }
+    });
+  }
+
+  if (btnGiftVerifyAll) {
+    // De uno en uno: cada scraper tarda lo suyo y mandarlos todos a la vez
+    // solo consigue que el proveedor corte la conexión.
+    btnGiftVerifyAll.addEventListener('click', async () => {
+      const pendientes = Array.from(giftCodesList.querySelectorAll('.gift-nick-btn'));
+      if (!pendientes.length) { toast('No hay IDs pendientes de verificar'); return; }
+      btnGiftVerifyAll.disabled = true;
+      let encontrados = 0;
+      for (let i = 0; i < pendientes.length; i++) {
+        btnGiftVerifyAll.textContent = `Verificando ${i + 1}/${pendientes.length}...`;
+        if (await verificarNickDeCodigo(pendientes[i].dataset.id, pendientes[i], true)) encontrados++;
+      }
+      btnGiftVerifyAll.textContent = 'Verificar nombres';
+      btnGiftVerifyAll.disabled = false;
+      const sinNombre = pendientes.length - encontrados;
+      toast(`${encontrados} nombres encontrados` + (sinNombre ? `, ${sinNombre} sin resultado` : ''));
     });
   }
 

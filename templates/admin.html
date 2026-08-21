@@ -150,6 +150,20 @@
     color: #94a3b8;
     margin-top: 2px;
   }
+  .gift-code-nick {
+    margin-top: 6px;
+  }
+  .gift-nick {
+    display: inline-block;
+    background: rgba(15, 118, 110, 0.16);
+    color: #d1fae5;
+    border: 1px solid rgba(45, 212, 191, 0.22);
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .gift-nick-btn { padding: 4px 10px; font-size: 12px; }
   .gift-code-row.is-used .gift-code-value { color: #94a3b8; text-decoration: line-through; }
   .gift-code-row.is-disabled { opacity: .6; }
   .gift-generated {
@@ -552,6 +566,7 @@
           <div class="minigame-row-head">
             <h3 style="margin:0;">Códigos</h3>
             <div class="actions" style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button id="btn-gift-verify-all" class="btn" type="button">Verificar nombres</button>
               <a id="btn-gift-export" class="btn" href="/admin/gift-codes/export">Descargar sin usar (.txt)</a>
               <button id="btn-gift-batch-disable" class="btn btn-reject" type="button" disabled>Desactivar el lote</button>
             </div>

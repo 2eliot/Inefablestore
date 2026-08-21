@@ -549,7 +549,7 @@
                         <label for="gift-player-input" class="block text-[11px] font-bold text-gray-300">Tu ID de jugador</label>
                         <input id="gift-player-input" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 123456789"
                                class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
-                        <div id="gift-nick" class="text-[11px] font-semibold" style="display:none"></div>
+                        <p class="text-[10px] text-gray-500">Revisa bien tu ID: la recarga se envía a ese ID y el canje no se puede deshacer.</p>
                     </div>
 
                     <div id="gift-zone-wrap" class="space-y-2" style="display:none">
@@ -1975,8 +1975,6 @@
         // se pide el ID del jugador. Asi el usuario ve que gano antes de escribir
         // nada mas, y el servidor no marca el codigo hasta el segundo paso.
         var validado = null;      // respuesta de /store/gift/validate
-        var verifyTimer = null;
-        var nickVerificado = '';
 
         function el(id) { return document.getElementById(id); }
 
@@ -2048,7 +2046,6 @@
 
         window.giftBackToCode = function () {
             validado = null;
-            nickVerificado = '';
             mostrarPaso('code');
             setError('gift-code-error', '');
             var input = el('gift-code-input');
@@ -2068,7 +2065,6 @@
                 .then(function (data) {
                     if (!data.ok) { setError('gift-code-error', data.error || 'Ese código no sirve.'); return; }
                     validado = data;
-                    nickVerificado = '';
 
                     var premio = data.prize || {};
                     el('gift-prize-game').innerText = premio.game || '';
@@ -2081,7 +2077,6 @@
                     el('gift-zone-wrap').style.display = premio.requires_zone ? '' : 'none';
                     el('gift-player-input').value = '';
                     el('gift-zone-input').value = '';
-                    el('gift-nick').style.display = 'none';
                     setError('gift-player-error', '');
 
                     mostrarPaso('player');
@@ -2092,43 +2087,6 @@
         };
 
         // ============ PASO 2: el ID del jugador ============
-
-        function verificarNick() {
-            if (!validado || !(validado.prize || {}).can_verify) return;
-            var uid = (el('gift-player-input').value || '').trim();
-            var zid = (el('gift-zone-input').value || '').trim();
-            var premio = validado.prize || {};
-            var caja = el('gift-nick');
-
-            nickVerificado = '';
-            if (!uid || uid.length < 5) { caja.style.display = 'none'; return; }
-            if (premio.requires_zone && !zid) { caja.style.display = 'none'; return; }
-
-            caja.style.display = '';
-            caja.className = 'text-[11px] font-semibold text-gray-400';
-            caja.innerText = 'Verificando ID...';
-
-            var url = '/store/verify-player?gid=' + encodeURIComponent(premio.store_package_id) +
-                      '&uid=' + encodeURIComponent(uid) + (zid ? '&zid=' + encodeURIComponent(zid) : '');
-            fetch(url)
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (data && data.ok && data.nick) {
-                        nickVerificado = data.nick;
-                        caja.className = 'text-[11px] font-semibold text-emerald-400';
-                        caja.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + esc(data.nick);
-                    } else {
-                        caja.className = 'text-[11px] font-semibold text-amber-400';
-                        caja.innerText = 'No encontramos ese ID. Revísalo antes de canjear.';
-                    }
-                })
-                .catch(function () { caja.style.display = 'none'; });  // si falla, se canjea igual
-        }
-
-        function programarVerificacion() {
-            if (verifyTimer) clearTimeout(verifyTimer);
-            verifyTimer = setTimeout(verificarNick, 600);
-        }
 
         window.giftRedeem = function () {
             if (!validado) { giftBackToCode(); return; }
@@ -2144,7 +2102,7 @@
             setBusy(btn, true, 'Canjeando...');
 
             postJson('/store/gift/redeem', {
-                code: validado.code, player_id: uid, zone_id: zid, nickname: nickVerificado
+                code: validado.code, player_id: uid, zone_id: zid
             })
                 .then(function (data) {
                     if (!data.ok) { setError('gift-player-error', data.error || 'No se pudo canjear.'); return; }
@@ -2226,14 +2184,10 @@
 
         var playerInput = el('gift-player-input');
         if (playerInput) {
-            playerInput.addEventListener('input', programarVerificacion);
             playerInput.addEventListener('keydown', function (evt) {
                 if (evt.key === 'Enter') { evt.preventDefault(); giftRedeem(); }
             });
         }
-        var zoneInput = el('gift-zone-input');
-        if (zoneInput) zoneInput.addEventListener('input', programarVerificacion);
-
         var historyInput = el('gift-history-input');
         if (historyInput) {
             historyInput.addEventListener('keydown', function (evt) {

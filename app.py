@@ -790,50 +790,51 @@ def _scrape_smileone_generic(conn, uid: str, zid: str = "") -> str:
         return ""
 
 
-@app.route("/store/verify-player")
-def store_verify_player_unified():
-    """Unified player verification — auto-detects scraper from admin config.
-    Frontend calls: GET /store/verify-player?gid=<package_id>&uid=<player_id>[&zid=<zone_id>]
-    Returns: {"ok": true, "nick": "PlayerName", "uid": "123", "cached": false}
+def _resolve_player_nick(gid_raw, uid, zid=""):
+    """Resuelve el nick de un ID con el scraper que corresponda al juego.
+
+    Devuelve (payload, status) con la misma forma que responde
+    /store/verify-player, para que la ruta pública y el panel de admin usen
+    exactamente la misma lógica en vez de dos copias que se van separando.
     """
     scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
     if not scrape_enabled:
-        return jsonify({"ok": False, "error": "Verificacion deshabilitada"}), 403
+        return {"ok": False, "error": "Verificacion deshabilitada"}, 403
 
-    uid = (request.args.get("uid") or "").strip()
-    zid = (request.args.get("zid") or request.args.get("zone") or "").strip()
-    gid_raw = (request.args.get("gid") or "").strip()
+    uid = (uid or "").strip()
+    zid = (zid or "").strip()
+    gid_raw = str(gid_raw or "").strip()
 
     if not uid or not uid.isdigit():
-        return jsonify({"ok": False, "error": "ID invalido"}), 400
+        return {"ok": False, "error": "ID invalido"}, 400
     if not gid_raw or not gid_raw.isdigit():
-        return jsonify({"ok": False, "error": "Juego invalido"}), 400
+        return {"ok": False, "error": "Juego invalido"}, 400
 
     try:
         gid = int(gid_raw)
     except ValueError:
-        return jsonify({"ok": False, "error": "Juego invalido"}), 400
+        return {"ok": False, "error": "Juego invalido"}, 400
 
     # 1) Dynamic SmileOne connections (most flexible — check first)
     so_conn = SmileOneConnection.query.filter_by(store_package_id=gid, active=True).first()
     if so_conn:
         if so_conn.requires_zone and (not zid or not zid.isdigit()):
-            return jsonify({"ok": False, "error": "Zona ID requerida", "requires_zone": True}), 422
+            return {"ok": False, "error": "Zona ID requerida", "requires_zone": True}, 422
         cache_key = f"so_{so_conn.id}:{uid}" + (f":{zid}" if so_conn.requires_zone else "")
         cached = _player_cache_get(cache_key)
         if cached:
             result = {"ok": True, "uid": uid, "nick": cached, "cached": True}
             if so_conn.requires_zone:
                 result["zid"] = zid
-            return jsonify(result)
+            return result, 200
         nick = _scrape_smileone_generic(so_conn, uid, zid)
         if not nick:
-            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+            return {"ok": False, "error": "ID no encontrado"}, 404
         _player_cache_set(cache_key, nick, ttl_seconds=600)
         result = {"ok": True, "uid": uid, "nick": nick, "cached": False}
         if so_conn.requires_zone:
             result["zid"] = zid
-        return jsonify(result)
+        return result, 200
 
     # 2) Legacy config-based verification
     active_login_game_id = (get_config_value("active_login_game_id", "") or "").strip()
@@ -845,43 +846,57 @@ def store_verify_player_unified():
         cache_key = f"ffmania:{uid}"
         cached = _player_cache_get(cache_key)
         if cached:
-            return jsonify({"ok": True, "uid": uid, "nick": cached, "cached": True})
+            return {"ok": True, "uid": uid, "nick": cached, "cached": True}, 200
         try:
             nick = _player_lookup_singleflight(cache_key, lambda: _scrape_ffmania_nick(uid))
         except Exception:
-            return jsonify({"ok": False, "error": "No se pudo verificar el ID"}), 502
+            return {"ok": False, "error": "No se pudo verificar el ID"}, 502
         if not nick:
-            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+            return {"ok": False, "error": "ID no encontrado"}, 404
         _player_cache_set(cache_key, nick, ttl_seconds=600)
-        return jsonify({"ok": True, "uid": uid, "nick": nick, "cached": False})
+        return {"ok": True, "uid": uid, "nick": nick, "cached": False}, 200
 
     # Blood Strike (Smile.One)
     if bs_package_id and bs_package_id == str(gid):
         cache_key = f"bs_smileone:{uid}"
         cached = _player_cache_get(cache_key)
         if cached:
-            return jsonify({"ok": True, "uid": uid, "nick": cached, "cached": True})
+            return {"ok": True, "uid": uid, "nick": cached, "cached": True}, 200
         nick = _scrape_smileone_bloodstrike_nick(uid)
         if not nick:
-            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+            return {"ok": False, "error": "ID no encontrado"}, 404
         _player_cache_set(cache_key, nick, ttl_seconds=600)
-        return jsonify({"ok": True, "uid": uid, "nick": nick, "cached": False})
+        return {"ok": True, "uid": uid, "nick": nick, "cached": False}, 200
 
     # Mobile Legends (Smile.One, requires zone)
     if ml_package_id and ml_package_id == str(gid):
         if not zid or not zid.isdigit():
-            return jsonify({"ok": False, "error": "Zona ID requerida", "requires_zone": True}), 422
+            return {"ok": False, "error": "Zona ID requerida", "requires_zone": True}, 422
         cache_key = f"ml_smileone:{uid}:{zid}"
         cached = _player_cache_get(cache_key)
         if cached:
-            return jsonify({"ok": True, "uid": uid, "nick": cached, "zid": zid, "cached": True})
+            return {"ok": True, "uid": uid, "nick": cached, "zid": zid, "cached": True}, 200
         nick = _scrape_smileone_mobilelegends_nick(uid, zid)
         if not nick:
-            return jsonify({"ok": False, "error": "ID no encontrado"}), 404
+            return {"ok": False, "error": "ID no encontrado"}, 404
         _player_cache_set(cache_key, nick, ttl_seconds=600)
-        return jsonify({"ok": True, "uid": uid, "nick": nick, "zid": zid, "cached": False})
+        return {"ok": True, "uid": uid, "nick": nick, "zid": zid, "cached": False}, 200
 
-    return jsonify({"ok": False, "error": "Verificacion no disponible para este juego"}), 403
+    return {"ok": False, "error": "Verificacion no disponible para este juego"}, 403
+
+
+@app.route("/store/verify-player")
+def store_verify_player_unified():
+    """Unified player verification — auto-detects scraper from admin config.
+    Frontend calls: GET /store/verify-player?gid=<package_id>&uid=<player_id>[&zid=<zone_id>]
+    Returns: {"ok": true, "nick": "PlayerName", "uid": "123", "cached": false}
+    """
+    payload, status = _resolve_player_nick(
+        request.args.get("gid") or "",
+        request.args.get("uid") or "",
+        request.args.get("zid") or request.args.get("zone") or "",
+    )
+    return jsonify(payload), status
 
 
 @app.route("/store/player/verify/smileone")
@@ -6596,25 +6611,6 @@ def _gift_describe_problem(gift) -> str:
     return ""
 
 
-def _gift_can_verify_player(store_package_id) -> bool:
-    """¿/store/verify-player sabe resolver el nick de este juego?"""
-    try:
-        gid = int(store_package_id)
-    except (TypeError, ValueError):
-        return False
-    if os.environ.get("SCRAPE_ENABLED", "true").strip().lower() != "true":
-        return False
-    try:
-        if SmileOneConnection.query.filter_by(store_package_id=gid, active=True).first():
-            return True
-    except Exception:
-        pass
-    for cfg_key in ("active_login_game_id", "bs_package_id", "ml_package_id"):
-        if (get_config_value(cfg_key, "") or "").strip() == str(gid):
-            return True
-    return False
-
-
 def _gift_prize_payload(gift) -> dict:
     item = GamePackageItem.query.get(int(gift.item_id or 0))
     pkg = StorePackage.query.get(int(gift.store_package_id or 0))
@@ -6625,7 +6621,6 @@ def _gift_prize_payload(gift) -> dict:
         "image": (pkg.image_path or "") if pkg else "",
         "store_package_id": int(gift.store_package_id or 0),
         "requires_zone": _package_effective_requires_zone(gift.store_package_id),
-        "can_verify": _gift_can_verify_player(gift.store_package_id),
     }
 
 
@@ -7042,6 +7037,46 @@ def admin_gift_codes_toggle(code_id: int):
     gift.active = not bool(gift.active)
     db.session.commit()
     return jsonify({"ok": True, "id": gift.id, "active": bool(gift.active)})
+
+
+@app.route("/admin/gift-codes/<int:code_id>/verify-nick", methods=["POST"])
+def admin_gift_codes_verify_nick(code_id: int):
+    """Busca el nombre del jugador que canjeó este código.
+
+    Se hace aquí y no en el canje a propósito: el scraper puede tardar varios
+    segundos y no tiene por qué frenar al usuario, que ya escribió su ID. El
+    juego sale del propio código (store_package_id), así que cada uno se
+    consulta con el scraper que le toca — Free Fire, Blood Strike, Mobile
+    Legends o la conexión Smile.One que esté configurada.
+    """
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    gift = GiftCode.query.get(code_id)
+    if not gift:
+        return jsonify({"ok": False, "error": "Ese código no existe"}), 404
+    if not gift.is_used or not (gift.used_player_id or "").strip():
+        return jsonify({"ok": False, "error": "Ese código todavía no se canjeó"}), 409
+
+    payload, status = _resolve_player_nick(
+        gift.store_package_id, gift.used_player_id, gift.used_zone_id or ""
+    )
+    if not payload.get("ok"):
+        return jsonify({
+            "ok": False,
+            "id": gift.id,
+            "error": payload.get("error") or "No se pudo verificar el ID",
+        }), status if status in (403, 404, 422, 502) else 502
+
+    nick = str(payload.get("nick") or "").strip()[:200]
+    if nick and nick != (gift.used_nickname or ""):
+        gift.used_nickname = nick
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    return jsonify({"ok": True, "id": gift.id, "nick": nick})
 
 
 @app.route("/admin/gift-codes/batch-disable", methods=["POST"])
