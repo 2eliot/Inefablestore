@@ -2772,8 +2772,11 @@ window.refreshGallery = refreshGallery;
       try { return Number(n||0).toLocaleString('en-US', { style:'currency', currency:'USD', maximumFractionDigits: 2 }); } catch(_) { return `$${n}`; }
     };
     items.forEach(u => {
-      const card = document.createElement('div');
-      card.className = 'aff-card';
+      // <details> en vez de <div>: la fila se queda cerrada (solo correo y
+      // saldo) y el click del navegador se encarga de desplegar el resto,
+      // sin JS extra para el toggle.
+      const card = document.createElement('details');
+      card.className = 'aff-card aff-row';
       const isMini = (u.kind === 'mini');
       const profStatus = u.status || 'approved';
       const isPending = (profStatus === 'pending');
@@ -2821,29 +2824,32 @@ window.refreshGallery = refreshGallery;
           <button class="btn btn-aff-bonus" data-id="${u.id}" type="button">Dar bono</button>
         </div>` : '';
       card.innerHTML = `
-        <div class="aff-card-head">
-          <div class="aff-card-info">
-            <div class="aff-card-name">${u.name || 'Sin nombre'}</div>
-            ${isMini ? '<span class="aff-status aff-status--mini">Mini influencer</span>' : ''}
+        <summary class="aff-row-summary">
+          <span class="aff-row-badges">
+            ${isMini ? '<span class="aff-status aff-status--mini">Mini</span>' : ''}
             <span class="aff-status ${statusCls}">${statusTxt}</span>
-            ${u.videos_pending ? `<span class="aff-status aff-status--pending">${u.videos_pending} video(s) por revisar</span>` : ''}
+            ${u.videos_pending ? `<span class="aff-status aff-status--pending">${u.videos_pending} video(s)</span>` : ''}
+          </span>
+          <span class="aff-row-email">${u.email || '-'}</span>
+          <span class="aff-row-balance">${fmtUSD(u.balance)}</span>
+        </summary>
+        <div class="aff-row-body">
+          <div class="aff-card-head">
+            <div class="aff-card-info">
+              <div class="aff-card-name">${u.name || 'Sin nombre'}</div>
+            </div>
           </div>
-          <div class="aff-card-balance">${fmtUSD(u.balance)}</div>
-        </div>
-        <div class="aff-card-meta">
-          <div class="aff-meta-item"><span class="aff-meta-label">C\u00f3digo</span><span class="aff-meta-value">${u.code}</span></div>
-          ${u.secondary_code ? `<div class="aff-meta-item"><span class="aff-meta-label">Adicional</span><span class="aff-meta-value">${u.secondary_code}</span></div>` : ''}
-          <div class="aff-meta-item"><span class="aff-meta-label">Email</span><span class="aff-meta-value">${u.email || '-'}</span></div>
-          <div class="aff-meta-item"><span class="aff-meta-label">Alcance</span><span class="aff-meta-value">${scopeTxt}</span></div>
-          <div class="aff-meta-item"><span class="aff-meta-label">Descuento</span><span class="aff-meta-value">${u.discount_percent || 0}%</span></div>
-          <div class="aff-meta-item"><span class="aff-meta-label">Comisi\u00f3n</span><span class="aff-meta-value">${u.commission_percent || 0}%</span></div>
-          ${miniCells}
-        </div>
-        ${reviewBlock}
-        ${rankBlock}
-        ${bonusBlock}
-        <details class="aff-card-edit">
-          <summary class="aff-edit-toggle">Editar</summary>
+          <div class="aff-card-meta">
+            <div class="aff-meta-item"><span class="aff-meta-label">C\u00f3digo</span><span class="aff-meta-value">${u.code}</span></div>
+            ${u.secondary_code ? `<div class="aff-meta-item"><span class="aff-meta-label">Adicional</span><span class="aff-meta-value">${u.secondary_code}</span></div>` : ''}
+            <div class="aff-meta-item"><span class="aff-meta-label">Alcance</span><span class="aff-meta-value">${scopeTxt}</span></div>
+            <div class="aff-meta-item"><span class="aff-meta-label">Descuento</span><span class="aff-meta-value">${u.discount_percent || 0}%</span></div>
+            <div class="aff-meta-item"><span class="aff-meta-label">Comisi\u00f3n</span><span class="aff-meta-value">${u.commission_percent || 0}%</span></div>
+            ${miniCells}
+          </div>
+          ${reviewBlock}
+          ${rankBlock}
+          ${bonusBlock}
           <div class="aff-edit-body">
             <div class="aff-edit-grid">
               <div class="aff-edit-field"><label>Nombre</label><input class="aff-edit-name" type="text" value="${u.name || ''}" /></div>
@@ -2873,7 +2879,7 @@ window.refreshGallery = refreshGallery;
               <button class="btn btn-aff-del" data-id="${u.id}" type="button">Eliminar</button>
             </div>
           </div>
-        </details>
+        </div>
       `;
       affList.appendChild(card);
     });
@@ -2920,6 +2926,8 @@ window.refreshGallery = refreshGallery;
         if (affPkgSelect) affPkgSelect.value = '';
         if (affBalance) affBalance.value = '0';
         if (affActive) affActive.checked = true;
+        const createDetails = btnAffCreate.closest('details.aff-create-card');
+        if (createDetails) createDetails.open = false;
         await fetchAffiliates();
       } catch (e) {
         toast(e.message || 'Error');

@@ -901,6 +901,17 @@ body.theme-admin-dark #tab-orders .order-tile .package-name { color: #e5e7eb !im
   margin-bottom: 16px;
   letter-spacing: -0.2px;
 }
+/* El formulario de creacion vive dentro de un <details>: colapsado por
+   defecto, se abre con este boton en vez de saturar la pantalla. */
+.aff-create-toggle {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.aff-create-toggle::-webkit-details-marker { display: none; }
+.aff-create-toggle::before { content: '▸ '; font-size: 14px; }
+.aff-create-card[open] > .aff-create-toggle::before { content: '▾ '; }
+.aff-create-card:not([open]) > .aff-create-toggle { margin-bottom: 0; }
 .aff-create-form input,
 .aff-create-form select {
   padding: 9px 12px;
@@ -964,15 +975,62 @@ body.theme-admin-dark #tab-orders .order-tile .package-name { color: #e5e7eb !im
   gap: 16px;
   margin-bottom: 24px;
 }
+/* --- Tabla de afiliados: una fila por afiliado, un click la despliega --- */
+.aff-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
 .aff-card {
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  padding: 16px 18px;
   box-shadow: 0 2px 12px rgba(15,23,42,0.06);
   transition: box-shadow 0.2s;
 }
+.aff-row { padding: 0; overflow: hidden; }
 .aff-card:hover { box-shadow: 0 6px 22px rgba(15,23,42,0.1); }
+
+.aff-row-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.aff-row-summary::-webkit-details-marker { display: none; }
+.aff-row-summary::before {
+  content: '▸';
+  font-size: 12px;
+  color: #94a3b8;
+  flex: 0 0 auto;
+}
+.aff-row[open] > .aff-row-summary::before { content: '▾'; }
+.aff-row-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 0 0 auto; }
+.aff-row-email {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aff-row-balance {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 900;
+  color: #10b981;
+  white-space: nowrap;
+}
+.aff-row-body {
+  padding: 14px 18px 18px;
+  border-top: 1px solid #f1f5f9;
+}
 
 .aff-card-head {
   display: flex;
@@ -1283,9 +1341,13 @@ body.theme-admin-dark .orders-search-info { color: #94a3b8; }
   .aff-grid { grid-template-columns: 1fr; }
   .aff-wd-grid { grid-template-columns: 1fr; }
   .aff-create-card { padding: 14px; }
-  .aff-card { padding: 12px; }
+  .aff-card:not(.aff-row) { padding: 12px; }
+  .aff-row-summary { padding: 12px 14px; flex-wrap: wrap; }
+  .aff-row-body { padding: 12px 14px 14px; }
   .aff-card-name { font-size: 15px; }
   .aff-card-balance { font-size: 16px; }
+  .aff-row-email { font-size: 13px; }
+  .aff-row-balance { font-size: 14px; }
   .aff-edit-grid,
   .aff-edit-grid--2,
   .aff-edit-grid--3 { grid-template-columns: 1fr; }
@@ -1309,6 +1371,9 @@ body.theme-admin-dark .aff-card-name { color: #f1f5f9; }
 body.theme-admin-dark .aff-meta-value { color: #e2e8f0; }
 body.theme-admin-dark .aff-meta-label { color: #64748b; }
 body.theme-admin-dark .aff-card-meta { border-color: #1f2937; }
+body.theme-admin-dark .aff-row-summary::before { color: #64748b; }
+body.theme-admin-dark .aff-row-email { color: #f1f5f9; }
+body.theme-admin-dark .aff-row-body { border-top-color: #1f2937; }
 body.theme-admin-dark .aff-edit-toggle { color: #818cf8; }
 body.theme-admin-dark .aff-edit-field label { color: #94a3b8; }
 body.theme-admin-dark .aff-edit-field input,

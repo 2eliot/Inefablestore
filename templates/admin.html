@@ -1147,9 +1147,9 @@
         </div>
       </div>
       <div class="panel-body">
-        <!-- Formulario crear afiliado -->
-        <div class="aff-create-card">
-          <div class="aff-create-title">Nuevo afiliado</div>
+        <!-- Formulario crear afiliado: colapsado, se abre con el boton -->
+        <details class="aff-create-card">
+          <summary class="aff-create-title aff-create-toggle">Nuevo afiliado</summary>
           <form id="aff-form" class="aff-create-form" onsubmit="return false;">
             <div class="aff-form-grid">
               <div class="aff-field">
@@ -1212,10 +1212,10 @@
               <button id="btn-aff-create" class="btn primary" type="button">Crear afiliado</button>
             </div>
           </form>
-        </div>
+        </details>
 
-        <!-- Lista de afiliados -->
-        <div id="aff-list" class="aff-grid"></div>
+        <!-- Lista de afiliados: tabla con correo y saldo, cada fila se despliega con un click -->
+        <div id="aff-list" class="aff-table"></div>
 
         <!-- Retiros -->
         <div class="aff-withdrawals-section">
