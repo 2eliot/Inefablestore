@@ -331,12 +331,6 @@
                     ¿No tienes cuenta?
                     <button onclick="showRegisterForm()" class="text-emerald-400 font-bold hover:underline">Regístrate</button>
                 </p>
-                <div class="pt-3 border-t border-[#222226]">
-                    <button onclick="openMiniModal()" type="button" class="w-full py-2.5 bg-[#0c0c0e] border border-purple-500/40 hover:border-purple-400 text-purple-300 font-black text-[11px] rounded-xl tracking-wider uppercase transition-all active:scale-[0.98] flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-star"></i> Registro de mini influencer
-                    </button>
-                    <p class="text-center text-[10px] text-gray-500 mt-2">Crea contenido y gana con tu propio código</p>
-                </div>
             </div>
         </div>
     </div>
@@ -1966,6 +1960,8 @@
             // Refrescar el ticker con ordenes nuevas cada 60s
             setInterval(loadRecentRecharges, 60000);
             initWaPopup();
+            // Ya no hay boton visible: solo se abre para quien entra por /mini
+            {% if auto_open_mini %}openMiniModal();{% endif %}
         };
     </script>
     <!-- CANJE DE CODIGOS DE REGALO -->

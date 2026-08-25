@@ -7882,6 +7882,23 @@ def mini_register():
         return jsonify({"ok": False, "error": "Ya existe una cuenta con ese email"}), 400
     if email.lower() == (ADMIN_EMAIL or "").lower():
         return jsonify({"ok": False, "error": "Ya existe una cuenta con ese email"}), 400
+    # El link del canal es el identificador de la solicitud: si ya mandaron una
+    # con ese mismo link no se puede volver a enviar, sin importar si quedo
+    # pendiente, ya fue aprobada o incluso si fue rechazada.
+    solicitud_previa = SpecialUser.query.filter(
+        SpecialUser.kind == "mini",
+        db.func.lower(SpecialUser.channel_url) == channel_url.lower(),
+    ).first()
+    if solicitud_previa:
+        estado = solicitud_previa.status or "pending"
+        detalle = {
+            "approved": "ya fue aprobada",
+            "rejected": "fue rechazada",
+        }.get(estado, "esta pendiente de revision")
+        return jsonify({
+            "ok": False,
+            "error": f"Ese link de canal ya tiene una solicitud que {detalle}. No se puede enviar otra con el mismo link.",
+        }), 400
 
     su = SpecialUser(
         name=name,
@@ -8524,13 +8541,24 @@ def store_validate_code():
 
 
 # Routes
-@app.route("/")
-def index():
-    """Public storefront index page with header and configurable logo."""
+def _render_storefront(**extra):
     logo_url = get_config_value("logo_path", "")
     banner_url = get_config_value("mid_banner_path", "")
     site_name = get_config_value("site_name", "InefableStore")
-    return render_template("index.html", logo_url=logo_url, banner_url=banner_url, site_name=site_name)
+    return render_template("index.html", logo_url=logo_url, banner_url=banner_url, site_name=site_name, **extra)
+
+
+@app.route("/")
+def index():
+    """Public storefront index page with header and configurable logo."""
+    return _render_storefront()
+
+
+@app.route("/mini")
+def mini_landing():
+    """Enlace privado para el registro de mini influencer: ya no hay boton en
+    el home, solo se llega abriendo este link directamente."""
+    return _render_storefront(auto_open_mini=True)
 
 @app.route("/terms")
 def terms_page():
