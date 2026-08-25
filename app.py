@@ -363,6 +363,48 @@ def _scrape_ffmania_nick(uid: str) -> str:
     return ""
 
 
+# Timeout de lectura del verify-name de Revendedores: el primer lookup de un ID
+# pasa por el bot con Playwright (~15-45s); los repetidos salen del cache de
+# Revendedores (7 días) en <1s.
+_VERIFY_NAME_TIMEOUT_S = float(os.environ.get("REVENDEDORES_VERIFY_NAME_TIMEOUT_SECONDS", "75"))
+
+
+def _revendedores_verify_name_nick(uid: str) -> str:
+    """Consulta el nick de Free Fire vía la API de Revendedores
+    (POST /api/v1/freefire-id/verify-name, add-on 'API Verif. ID').
+
+    Reemplaza el scraping de FFMania: la fuente ahora es la verificación real
+    contra Hype a través de Revendedores, sin depender del índice/captcha de
+    freefiremania.com.br. Devuelve "" si el ID no existe según Hype; lanza
+    excepción si el servicio no está disponible (para responder 502 sin
+    cachear un negativo falso).
+    """
+    base_url = (os.environ.get("REVENDEDORES_BASE_URL") or os.environ.get("WEBB_URL") or "").strip().rstrip("/")
+    api_key = (os.environ.get("REVENDEDORES_API_KEY") or os.environ.get("WEBB_API_KEY") or "").strip()
+    if not base_url or not api_key:
+        raise RuntimeError("REVENDEDORES_BASE_URL/REVENDEDORES_API_KEY no configurados")
+
+    resp = _requests_lib.post(
+        f"{base_url}/api/v1/freefire-id/verify-name",
+        json={"player_id": str(uid).strip()},
+        headers={"X-API-Key": api_key, "Content-Type": "application/json"},
+        timeout=(5, _VERIFY_NAME_TIMEOUT_S),
+    )
+    if resp.status_code == 404:
+        return ""  # Hype confirmó que el ID no existe
+    if resp.status_code == 200:
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {}
+        if data.get("ok"):
+            return str(data.get("player_name") or "").strip()
+        return ""
+    # 403 (add-on apagado), 429 (rate limit), 5xx (bot caído): servicio no
+    # disponible — que el caller responda 502 sin cachear negativo.
+    raise RuntimeError(f"verify-name HTTP {resp.status_code}: {(resp.text or '')[:200]}")
+
+
 def _smileone_is_valid_username(value: str) -> bool:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     if not text:
@@ -848,20 +890,26 @@ def _resolve_player_nick(gid_raw, uid, zid=""):
     bs_package_id = (get_config_value("bs_package_id", "") or "").strip()
     ml_package_id = (get_config_value("ml_package_id", "") or "").strip()
 
-    # Free Fire (freefiremania.com.br)
+    # Free Fire (API verify-name de Revendedores; antes: freefiremania.com.br)
     if active_login_game_id and active_login_game_id == str(gid):
-        cache_key = f"ffmania:{uid}"
+        cache_key = f"ffid_verify:{uid}"
         cached = _player_cache_get(cache_key)
         if cached:
             return {"ok": True, "uid": uid, "nick": cached, "cached": True}, 200
         try:
-            nick = _player_lookup_singleflight(cache_key, lambda: _scrape_ffmania_nick(uid))
+            # wait_timeout alto: el primer lookup de un ID puede tardar ~40s
+            # (Playwright en el bot); los seguidores concurrentes deben esperar
+            # el resultado real en vez de recibir None y cachear un 404 falso.
+            nick = _player_lookup_singleflight(
+                cache_key,
+                lambda: _revendedores_verify_name_nick(uid),
+                wait_timeout=_VERIFY_NAME_TIMEOUT_S + 10,
+            )
         except Exception:
             return {"ok": False, "error": "No se pudo verificar el ID"}, 502
         if not nick:
-            # Corto a propósito: un "no encontrado" puede ser un ID que
-            # FFMania todavía no indexó o un bloqueo temporal de su lado
-            # (ver _scrape_ffmania_nick), no necesariamente que no exista.
+            # 404 de Hype es autoritativo (a diferencia de FFMania), pero se
+            # cachea corto por si fue una rareza transitoria del bot.
             _player_cache_set(cache_key, nick, ttl_seconds=45)
             return {"ok": False, "error": "ID no encontrado"}, 404
         _player_cache_set(cache_key, nick, ttl_seconds=600)
@@ -974,13 +1022,17 @@ def store_player_verify():
     if not game or not getattr(game, "active", False):
         return jsonify({"ok": False, "error": "Juego no encontrado"}), 404
 
-    cache_key = f"ffmania:{uid}"
+    cache_key = f"ffid_verify:{uid}"
     cached = _player_cache_get(cache_key)
     if cached:
         return jsonify({"ok": True, "uid": uid, "nick": cached, "cached": True})
 
     try:
-        nick = _player_lookup_singleflight(cache_key, lambda: _scrape_ffmania_nick(uid))
+        nick = _player_lookup_singleflight(
+            cache_key,
+            lambda: _revendedores_verify_name_nick(uid),
+            wait_timeout=_VERIFY_NAME_TIMEOUT_S + 10,
+        )
     except Exception:
         return jsonify({"ok": False, "error": "No se pudo verificar el ID"}), 502
 
