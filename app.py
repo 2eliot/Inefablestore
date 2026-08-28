@@ -11581,6 +11581,59 @@ def admin_orders_verify_ubii(oid: int):
     return jsonify({"ok": True, "payment_verify": result, "order_status": o.status})
 
 
+# external_order_id nuestro hacia Revendedores: "INE-{order_id}" o
+# "INE-{order_id}-{index}" (multi-unidad), y "MG-{order_id}-..." para premios.
+_REV_WEBHOOK_EXT_ID_RE = re.compile(r"^(?:INE|MG)-(\d+)(?:-|$)")
+
+
+@app.route("/api/v1/webhook-status", methods=["POST"])
+def revendedores_webhook_status():
+    """Receptor del webhook de la API whitelabel de Revendedores.
+
+    Esta URL ya estaba configurada en la cuenta API pero la ruta no existía
+    (los webhooks llegaban a un 404). Revendedores avisa aquí cuando una
+    orden suya cambia de estado — en particular cuando su reconciliador
+    completa una recarga dinámica que quedó 'procesando'.
+
+    El payload NUNCA decide el resultado (cualquiera podría falsificarlo):
+    solo se usa external_order_id como pista de qué orden re-verificar.
+    _verify_order_processing_units re-consulta /api/v1/order-status con
+    nuestra propia API key bajo el advisory lock por orden — el mismo camino
+    que el botón 'Verificar' del admin y el hilo de auto-verificación.
+    """
+    payload = request.get_json(silent=True) or {}
+    ext_id = str((payload.get("order") or {}).get("external_order_id") or "").strip()
+
+    if not payload.get("event") or not ext_id:
+        return jsonify({"ok": False, "error": "Payload inválido: falta event o external_order_id"}), 400
+
+    match = _REV_WEBHOOK_EXT_ID_RE.match(ext_id)
+    if not match:
+        # 200 igual para que Revendedores no reintente un id que no es nuestro.
+        return jsonify({"ok": True, "warning": "external_order_id no corresponde a esta tienda"})
+
+    order = Order.query.get(int(match.group(1)))
+    if not order:
+        return jsonify({"ok": True, "warning": "order not found"})
+
+    if order.status != "pending":
+        return jsonify({"ok": True, "result": "already_processed", "order_status": order.status})
+
+    try:
+        result = _verify_order_processing_units(order)
+    except Exception as exc:
+        print(f"[RevWebhook] Error verificando orden #{order.id}: {exc}")
+        # No se toca la orden: el hilo de auto-verificación la retomará.
+        return jsonify({"ok": True, "warning": "verification failed, ignored"})
+
+    summary = (result or {}).get("summary") or {}
+    if result.get("ok") and summary.get("processing_units", 0) <= 0:
+        _send_order_completed_email_if_needed(order)
+        print(f"[RevWebhook] Orden #{order.id} resuelta por webhook: estado={order.status}")
+
+    return jsonify({"ok": True, "order_status": order.status})
+
+
 def _verify_order_processing_units(o):
     """Re-consulta contra el proveedor las unidades 'processing' de una orden y
     actualiza su estado/emails. Lógica compartida por el botón 'Verificar' del
