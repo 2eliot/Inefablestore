@@ -266,7 +266,7 @@
             <span class="mini-stat-value" id="mini-commission">$0.00</span>
           </div>
           <div class="mini-stat">
-            <span class="mini-stat-label">Bonos por videos</span>
+            <span class="mini-stat-label" id="mini-bonus-label">{% if mini_videos_enabled %}Bonos por videos{% else %}Bonos recibidos{% endif %}</span>
             <span class="mini-stat-value" id="mini-bonus">$0.00</span>
           </div>
           <div class="mini-stat mini-stat--total">
@@ -356,7 +356,8 @@
       </div>
     </div>
 
-    <div class="user-card" style="margin-top:16px;">
+    {% if mini_videos_enabled %}
+    <div class="user-card" id="mini-videos-card" style="margin-top:16px;">
       <div class="user-header">
         <div class="user-title">Mis videos</div>
         <div class="mini-video-counters muted">
@@ -397,6 +398,7 @@
         <div id="mini-video-list" class="mini-video-list"></div>
       </div>
     </div>
+    {% endif %}
   </div>
   {% endif %}
 </div>

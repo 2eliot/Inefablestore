@@ -1235,11 +1235,22 @@
         <div class="aff-withdrawals-section">
           <div class="aff-withdrawals-header">
             <h3>Tabla de recompensas (mini influencers)</h3>
-            <button id="btn-mini-tiers-save" class="btn primary" type="button">Guardar tabla</button>
+            <div class="aff-vid-header-actions">
+              <label class="pkg-toggle" style="margin-right:4px;">
+                <input id="mini-videos-enabled-toggle" type="checkbox">
+                <span class="pkg-toggle-label">Videos activados</span>
+              </label>
+              <button id="btn-mini-tiers-save" class="btn primary" type="button">Guardar tabla</button>
+            </div>
           </div>
           <p class="tier-help">
             Esto es la referencia que ven los minis en su panel. Al revisar un video se te propone
             el monto del tramo, pero el pago siempre lo confirmas tú.
+          </p>
+          <p class="tier-help">
+            Si apagas "Videos activados", los minis dejan de ver la sección de videos y la tabla de
+            bonos por vistas en su panel, y no pueden enviar videos nuevos. Los que ya enviaron
+            siguen aquí para que los revises.
           </p>
           <div class="tier-editor-grid">
             <div class="tier-editor">

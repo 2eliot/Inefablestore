@@ -1154,6 +1154,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnTierAdd = document.getElementById('btn-tier-add');
   const btnRankAdd = document.getElementById('btn-rank-add');
   const btnTiersSave = document.getElementById('btn-mini-tiers-save');
+  const miniVideosEnabledToggle = document.getElementById('mini-videos-enabled-toggle');
   // Mobile drawer elements
   const adminHamburger = document.getElementById('admin-hamburger');
   const adminDrawer = document.getElementById('admin-drawer');
@@ -2979,6 +2980,7 @@ window.refreshGallery = refreshGallery;
         tierRankRows.innerHTML = '';
         (data.ranks || []).forEach(addRankRow);
       }
+      if (miniVideosEnabledToggle) miniVideosEnabledToggle.checked = data.videos_enabled !== false;
     } catch (e) {
       toast(e.message || 'Error');
     }
@@ -3031,6 +3033,27 @@ window.refreshGallery = refreshGallery;
     } finally {
       if (btnTiersSave) btnTiersSave.disabled = false;
     }
+  }
+
+  if (miniVideosEnabledToggle) {
+    miniVideosEnabledToggle.addEventListener('change', async () => {
+      const enabled = miniVideosEnabledToggle.checked;
+      try {
+        const res = await fetch('/admin/mini/videos/toggle-enabled', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar');
+        toast(enabled
+          ? 'Los minis ya pueden enviar videos'
+          : 'Videos y bonos por vistas ocultos para los minis');
+      } catch (e) {
+        miniVideosEnabledToggle.checked = !enabled;
+        toast(e.message || 'No se pudo guardar', 'error');
+      }
+    });
   }
 
   if (btnTierAdd) btnTierAdd.addEventListener('click', () => addTierRow(null));

@@ -396,6 +396,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnMiniVideoAdd = document.getElementById('btn-mini-video-add');
   const miniVideoAlert = document.getElementById('mini-video-alert');
   const miniVideoList = document.getElementById('mini-video-list');
+  const miniVideosCard = document.getElementById('mini-videos-card');
+  const miniBonusLabel = document.getElementById('mini-bonus-label');
+  // El admin puede apagar el módulo: sin videos ni tabla de bonos por vistas
+  let videosEnabled = true;
 
   const money = (n) => `$${Number(n || 0).toFixed(2)}`;
   const num = (n) => Number(n || 0).toLocaleString('es-VE');
@@ -504,6 +508,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/mini/summary');
       const data = await res.json();
       if (!res.ok || !data.ok) return;
+      videosEnabled = data.videos_enabled !== false;
+      applyVideosEnabled();
       setMiniStatus(data.status);
       renderRanks(data);
       renderTierTable(data.view_tiers);
@@ -525,6 +531,12 @@ document.addEventListener('DOMContentLoaded', () => {
       updateRedeemSummary();
       if (miniViewsCount) miniViewsCount.textContent = `${num(data.views_total)} vistas aprobadas`;
     } catch (_) {}
+  }
+
+  function applyVideosEnabled() {
+    // Con el módulo apagado no queda rastro de videos ni de vistas en el panel
+    if (miniVideosCard) miniVideosCard.hidden = !videosEnabled;
+    if (miniBonusLabel) miniBonusLabel.textContent = videosEnabled ? 'Bonos por videos' : 'Bonos recibidos';
   }
 
   function renderMiniVideos(items) {
@@ -579,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function fetchMiniVideos() {
-    if (!IS_MINI || !miniVideoList) return;
+    if (!IS_MINI || !miniVideoList || !videosEnabled) return;
     try {
       const res = await fetch('/mini/videos');
       const data = await res.json();
@@ -590,7 +602,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function addMiniVideo() {
-    if (!IS_MINI) return;
+    if (!IS_MINI || !videosEnabled) return;
     const url = miniVideoUrl ? miniVideoUrl.value.trim() : '';
     const views = miniVideoViews ? miniVideoViews.value : '';
     if (!url) { miniAlert('Pega el link de tu video', 'error'); return; }
