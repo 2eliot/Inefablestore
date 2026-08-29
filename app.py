@@ -2818,6 +2818,9 @@ def _credit_special_user_bonus(su, amount_usd: float) -> float:
 # ==============================
 CFG_MINI_VIEW_TIERS = "mini_view_tiers"
 CFG_MINI_RANKS = "mini_ranks"
+# Interruptor del modulo de videos: cuando esta apagado el mini no puede enviar
+# videos ni ve la tabla de bonos por vistas en su panel.
+CFG_MINI_VIDEOS_ENABLED = "mini_videos_enabled"
 
 DEFAULT_MINI_VIEW_TIERS = [
     {"min": 1000, "max": 3999, "reward": 0.86},
@@ -2892,6 +2895,12 @@ def _mini_ranks() -> list:
     except Exception:
         pass
     return [dict(r) for r in DEFAULT_MINI_RANKS]
+
+
+def _mini_videos_enabled() -> bool:
+    """Si los minis pueden cargar videos y ver la tabla de bonos por vistas."""
+    raw = (get_config_value(CFG_MINI_VIDEOS_ENABLED, "1") or "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
 
 
 def _tier_for_views(views: int, tiers=None) -> dict:
@@ -7692,6 +7701,7 @@ def mini_tiers_public():
         "ok": True,
         "view_tiers": _mini_view_tiers(),
         "ranks": _mini_ranks(),
+        "videos_enabled": _mini_videos_enabled(),
     })
 
 
@@ -7704,6 +7714,7 @@ def admin_mini_tiers_get():
         "ok": True,
         "view_tiers": _mini_view_tiers(),
         "ranks": _mini_ranks(),
+        "videos_enabled": _mini_videos_enabled(),
         "defaults": {"view_tiers": DEFAULT_MINI_VIEW_TIERS, "ranks": DEFAULT_MINI_RANKS},
     })
 
@@ -7809,6 +7820,21 @@ def admin_mini_videos_list():
         })
         items.append(payload)
     return jsonify({"ok": True, "items": items, "view_tiers": tiers})
+
+
+@app.route("/admin/mini/videos/toggle-enabled", methods=["POST"])
+def admin_mini_videos_toggle_enabled():
+    """Enciende o apaga el modulo de videos en el panel de los minis."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled"))
+    try:
+        set_config_value(CFG_MINI_VIDEOS_ENABLED, "1" if enabled else "0")
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar: {exc}"}), 500
+    return jsonify({"ok": True, "videos_enabled": enabled})
 
 
 @app.route("/admin/mini/videos/<int:v_id>/review", methods=["POST"])
@@ -8039,6 +8065,7 @@ def mini_summary():
         "videos_approved": sum(1 for v in videos if (v.status or "") == "approved"),
         "videos_pending": sum(1 for v in videos if (v.status or "pending") == "pending"),
         "views_total": sum(int(v.views_declared or 0) for v in videos if (v.status or "") == "approved"),
+        "videos_enabled": _mini_videos_enabled(),
     })
 
 
@@ -8272,6 +8299,8 @@ def mini_videos_create():
     su = _current_mini()
     if not su:
         return jsonify({"ok": False, "error": "No autorizado"}), 401
+    if not _mini_videos_enabled():
+        return jsonify({"ok": False, "error": "La carga de videos está desactivada por ahora"}), 403
     if (su.status or "approved") != "approved":
         return jsonify({"ok": False, "error": "Tu perfil todavía no fue aprobado"}), 403
     data = request.get_json(silent=True) or {}
@@ -8637,6 +8666,7 @@ def user_page():
     site_name = get_config_value("site_name", "InefableStore")
     return render_template("user.html", is_admin=is_admin, is_affiliate=is_affiliate,
                            is_mini=is_mini, mini_status=mini_status,
+                           mini_videos_enabled=_mini_videos_enabled(),
                            logo_url=logo_url, site_name=site_name)
 
 @app.route("/admin")
