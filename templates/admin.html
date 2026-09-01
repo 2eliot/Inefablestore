@@ -754,23 +754,63 @@
           </div>
 
           <hr style="margin:24px 0; opacity:0.5;">
-          <h3 style="margin:0 0 12px;">Carrusel principal (3 imágenes)</h3>
+          <h3 style="margin:0 0 12px;">Banners del inicio (hasta 4)</h3>
+          <div style="margin:0 0 12px; color:#64748b; font-size:13px;">
+            Cada banner lleva imagen de fondo (1180×118 escritorio / 720×92 móvil), etiqueta, título y subtítulo.
+            Un banner se muestra si tiene imagen o título.
+          </div>
           <div class="form-row">
-            <label>Hero 1</label>
+            <label>Banner 1</label>
             <div><div id="slot-hero-1"></div><input id="hero-1" type="hidden"></div>
           </div>
           <div class="form-row">
-            <label>Hero 2</label>
+            <label>Textos 1</label>
+            <div style="display:grid; gap:6px;">
+              <input id="banner-1-tag" type="text" placeholder="Etiqueta (ej: PROMOCIÓN ACTIVA)">
+              <input id="banner-1-title" type="text" placeholder="Título (ej: GANA PREMIOS AL RECARGAR)">
+              <input id="banner-1-sub" type="text" placeholder="Subtítulo (ej: Acumula puntos en cada compra)">
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Banner 2</label>
             <div><div id="slot-hero-2"></div><input id="hero-2" type="hidden"></div>
           </div>
           <div class="form-row">
-            <label>Hero 3</label>
+            <label>Textos 2</label>
+            <div style="display:grid; gap:6px;">
+              <input id="banner-2-tag" type="text" placeholder="Etiqueta">
+              <input id="banner-2-title" type="text" placeholder="Título">
+              <input id="banner-2-sub" type="text" placeholder="Subtítulo">
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Banner 3</label>
             <div><div id="slot-hero-3"></div><input id="hero-3" type="hidden"></div>
+          </div>
+          <div class="form-row">
+            <label>Textos 3</label>
+            <div style="display:grid; gap:6px;">
+              <input id="banner-3-tag" type="text" placeholder="Etiqueta">
+              <input id="banner-3-title" type="text" placeholder="Título">
+              <input id="banner-3-sub" type="text" placeholder="Subtítulo">
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Banner 4</label>
+            <div><div id="slot-hero-4"></div><input id="hero-4" type="hidden"></div>
+          </div>
+          <div class="form-row">
+            <label>Textos 4</label>
+            <div style="display:grid; gap:6px;">
+              <input id="banner-4-tag" type="text" placeholder="Etiqueta">
+              <input id="banner-4-title" type="text" placeholder="Título">
+              <input id="banner-4-sub" type="text" placeholder="Subtítulo">
+            </div>
           </div>
           <div class="form-row">
             <label>&nbsp;</label>
             <div>
-              <button id="btn-save-hero" class="btn primary" type="button">Guardar Carrusel</button>
+              <button id="btn-save-hero" class="btn primary" type="button">Guardar Banners</button>
             </div>
           </div>
 

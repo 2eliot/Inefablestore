@@ -28,48 +28,269 @@
     <link rel="shortcut icon" href="{{ url_for('static', filename='561553627_18409264204136226_1099017029378111495_n.ico') }}" type="image/x-icon">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        html { overflow-y: auto; background-color: #0c0c0e; }
-        body { font-family: 'Inter', sans-serif; background-color: #0c0c0e; }
-        .color-dark-bg { background-color: #121214; }
-        .color-card-bg { background-color: #1a1a1e; }
-        .color-border { border-color: #2a2a30; }
-        .bg-gradient-verde {
-            background: linear-gradient(135deg, #4ade80 0%, #22c55e 50%, #16a34a 100%);
-        }
-        .text-neon-verde {
-            color: #4ade80;
-            text-shadow: 0 0 10px rgba(74, 222, 128, 0.2);
-        }
+        *{box-sizing:border-box}
+        html { overflow-y: auto; background-color: #000000; }
+        html,body{margin:0;padding:0;background:#000000;color:#eaeaea;font-family:'Outfit',Helvetica,sans-serif}
+        a{color:#3ee07f;text-decoration:none}
+        a:hover{color:#7af0a6}
+        input,button{font-family:inherit}
+        ::selection{background:#3ee07f;color:#000000}
+        body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:1;background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.07' stroke-width='1.2'%3E%3Cpath d='M40 18 L58 34 L40 62 L22 34 Z'/%3E%3Cpath d='M22 34 L58 34 M40 18 L33 34 L40 62 M40 18 L47 34'/%3E%3Ccircle cx='168' cy='44' r='15'/%3E%3Ccircle cx='168' cy='44' r='9'/%3E%3Cpath d='M232 100 L244 111 L232 130 L220 111 Z'/%3E%3Cpath d='M96 128 L110 141 L96 164 L82 141 Z'/%3E%3Cpath d='M82 141 L110 141'/%3E%3Ccircle cx='36' cy='196' r='13'/%3E%3Ccircle cx='36' cy='196' r='7'/%3E%3Cpath d='M188 178 L200 189 L188 208 L176 189 Z'/%3E%3Ccircle cx='128' cy='226' r='10'/%3E%3Cpath d='M244 214 L252 222 L244 236 L236 222 Z'/%3E%3Cpath d='M8 92 L18 101 L8 118 L-2 101 Z'/%3E%3C/g%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Ccircle cx='168' cy='44' r='7'/%3E%3Ccircle cx='36' cy='196' r='5'/%3E%3Ccircle cx='128' cy='226' r='8'/%3E%3C/g%3E%3C/svg%3E");background-size:260px 260px}
+        @keyframes push{0%{transform:translateY(120%);opacity:0}55%{transform:translateY(-8%);opacity:1}100%{transform:translateY(0);opacity:1}}
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        .transition-all-custom {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        /* Video de fondo (configurable desde el admin) */
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .transition-all-custom { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .bg-gradient-verde { background: linear-gradient(135deg, #4ade80 0%, #22c55e 50%, #16a34a 100%); }
+
+        /* Video/imagen de fondo (configurable desde el admin) */
         body.has-bg-video { background-color: transparent; }
         #bg-video-wrap { position: fixed; inset: 0; z-index: -1; pointer-events: none; display: none; }
         #bg-video-wrap video, #bg-video-wrap img { width: 100%; height: 100%; object-fit: cover; }
-        #bg-video-overlay { position: absolute; inset: 0; background: rgba(12, 12, 14, 0.82); }
-        /* Ticker de recargas recientes */
-        @keyframes ticker-scroll {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
+        #bg-video-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.82); }
+
+        /* ============ BARRA SUPERIOR ============ */
+        .st-topbar{position:sticky;top:0;z-index:50;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #1a1a1a;background:#000000d9;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+        .st-logo{font-family:'Outfit';font-size:22px;letter-spacing:.22em;font-weight:700;white-space:nowrap;flex:none;color:#eaeaea}
+        .st-logo span{color:#3ee07f}
+        .st-logo-img{height:38px;object-fit:contain;display:block}
+        .st-ticker-wrap{flex:1;min-width:0;display:flex;justify-content:center;padding:0 24px}
+        .st-ticker-box{height:30px;overflow:hidden;border:1px solid #1a1a1a;border-radius:8px;background:#0a0a0a;padding:0 14px;display:flex;align-items:center;min-width:340px;justify-content:center}
+        .st-ticker-item{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:11.5px;color:#8a8a8a;animation:push .55s cubic-bezier(.2,.85,.2,1);overflow:hidden}
+        .st-ticker-item .tk-dot{width:5px;height:5px;border-radius:50%;background:#3ee07f;flex:none}
+        .st-ticker-item .tk-user{font-family:ui-monospace,monospace;color:#3ee07f}
+        .st-ticker-item .tk-item{color:#eaeaea;font-weight:600}
+        .st-ticker-item .tk-game{color:#6e6e6e}
+        .st-ticker-item .tk-time{color:#4f4f4f}
+        .st-avatar{width:32px;height:32px;flex:none;border-radius:50%;border:1px solid #2b2b2b;background:transparent;display:flex;align-items:center;justify-content:center;font-size:11px;color:#8a8a8a;cursor:pointer;padding:0;transition:border-color .2s}
+        .st-avatar:hover{border-color:#3ee07f}
+        @media (max-width:859px){
+          .st-topbar{padding:0 14px}
+          .st-logo{font-size:15px;letter-spacing:.14em}
+          .st-logo-img{height:30px}
+          .st-ticker-wrap{padding:0 8px}
+          .st-ticker-box{height:26px;padding:0 8px;max-width:100%;min-width:0;justify-content:flex-start}
+          .st-ticker-item{gap:5px;font-size:9.5px}
+          .st-ticker-item .tk-game{display:none}
+          .st-avatar{width:26px;height:26px}
         }
-        #ticker-track {
-            display: flex;
-            align-items: center;
-            width: max-content;
-            animation: ticker-scroll 40s linear infinite;
+
+        /* ============ RUEDA LATERAL (canje de códigos de regalo) ============ */
+        /* El icono de regalo abre el canje de CÓDIGOS DE REGALO (gift cards / cupones
+           que el admin genera). Los demás sectores quedan libres para futuras acciones. */
+        #fan-wrap{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:45;width:118px;height:208px;overflow:hidden;pointer-events:none;display:none}
+        #fan-disc{position:absolute;left:-1px;top:8px;width:96px;height:192px;border-radius:96px 0 0 96px;border:1px solid #2b2b2b;border-right:none;background:#0a0a0af2;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:transform .35s cubic-bezier(.3,.9,.25,1),opacity .3s;transform:translateX(118px);opacity:0}
+        .fan-line{position:absolute;left:-1px;top:104px;width:96px;height:1px;transform-origin:right center;background:linear-gradient(to left,transparent 0 26px,#2b2b2b 26px,#242424);opacity:0;transition:all .35s}
+        #fan-gift{position:absolute;left:54px;top:141px;width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;border:none;background:none;color:#3ee07f;cursor:pointer;transition:all .3s .12s;transform:scale(.3);opacity:0;pointer-events:none}
+        #fan-tab{position:absolute;z-index:2;right:0;top:50%;transform:translateY(-50%);pointer-events:auto;width:26px;height:52px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid #1f1f1f;border-right:none;border-radius:9px 0 0 9px;background:#0d0d0d;color:#3ee07f;font-size:15px;line-height:1;transition:all .3s}
+        #fan-wrap.open #fan-disc{transform:translateX(0);opacity:1}
+        #fan-wrap.open .fan-line{opacity:1}
+        #fan-wrap.open #fan-gift{transform:scale(1);opacity:1;pointer-events:auto}
+        #fan-wrap.open #fan-tab{right:6px;top:104px;width:34px;height:34px;border:1px solid #2b2b2b;border-radius:50%}
+
+        /* ============ LAYOUT PRINCIPAL ============ */
+        .st-page{position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:14px 24px 20px;display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:28px;align-items:start}
+        .st-main{display:flex;flex-direction:column;gap:22px;min-width:0}
+        @media (max-width:859px){
+          .st-page{padding:12px 14px 20px;grid-template-columns:minmax(0,1fr)}
         }
-        #recharge-ticker:hover #ticker-track { animation-play-state: paused; }
+
+        /* ============ CARRUSEL DE BANNERS (imagen + textos desde el admin) ============ */
+        .st-banner{position:relative;border-radius:12px;overflow:hidden;border:1px solid #1f1f1f;background:#0a0a0a;height:118px}
+        #banner-track{display:flex;height:100%;transition:transform .45s cubic-bezier(.3,.9,.25,1)}
+        .st-slide{flex:0 0 100%;height:100%;cursor:pointer;position:relative;background:repeating-linear-gradient(135deg,#151515 0 10px,#0e0e0e 10px 20px);display:flex;align-items:center;justify-content:space-between;gap:20px;padding:0 48px;background-size:cover;background-position:center;overflow:hidden}
+        .st-slide-shade{position:absolute;inset:0;background:linear-gradient(90deg,#000000cc 0%,#00000066 55%,#00000022 100%);pointer-events:none}
+        .st-slide-copy{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+        .st-slide-tag{font-size:10px;letter-spacing:.18em;color:#3ee07f}
+        .st-slide-title{font-family:'Outfit';font-size:26px;line-height:1.05;font-weight:700;overflow:hidden;text-overflow:ellipsis;color:#eaeaea}
+        .st-slide-sub{font-size:12px;color:#8a8a8a}
+        .st-banner-arrow{position:absolute;top:50%;transform:translateY(-50%);width:26px;height:26px;border-radius:50%;background:#000000b3;border:1px solid #262626;display:flex;align-items:center;justify-content:center;font-size:13px;color:#c4c4c4;cursor:pointer;z-index:2}
+        .st-banner-arrow.prev{left:8px}
+        .st-banner-arrow.next{right:8px}
+        #carousel-dots{position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:6px;z-index:2}
+        #carousel-dots .dot{width:6px;height:6px;border-radius:3px;cursor:pointer;background:#3a3a3a;transition:all .3s}
+        #carousel-dots .dot.on{width:16px;background:#3ee07f}
+        @media (max-width:859px){
+          .st-banner{height:92px}
+          .st-slide{padding:0 40px}
+          .st-slide-title{font-size:19px}
+        }
+
+        /* ============ SECCIONES ============ */
+        .st-section{display:flex;flex-direction:column;gap:14px}
+        .st-headrow{display:flex;flex-direction:column;align-items:center;gap:10px;min-height:30px}
+        @media (max-width:859px){ .st-headrow{gap:8px;min-height:0} }
+        .st-headcenter{display:flex;align-items:center;justify-content:center;gap:14px;width:100%;max-width:100%;min-width:0;overflow:hidden}
+        @media (max-width:859px){ .st-headcenter{gap:8px;overflow:visible} }
+        .st-headline{flex:0 1 70px;min-width:0;height:1px}
+        .st-headline.l{background:linear-gradient(90deg,transparent,#3ee07f4d)}
+        .st-headline.r{background:linear-gradient(90deg,#3ee07f4d,transparent)}
+        .st-headmid{display:flex;align-items:center;gap:10px}
+        .st-headnum{width:20px;height:20px;flex:none;border-radius:6px;background:#3ee07f;color:#020a05;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+        .st-headtitle{font-family:'Outfit';font-size:19px;letter-spacing:.06em;white-space:nowrap}
+        .st-headdiamond{width:6px;height:6px;flex:none;background:#3ee07f;transform:rotate(45deg)}
+        @media (max-width:459px){ .st-headtitle{font-size:16px} }
+
+        /* Tabs Juegos/Tarjetas + redes */
+        .st-tabsrow{width:100%;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap}
+        .st-tabs{display:flex;align-items:center;gap:8px;font-family:'Outfit';font-size:17px;letter-spacing:.04em}
+        .st-tab{position:relative;cursor:pointer;padding:0 6px 0 12px}
+        .st-tab .caret{position:absolute;top:50%;left:-11px;transform:translateY(-50%);font-size:11px;line-height:1;color:#3ee07f;opacity:0;transition:opacity .2s}
+        .st-tab .lbl{color:#6e6e6e;transition:color .2s}
+        .st-tab.on .caret{opacity:1}
+        .st-tab.on .lbl{color:#3ee07f}
+        .st-tabsep{color:#333333}
+        .st-socials{display:flex;align-items:center;gap:6px;flex:none}
+        .st-social{width:26px;height:26px;border-radius:7px;border:1px solid #1f1f1f;background:#0d0d0d;display:flex;align-items:center;justify-content:center;color:#8a8a8a;transition:all .2s}
+        .st-social:hover{border-color:#3ee07f;color:#3ee07f}
+
+        /* Selector de productos */
+        #mosaic-container{display:flex;flex-wrap:nowrap;justify-content:center;align-items:stretch;gap:12px}
+        #mosaic-expanded{display:flex;flex-direction:column;gap:10px}
+        #mosaic-scroll{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
+        .st-prod{cursor:pointer;flex:none;display:flex;flex-direction:column;align-items:center;gap:7px}
+        .st-prod-art{width:84px;height:84px;border-radius:10px;background:repeating-linear-gradient(135deg,#141414 0 6px,#0e0e0e 6px 12px);border:1px solid transparent;display:flex;align-items:center;justify-content:center;font-family:'Outfit';font-size:12px;color:#5a5a5a;transition:border-color .2s,box-shadow .2s;overflow:hidden}
+        .st-prod-art img{width:100%;height:100%;object-fit:contain;background:#0a0a0a}
+        .st-prod.on .st-prod-art{border-color:#3ee07f;box-shadow:0 0 0 3px #3ee07f1f}
+        .st-prod-name{width:92px;font-size:11px;text-align:center;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .st-prod.on .st-prod-name{color:#eaeaea}
+        .st-extra-art{width:84px;height:84px;display:flex;align-items:center;justify-content:center}
+        .st-extra-circle{width:30px;height:30px;border-radius:50%;background:repeating-linear-gradient(135deg,#1a1a1a 0 4px,#111 4px 8px);border:1px solid #262626;display:flex;align-items:center;justify-content:center;font-size:9px;color:#8a8a8a;overflow:hidden}
+        .st-extra-circle img{width:100%;height:100%;object-fit:contain}
+        .st-extra-plus{width:30px;height:30px;border-radius:50%;margin-left:-9px;border:1px solid #3ee07f;color:#3ee07f;background:#000000;display:flex;align-items:center;justify-content:center;font-size:14px}
+        .st-extra-label{width:92px;text-align:center;font-size:11px;color:#8a8a8a}
+        .st-verless{align-self:center;font-size:12px;color:#8a8a8a;cursor:pointer}
+        .st-verless:hover{color:#3ee07f}
+        @media (max-width:859px){
+          #mosaic-container{gap:8px}
+          .st-prod-art,.st-extra-art{width:68px;height:68px}
+          .st-prod-name,.st-extra-label{width:74px;font-size:10px}
+        }
+
+        /* ID de jugador */
+        .st-id-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+        .st-id-row{width:100%;max-width:420px;display:flex;align-items:center;gap:6px;border:1px solid #2b2b2b;background:#0a0a0a;border-radius:10px;padding:5px 5px 5px 14px;transition:border-color .2s,box-shadow .2s}
+        .st-id-row input{flex:1;min-width:0;padding:8px 0;border:none;background:transparent;color:#eaeaea;font-size:14px;outline:none}
+        .st-id-row input::placeholder{color:#6e6e6e}
+        .st-verify-btn{padding:9px 16px;border-radius:7px;border:none;background:#3ee07f;color:#020a05;font-size:12px;font-weight:700;letter-spacing:.04em;cursor:pointer;flex:none}
+        .st-verify-btn:hover{background:#5cf094}
+        .st-verify-btn:disabled{opacity:.6;cursor:wait}
+        .st-id-error{border-color:#ff5d5d !important;box-shadow:0 0 0 3px #ff5d5d22}
+        #verification-status{font-size:12px;text-align:center;color:#3ee07f}
+        #verification-status.err{color:#ff5d5d}
+
+        /* Paquetes */
+        .st-packrow2{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;width:100%}
+        #subcat-tabs{display:flex;gap:6px;white-space:nowrap;flex:none;background:#0d0d0d;border:1px solid #1f1f1f;border-radius:9px;padding:4px}
+        .st-subcat{padding:6px 14px;border-radius:6px;color:#8a8a8a;font-size:12px;cursor:pointer;user-select:none}
+        .st-subcat.on{background:#0f2416;color:#3ee07f;font-weight:600}
+        .st-promo{display:flex;align-items:center;gap:5px;border:1px solid #1f1f1f;background:#0a0a0a;border-radius:8px;padding:3px 3px 3px 10px;width:210px}
+        .st-promo input{flex:1;min-width:0;padding:5px 0;border:none;background:transparent;color:#eaeaea;font-size:12px;outline:none;text-transform:uppercase}
+        .st-promo input::placeholder{color:#6e6e6e;text-transform:none}
+        .st-promo button{flex:none;padding:5px 11px;border:none;border-radius:6px;background:#1a1a1a;color:#3ee07f;font-size:11px;font-weight:600;cursor:pointer;transition:all .2s}
+        .st-promo button:hover{background:#3ee07f;color:#020a05}
+        #discount-status{font-size:11px;text-align:center}
+        #discount-status.ok{color:#3ee07f}
+        #discount-status.err{color:#ff5d5d}
+        #packages-container{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+        .st-pack{cursor:pointer;border-radius:10px;padding:7px 14px;display:flex;align-items:center;justify-content:center;gap:10px;background:#0d0d0d;border:1px solid #1f1f1f;transition:border-color .2s,background .2s;min-width:0}
+        .st-pack.on{background:#0f2416;border-color:#3ee07f}
+        .st-pack-col{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0}
+        .st-pack-amount{font-family:'Outfit';font-size:26px;line-height:1;font-weight:700;color:#ffffff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+        .st-pack-badge{font-size:10px;color:#6e6e6e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+        .st-pack.on .st-pack-badge{color:#3ee07f}
+        .st-pack-gem{width:20px;height:20px;flex:none;background:repeating-linear-gradient(135deg,#1c1c1c 0 4px,#131313 4px 8px);clip-path:polygon(50% 0,100% 38%,50% 100%,0 38%);opacity:.7}
+        .st-pack.on .st-pack-gem{opacity:1}
+        .st-pack-icon{width:20px;height:20px;flex:none;object-fit:contain}
+        @media (max-width:859px){
+          #packages-container{grid-template-columns:repeat(2,minmax(0,1fr))}
+          .st-pack-amount{font-size:22px}
+        }
+
+        /* CTA inline (solo móvil) */
+        #inline-cta{display:none;justify-content:center;margin-top:4px}
+        #inline-cta button{width:100%;max-width:320px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border:none;border-radius:10px;background:#3ee07f;color:#020a05;cursor:pointer}
+        #inline-cta .cta-label{display:flex;flex-direction:column;align-items:flex-start;gap:0}
+        #inline-cta .cta-total-tag{font-size:9px;letter-spacing:.12em;opacity:.72}
+        #inline-cta .cta-total{font-family:'Outfit';font-size:22px;font-weight:700;line-height:1}
+        #inline-cta .cta-next{font-size:13px;font-weight:700;letter-spacing:.05em}
+        @media (max-width:859px){ #inline-cta{display:flex} }
+
+        /* Resumen (escritorio) */
+        .st-summary{position:sticky;top:70px;display:flex;flex-direction:column;gap:14px;border:1px solid #1f1f1f;background:#0a0a0a;border-radius:16px;padding:20px}
+        @media (max-width:859px){ .st-summary{display:none} }
+        .st-summary-head{display:flex;align-items:center;gap:8px}
+        .st-summary-bar{width:3px;height:16px;background:#3ee07f}
+        .st-summary-title{font-family:'Outfit';font-size:19px;letter-spacing:.08em}
+        .st-summary-title span{color:#3ee07f}
+        .st-summary-item{display:flex;flex-direction:column;gap:12px;padding-bottom:14px;border-bottom:1px dashed #1f1f1f}
+        .st-summary-prod{display:flex;gap:12px;align-items:center}
+        #summary-game-badge{width:44px;height:44px;border-radius:9px;background:repeating-linear-gradient(135deg,#141414 0 6px,#0e0e0e 6px 12px);flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#8a8a8a;overflow:hidden}
+        #summary-game-badge img{width:100%;height:100%;object-fit:contain}
+        .st-summary-prodinfo{flex:1;min-width:0}
+        #summary-item-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        #summary-game-name{font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .st-qty{display:flex;align-items:center;gap:8px;border:1px solid #2b2b2b;border-radius:8px;padding:4px 8px;flex:none}
+        .st-qty .q-btn{cursor:pointer;font-size:14px;user-select:none;line-height:1}
+        .st-qty .q-minus{color:#8a8a8a}
+        .st-qty .q-plus{color:#3ee07f}
+        #summary-quantity-val{font-size:13px;min-width:14px;text-align:center}
+        .st-summary-idrow{display:flex;justify-content:space-between;font-size:13px;color:#8a8a8a}
+        .st-summary-idrow span:last-child{color:#eaeaea;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .st-summary-rows{display:flex;flex-direction:column;gap:8px;font-size:13px}
+        .st-summary-row{display:flex;justify-content:space-between;color:#8a8a8a}
+        .st-summary-row .val{color:#eaeaea}
+        .st-summary-row .val.disc{color:#3ee07f}
+        .st-summary-total{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;padding-top:12px;border-top:1px solid #1f1f1f}
+        .st-summary-total .tag{font-size:12px;letter-spacing:.1em;color:#8a8a8a}
+        #summary-total-bs{font-family:'Outfit';font-size:28px;font-weight:700;color:#3ee07f}
+        #summary-total-usd{font-size:11px;color:#8a8a8a;font-weight:400}
+        .st-next-btn{margin-top:4px;padding:15px;border:none;border-radius:10px;background:#3ee07f;color:#020a05;font-size:15px;font-weight:700;letter-spacing:.06em;cursor:pointer}
+        .st-next-btn:hover{background:#5cf094}
+        .st-summary-note{font-size:11px;color:#6e6e6e;text-align:center}
+
+        /* Barra flotante móvil */
+        #mobile-checkout-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:none;flex-direction:column;gap:0;padding:10px 14px calc(12px + env(safe-area-inset-bottom));background:#000000f2;border-top:1px solid #1f1f1f;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+        body.has-mob-bar #mobile-checkout-bar{display:flex;animation:push .35s cubic-bezier(.2,.85,.2,1)}
+        @media (min-width:860px){ body.has-mob-bar #mobile-checkout-bar{display:none} }
+        .st-mob-row{display:flex;align-items:center;gap:12px}
+        #mob-badge{width:22px;height:22px;flex:none;background:repeating-linear-gradient(135deg,#1c1c1c 0 4px,#131313 4px 8px);clip-path:polygon(50% 0,100% 38%,50% 100%,0 38%)}
+        .st-mob-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+        .st-mob-line{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
+        #mob-item-name{font-size:14px;font-weight:600}
+        #mob-item-badge{font-size:11px;color:#8a8a8a}
+        #mob-price{font-size:13px;font-weight:600;color:#3ee07f}
+        #mob-game-name{font-size:11px;color:#6e6e6e;overflow:hidden;text-overflow:ellipsis}
+        .st-mob-qty{flex:none;display:flex;align-items:center;gap:12px;border:1px solid #2b2b2b;border-radius:9px;padding:7px 14px}
+        .st-mob-qty .q-btn{cursor:pointer;font-size:17px;line-height:1;user-select:none}
+        .st-mob-qty .q-minus{color:#8a8a8a}
+        .st-mob-qty .q-plus{color:#3ee07f}
+        #mob-qty{font-size:14px;min-width:16px;text-align:center}
+        .st-mob-go{flex:none;width:38px;height:38px;display:flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:9px;background:#3ee07f;color:#020a05;font-size:17px;font-weight:700;cursor:pointer}
+
+        /* ============ FOOTER ============ */
+        .st-footer{position:relative;z-index:1;border-top:1px solid #1a1a1a;background:#050505;padding:36px 24px 22px}
+        body.has-mob-bar .st-footer{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+        @media (min-width:860px){ body.has-mob-bar .st-footer{padding-bottom:22px} }
+        @media (max-width:859px){ .st-footer{padding:30px 18px 22px} }
+        .st-footer-inner{max-width:760px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:18px}
+        .st-footer-desc{font-size:14px;line-height:1.6;color:#c4c4c4;text-align:center;max-width:460px;text-wrap:pretty}
+        .st-footer-chips{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;width:100%}
+        .st-chip{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:999px;background:#0f2416;color:#3ee07f;font-size:12px;font-weight:600;white-space:nowrap;flex:none}
+        .st-footer-div{width:100%;height:1px;background:#161616;margin:6px 0;flex:none}
+        .st-footer-contact{display:flex;flex-direction:column;align-items:center;gap:12px}
+        .st-footer-contact-title{font-size:12px;letter-spacing:.14em;font-weight:700;color:#eaeaea}
+        .st-footer-mail{display:flex;align-items:center;gap:8px;font-size:15px;color:#eaeaea}
+        .st-footer-wa{display:flex;align-items:center;gap:10px;padding:13px 26px;border-radius:10px;border:1px solid #3ee07f;background:#0b1a11;color:#3ee07f;font-size:14px;font-weight:700;letter-spacing:.04em}
+        .st-footer-wa:hover{background:#0f2416;color:#3ee07f}
+        .st-footer-bottom{width:100%;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;font-size:12px;color:#6e6e6e}
+        .st-footer-terms{color:#8a8a8a;text-decoration:underline}
     </style>
 </head>
-<body class="text-gray-100 flex flex-col min-h-screen">
+<body class="text-gray-100">
 
     <!-- FONDO DE PAGINA: video en bucle o imagen (se configura en el admin) -->
     <div id="bg-video-wrap" aria-hidden="true">
@@ -78,247 +299,270 @@
         <div id="bg-video-overlay"></div>
     </div>
 
-    <!-- HEADER -->
-    <header class="sticky top-0 z-50 bg-[#0c0c0e]/95 backdrop-blur-md border-b border-[#222226] px-4 py-3">
-        <div class="max-w-md md:max-w-2xl mx-auto flex items-center justify-center gap-3">
+    <!-- BARRA SUPERIOR: logo · ticker · sesión -->
+    <header class="st-topbar">
+        <div style="display:flex;align-items:center;gap:28px;min-width:0">
             {% if logo_url %}
-            <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="h-10 object-contain">
+            <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="st-logo-img">
             {% else %}
-            <h1 class="text-xl md:text-2xl font-black tracking-widest text-white flex items-center gap-1.5">
-                INEFABLE <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 font-extrabold">STORE</span>
-            </h1>
+            <div class="st-logo">INEFABL<span>E</span></div>
             {% endif %}
-            <!-- BOTON DE SESION (pegado al logo, ambos centrados) -->
-            <button onclick="openLoginModal()" title="Iniciar Sesión" id="header-login-btn" class="flex items-center justify-center w-8 h-8 rounded-full bg-[#1a1a1e] border border-[#2a2a2e] hover:border-emerald-500/50 hover:bg-[#222226] transition-all duration-200 active:scale-95 flex-shrink-0">
-                <svg id="header-login-icon" class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        </div>
+        <div class="st-ticker-wrap">
+            <div id="recharge-ticker" class="st-ticker-box" style="display:none">
+                <div id="ticker-track"></div>
+            </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+            <button onclick="openLoginModal()" title="Iniciar Sesión" id="header-login-btn" class="st-avatar">
+                <svg id="header-login-icon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                 </svg>
             </button>
         </div>
     </header>
 
-    <!-- TICKER DE RECARGAS RECIENTES (juegos automaticos) -->
-    <div id="recharge-ticker" class="w-full bg-[#121214] border-b border-[#1a1a1e] overflow-hidden" style="display:none">
-        <div class="py-1.5 overflow-hidden">
-            <div id="ticker-track"></div>
+    <!-- RUEDA LATERAL: el regalo abre el canje de códigos (solo si está activo en el admin) -->
+    <div id="fan-wrap" aria-label="Canje de códigos de regalo">
+        <div id="fan-disc"></div>
+        <div class="fan-line" style="transform:rotate(90deg) scaleX(var(--fs,0))"></div>
+        <div class="fan-line" style="transform:rotate(45deg) scaleX(var(--fs,0))"></div>
+        <div class="fan-line" style="transform:rotate(0deg) scaleX(var(--fs,0))"></div>
+        <div class="fan-line" style="transform:rotate(-45deg) scaleX(var(--fs,0))"></div>
+        <div class="fan-line" style="transform:rotate(-90deg) scaleX(var(--fs,0))"></div>
+        <button id="fan-gift" onclick="fanOpenGift()" type="button" aria-label="Redimir código de regalo" title="Redimir código de regalo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="10" width="17" height="10.5" rx="1.5"></rect><rect x="2.5" y="6.5" width="19" height="3.5" rx="1"></rect><path d="M12 6.5v14"></path></svg>
+        </button>
+        <button id="fan-tab" onclick="toggleFan()" type="button" aria-label="Abrir acciones rápidas">‹</button>
+    </div>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <div class="st-page">
+        <div class="st-main">
+
+            <!-- CARRUSEL DE BANNERS (imagen, etiqueta, título y subtítulo desde el admin) -->
+            <section class="st-banner">
+                <div id="banner-track">
+                    <div class="st-slide" style="justify-content:center">
+                        <div class="st-slide-copy" style="align-items:center">
+                            <div class="st-slide-sub">Cargando promociones...</div>
+                        </div>
+                    </div>
+                </div>
+                <div onclick="prevSlide()" class="st-banner-arrow prev">‹</div>
+                <div onclick="nextSlide()" class="st-banner-arrow next">›</div>
+                <div id="carousel-dots"></div>
+            </section>
+
+            <!-- 1 · SELECCIONA EL PRODUCTO -->
+            <section class="st-section">
+                <div class="st-headrow">
+                    <div class="st-headcenter">
+                        <div class="st-headline l"></div>
+                        <div class="st-headmid">
+                            <div class="st-headnum">1</div>
+                            <div class="st-headtitle">SELECCIONA EL PRODUCTO</div>
+                            <div class="st-headdiamond"></div>
+                        </div>
+                        <div class="st-headline r"></div>
+                    </div>
+                    <div class="st-tabsrow">
+                        <div class="st-tabs">
+                            <div id="tab-juegos" class="st-tab on" onclick="setCategory('mobile')">
+                                <div class="caret">▸</div>
+                                <div class="lbl">Juegos</div>
+                            </div>
+                            <div class="st-tabsep">/</div>
+                            <div id="tab-tarjetas" class="st-tab" onclick="setCategory('gift')">
+                                <div class="caret">▸</div>
+                                <div class="lbl">Tarjetas</div>
+                            </div>
+                        </div>
+                        <div class="st-socials">
+                            <a href="https://www.facebook.com/InefablestoreR/" target="_blank" rel="noopener" class="st-social" aria-label="Facebook">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 22v-9h3l.5-3.5h-3.5V7.3c0-1 .3-1.7 1.7-1.7H17V2.4c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v2.7H7V13h3v9h3.5z"></path></svg>
+                            </a>
+                            <a href="https://www.instagram.com/inefable_store_12/" target="_blank" rel="noopener" class="st-social" aria-label="Instagram">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none"></circle></svg>
+                            </a>
+                            <a href="https://www.tiktok.com/@inefablestore" target="_blank" rel="noopener" class="st-social" aria-label="TikTok">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M16.6 5.8a4.8 4.8 0 0 1-1.2-3.2h-3v13a2.7 2.7 0 1 1-1.9-2.6V9.9a5.8 5.8 0 1 0 4.9 5.7V9.4a7.9 7.9 0 0 0 4.6 1.5v-3a4.8 4.8 0 0 1-3.4-2.1z"></path></svg>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div id="mosaic-container"></div>
+                <div id="mosaic-expanded" style="display:none">
+                    <div id="mosaic-scroll"></div>
+                    <div class="st-verless" onclick="collapseProducts()">Ver menos ▴</div>
+                </div>
+            </section>
+
+            <!-- 2 · ID DE JUGADOR (oculto en Tarjetas / gift cards) -->
+            <section class="st-section" id="verification-section">
+                <div class="st-headcenter">
+                    <div class="st-headline l"></div>
+                    <div class="st-headmid">
+                        <div class="st-headnum">2</div>
+                        <div class="st-headtitle">ID DE JUGADOR</div>
+                        <div class="st-headdiamond"></div>
+                    </div>
+                    <div class="st-headline r"></div>
+                </div>
+                <div class="st-id-wrap">
+                    <div class="st-id-row" id="id-row">
+                        <input type="text" id="id-verification-input" placeholder="Ingresa tu ID de jugador" inputmode="numeric" autocomplete="off">
+                        <button onclick="verifyId()" id="btn-verify-id" class="st-verify-btn" type="button">VERIFICAR</button>
+                    </div>
+                    <div class="st-id-row" id="zone-id-row" style="display:none">
+                        <input type="text" id="zone-verification-input" placeholder="Ingresa tu Zone ID (ej: 1234)" inputmode="numeric" autocomplete="off">
+                    </div>
+                    <div id="verification-status" style="display:none"></div>
+                </div>
+            </section>
+
+            <!-- 3 · ELIGE EL PAQUETE -->
+            <section class="st-section">
+                <div class="st-headrow">
+                    <div class="st-headcenter">
+                        <div class="st-headline l"></div>
+                        <div class="st-headmid">
+                            <div class="st-headnum">3</div>
+                            <div class="st-headtitle">ELIGE EL PAQUETE</div>
+                            <div class="st-headdiamond"></div>
+                        </div>
+                        <div class="st-headline r"></div>
+                    </div>
+                    <div class="st-packrow2">
+                        <div id="subcat-tabs" style="display:none">
+                            <div id="subcat-tab-a" class="st-subcat on" onclick="selectSubcat('a')">Diamantes</div>
+                            <div id="subcat-tab-b" class="st-subcat" onclick="selectSubcat('b')">Tarjetas</div>
+                        </div>
+                        <div class="st-promo">
+                            <input type="text" id="discount-code-input" placeholder="Código de descuento" autocomplete="off">
+                            <button onclick="applyDiscountCode()" id="btn-discount" type="button">Aplicar</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="packages-container"></div>
+                <div id="discount-status" style="display:none"></div>
+                <div id="inline-cta">
+                    <button onclick="goToCheckout()" type="button">
+                        <span class="cta-label">
+                            <span class="cta-total-tag">TOTAL</span>
+                            <span class="cta-total" id="inline-total">--</span>
+                        </span>
+                        <span class="cta-next">SIGUIENTE ➤</span>
+                    </button>
+                </div>
+            </section>
+
+        </div>
+
+        <!-- RESUMEN DE VENTA (escritorio) -->
+        <aside class="st-summary">
+            <div class="st-summary-head">
+                <div class="st-summary-bar"></div>
+                <div class="st-summary-title">RESUMEN DE <span>VENTA</span></div>
+            </div>
+            <div class="st-summary-item">
+                <div class="st-summary-prod">
+                    <div id="summary-game-badge">---</div>
+                    <div class="st-summary-prodinfo">
+                        <div id="summary-item-name">---</div>
+                        <div id="summary-game-name">---</div>
+                    </div>
+                    <div class="st-qty">
+                        <div class="q-btn q-minus" onclick="changeQuantity(-1)">−</div>
+                        <div id="summary-quantity-val">1</div>
+                        <div class="q-btn q-plus" onclick="changeQuantity(1)">+</div>
+                    </div>
+                </div>
+                <div class="st-summary-idrow">
+                    <span>ID de jugador</span><span id="summary-player-id">—</span>
+                </div>
+            </div>
+            <div class="st-summary-rows">
+                <div class="st-summary-row"><span>Subtotal</span><span class="val" id="summary-subtotal">--</span></div>
+                <div class="st-summary-row"><span>Descuento</span><span class="val disc" id="summary-discount">— --</span></div>
+                <div class="st-summary-total">
+                    <span class="tag">TOTAL A PAGAR</span>
+                    <span><span id="summary-total-bs">--</span> <span id="summary-total-usd"></span></span>
+                </div>
+            </div>
+            <button class="st-next-btn" onclick="goToCheckout()" type="button">SIGUIENTE ➤</button>
+            <div class="st-summary-note">Pago protegido · Entrega automática en 1–3 min</div>
+        </aside>
+    </div>
+
+    <!-- BARRA FLOTANTE MÓVIL (aparece al elegir un paquete) -->
+    <div id="mobile-checkout-bar">
+        <div class="st-mob-row">
+            <div id="mob-badge"></div>
+            <div class="st-mob-info">
+                <div class="st-mob-line">
+                    <span id="mob-item-name">---</span>
+                    <span id="mob-item-badge"></span>
+                </div>
+                <div class="st-mob-line">
+                    <span id="mob-price">--</span>
+                    <span id="mob-game-name">---</span>
+                </div>
+            </div>
+            <div class="st-mob-qty">
+                <div class="q-btn q-minus" data-delta="-1">−</div>
+                <div id="mob-qty">1</div>
+                <div class="q-btn q-plus" data-delta="1">+</div>
+            </div>
+            <button class="st-mob-go" onclick="goToCheckout()" type="button">➤</button>
         </div>
     </div>
 
-    <!-- MAIN CONTAINER -->
-    <main class="flex-grow max-w-md md:max-w-2xl w-full mx-auto px-4 py-5 space-y-6">
-
-        <!-- CARRUSEL PROMOCIONAL (imagenes del admin) -->
-        <section class="relative overflow-hidden rounded-2xl bg-[#141418] h-32 md:h-52 border border-[#222226]">
-            <div class="absolute inset-0 flex transition-transform duration-500" id="image-carousel">
-                <!-- Se llena dinamicamente con imagenes del admin -->
-                <div class="carousel-slide min-w-full h-full flex items-center justify-center shrink-0">
-                    <div class="flex flex-col items-center gap-2">
-                        <i class="fa-solid fa-image text-gray-600 text-3xl"></i>
-                        <p class="text-gray-500 text-xs">Cargando promociones...</p>
-                    </div>
-                </div>
-            </div>
-            <button onclick="prevSlide()" class="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/40 hover:bg-black/75 flex items-center justify-center text-white text-xs transition-all border border-[#222226] z-10">
-                <i class="fa-solid fa-chevron-left"></i>
-            </button>
-            <button onclick="nextSlide()" class="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/40 hover:bg-black/75 flex items-center justify-center text-white text-xs transition-all border border-[#222226] z-10">
-                <i class="fa-solid fa-chevron-right"></i>
-            </button>
-            <div class="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5" id="carousel-dots">
-            </div>
-        </section>
-
-        <!-- SELECTOR DE CATEGORIAS -->
-        <section class="color-card-bg p-1.5 rounded-2xl flex border border-[#222226] shadow-md shadow-black/20">
-            <button id="tab-juegos" onclick="setCategory('mobile')" class="flex-1 py-3 text-xs md:text-sm font-bold rounded-xl transition-all-custom flex items-center justify-center gap-2 bg-gradient-verde text-[#0c0c0e] shadow-lg shadow-emerald-500/20">
-                <i class="fa-solid fa-gamepad"></i>Juegos
-            </button>
-            <button id="tab-tarjetas" onclick="setCategory('gift')" class="flex-1 py-3 text-xs md:text-sm font-semibold rounded-xl transition-all-custom flex items-center justify-center gap-2 text-gray-400 hover:text-white">
-                <i class="fa-solid fa-credit-card"></i>Tarjetas
-            </button>
-        </section>
-
-        <!-- CARRUSEL DE JUEGOS/TARJETAS (Horizontal) -->
-        <section class="space-y-3">
-            <div class="flex justify-between items-center px-1">
-                <h2 class="text-[11px] font-bold uppercase tracking-wider text-gray-400">Selecciona el Producto</h2>
-                <span class="text-[10px] text-emerald-400/80 italic">Desliza para ver mas <i class="fa-solid fa-chevron-right text-[8px]"></i></span>
-            </div>
-            <div id="mosaic-container" class="flex gap-3 overflow-x-auto pb-2 pt-1 pl-2 no-scrollbar snap-x scroll-pl-2">
-                <!-- Se llena dinamicamente -->
-            </div>
-        </section>
-
-        <!-- FORMULARIO DE VERIFICACION DE ID (oculto en Tarjetas) -->
-        <section id="verification-section" class="space-y-2 bg-[#141418] p-4 rounded-2xl border border-[#222226]">
-            <div class="flex justify-between items-center px-1">
-                <label id="verification-label" class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">ID de Jugador</label>
-            </div>
-            <div class="flex gap-2">
-                <input type="text" id="id-verification-input" placeholder="Ingresa tu ID de jugador" class="flex-grow bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
-                <button onclick="verifyId()" id="btn-verify-id" class="px-5 py-2.5 bg-gradient-verde text-[#0c0c0e] font-black text-xs rounded-xl tracking-wider uppercase transition-all-custom shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/25 active:scale-[0.98]">
-                    Verificar
-                </button>
-            </div>
-            <!-- Zone ID (se muestra solo cuando el paquete lo requiere, ej. Mobile Legends) -->
-            <div id="zone-id-row" class="hidden">
-                <input type="text" id="zone-verification-input" placeholder="Ingresa tu Zone ID (ej: 1234)" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
-            </div>
-            <div id="verification-status" class="hidden text-[11px] font-semibold flex items-center gap-1.5 px-1">
-            </div>
-        </section>
-
-        <!-- DESPLIEGUE DE PAQUETES -->
-        <section class="space-y-3">
-            <div class="flex justify-between items-center px-1">
-                <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                    Paquetes de <span id="selected-item-name" class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-400">---</span>
-                </h2>
-                <span class="text-[11px] text-emerald-400 bg-emerald-950/30 px-2 py-0.5 rounded-md border border-emerald-900/50">Entrega Inmediata</span>
-            </div>
-            <!-- Tabs de subcategoria (ej: Diamantes | Tarjetas) -->
-            <div id="subcat-tabs" class="flex items-center justify-center gap-3 py-1 -mt-1">
-                <span id="subcat-tab-a" onclick="selectSubcat('a')" class="text-xs font-semibold text-emerald-400 cursor-pointer hover:text-emerald-300 transition-colors select-none">Diamantes</span>
-                <span class="text-gray-700 text-xs select-none">|</span>
-                <span id="subcat-tab-b" onclick="selectSubcat('b')" class="text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-300 transition-colors select-none">Tarjetas</span>
-            </div>
-            <div id="packages-container" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <!-- Paquetes dinamicos -->
-            </div>
-        </section>
-
-        <!-- CODIGO DE DESCUENTO (colapsable, debajo de paquetes) -->
-        <section id="discount-section" class="bg-[#141418] rounded-2xl border border-[#222226] overflow-hidden hidden">
-            <!-- Cabecera colapsable -->
-            <button onclick="toggleDiscount()" id="discount-header" class="w-full flex items-center justify-between p-4 text-left hover:bg-[#1a1a1e] transition-colors">
-                <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Tienes un codigo de descuento?</span>
-                <i id="discount-chevron" class="fa-solid fa-chevron-down text-gray-500 text-[10px] transition-transform"></i>
-            </button>
-            <!-- Cuerpo desplegable -->
-            <div id="discount-body" class="px-4 pb-4 pt-0 space-y-2" style="display:none;">
-                <div class="flex gap-2">
-                    <input type="text" id="discount-code-input" placeholder="Ingresa tu codigo" class="flex-grow bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all uppercase">
-                    <button onclick="applyDiscountCode()" id="btn-discount" class="px-5 py-2.5 bg-emerald-950/50 border border-emerald-500/30 text-emerald-400 font-black text-xs rounded-xl tracking-wider uppercase transition-all-custom hover:bg-emerald-500/10">
-                        Aplicar
-                    </button>
-                </div>
-                <div id="discount-status" class="hidden text-[11px] font-semibold flex items-center gap-1.5 px-1">
-                </div>
-            </div>
-        </section>
-
-        <!-- RESUMEN DE COMPRA (Desktop) -->
-        <div class="hidden md:block space-y-3">
-        <section class="space-y-3">
-            <div class="flex items-center gap-2 px-1">
-                <span class="w-1 h-5 bg-emerald-400 rounded-full"></span>
-                <h2 class="text-xs md:text-sm font-black uppercase tracking-wider text-white italic">
-                    Resumen de <span class="text-emerald-400 font-extrabold text-neon-verde">Venta</span>
-                </h2>
-            </div>
-            <div class="bg-[#141418] border border-[#222226] rounded-2xl p-4 space-y-4 shadow-xl">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0c0c0e]/80 p-3.5 rounded-xl border border-[#1e1e24] transition-all duration-300">
-                    <div class="flex items-center gap-3">
-                        <div id="summary-game-badge" class="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-600 to-amber-500 flex items-center justify-center text-[10px] font-black text-white shadow-lg transition-transform duration-300">
-                            ---
-                        </div>
-                        <div>
-                            <h4 id="summary-game-name" class="font-extrabold text-xs md:text-sm text-white italic tracking-wide uppercase">---</h4>
-                            <div class="flex items-center gap-1.5 mt-1 text-xs text-gray-400 font-semibold">
-                                <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full shadow-sm shadow-cyan-400/50"></span>
-                                <span id="summary-package-qty" class="text-gray-300">---</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#222226]/50">
-                        <span class="text-[9px] font-extrabold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
-                            Combos <span id="summary-combos-badge" class="bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded text-[8px] font-bold">x1</span>
-                        </span>
-                        <div class="flex items-center bg-[#0c0c0e] border border-[#222226] rounded-xl p-1 shadow-inner">
-                            <button onclick="changeQuantity(-1)" class="w-7 h-7 flex items-center justify-center rounded-lg bg-[#161619] text-gray-400 hover:text-white hover:bg-red-950/40 transition-all text-xs font-black select-none">-</button>
-                            <span id="summary-quantity-val" class="w-9 text-center text-xs font-black text-white italic">1</span>
-                            <button onclick="changeQuantity(1)" class="w-7 h-7 flex items-center justify-center rounded-lg bg-[#161619] text-gray-400 hover:text-white hover:bg-emerald-950/40 transition-all text-xs font-black select-none">+</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-4 pt-2 border-t border-[#222226]/50 text-xs items-center">
-                    <div class="space-y-0.5">
-                        <span class="text-[9px] text-gray-500 uppercase font-black tracking-wider">Subtotal</span>
-                        <p id="summary-subtotal" class="font-bold text-gray-300">Bs. -- <span class="text-gray-500 font-normal">($-- USD)</span></p>
-                    </div>
-                    <div class="flex flex-col items-end justify-center">
-                        <span class="text-[9px] text-gray-500 uppercase font-black tracking-wider mb-0.5">Total a Pagar</span>
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-[10px] text-emerald-400 font-extrabold">Bs.</span>
-                            <span id="summary-total-bs" class="text-lg md:text-xl font-black text-white tracking-tight leading-none">--</span>
-                            <span id="summary-total-usd" class="text-[9px] text-gray-400 font-medium ml-0.5">($--)</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-        </div>
-
-        <!-- BOTON SIGUIENTE (Desktop y Mobile) -->
-        <section class="pt-2">
-            <button onclick="goToCheckout()" class="w-full bg-gradient-verde text-[#0c0c0e] font-black py-4 px-6 rounded-2xl shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/25 active:scale-[0.98] transition-all-custom text-center text-sm tracking-widest uppercase flex items-center justify-center gap-2">
-                Siguiente <i class="fa-solid fa-chevron-right text-base"></i>
-            </button>
-        </section>
-
-        <!-- PADDING para que el footer flotante no tape el contenido -->
-        <div class="md:hidden h-16"></div>
-
-    </main>
-
     <!-- FOOTER -->
-    <footer class="bg-[#070709] border-t border-[#1a1a1e] text-gray-400 text-xs py-10 px-4 mt-12">
-        <div class="max-w-md md:max-w-2xl mx-auto space-y-8">
-            <div class="text-center space-y-3">
-                <p class="text-gray-300 leading-relaxed text-sm max-w-sm mx-auto">
-                    Tu tienda de confianza para recargas de juegos, Gift Cards y productos digitales. Entrega inmediata y segura.
-                </p>
-                <div class="flex justify-center gap-3 pt-1">
-                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#121214] text-[11px] text-emerald-400 border border-emerald-950/60 font-semibold">
-                        <i class="fa-solid fa-shield-halved"></i> Compra Segura
-                    </span>
-                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#121214] text-[11px] text-emerald-400 border border-emerald-950/60 font-semibold">
-                        <i class="fa-solid fa-headset"></i> Soporte 24/7
-                    </span>
+    <footer class="st-footer">
+        <div class="st-footer-inner">
+            <div class="st-footer-desc">Tu tienda de confianza para recargas de juegos, Gift Cards y productos digitales. Entrega inmediata y segura.</div>
+            <div class="st-footer-chips">
+                <div class="st-chip">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5.5v6c0 4.8 3.4 9.3 8 10.5 4.6-1.2 8-5.7 8-10.5v-6L12 2z"></path></svg>
+                    Compra Segura
+                </div>
+                <div class="st-chip">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 13v-1a8 8 0 0 1 16 0v1"></path><rect x="2.5" y="13" width="4.5" height="6" rx="2"></rect><rect x="17" y="13" width="4.5" height="6" rx="2"></rect></svg>
+                    Soporte 24/7
                 </div>
             </div>
-            <hr class="border-[#1a1a1e]">
-            <div class="text-center space-y-4">
-                <div class="space-y-1">
-                    <h4 class="font-bold text-white uppercase tracking-widest text-[10px] text-emerald-400">Contacto y Soporte</h4>
-                    <p class="text-gray-200 text-sm font-medium hover:text-emerald-400 transition-colors">
-                        <i class="fa-regular fa-envelope mr-1.5 text-emerald-500"></i>soporte@inefablestore.com
-                    </p>
-                </div>
-                <div>
-                    <a href="https://wa.me/584125712917" target="_blank" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-emerald-400 font-bold hover:bg-emerald-500/10 transition-all text-xs">
-                        <i class="fa-brands fa-whatsapp text-lg"></i> CONTACTAR POR WHATSAPP
-                    </a>
-                </div>
+            <div class="st-footer-div"></div>
+            <div class="st-footer-contact">
+                <div class="st-footer-contact-title">CONTACTO Y SOPORTE</div>
+                <a href="mailto:soporte@inefablestore.com" class="st-footer-mail">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3ee07f" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg>
+                    soporte@inefablestore.com
+                </a>
+                <a href="https://wa.me/584125712917" target="_blank" rel="noopener" class="st-footer-wa">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.3A10 10 0 1 0 12 2zm5.3 14c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.7-.1a12 12 0 0 1-6.6-5.6c-.5-.9-.8-1.8-.5-2.7.2-.6.7-1.1 1-1.3.2-.2.6-.2.8-.2h.6c.2 0 .4 0 .6.5l.8 2c.1.2.1.4 0 .6l-.4.6c-.2.2-.3.3-.1.6a8.6 8.6 0 0 0 3.7 3.2c.3.1.5.1.7-.1l.8-1c.2-.2.3-.2.6-.1l2 1c.2.1.4.2.4.3.1.2.1.5 0 1.1z"></path></svg>
+                    CONTACTAR POR WHATSAPP
+                </a>
             </div>
-            <div class="text-center pt-4 border-t border-[#121214] flex flex-col md:flex-row justify-between items-center gap-2 text-gray-600 text-[10px]">
-                <span>&copy; 2026 {{ site_name|default('InefableStore') }}. Todos los derechos reservados.</span>
-                <a href="/terms" class="hover:text-emerald-400 underline transition-colors">Terminos y Condiciones</a>
+            <div class="st-footer-div"></div>
+            <div class="st-footer-bottom">
+                <div>© 2026 {{ site_name|default('Inefablestore') }}. Todos los derechos reservados.</div>
+                <a href="/terms" class="st-footer-terms">Términos y Condiciones</a>
             </div>
         </div>
     </footer>
 
     <!-- MODAL DE LOGIN -->
     <div id="login-modal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
-        <div class="bg-[#141418] border border-[#2a2a30] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
-            <div class="p-5 border-b border-[#222226] flex justify-between items-center">
+        <div class="bg-[#0a0a0a] border border-[#1f1f1f] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="p-5 border-b border-[#1a1a1a] flex justify-between items-center">
                 <h3 class="font-black text-white tracking-wide text-sm" id="login-modal-title">Iniciar Sesión</h3>
                 <button onclick="closeLoginModal()" class="text-gray-400 hover:text-white text-lg leading-none">&times;</button>
             </div>
             <div class="p-5 space-y-4">
-                <input type="text" id="login-email" placeholder="Email" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <input type="text" id="login-email" placeholder="Email" class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                 <div class="relative">
-                    <input type="password" id="login-password" placeholder="Contraseña" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all pr-10">
+                    <input type="password" id="login-password" placeholder="Contraseña" class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all pr-10">
                     <button onclick="toggleLoginPassword()" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
                         <i id="login-eye" class="fa-solid fa-eye text-xs"></i>
                     </button>
@@ -337,8 +581,8 @@
 
     <!-- MODAL DE REGISTRO MINI INFLUENCER -->
     <div id="mini-modal" class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
-        <div class="bg-[#141418] border border-[#2a2a30] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
-            <div class="p-5 border-b border-[#222226] flex justify-between items-center bg-gradient-to-r from-purple-950/30 to-transparent flex-shrink-0">
+        <div class="bg-[#0a0a0a] border border-[#1f1f1f] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
+            <div class="p-5 border-b border-[#1a1a1a] flex justify-between items-center bg-gradient-to-r from-purple-950/30 to-transparent flex-shrink-0">
                 <h3 class="font-black text-white tracking-wide text-sm flex items-center gap-2">
                     <i class="fa-solid fa-star text-purple-400"></i> MINI INFLUENCER
                 </h3>
@@ -350,17 +594,17 @@
                     Ganas comisión por cada recarga hecha con tu código, más bonos por tus videos.
                     <span class="text-purple-300 font-bold">Tu perfil pasa por revisión antes de activarse.</span>
                 </p>
-                <input type="text" id="mini-name" placeholder="Tu nombre o nombre de creador" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
-                <input type="email" id="mini-email" placeholder="Email (para entrar a tu panel)" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <input type="text" id="mini-name" placeholder="Tu nombre o nombre de creador" class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <input type="email" id="mini-email" placeholder="Email (para entrar a tu panel)" class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                 <div class="relative">
-                    <input type="password" id="mini-password" placeholder="Contraseña (mín. 6 caracteres)" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all pr-10">
+                    <input type="password" id="mini-password" placeholder="Contraseña (mín. 6 caracteres)" class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all pr-10">
                     <button onclick="toggleMiniPassword()" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
                         <i id="mini-eye" class="fa-solid fa-eye text-xs"></i>
                     </button>
                 </div>
-                <input type="text" id="mini-channel" placeholder="Link de tu canal (TikTok, YouTube...)" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <input type="text" id="mini-channel" placeholder="Link de tu canal (TikTok, YouTube...)" class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                 <div>
-                    <input type="text" id="mini-code" placeholder="Código que quieres usar (ej: TUNOMBRE)" maxlength="20" class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all uppercase">
+                    <input type="text" id="mini-code" placeholder="Código que quieres usar (ej: TUNOMBRE)" maxlength="20" class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all uppercase">
                     <p class="text-[10px] text-gray-500 mt-1">Solo letras, números, guion y guion bajo.</p>
                 </div>
                 <div id="mini-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
@@ -377,7 +621,7 @@
 
     <!-- POPUP CANAL DE WHATSAPP -->
     <div id="wa-popup" class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
-        <div id="wa-popup-card" class="relative bg-[#141418] border border-[#2a2a30] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl transition-all transform scale-95 opacity-0 duration-300">
+        <div id="wa-popup-card" class="relative bg-[#0a0a0a] border border-[#1f1f1f] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl transition-all transform scale-95 opacity-0 duration-300">
             <!-- Contador y cierre -->
             <div class="absolute top-4 right-4 flex items-center gap-3 z-10">
                 <div id="wa-countdown" class="relative w-7 h-7 flex items-center justify-center">
@@ -394,7 +638,6 @@
             </div>
 
             <div class="px-6 pt-9 pb-6 text-center">
-                <!-- Icono -->
                 <div class="mx-auto w-16 h-16 rounded-full bg-gradient-verde flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-5">
                     <i class="fa-brands fa-whatsapp text-3xl text-[#0c0c0e]"></i>
                 </div>
@@ -408,7 +651,7 @@
                 </a>
 
                 <button onclick="closeWaPopup()" type="button"
-                        class="w-full mt-3 py-3 bg-[#1a1a1e] border border-[#2a2a30] text-gray-300 font-bold text-xs rounded-xl transition-all-custom hover:border-emerald-500/40 hover:text-white active:scale-[0.98]">
+                        class="w-full mt-3 py-3 bg-[#0d0d0d] border border-[#2b2b2b] text-gray-300 font-bold text-xs rounded-xl transition-all-custom hover:border-emerald-500/40 hover:text-white active:scale-[0.98]">
                     Continuar a la página
                 </button>
 
@@ -420,88 +663,11 @@
         </div>
     </div>
 
-    <!-- MODAL DE CHECKOUT -->
-    <div id="checkout-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm hidden">
-        <div class="color-card-bg border border-[#2a2a30] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl transition-all transform scale-95 opacity-0 duration-300" id="modal-content">
-            <div class="p-5 border-b border-[#222226] flex justify-between items-center bg-gradient-to-r from-emerald-950/20 to-transparent">
-                <h3 class="font-black text-white tracking-wide text-sm flex items-center gap-2">
-                    <i class="fa-solid fa-circle-check text-emerald-400"></i> DETALLES DE COMPRA
-                </h3>
-                <button onclick="closeCheckoutModal()" class="text-gray-400 hover:text-white">
-                    <i class="fa-solid fa-xmark text-lg"></i>
-                </button>
-            </div>
-            <div class="p-5 space-y-4">
-                <div class="space-y-3 bg-[#121214] p-4 rounded-xl border border-[#222226]">
-                    <div class="flex justify-between items-center text-xs text-gray-400">
-                        <span>Producto:</span>
-                        <span id="modal-product" class="text-white font-bold">---</span>
-                    </div>
-                    <div class="flex justify-between items-center text-xs text-gray-400">
-                        <span>Cantidad / Combo:</span>
-                        <span id="modal-package" class="text-white font-bold">---</span>
-                    </div>
-                    <hr class="border-[#222226]">
-                    <div class="flex justify-between items-center text-sm font-black">
-                        <span class="text-gray-300">Total a pagar:</span>
-                        <span id="modal-price" class="text-emerald-400 text-sm">---</span>
-                    </div>
-                </div>
-                <!-- Campos de contacto -->
-                <div class="space-y-1.5">
-                    <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">Correo electronico:</label>
-                    <input type="email" id="checkout-email" placeholder="tucorreo@email.com" class="w-full bg-[#121214] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
-                </div>
-                <div class="space-y-1.5">
-                    <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">Telefono:</label>
-                    <input type="text" id="checkout-phone" placeholder="+58 412 1234567" class="w-full bg-[#121214] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
-                </div>
-                <div class="space-y-1.5" id="checkout-id-section">
-                    <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider" id="checkout-id-label">ID de Jugador:</label>
-                    <input type="text" id="checkout-player-id" placeholder="Ej: 472938102" class="w-full bg-[#121214] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
-                </div>
-                <div class="space-y-1.5" id="checkout-ref-section">
-                    <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">Referencia de pago:</label>
-                    <input type="text" id="checkout-reference" placeholder="Ultimos 4 digitos del comprobante" class="w-full bg-[#121214] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
-                </div>
-                <div class="space-y-1.5">
-                    <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">Metodo de pago:</label>
-                    <div class="flex gap-2">
-                        <select id="checkout-currency" class="flex-1 bg-[#121214] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none transition-all">
-                            <option value="BSD">Bs. (Pago Movil / Transferencia)</option>
-                            <option value="USD">USD (Zelle / PayPal)</option>
-                        </select>
-                    </div>
-                </div>
-                <div id="checkout-loading" class="hidden text-center py-4">
-                    <i class="fa-solid fa-spinner animate-spin text-emerald-400 text-2xl"></i>
-                    <p class="text-xs text-gray-400 mt-2">Procesando pedido...</p>
-                </div>
-            </div>
-            <div class="p-5 border-t border-[#222226] bg-[#121214]/50 flex gap-2">
-                <button onclick="closeCheckoutModal()" class="flex-1 py-2.5 text-xs font-bold text-gray-400 hover:text-white bg-[#222226] rounded-xl transition-all">
-                    Cancelar
-                </button>
-                <button onclick="submitOrder()" id="btn-submit-order" class="flex-1 py-2.5 text-xs font-bold text-[#0c0c0e] bg-gradient-verde rounded-xl transition-all shadow-lg shadow-emerald-500/20 hover:brightness-110">
-                    Confirmar Pedido
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- BOTON FLOTANTE DE CANJE (esquina inferior derecha, separado del footer) -->
-    <button id="gift-fab" onclick="openGiftModal()" type="button"
-            aria-label="Redimir código de regalo" title="Redimir código de regalo"
-            class="fixed right-4 bottom-28 md:right-8 md:bottom-8 z-[45] hidden w-12 h-12 items-center justify-center rounded-full bg-gradient-verde text-[#0c0c0e] shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 active:scale-95 transition-all-custom">
-        <span class="absolute inset-0 rounded-full bg-emerald-400/40 animate-ping"></span>
-        <i class="fa-solid fa-gift text-lg relative"></i>
-    </button>
-
     <!-- MODAL DE CANJE DE CODIGOS DE REGALO -->
     <div id="gift-modal" class="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
-        <div class="bg-[#141418] border border-[#2a2a30] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
+        <div class="bg-[#0a0a0a] border border-[#1f1f1f] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
 
-            <div class="p-5 border-b border-[#222226] flex justify-between items-center shrink-0">
+            <div class="p-5 border-b border-[#1a1a1a] flex justify-between items-center shrink-0">
                 <h3 class="font-black text-white tracking-wide text-sm flex items-center gap-2">
                     <i class="fa-solid fa-gift text-emerald-400"></i> Redimir código
                 </h3>
@@ -517,7 +683,7 @@
                     </p>
                     <input id="gift-code-input" type="text" inputmode="latin" autocomplete="off" autocapitalize="characters"
                            spellcheck="false" maxlength="14" placeholder="ABCD-EFGH-JKMN"
-                           class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-3 text-center text-base font-black tracking-[0.2em] text-white placeholder-gray-700 focus:outline-none transition-all uppercase">
+                           class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-emerald-500 rounded-xl px-3 py-3 text-center text-base font-black tracking-[0.2em] text-white placeholder-gray-700 focus:outline-none transition-all uppercase">
                     <div id="gift-code-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
                     <button onclick="giftValidateCode()" id="gift-btn-check"
                             class="w-full py-3 bg-gradient-verde text-[#0c0c0e] font-black text-xs rounded-xl tracking-wider uppercase transition-all active:scale-[0.98]">
@@ -530,7 +696,7 @@
 
                 <!-- PASO 2: el ID del jugador -->
                 <div id="gift-step-player" class="space-y-4" style="display:none">
-                    <div class="flex items-center gap-3 bg-[#0c0c0e] border border-emerald-500/25 rounded-xl p-3">
+                    <div class="flex items-center gap-3 bg-[#0d0d0d] border border-emerald-500/25 rounded-xl p-3">
                         <img id="gift-prize-img" src="" alt="" class="w-12 h-12 rounded-lg object-cover shrink-0 bg-[#1a1a1e]">
                         <div class="min-w-0 flex-1">
                             <div id="gift-prize-game" class="text-[10px] font-extrabold text-white truncate uppercase tracking-wide">---</div>
@@ -542,14 +708,14 @@
                     <div class="space-y-2">
                         <label for="gift-player-input" class="block text-[11px] font-bold text-gray-300">Tu ID de jugador</label>
                         <input id="gift-player-input" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 123456789"
-                               class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                               class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                         <p class="text-[10px] text-gray-500">Revisa bien tu ID: la recarga se envía a ese ID y el canje no se puede deshacer.</p>
                     </div>
 
                     <div id="gift-zone-wrap" class="space-y-2" style="display:none">
                         <label for="gift-zone-input" class="block text-[11px] font-bold text-gray-300">Zona ID</label>
                         <input id="gift-zone-input" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 2001"
-                               class="w-full bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                               class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                     </div>
 
                     <div id="gift-player-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
@@ -572,7 +738,7 @@
                         <div id="gift-done-title" class="text-sm font-black text-white">¡Listo!</div>
                         <p id="gift-done-message" class="text-[11px] text-gray-400 leading-relaxed"></p>
                     </div>
-                    <div class="bg-[#0c0c0e] border border-[#222226] rounded-xl p-3 space-y-1">
+                    <div class="bg-[#0d0d0d] border border-[#2b2b2b] rounded-xl p-3 space-y-1">
                         <div id="gift-done-prize" class="text-sm font-black text-emerald-400"></div>
                         <div id="gift-done-order" class="text-[10px] text-gray-500 font-semibold"></div>
                     </div>
@@ -590,7 +756,7 @@
                     <p class="text-[11px] text-gray-400 leading-relaxed">Escribe el ID de jugador con el que canjeaste para ver tus últimos canjes.</p>
                     <div class="flex gap-2">
                         <input id="gift-history-input" type="text" inputmode="numeric" autocomplete="off" placeholder="ID de jugador"
-                               class="flex-1 min-w-0 bg-[#0c0c0e] border border-[#222226] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                               class="flex-1 min-w-0 bg-[#0d0d0d] border border-[#2b2b2b] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                         <button onclick="giftSearchHistory()" id="gift-btn-history" class="px-4 py-2.5 bg-[#222226] text-white font-black text-[11px] rounded-xl uppercase tracking-wider hover:bg-[#2a2a30] transition-all">Buscar</button>
                     </div>
                     <div id="gift-history-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
@@ -600,32 +766,6 @@
                     </button>
                 </div>
 
-            </div>
-        </div>
-    </div>
-
-
-    <!-- FLOATING MOBILE CHECKOUT BAR (solo en telefono, oculta hasta seleccionar item) -->
-    <div id="mobile-checkout-bar" class="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#0c0c0e] border-t border-[#222226] px-3 py-2 translate-y-full opacity-0 pointer-events-none transition-all duration-300 ease-out" style="-webkit-backdrop-filter:none; backdrop-filter:none">
-        <div class="flex items-center gap-2.5">
-            <!-- Badge del juego -->
-            <div id="mob-badge" class="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-600 to-cyan-500 flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0">---</div>
-
-            <!-- Info juego + item -->
-            <div class="min-w-0 flex-1">
-                <div id="mob-game-name" class="text-[10px] font-extrabold text-white truncate uppercase tracking-wide leading-tight">---</div>
-                <div id="mob-item-name" class="text-[9px] text-gray-400 truncate leading-tight">---</div>
-                <div class="flex items-baseline gap-1.5 mt-0.5">
-                    <span id="mob-price" class="text-sm font-black text-emerald-400 leading-none">Bs. --</span>
-                    <span id="mob-price-usd" class="text-[9px] text-gray-500 font-semibold leading-none">$-- USD</span>
-                </div>
-            </div>
-
-            <!-- Selector de cantidad -->
-            <div class="flex items-center gap-0.5 bg-[#121214] border border-[#222226] rounded-lg shrink-0">
-                <button type="button" data-delta="-1" class="min-w-[32px] h-8 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-red-600 active:scale-90 transition-all text-base font-black select-none cursor-pointer" style="touch-action:manipulation; -webkit-tap-highlight-color:transparent">−</button>
-                <span id="mob-qty" class="min-w-[20px] text-center text-sm font-black text-white px-0.5">1</span>
-                <button type="button" data-delta="1" class="min-w-[32px] h-8 flex items-center justify-center rounded-md bg-[#1a1a1e] text-white active:bg-emerald-500 active:scale-90 transition-all text-base font-black select-none cursor-pointer" style="touch-action:manipulation; -webkit-tap-highlight-color:transparent">+</button>
             </div>
         </div>
     </div>
@@ -656,20 +796,9 @@
         let verifiedNick = '';
         let discountPercent = 0;
         let currentSlide = 0;
+        let productsOpen = false;    // selector de productos expandido ("+N juegos")
 
-        // Colores y gradientes predefinidos para mosaicos (asignados por indice)
-        const GAME_GRADIENTS = [
-            'from-orange-600 to-amber-500',
-            'from-red-600 to-red-800',
-            'from-blue-600 to-indigo-800',
-            'from-emerald-600 to-cyan-500',
-            'from-purple-600 to-pink-500',
-            'from-yellow-600 to-yellow-800',
-            'from-zinc-800 to-zinc-600',
-            'from-green-600 to-teal-500',
-            'from-cyan-600 to-blue-500',
-            'from-rose-600 to-pink-600',
-        ];
+        function isMobileView() { return window.matchMedia('(max-width: 859px)').matches; }
 
         // ============ API FETCHS ============
         async function fetchJSON(url, options) {
@@ -689,8 +818,8 @@
                 allPackages.mobile = (mobileData.packages || []).filter(p => p.active !== false);
                 allPackages.gift = (giftData.packages || []).filter(p => p.active !== false);
 
-                // Cargar imagenes del carrusel desde el admin
-                buildHeroCarousel(heroData.images || []);
+                // Cargar banners del carrusel desde el admin (imagen + textos)
+                buildHeroCarousel(heroData.banners || [], heroData.images || []);
 
                 // Fondo de pagina: video en bucle o imagen (config del admin)
                 setupBgMedia(heroData.video || '', heroData.bg_image || '');
@@ -773,16 +902,17 @@
             purchaseQuantity = 1;
             isIdVerified = false;
             discountPercent = 0;
-            discountExpanded = false;
+            productsOpen = false;
             document.getElementById('summary-quantity-val').innerText = '1';
-            document.getElementById('summary-combos-badge').innerText = 'x1';
             const mobQtyReset = document.getElementById('mob-qty');
             if (mobQtyReset) mobQtyReset.innerText = '1';
-            document.getElementById('verification-status').classList.add('hidden');
-            document.getElementById('discount-status').classList.add('hidden');
+            const vstatus = document.getElementById('verification-status');
+            vstatus.style.display = 'none';
+            vstatus.innerHTML = '';
+            const dstatus = document.getElementById('discount-status');
+            dstatus.style.display = 'none';
+            dstatus.innerHTML = '';
             document.getElementById('discount-code-input').value = '';
-            document.getElementById('discount-body').style.display = 'none';
-            document.getElementById('discount-chevron').classList.remove('rotate-180');
             document.getElementById('id-verification-input').value = '';
 
             updateCategoryTabs();
@@ -804,13 +934,8 @@
         function updateCategoryTabs() {
             const tabJuegos = document.getElementById('tab-juegos');
             const tabTarjetas = document.getElementById('tab-tarjetas');
-            if (currentCategory === 'mobile') {
-                tabJuegos.className = "flex-1 py-3 text-xs md:text-sm font-bold rounded-xl transition-all-custom flex items-center justify-center gap-2 bg-gradient-verde text-[#0c0c0e] shadow-lg shadow-emerald-500/20";
-                tabTarjetas.className = "flex-1 py-3 text-xs md:text-sm font-semibold rounded-xl transition-all-custom flex items-center justify-center gap-2 text-gray-400 hover:text-white";
-            } else {
-                tabTarjetas.className = "flex-1 py-3 text-xs md:text-sm font-bold rounded-xl transition-all-custom flex items-center justify-center gap-2 bg-gradient-verde text-[#0c0c0e] shadow-lg shadow-emerald-500/20";
-                tabJuegos.className = "flex-1 py-3 text-xs md:text-sm font-semibold rounded-xl transition-all-custom flex items-center justify-center gap-2 text-gray-400 hover:text-white";
-            }
+            tabJuegos.classList.toggle('on', currentCategory === 'mobile');
+            tabTarjetas.classList.toggle('on', currentCategory === 'gift');
         }
 
         function updateVerificationVisibility() {
@@ -824,20 +949,14 @@
             // Siempre mostrar la seccion con el campo de ID
             section.style.display = '';
             const pkg = getCurrentPackage();
-            const label = document.getElementById('verification-label');
             const btnVerify = document.getElementById('btn-verify-id');
             const zoneRow = document.getElementById('zone-id-row');
-            if (pkg && label) {
-                label.innerText = 'ID de Jugador (' + pkg.name + ')';
+            if (pkg) {
                 document.getElementById('id-verification-input').placeholder = 'Ingresa tu ID de ' + pkg.name;
             }
             // Mostrar Zone ID si el paquete lo requiere
             if (zoneRow) {
-                if (requiresZonePkg) {
-                    zoneRow.classList.remove('hidden');
-                } else {
-                    zoneRow.classList.add('hidden');
-                }
+                zoneRow.style.display = requiresZonePkg ? '' : 'none';
             }
             // Ocultar SOLO el boton de Verificar si el paquete NO tiene scraper configurado
             if (btnVerify) {
@@ -846,40 +965,13 @@
         }
 
         function updateDiscountVisibility() {
-            const section = document.getElementById('discount-section');
-            // Siempre visible como colapsable debajo de los paquetes
-            section.classList.remove('hidden');
-            // Resetear estado del colapsable
-            discountExpanded = false;
-            document.getElementById('discount-body').style.display = 'none';
-            document.getElementById('discount-chevron').classList.remove('rotate-180');
+            // La caja de código siempre está visible en el encabezado de paquetes;
+            // al cambiar de juego se resetea el estado del descuento
             discountPercent = 0;
             document.getElementById('discount-code-input').value = '';
-            document.getElementById('discount-status').classList.add('hidden');
-        }
-
-        // Toggle colapsable del descuento
-        let discountExpanded = false;
-        function toggleDiscount() {
-            const body = document.getElementById('discount-body');
-            const chevron = document.getElementById('discount-chevron');
-            discountExpanded = !discountExpanded;
-            body.style.display = discountExpanded ? 'block' : 'none';
-            if (discountExpanded) {
-                chevron.classList.add('rotate-180');
-            } else {
-                chevron.classList.remove('rotate-180');
-            }
-        }
-
-        function getTitleFontSize(title) {
-            const len = (title || '').length;
-            if (len <= 3) return 'text-lg';
-            if (len <= 5) return 'text-base';
-            if (len <= 7) return 'text-sm';
-            if (len <= 10) return 'text-xs';
-            if (len <= 14) return 'text-[11px]';
-            return 'text-[10px]';
+            const dstatus = document.getElementById('discount-status');
+            dstatus.style.display = 'none';
+            dstatus.innerHTML = '';
         }
 
         function getCurrentPackage() {
@@ -899,58 +991,118 @@
             selectedItemId = null;
             purchaseQuantity = 1;
             document.getElementById('summary-quantity-val').innerText = '1';
-            document.getElementById('summary-combos-badge').innerText = 'x1';
             const mobQtySub = document.getElementById('mob-qty');
             if (mobQtySub) mobQtySub.innerText = '1';
             renderSelectedPackages();
             updatePurchaseSummary();
         }
 
-        // ============ RENDER MOSAICOS ============
+        // ============ RENDER SELECTOR DE PRODUCTOS ============
+        function pkgShort(name) {
+            let short = (name || '').replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase();
+            if (!short) short = (name || '?').substring(0, 3).toUpperCase();
+            return short;
+        }
+
+        function buildProductCard(pkg) {
+            const card = document.createElement('div');
+            card.className = 'st-prod' + (pkg.id === currentSelectedPkgId ? ' on' : '');
+            card.onclick = function() { selectPackageItem(pkg.id); };
+            const art = document.createElement('div');
+            art.className = 'st-prod-art';
+            if (pkg.image_path) {
+                const img = document.createElement('img');
+                img.src = pkg.image_path;
+                img.alt = pkg.name;
+                img.onerror = function() { art.innerText = pkgShort(pkg.name); this.remove(); };
+                art.appendChild(img);
+            } else {
+                art.innerText = pkgShort(pkg.name);
+            }
+            const name = document.createElement('div');
+            name.className = 'st-prod-name';
+            name.innerText = pkg.name;
+            card.appendChild(art);
+            card.appendChild(name);
+            return card;
+        }
+
+        function expandProducts() { productsOpen = true; renderCategoryMosaics(); }
+        function collapseProducts() { productsOpen = false; renderCategoryMosaics(); }
+
         function renderCategoryMosaics() {
             const container = document.getElementById('mosaic-container');
+            const expandedWrap = document.getElementById('mosaic-expanded');
+            const scroll = document.getElementById('mosaic-scroll');
             const pkgs = currentCategory === 'mobile' ? allPackages.mobile : allPackages.gift;
             container.innerHTML = '';
+            scroll.innerHTML = '';
 
             if (pkgs.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-xs px-2 py-4">No hay productos disponibles en esta categoria.</p>';
+                expandedWrap.style.display = 'none';
+                container.style.display = 'flex';
+                container.innerHTML = '<p style="color:#6e6e6e;font-size:12px;padding:16px 8px;">No hay productos disponibles en esta categoria.</p>';
                 return;
             }
 
-            pkgs.forEach((pkg, idx) => {
-                const isSelected = pkg.id === currentSelectedPkgId;
-                const borderClass = isSelected ? 'border-2 border-emerald-400 scale-105' : 'border border-[#222226] opacity-60 hover:opacity-100';
+            if (productsOpen) {
+                // Vista expandida: todos los juegos en fila con scroll
+                container.style.display = 'none';
+                expandedWrap.style.display = '';
+                pkgs.forEach((pkg) => scroll.appendChild(buildProductCard(pkg)));
+                return;
+            }
 
-                // Usar imagen real si existe, si no fallback a degradado con iniciales
-                let imgHtml = '';
-                if (pkg.image_path) {
-                    imgHtml = '<img src="' + pkg.image_path + '" alt="' + pkg.name + '" class="w-12 h-12 rounded-xl object-contain mb-2 shadow-md shadow-black/40 bg-[#0c0c0e]" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">';
-                    imgHtml += '<div class="w-12 h-12 bg-gradient-to-br ' + GAME_GRADIENTS[idx % GAME_GRADIENTS.length] + ' rounded-xl items-center justify-center text-[10px] font-black text-white mb-2 shadow-md shadow-black/40 hidden">' + (pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || pkg.name.substring(0, 3).toUpperCase()) + '</div>';
-                } else {
-                    let short = pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase();
-                    if (!short) short = pkg.name.substring(0, 3).toUpperCase();
-                    imgHtml = '<div class="w-12 h-12 bg-gradient-to-br ' + GAME_GRADIENTS[idx % GAME_GRADIENTS.length] + ' rounded-xl flex items-center justify-center text-[10px] font-black text-white mb-2 shadow-md shadow-black/40">' + short + '</div>';
-                }
+            // Vista compacta: el seleccionado + los primeros, y un "+N juegos"
+            expandedWrap.style.display = 'none';
+            container.style.display = 'flex';
+            const selIdx = Math.max(0, pkgs.findIndex(p => p.id === currentSelectedPkgId));
+            const front = [...new Set([selIdx, 0, 1, 2])]
+                .filter(i => i >= 0 && i < pkgs.length)
+                .slice(0, 3)
+                .sort((a, b) => a - b);
+            front.forEach((i) => container.appendChild(buildProductCard(pkgs[i])));
 
-                const card = document.createElement('div');
-                card.className = 'snap-start shrink-0 w-28 bg-[#161619] ' + borderClass + ' p-3 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition-all-custom transform';
-                card.onclick = function() { selectPackageItem(pkg.id); };
-
-                card.innerHTML = imgHtml + '<span class="text-[10px] font-extrabold block truncate w-full tracking-wide text-white">' + pkg.name + '</span>';
-                container.appendChild(card);
-            });
+            const rest = pkgs.map((p, i) => i).filter(i => !front.includes(i));
+            if (rest.length > 0) {
+                const more = document.createElement('div');
+                more.className = 'st-prod';
+                more.onclick = expandProducts;
+                const art = document.createElement('div');
+                art.className = 'st-extra-art';
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center';
+                rest.slice(0, 2).forEach((i, n) => {
+                    const c = document.createElement('div');
+                    c.className = 'st-extra-circle';
+                    if (n > 0) c.style.marginLeft = '-9px';
+                    if (pkgs[i].image_path) {
+                        const im = document.createElement('img');
+                        im.src = pkgs[i].image_path;
+                        im.alt = pkgs[i].name;
+                        im.onerror = function() { c.innerText = pkgShort(pkgs[i].name); this.remove(); };
+                        c.appendChild(im);
+                    } else {
+                        c.innerText = pkgShort(pkgs[i].name);
+                    }
+                    row.appendChild(c);
+                });
+                const plus = document.createElement('div');
+                plus.className = 'st-extra-plus';
+                plus.innerText = '+';
+                row.appendChild(plus);
+                art.appendChild(row);
+                const label = document.createElement('div');
+                label.className = 'st-extra-label';
+                label.innerText = '+' + rest.length + ' juegos';
+                more.appendChild(art);
+                more.appendChild(label);
+                container.appendChild(more);
+            }
         }
 
         // ============ RENDER PAQUETES ============
         function renderSelectedPackages() {
-            const pkg = getCurrentPackage();
-            const titleSpan = document.getElementById('selected-item-name');
-            if (pkg) {
-                titleSpan.innerText = pkg.name;
-            } else {
-                titleSpan.innerText = '---';
-            }
-
             // Actualizar labels y visibilidad de tabs de subcategoria
             const tabsContainer = document.getElementById('subcat-tabs');
             const tabA = document.getElementById('subcat-tab-a');
@@ -960,19 +1112,9 @@
             // Mostrar tabs solo si hay al menos un item en cada subcategoria
             const hasA = currentItems.some(it => !it.is_subcat_b);
             const hasB = currentItems.some(it => it.is_subcat_b);
-            if (hasA && hasB) {
-                tabsContainer.style.display = 'flex';
-            } else {
-                tabsContainer.style.display = 'none';
-            }
-            // Actualizar estilo de tab activo
-            if (currentSubcat === 'a') {
-                tabA.className = 'text-xs font-semibold text-emerald-400 cursor-pointer hover:text-emerald-300 transition-colors select-none';
-                tabB.className = 'text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-300 transition-colors select-none';
-            } else {
-                tabB.className = 'text-xs font-semibold text-emerald-400 cursor-pointer hover:text-emerald-300 transition-colors select-none';
-                tabA.className = 'text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-300 transition-colors select-none';
-            }
+            tabsContainer.style.display = (hasA && hasB) ? 'flex' : 'none';
+            tabA.classList.toggle('on', currentSubcat === 'a');
+            tabB.classList.toggle('on', currentSubcat === 'b');
 
             const container = document.getElementById('packages-container');
             container.innerHTML = '';
@@ -986,39 +1128,51 @@
             }
 
             if (!filteredItems.length) {
-                container.innerHTML = '<p class="text-gray-500 text-xs col-span-full text-center py-4">No hay paquetes en esta categoria.</p>';
+                container.innerHTML = '<p style="grid-column:1/-1;color:#6e6e6e;font-size:12px;text-align:center;padding:16px 0;">No hay paquetes en esta categoria.</p>';
                 return;
             }
 
             filteredItems.forEach((item) => {
-                const isSelected = item.id === selectedItemId;
-                const borderClass = isSelected
-                    ? 'border-2 border-emerald-400 bg-[#141418] shadow-md shadow-emerald-500/5'
-                    : 'border border-[#3a3a42] hover:border-emerald-500/40';
-
                 const card = document.createElement('div');
-                card.className = 'group ' + borderClass + ' rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center cursor-pointer transition-all-custom select-none overflow-hidden min-w-0';
+                card.className = 'st-pack' + (item.id === selectedItemId ? ' on' : '');
                 card.onclick = function() {
                     selectedItemId = item.id;
                     renderSelectedPackages();
                     updatePurchaseSummary();
                 };
 
+                const col = document.createElement('div');
+                col.className = 'st-pack-col';
+                const amount = document.createElement('div');
+                amount.className = 'st-pack-amount';
+                amount.innerText = item.title;
+                col.appendChild(amount);
                 const extra = item.sticker || item.subtitle || '';
-                let extraHtml = '';
                 if (extra) {
-                    extraHtml = '<div class="mt-2.5 px-3 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-900/30 text-emerald-400 text-[10px] font-extrabold tracking-wide text-center">' + extra + '</div>';
+                    const badge = document.createElement('div');
+                    badge.className = 'st-pack-badge';
+                    badge.innerText = extra;
+                    col.appendChild(badge);
                 }
+                card.appendChild(col);
 
-                // Icono del item: usar imagen del admin si existe, si no fallback a diamante
-                let itemIconHtml = '';
+                // Icono del item: imagen del admin si existe, si no la gema
                 if (item.icon_path && item.icon_path.trim() !== '') {
-                    itemIconHtml = '<div class="shrink-0 w-7 h-7 rounded-xl flex items-center justify-center border border-emerald-500/20 shadow-sm relative overflow-hidden bg-[#0c0c0e]"><img src="' + item.icon_path + '" class="w-full h-full object-contain" onerror="this.parentElement.innerHTML=\'<i class=&quot;fa-solid fa-gem&quot; style=&quot;font-size:10px;color:#4ade80&quot;></i>\';"></div>';
+                    const icon = document.createElement('img');
+                    icon.className = 'st-pack-icon';
+                    icon.src = item.icon_path;
+                    icon.alt = '';
+                    icon.onerror = function() {
+                        const gem = document.createElement('div');
+                        gem.className = 'st-pack-gem';
+                        this.replaceWith(gem);
+                    };
+                    card.appendChild(icon);
                 } else {
-                    itemIconHtml = '<div class="shrink-0 w-7 h-7 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400 border border-emerald-500/20 shadow-sm relative"><i class="fa-solid fa-gem text-[10px]"></i></div>';
+                    const gem = document.createElement('div');
+                    gem.className = 'st-pack-gem';
+                    card.appendChild(gem);
                 }
-
-                card.innerHTML = '<div class="flex items-center justify-center gap-1.5 sm:gap-2 w-full max-w-full overflow-hidden"><span class="font-extrabold text-white group-hover:text-emerald-400 transition-colors leading-none tracking-wide whitespace-nowrap truncate ' + getTitleFontSize(item.title) + '">' + item.title + '</span>' + itemIconHtml + '</div>' + extraHtml;
 
                 container.appendChild(card);
             });
@@ -1052,7 +1206,7 @@
 
             const pkg = getCurrentPackage();
             if (!pkg) {
-                btn.innerHTML = 'Verificar';
+                btn.innerHTML = 'VERIFICAR';
                 btn.disabled = false;
                 showToast("Selecciona un juego primero.", true);
                 return;
@@ -1065,7 +1219,7 @@
                 isIdVerified = true;
                 verifiedNick = cached;
                 showVerifiedStatus(cached);
-                btn.innerHTML = 'Verificar';
+                btn.innerHTML = 'VERIFICAR';
                 btn.disabled = false;
                 return;
             }
@@ -1077,7 +1231,7 @@
                 const resp = await fetch(url, { signal: verifyAbortController.signal });
                 const data = await resp.json();
 
-                btn.innerHTML = 'Verificar';
+                btn.innerHTML = 'VERIFICAR';
                 btn.disabled = false;
 
                 if (data.ok && data.nick) {
@@ -1089,29 +1243,28 @@
                 } else if (data.requires_zone) {
                     // El paquete requiere Zone ID — mostrar el input
                     const zoneRow = document.getElementById('zone-id-row');
-                    if (zoneRow) zoneRow.classList.remove('hidden');
+                    if (zoneRow) zoneRow.style.display = '';
                     showToast("Este juego requiere Zone ID. Ingresala e intenta de nuevo.", true);
                 } else {
                     isIdVerified = false;
                     verifiedNick = '';
-                    statusDiv.classList.add('hidden');
+                    statusDiv.style.display = 'none';
+                    statusDiv.innerHTML = '';
                     showToast(data.error || "ID no encontrado. Verifica el numero.", true);
                 }
             } catch (e) {
                 if (e.name === 'AbortError') return; // Cancelado a proposito
-                btn.innerHTML = 'Verificar';
+                btn.innerHTML = 'VERIFICAR';
                 btn.disabled = false;
-                // Si el ID es numerico y fallo la red, aceptar temporalmente
-                // pero NO marcar como verificado (no hay nick real)
                 showToast("Error de conexion. Intenta de nuevo.", true);
             }
         }
 
         function showVerifiedStatus(nick) {
             const statusDiv = document.getElementById('verification-status');
-            statusDiv.className = "text-[11px] font-semibold flex items-center gap-1.5 px-1 text-emerald-400";
-            statusDiv.innerHTML = '<i class="fa-solid fa-circle-check"></i> Verificado: <span class="text-white font-bold">' + nick + '</span>';
-            statusDiv.classList.remove('hidden');
+            statusDiv.classList.remove('err');
+            statusDiv.innerHTML = 'Cuenta verificada · <span style="color:#eaeaea;font-weight:600">' + nick + '</span>';
+            statusDiv.style.display = '';
         }
 
         // ============ CODIGO DE DESCUENTO ============
@@ -1139,16 +1292,16 @@
 
                 if (resp.ok && resp.discount_percent) {
                     discountPercent = parseFloat(resp.discount_percent);
-                    statusDiv.className = "text-[11px] font-semibold flex items-center gap-1.5 px-1 text-emerald-400";
-                    statusDiv.innerHTML = '<i class="fa-solid fa-circle-check"></i> Codigo aplicado! <span class="text-white">' + discountPercent + '% descuento en el 1er combo</span>';
-                    statusDiv.classList.remove('hidden');
+                    statusDiv.className = 'ok';
+                    statusDiv.innerHTML = '<i class="fa-solid fa-circle-check"></i> Codigo aplicado! <span style="color:#eaeaea">' + discountPercent + '% descuento en el 1er combo</span>';
+                    statusDiv.style.display = '';
                     updatePurchaseSummary();
                     showToast(discountPercent + '% de descuento aplicado en el primer combo!');
                 } else {
                     discountPercent = 0;
-                    statusDiv.className = "text-[11px] font-semibold flex items-center gap-1.5 px-1 text-red-400";
+                    statusDiv.className = 'err';
                     statusDiv.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Codigo invalido o expirado';
-                    statusDiv.classList.remove('hidden');
+                    statusDiv.style.display = '';
                     showToast("Codigo invalido o expirado.", true);
                 }
             } catch (e) {
@@ -1165,125 +1318,106 @@
             if (purchaseQuantity > 10) purchaseQuantity = 10;
 
             document.getElementById('summary-quantity-val').innerText = purchaseQuantity;
-            document.getElementById('summary-combos-badge').innerText = 'x' + purchaseQuantity;
             const mobQty = document.getElementById('mob-qty');
             if (mobQty) mobQty.innerText = purchaseQuantity;
             updatePurchaseSummary();
         }
 
+        function fmtBs(n) {
+            return 'Bs. ' + Math.round(n).toLocaleString('es-VE', { maximumFractionDigits: 0 });
+        }
+
         function updatePurchaseSummary() {
             const pkg = getCurrentPackage();
             const item = getCurrentItem();
-            const mobBar = document.getElementById('mobile-checkout-bar');
+
+            const idInputEl = document.getElementById('id-verification-input');
+            const idVal = idInputEl ? idInputEl.value.trim() : '';
+            const idLabelEl = document.getElementById('summary-player-id');
+            if (idLabelEl) idLabelEl.innerText = idVal || '—';
 
             if (!pkg || !item) {
-                document.getElementById('summary-game-badge').innerText = '---';
+                document.getElementById('summary-game-badge').innerHTML = '---';
+                document.getElementById('summary-item-name').innerText = '---';
                 document.getElementById('summary-game-name').innerText = '---';
-                document.getElementById('summary-package-qty').innerText = '---';
-                document.getElementById('summary-subtotal').innerHTML = 'Bs. -- <span class="text-gray-500 font-normal">($-- USD)</span>';
+                document.getElementById('summary-subtotal').innerText = '--';
+                document.getElementById('summary-discount').innerText = '— --';
                 document.getElementById('summary-total-bs').innerText = '--';
-                document.getElementById('summary-total-usd').innerText = '($--)';
-                // Ocultar barra flotante movil con animacion
-                if (mobBar) {
-                    mobBar.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
-                    mobBar.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
-                }
+                document.getElementById('summary-total-usd').innerText = '';
+                document.getElementById('inline-total').innerText = '--';
+                document.body.classList.remove('has-mob-bar');
                 return;
             }
 
-            // Mostrar barra flotante movil con animacion de slide-up
-            if (mobBar) {
-                mobBar.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
-                mobBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
-            }
+            // Mostrar barra flotante movil
+            document.body.classList.add('has-mob-bar');
 
             const badge = document.getElementById('summary-game-badge');
-            const pkgIdx = allPackages[currentCategory].findIndex(p => p.id === pkg.id);
-            const seq = pkgIdx >= 0 ? pkgIdx : 0;
-            const grad = GAME_GRADIENTS[seq % GAME_GRADIENTS.length];
-
             if (pkg.image_path) {
-                badge.innerHTML = '<img src="' + pkg.image_path + '" alt="' + pkg.name + '" class="w-full h-full object-contain rounded-xl" onerror="this.style.display=\'none\';this.parentElement.className=\'w-11 h-11 rounded-xl bg-gradient-to-br ' + grad + ' flex items-center justify-center text-[10px] font-black text-white shadow-lg\';this.parentElement.innerText=\'' + (pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || '?') + '\';">';
-                badge.className = 'w-11 h-11 rounded-xl bg-[#0c0c0e] flex items-center justify-center shadow-lg overflow-hidden';
+                badge.innerHTML = '<img src="' + pkg.image_path + '" alt="' + pkg.name + '" onerror="this.parentElement.innerText=\'' + pkgShort(pkg.name) + '\';">';
             } else {
-                badge.className = 'w-11 h-11 rounded-xl bg-gradient-to-br ' + grad + ' flex items-center justify-center text-[10px] font-black text-white shadow-lg';
-                let short = pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase();
-                if (!short) short = pkg.name.substring(0, 3).toUpperCase();
-                badge.innerText = short;
+                badge.innerText = pkgShort(pkg.name);
             }
 
+            let itemName = item.title;
+            if (item.subtitle) itemName += ' (' + item.subtitle + ')';
+            document.getElementById('summary-item-name').innerText = itemName;
             document.getElementById('summary-game-name').innerText = pkg.name;
-            let qtyText = item.title;
-            if (item.subtitle) qtyText += ' (' + item.subtitle + ')';
-            document.getElementById('summary-package-qty').innerText = qtyText;
 
             // Precio desde el admin (item.price en USD)
             const basePriceUSD = parseFloat(item.price || 0);
-            let totalUSD = basePriceUSD * purchaseQuantity;
+            const subUSD = basePriceUSD * purchaseQuantity;
+            let totalUSD = subUSD;
 
             // Descuento solo se aplica al PRIMER combo, no a todos
+            let discUSD = 0;
             if (discountPercent > 0) {
-                totalUSD = totalUSD - (basePriceUSD * (discountPercent / 100));
+                discUSD = basePriceUSD * (discountPercent / 100);
+                totalUSD = subUSD - discUSD;
             }
 
+            const discEl = document.getElementById('summary-discount');
             // Si no hay tasa configurada en admin, mostrar solo USD
             if (exchangeRateBs > 0) {
-                const totalBs = Math.round(totalUSD * exchangeRateBs);
-                const formattedBs = totalBs.toLocaleString('es-VE', { maximumFractionDigits: 0 });
-                const formattedUSD = totalUSD.toFixed(2);
-                document.getElementById('summary-subtotal').innerHTML = 'Bs. ' + formattedBs + ' <span class="text-gray-500 font-normal">($' + formattedUSD + ' USD)</span>';
-                document.getElementById('summary-total-bs').innerText = formattedBs;
-                document.getElementById('summary-total-usd').innerText = '($' + formattedUSD + ' USD)';
+                const totalBsTxt = fmtBs(totalUSD * exchangeRateBs);
+                document.getElementById('summary-subtotal').innerText = fmtBs(subUSD * exchangeRateBs);
+                discEl.innerText = discUSD > 0 ? ('− ' + fmtBs(discUSD * exchangeRateBs)) : '— --';
+                document.getElementById('summary-total-bs').innerText = totalBsTxt;
+                document.getElementById('summary-total-usd').innerText = '($' + totalUSD.toFixed(2) + ')';
+                document.getElementById('inline-total').innerText = totalBsTxt;
             } else {
-                const formattedUSD = totalUSD.toFixed(2);
-                document.getElementById('summary-subtotal').innerHTML = '<span class="text-emerald-400 font-bold">$' + formattedUSD + ' USD</span> <span class="text-[10px] text-yellow-500 italic">(tasa no configurada)</span>';
-                document.getElementById('summary-total-bs').innerText = '--';
-                document.getElementById('summary-total-usd').innerText = '($' + formattedUSD + ' USD)';
+                document.getElementById('summary-subtotal').innerText = '$' + subUSD.toFixed(2) + ' USD';
+                discEl.innerText = discUSD > 0 ? ('− $' + discUSD.toFixed(2)) : '— --';
+                document.getElementById('summary-total-bs').innerText = '$' + totalUSD.toFixed(2);
+                document.getElementById('summary-total-usd').innerText = '(tasa no configurada)';
+                document.getElementById('inline-total').innerText = '$' + totalUSD.toFixed(2);
             }
 
             // Sincronizar barra flotante movil
-            const mobBadge2 = document.getElementById('mob-badge');
-            const mobGame2 = document.getElementById('mob-game-name');
             const mobItem2 = document.getElementById('mob-item-name');
+            const mobBadge2 = document.getElementById('mob-item-badge');
+            const mobGame2 = document.getElementById('mob-game-name');
             const mobPrice2 = document.getElementById('mob-price');
-            const mobPriceUsd2 = document.getElementById('mob-price-usd');
-            if (mobBadge2) {
-                if (pkg.image_path) {
-                    mobBadge2.innerHTML = '<img src="' + pkg.image_path + '" alt="' + pkg.name + '" class="w-full h-full object-contain rounded-lg" onerror="this.style.display=\'none\';this.parentElement.className=\'w-10 h-10 rounded-lg bg-gradient-to-br ' + grad + ' flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0\';this.parentElement.innerText=\'' + (pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0,3).toUpperCase() || '?') + '\';">';
-                    mobBadge2.className = 'w-10 h-10 rounded-lg bg-[#0c0c0e] flex items-center justify-center shadow-lg shrink-0 overflow-hidden';
-                } else {
-                    mobBadge2.className = 'w-10 h-10 rounded-lg bg-gradient-to-br ' + grad + ' flex items-center justify-center text-[8px] font-black text-white shadow-lg shrink-0';
-                    let short2 = pkg.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase();
-                    if (!short2) short2 = pkg.name.substring(0, 3).toUpperCase();
-                    mobBadge2.innerText = short2;
-                }
-            }
+            if (mobItem2) mobItem2.innerText = item.title;
+            if (mobBadge2) mobBadge2.innerText = item.subtitle || item.sticker || '';
             if (mobGame2) mobGame2.innerText = pkg.name;
-            if (mobItem2) mobItem2.innerText = item.title + (item.subtitle ? ' (' + item.subtitle + ')' : '');
-            if (mobPrice2 && mobPriceUsd2) {
-                if (exchangeRateBs > 0) {
-                    const totalBs = Math.round(totalUSD * exchangeRateBs);
-                    mobPrice2.innerText = 'Bs. ' + totalBs.toLocaleString('es-VE', { maximumFractionDigits: 0 });
-                    mobPriceUsd2.innerText = '$' + totalUSD.toFixed(2) + ' USD';
-                    mobPriceUsd2.classList.remove('hidden');
-                } else {
-                    mobPrice2.innerText = '$' + totalUSD.toFixed(2) + ' USD';
-                    mobPriceUsd2.innerText = '';
-                    mobPriceUsd2.classList.add('hidden');
-                }
+            if (mobPrice2) {
+                mobPrice2.innerText = (exchangeRateBs > 0)
+                    ? fmtBs(totalUSD * exchangeRateBs)
+                    : '$' + totalUSD.toFixed(2) + ' USD';
             }
         }
 
         // ============ CHECKOUT REDIRECT ============
         function focusVerificationField(inputEl, message) {
             const section = document.getElementById('verification-section');
+            const idRow = inputEl ? inputEl.closest('.st-id-row') : null;
             if (section) {
                 section.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // Efecto visual: borde rojo temporal en la seccion
-                section.classList.add('ring-2', 'ring-red-500', 'border-red-500');
-                setTimeout(() => {
-                    section.classList.remove('ring-2', 'ring-red-500', 'border-red-500');
-                }, 2000);
+            }
+            if (idRow) {
+                idRow.classList.add('st-id-error');
+                setTimeout(() => idRow.classList.remove('st-id-error'), 2000);
             }
             if (inputEl) {
                 // Esperar al scroll antes de hacer focus en movil (evita teclado abriendo a media animacion)
@@ -1353,150 +1487,96 @@
             window.location.href = '/checkout/' + currentSelectedPkgId + '?' + params.toString();
         }
 
-        function closeCheckoutModal() {
-            const modal = document.getElementById('checkout-modal');
-            const content = document.getElementById('modal-content');
-            content.classList.remove('scale-100', 'opacity-100');
-            content.classList.add('scale-95', 'opacity-0');
-            setTimeout(() => {
-                modal.classList.add('hidden');
-            }, 300);
-        }
+        // ============ CARRUSEL DE BANNERS (imagen + textos del admin) ============
+        let carouselInterval = null;
+        let bannerCount = 0;
 
-        async function submitOrder() {
-            const email = document.getElementById('checkout-email').value.trim();
-            const phone = document.getElementById('checkout-phone').value.trim();
-            const reference = document.getElementById('checkout-reference').value.trim();
-            const playerId = document.getElementById('checkout-player-id').value.trim();
-            const currency = document.getElementById('checkout-currency').value;
-            const pkg = getCurrentPackage();
-            const item = getCurrentItem();
-
-            if (!email) {
-                showToast("Ingresa tu correo electronico.", true);
-                return;
-            }
-            if (!reference) {
-                showToast("Ingresa la referencia de pago.", true);
-                return;
-            }
-
-            const basePrice = parseFloat(item.price || 0);
-            let totalUSD = basePrice * purchaseQuantity;
-            // Descuento solo al primer combo
-            if (discountPercent > 0) {
-                totalUSD = totalUSD - (basePrice * (discountPercent / 100));
-            }
-            const amountRounded = Math.round(totalUSD * exchangeRateBs);
-            const finalAmount = currency === 'BSD' ? amountRounded : totalUSD.toFixed(2);
-
-            document.getElementById('checkout-loading').classList.remove('hidden');
-            document.getElementById('btn-submit-order').classList.add('hidden');
-
-            const formData = new FormData();
-            formData.append('store_package_id', currentSelectedPkgId);
-            formData.append('item_id', selectedItemId);
-            formData.append('method', currency === 'BSD' ? 'pm' : 'zelle');
-            formData.append('currency', currency);
-            formData.append('amount', finalAmount);
-            formData.append('reference', reference);
-            formData.append('email', email);
-            formData.append('phone', phone);
-            formData.append('name', email.split('@')[0] || 'Cliente');
-            if (playerId && currentCategory === 'mobile' && !selectedPkgDirectToPin) {
-                formData.append('customer_id', playerId);
-            }
-            if (verifiedNick) {
-                formData.append('nn', verifiedNick);
-            }
-            if (discountPercent > 0) {
-                const code = document.getElementById('discount-code-input').value.trim().toUpperCase();
-                formData.append('special_code', code);
-            }
-            if (purchaseQuantity > 1) {
-                const itemsJson = JSON.stringify([{ item_id: selectedItemId, qty: purchaseQuantity }]);
-                formData.append('items', itemsJson);
-            }
-
-            try {
-                const resp = await fetch('/orders', {
-                    method: 'POST',
-                    body: formData,
-                });
-                const data = await resp.json();
-
-                if (data.ok && data.order_id) {
-                    closeCheckoutModal();
-                    window.location.href = '/gracias/' + data.order_id;
-                } else {
-                    document.getElementById('checkout-loading').classList.add('hidden');
-                    document.getElementById('btn-submit-order').classList.remove('hidden');
-                    showToast(data.error || 'Error al crear el pedido.', true);
-                }
-            } catch (e) {
-                document.getElementById('checkout-loading').classList.add('hidden');
-                document.getElementById('btn-submit-order').classList.remove('hidden');
-                showToast('Error de conexion. Intenta de nuevo.', true);
-            }
-        }
-
-        // ============ CARRUSEL HERO (imagenes del admin) ============
-        function buildHeroCarousel(images) {
-            const carousel = document.getElementById('image-carousel');
+        function buildHeroCarousel(banners, legacyImages) {
+            const track = document.getElementById('banner-track');
             const dotsContainer = document.getElementById('carousel-dots');
-            
-            // Filtrar solo imagenes no vacias
-            const validImages = (images || []).filter(img => img && img.trim() !== '');
-            
-            if (validImages.length === 0) {
-                carousel.innerHTML = '<div class="carousel-slide min-w-full h-full flex items-center justify-center shrink-0"><div class="flex flex-col items-center gap-2"><i class="fa-solid fa-image text-gray-600 text-3xl"></i><p class="text-gray-500 text-xs">Sin promociones</p></div></div>';
+
+            // Compatibilidad: si no hay banners configurados, usar las imagenes del carrusel anterior
+            let slides = (banners || []).filter(b => b && (b.image || b.title));
+            if (slides.length === 0) {
+                slides = (legacyImages || []).filter(img => img && img.trim() !== '').map(img => ({ image: img, tag: '', title: '', sub: '' }));
+            }
+
+            if (slides.length === 0) {
+                track.innerHTML = '<div class="st-slide" style="justify-content:center"><div class="st-slide-copy" style="align-items:center"><div class="st-slide-sub">Sin promociones</div></div></div>';
                 dotsContainer.innerHTML = '';
+                bannerCount = 0;
+                if (carouselInterval) clearInterval(carouselInterval);
                 return;
             }
 
-            carousel.innerHTML = '';
+            track.innerHTML = '';
             dotsContainer.innerHTML = '';
+            bannerCount = slides.length;
 
-            validImages.forEach((imgPath, i) => {
+            slides.forEach((b, i) => {
                 const slide = document.createElement('div');
-                slide.className = 'carousel-slide min-w-full h-full shrink-0 flex items-center justify-center';
-                if (i !== 0) slide.classList.add('hidden');
-                slide.innerHTML = `<img src="${imgPath}" alt="Promocion ${i+1}" class="w-full h-full object-contain" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center bg-[#141418]\\'><span class=\\'text-gray-600 text-xs\\'>Imagen no disponible</span></div>';">`;
-                carousel.appendChild(slide);
+                slide.className = 'st-slide';
+                if (b.image) slide.style.backgroundImage = "url('" + b.image + "')";
+                const hasText = !!(b.tag || b.title || b.sub);
+                if (hasText) {
+                    const shade = document.createElement('div');
+                    shade.className = 'st-slide-shade';
+                    slide.appendChild(shade);
+                    const copy = document.createElement('div');
+                    copy.className = 'st-slide-copy';
+                    if (b.tag) {
+                        const tag = document.createElement('div');
+                        tag.className = 'st-slide-tag';
+                        tag.innerText = b.tag;
+                        copy.appendChild(tag);
+                    }
+                    if (b.title) {
+                        const title = document.createElement('div');
+                        title.className = 'st-slide-title';
+                        title.innerText = b.title;
+                        copy.appendChild(title);
+                    }
+                    if (b.sub) {
+                        const sub = document.createElement('div');
+                        sub.className = 'st-slide-sub';
+                        sub.innerText = b.sub;
+                        copy.appendChild(sub);
+                    }
+                    slide.appendChild(copy);
+                }
+                track.appendChild(slide);
 
                 const dot = document.createElement('span');
-                dot.className = i === 0 ? 'w-2 h-2 rounded-full bg-emerald-400' : 'w-2 h-2 rounded-full bg-gray-600';
+                dot.className = 'dot' + (i === 0 ? ' on' : '');
+                dot.onclick = function() { showSlide(i); restartCarouselTimer(); };
                 dotsContainer.appendChild(dot);
             });
 
             currentSlide = 0;
+            showSlide(0);
+            restartCarouselTimer();
+        }
+
+        function restartCarouselTimer() {
             if (carouselInterval) clearInterval(carouselInterval);
-            if (validImages.length > 1) carouselInterval = setInterval(nextSlide, 5000);
+            if (bannerCount > 1) carouselInterval = setInterval(nextSlide, 5200);
         }
 
         function showSlide(index) {
-            const slides = document.querySelectorAll('.carousel-slide');
-            const dots = document.querySelectorAll('#carousel-dots span');
-            if (slides.length === 0) return;
-
-            if (index >= slides.length) currentSlide = 0;
-            else if (index < 0) currentSlide = slides.length - 1;
+            if (bannerCount === 0) return;
+            if (index >= bannerCount) currentSlide = 0;
+            else if (index < 0) currentSlide = bannerCount - 1;
             else currentSlide = index;
 
-            slides.forEach((slide, i) => {
-                slide.classList.toggle('hidden', i !== currentSlide);
-            });
-            dots.forEach((dot, i) => {
-                dot.className = i === currentSlide
-                    ? "w-2 h-2 rounded-full bg-emerald-400"
-                    : "w-2 h-2 rounded-full bg-gray-600";
+            const track = document.getElementById('banner-track');
+            track.style.transform = 'translateX(-' + (currentSlide * 100) + '%)';
+            document.querySelectorAll('#carousel-dots .dot').forEach((dot, i) => {
+                dot.classList.toggle('on', i === currentSlide);
             });
         }
 
         function nextSlide() { showSlide(currentSlide + 1); }
-        function prevSlide() { showSlide(currentSlide - 1); }
-
-        let carouselInterval = null;
+        function prevSlide() { showSlide(currentSlide - 1); restartCarouselTimer(); }
 
         // ============ FONDO DE PAGINA: video o imagen (config del admin) ============
         function setupBgMedia(videoSrc, imageSrc) {
@@ -1532,6 +1612,10 @@
         }
 
         // ============ TICKER DE RECARGAS RECIENTES ============
+        let tickerFeed = [];
+        let tickerIndex = 0;
+        let tickerRotateId = null;
+
         function timeAgoEs(iso) {
             if (!iso) return '';
             // created_at viene en UTC — puede traer offset (+00:00) o venir naive
@@ -1541,38 +1625,49 @@
             const secs = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
             if (secs < 90) return 'ahora';
             const mins = Math.floor(secs / 60);
-            if (mins < 60) return mins + 'min';
+            if (mins < 60) return 'hace ' + mins + ' min';
             const hours = Math.floor(mins / 60);
-            if (hours < 24) return hours + 'h';
-            return Math.floor(hours / 24) + 'd';
+            if (hours < 24) return 'hace ' + hours + ' h';
+            return 'hace ' + Math.floor(hours / 24) + ' d';
         }
 
-        function buildRechargeTicker(recharges) {
+        function escHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function renderTickerItem() {
             const bar = document.getElementById('recharge-ticker');
             const track = document.getElementById('ticker-track');
             if (!bar || !track) return;
-            const list = (recharges || []).filter(r => r && r.user && r.product);
-            if (!list.length) {
+            if (!tickerFeed.length) {
                 bar.style.display = 'none';
                 track.innerHTML = '';
                 return;
             }
-            const itemHtml = list.map(r => {
-                const ago = timeAgoEs(r.created_at);
-                return '<span class="inline-flex items-center gap-1.5 px-4 text-[11px] font-semibold text-gray-300 whitespace-nowrap">' +
-                    '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 shrink-0"></span>' +
-                    '<span class="text-white font-bold">' + r.user + '</span>' +
-                    '<span class="text-gray-400">recargó</span>' +
-                    '<span class="text-emerald-400 font-bold">' + r.product + '</span>' +
-                    (r.game ? '<span class="text-gray-400">de</span> <span class="text-white font-semibold">' + r.game + '</span>' : '') +
-                    (ago ? '<span class="text-gray-500 text-[10px]">· ' + ago + '</span>' : '') +
-                '</span>';
-            }).join('');
-            // Duplicar el contenido para que el scroll infinito no tenga cortes
-            track.innerHTML = itemHtml + itemHtml;
-            // Velocidad proporcional a la cantidad de items
-            track.style.animationDuration = Math.max(20, list.length * 5) + 's';
-            bar.style.display = 'block';
+            bar.style.display = 'flex';
+            const r = tickerFeed[tickerIndex % tickerFeed.length];
+            const ago = timeAgoEs(r.created_at);
+            track.innerHTML = '<div class="st-ticker-item">' +
+                '<span class="tk-dot"></span>' +
+                '<span class="tk-user">' + escHtml(r.user) + '</span>' +
+                '<span>recargó</span>' +
+                '<span class="tk-item">' + escHtml(r.product) + '</span>' +
+                (r.game ? '<span class="tk-game">· ' + escHtml(r.game) + '</span>' : '') +
+                (ago ? '<span class="tk-time">' + escHtml(ago) + '</span>' : '') +
+            '</div>';
+        }
+
+        function buildRechargeTicker(recharges) {
+            tickerFeed = (recharges || []).filter(r => r && r.user && r.product);
+            if (tickerIndex >= tickerFeed.length) tickerIndex = 0;
+            renderTickerItem();
+            if (tickerRotateId) clearInterval(tickerRotateId);
+            if (tickerFeed.length > 1) {
+                tickerRotateId = setInterval(() => {
+                    tickerIndex = (tickerIndex + 1) % tickerFeed.length;
+                    renderTickerItem();
+                }, 2600);
+            }
         }
 
         async function loadRecentRecharges() {
@@ -1582,6 +1677,23 @@
             } catch (e) {
                 // Silencioso — si falla se oculta el ticker en el proximo intento exitoso
             }
+        }
+
+        // ============ RUEDA LATERAL (canje de regalos) ============
+        function toggleFan() {
+            const wrap = document.getElementById('fan-wrap');
+            if (!wrap) return;
+            const open = wrap.classList.toggle('open');
+            wrap.style.setProperty('--fs', open ? '1' : '0');
+            const tab = document.getElementById('fan-tab');
+            if (tab) tab.innerText = open ? '›' : '‹';
+        }
+
+        function fanOpenGift() {
+            // El sector del regalo abre el canje de códigos generados en el admin
+            const wrap = document.getElementById('fan-wrap');
+            if (wrap && wrap.classList.contains('open')) toggleFan();
+            openGiftModal();
         }
 
         // ============ LOGIN MODAL ============
@@ -1868,17 +1980,17 @@
         function updateLoginButton(user) {
             const btn = document.getElementById('header-login-btn');
             if (!btn) return;
-            
+
             if (user && (user.name || user.email)) {
                 // Mostrar iniciales y redirigir a /user al clickear
                 const name = user.name || user.email || '';
                 const initials = name.split(/\s+/).map(w => w[0] || '').slice(0, 2).join('').toUpperCase();
-                btn.innerHTML = '<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black border border-emerald-500/30">' + initials + '</span>';
+                btn.innerHTML = '<span style="color:#3ee07f;font-weight:700;font-size:11px;">' + initials + '</span>';
                 btn.title = name + ' — Mi Cuenta';
                 btn.setAttribute('onclick', "window.location.href='/user'");
             } else {
                 // Restaurar icono SVG y volver a abrir login modal
-                btn.innerHTML = '<svg id="header-login-icon" class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>';
+                btn.innerHTML = '<svg id="header-login-icon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>';
                 btn.title = 'Iniciar Sesión';
                 btn.setAttribute('onclick', 'openLoginModal()');
             }
@@ -1919,11 +2031,11 @@
         }
 
         // ============ INIT ============
-        // Vincular botones +/- del footer flotante movil
+        // Vincular botones +/- de la barra flotante movil
         function bindMobileQtyButtons() {
             const bar = document.getElementById('mobile-checkout-bar');
             if (!bar) return;
-            bar.querySelectorAll('button[data-delta]').forEach(function(btn) {
+            bar.querySelectorAll('[data-delta]').forEach(function(btn) {
                 if (btn.dataset.bound === '1') return;
                 btn.dataset.bound = '1';
                 const delta = parseInt(btn.getAttribute('data-delta'));
@@ -1941,9 +2053,19 @@
         }
         bindMobileQtyButtons();
 
-        // Scroll horizontal con rueda del mouse en el carrusel de juegos
+        // El ID escrito se refleja en el resumen lateral
+        (function bindIdMirror() {
+            const idInput = document.getElementById('id-verification-input');
+            if (!idInput) return;
+            idInput.addEventListener('input', () => {
+                const idLabelEl = document.getElementById('summary-player-id');
+                if (idLabelEl) idLabelEl.innerText = idInput.value.trim() || '—';
+            });
+        })();
+
+        // Scroll horizontal con rueda del mouse en el carrusel de juegos expandido
         (function enableWheelScroll() {
-            var mc = document.getElementById('mosaic-container');
+            var mc = document.getElementById('mosaic-scroll');
             if (!mc) return;
             mc.addEventListener('wheel', function(e) {
                 if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return; // ya es horizontal (trackpad)
@@ -1955,7 +2077,6 @@
         window.onload = function () {
             checkSession();
             loadAllData();
-            showSlide(0);
             loadRecentRecharges();
             // Refrescar el ticker con ordenes nuevas cada 60s
             setInterval(loadRecentRecharges, 60000);
@@ -2152,7 +2273,7 @@
                         var estado = item.delivered
                             ? '<span class="text-[9px] font-black text-emerald-400 uppercase tracking-wider">Entregado</span>'
                             : '<span class="text-[9px] font-black text-amber-400 uppercase tracking-wider">En proceso</span>';
-                        return '<div class="bg-[#0c0c0e] border border-[#222226] rounded-xl p-3 flex items-center justify-between gap-3">' +
+                        return '<div class="bg-[#0d0d0d] border border-[#2b2b2b] rounded-xl p-3 flex items-center justify-between gap-3">' +
                                '<div class="min-w-0">' +
                                '<div class="text-[11px] font-bold text-white truncate">' + esc(item.prize) + '</div>' +
                                '<div class="text-[9px] text-gray-500 font-semibold tracking-widest">' + esc(item.code) + '</div>' +
@@ -2199,36 +2320,16 @@
             if (evt.key === 'Escape' && modal && modal.style.display === 'flex') closeGiftModal();
         });
 
-        // El boton flota sobre el contenido, pero nunca encima del footer: al
-        // llegar al final se apoya justo arriba de su borde en vez de taparlo.
-        var fab = el('gift-fab');
-        var footer = document.querySelector('footer');
-
-        function ajustarFab() {
-            if (!fab || fab.classList.contains('hidden')) return;
-            var base = window.innerWidth >= 768 ? 32 : 112;   // md:bottom-8 / bottom-28
-            var sobreFooter = base;
-            if (footer) {
-                var tope = footer.getBoundingClientRect().top;
-                sobreFooter = (window.innerHeight - tope) + 16;
-            }
-            fab.style.bottom = Math.max(base, sobreFooter) + 'px';
-        }
-
-        window.addEventListener('scroll', ajustarFab, { passive: true });
-        window.addEventListener('resize', ajustarFab);
-
-        // El boton solo aparece si el canje esta encendido en el admin.
+        // La rueda lateral solo aparece si el canje esta encendido en el admin.
         fetch('/store/gift/config')
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (data && data.ok && data.enabled && fab) {
-                    fab.classList.remove('hidden');
-                    fab.classList.add('flex');
-                    ajustarFab();
+                var fan = el('fan-wrap');
+                if (data && data.ok && data.enabled && fan) {
+                    fan.style.display = 'block';
                 }
             })
-            .catch(function () { /* si falla, el boton se queda oculto */ });
+            .catch(function () { /* si falla, la rueda se queda oculta */ });
     })();
     </script>
 

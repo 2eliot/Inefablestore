@@ -8679,12 +8679,25 @@ def admin_page():
 
 @app.route("/store/hero")
 def store_hero():
+    # Banners del carrusel del inicio: imagen + etiqueta + título + subtítulo,
+    # todo editable desde el panel de administración (hasta 4 banners).
+    banners = []
+    for n in range(1, 5):
+        banner = {
+            "image": get_config_value(f"hero_{n}", ""),
+            "tag": get_config_value(f"banner_{n}_tag", ""),
+            "title": get_config_value(f"banner_{n}_title", ""),
+            "sub": get_config_value(f"banner_{n}_sub", ""),
+        }
+        if banner["image"] or banner["title"]:
+            banners.append(banner)
     return jsonify({
         "images": [
             get_config_value("hero_1", ""),
             get_config_value("hero_2", ""),
             get_config_value("hero_3", ""),
         ],
+        "banners": banners,
         "video": get_config_value("bg_video_path", ""),
         "bg_image": get_config_value("bg_image_path", ""),
     })
@@ -9338,12 +9351,13 @@ def admin_config_hero_get():
     user = session.get("user")
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
-    return jsonify({
-        "ok": True,
-        "hero_1": get_config_value("hero_1", ""),
-        "hero_2": get_config_value("hero_2", ""),
-        "hero_3": get_config_value("hero_3", ""),
-    })
+    out = {"ok": True}
+    for n in range(1, 5):
+        out[f"hero_{n}"] = get_config_value(f"hero_{n}", "")
+        out[f"banner_{n}_tag"] = get_config_value(f"banner_{n}_tag", "")
+        out[f"banner_{n}_title"] = get_config_value(f"banner_{n}_title", "")
+        out[f"banner_{n}_sub"] = get_config_value(f"banner_{n}_sub", "")
+    return jsonify(out)
 
 
 @app.route("/admin/config/hero", methods=["POST"])
@@ -9353,11 +9367,13 @@ def admin_config_hero_set():
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
     try:
-        set_config_values({
-            "hero_1": (data.get("hero_1") or "").strip(),
-            "hero_2": (data.get("hero_2") or "").strip(),
-            "hero_3": (data.get("hero_3") or "").strip(),
-        })
+        values = {}
+        for n in range(1, 5):
+            values[f"hero_{n}"] = (data.get(f"hero_{n}") or "").strip()
+            values[f"banner_{n}_tag"] = (data.get(f"banner_{n}_tag") or "").strip()
+            values[f"banner_{n}_title"] = (data.get(f"banner_{n}_title") or "").strip()
+            values[f"banner_{n}_sub"] = (data.get(f"banner_{n}_sub") or "").strip()
+        set_config_values(values)
     except Exception as exc:
         return jsonify({"ok": False, "error": f"No se pudo guardar carrusel: {exc}"}), 500
     return jsonify({"ok": True})
@@ -10232,6 +10248,59 @@ def thanks_order(oid: int):
         "player_display": "",
         "package_display": "",
     }
+    # Datos extra para el comprobante de la página de entrega
+    game_name = ""
+    player_id_display = ""
+    reference_display = ""
+    order_date_display = ""
+    total_display = ""
+    retry_url = "/"
+    if order_obj:
+        try:
+            pkg = StorePackage.query.get(order_obj.store_package_id) if order_obj.store_package_id else None
+            game_name = (pkg.name or "").strip() if pkg else ""
+        except Exception:
+            game_name = ""
+        cid = str(order_obj.customer_id or "").strip()
+        zid = str(order_obj.customer_zone or "").strip()
+        player_id_display = f"{cid}/{zid}" if (cid and zid) else cid
+        reference_display = str(order_obj.reference or "").strip()
+        try:
+            if order_obj.created_at:
+                ve_dt = order_obj.created_at.replace(tzinfo=timezone.utc).astimezone(VE_TIMEZONE)
+                order_date_display = ve_dt.strftime("%d/%m %H:%M")
+        except Exception:
+            order_date_display = ""
+        try:
+            amount = float(order_obj.amount or 0)
+            if (order_obj.currency or "USD").upper() == "BSD":
+                total_display = "Bs. " + f"{amount:,.0f}".replace(",", ".")
+            else:
+                total_display = f"${amount:,.2f}"
+        except Exception:
+            total_display = ""
+        # Enlace para reintentar el pago con la misma selección (orden fallida)
+        try:
+            retry_params = {}
+            entries = _get_order_item_entries(order_obj)
+            if entries:
+                retry_params["item"] = str(entries[0].get("item_id") or "")
+                retry_params["q"] = str(entries[0].get("qty") or 1)
+            method = (order_obj.method or "pm").strip().lower()
+            retry_params["method"] = "binance" if method == "binance" else "pm"
+            retry_params["cur"] = "USD" if (order_obj.currency or "").upper() == "USD" else "BSD"
+            if cid:
+                retry_params["cid"] = cid
+            if zid:
+                retry_params["zid"] = zid
+            nick = str(order_obj.customer_name or "").strip()
+            if nick and not _looks_like_email(nick) and nick != cid:
+                retry_params["nn"] = nick
+            from urllib.parse import urlencode
+            retry_url = f"/checkout/{order_obj.store_package_id}?{urlencode({k: v for k, v in retry_params.items() if v})}"
+        except Exception:
+            retry_url = f"/checkout/{order_obj.store_package_id}" if order_obj.store_package_id else "/"
+    whatsapp_url = get_config_value("whatsapp_url", "https://api.whatsapp.com/send?phone=%2B584125712917")
     return render_template(
         "thanks.html",
         order_id=oid,
@@ -10239,6 +10308,13 @@ def thanks_order(oid: int):
         site_name=site_name,
         player_display=order_meta.get("player_display") or "",
         package_display=order_meta.get("package_display") or "",
+        game_name=game_name,
+        player_id_display=player_id_display,
+        reference_display=reference_display,
+        order_date_display=order_date_display,
+        total_display=total_display,
+        retry_url=retry_url,
+        whatsapp_url=whatsapp_url,
     )
 
 

@@ -1,14 +1,28 @@
-// Standalone checkout page
+// Standalone checkout page (pasarela de pago)
 document.addEventListener('DOMContentLoaded', () => {
   const root = document.getElementById('checkout');
   if (!root) return;
   const gid = root.getAttribute('data-gid');
-  const coTotal = document.getElementById('co-total');
-  const coInfo = document.getElementById('co-info');
+  // Resumen de la compra (tarjeta colapsable)
+  const sumCard = document.getElementById('co-sum-card');
+  const sumToggle = document.getElementById('co-sum-toggle');
+  const sumThumb = document.getElementById('co-sum-thumb');
+  const sumGame = document.getElementById('co-sum-game');
+  const sumPack = document.getElementById('co-sum-pack');
+  const sumMeta = document.getElementById('co-sum-meta');
+  const sumTotal = document.getElementById('co-sum-total');
+  const sumOld = document.getElementById('co-sum-old');
+  const sumQty = document.getElementById('co-sum-qty');
+  // Información de pago
+  const methodNameEl = document.getElementById('co-method-name');
+  const payTotalEl = document.getElementById('co-pay-total');
+  const payFieldsEl = document.getElementById('co-pay-fields');
+  const copyAllBtn = document.getElementById('co-copy-all');
   const coTimer = document.getElementById('co-timer');
   const coRef = document.getElementById('co-ref');
   const btnConfirm = document.getElementById('btn-co-confirm');
   const coDiscNote = document.getElementById('co-disc-note');
+  const finalCard = document.getElementById('co-final-card');
   const coQrModal = document.getElementById('coQrModal');
   const coQrModalClose = document.getElementById('coQrModalClose');
   const coQrModalTitle = document.getElementById('coQrModalTitle');
@@ -28,6 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const proofInner = document.getElementById('proofDropzoneInner');
   const proofFileName = document.getElementById('proofFileName');
   const proofPreview = document.getElementById('proofPreview');
+  const proofTitle = document.getElementById('proofTitle');
+  const proofHint = document.getElementById('proofHint');
   const captureRefBox = document.getElementById('captureRefBox');
   const captureRefLabel = document.getElementById('captureRefLabel');
   const captureRefValue = document.getElementById('captureRefValue');
@@ -52,6 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let captureAnalysisInFlight = false;
   let captureAnalysisPromise = null;
   let referralCodeError = '';
+
+  // Toggle del resumen (colapsado por defecto, como en el diseño)
+  if (sumToggle && sumCard) {
+    sumToggle.addEventListener('click', () => sumCard.classList.toggle('open'));
+  }
 
   function getCheckoutAttemptKey() {
     if (checkoutAttemptKey) return checkoutAttemptKey;
@@ -80,11 +101,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!coDiscNote) return;
     if (qRefCode && referralCodeError) {
       coDiscNote.removeAttribute('hidden');
-      coDiscNote.innerHTML = `<span style="color:#fca5a5;">${referralCodeError}</span>`;
+      coDiscNote.textContent = referralCodeError;
       return;
     }
     coDiscNote.setAttribute('hidden', '');
-    coDiscNote.innerHTML = '';
+    coDiscNote.textContent = '';
   }
 
   function renderCaptureReferenceState(mode, value = '', hint = '') {
@@ -272,53 +293,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return { uid, zid, nick };
   }
 
-  // Render basic game block immediately to avoid waiting for fetches
+  // Pintar juego + jugador de inmediato para no esperar los fetches
   (function initialHeader(){
-    if (!coTotal) return;
+    if (sumThumb && gimg) {
+      sumThumb.innerHTML = `<img src="${gimg}" alt="${gname || 'Juego'}">`;
+    }
+    if (sumGame) sumGame.textContent = gname || '';
     const qs0 = new URLSearchParams(window.location.search);
     const qCid0 = (qs0.get('cid') || '').trim();
-    const initialCtx = qCid0
-      ? getEffectivePlayerContext({
-          uid: qCid0,
-          zid: (qs0.get('zid') || '').trim(),
-          nick: (qs0.get('nn') || '').trim(),
-        })
-      : { uid: '', zid: '', nick: '' };
-    const leftImg = gimg ? `<img class="co-summary-art" src="${gimg}" alt="${gname || 'Juego'}">` : '';
-    const gameLabel = gname ? `<div class="co-summary-game">${gname}</div>` : '';
-    let playerMeta = '';
-    if (!directToPin && qCid0) {
-      const nn0 = initialCtx.nick || '';
-      const zid0 = initialCtx.zid || '';
-      const idLabel0 = zid0 ? 'ID/Zona ID' : 'ID';
-      const idValue0 = zid0 ? `${qCid0}/${zid0}` : qCid0;
-      const idLine = `<div class="co-summary-id">${idLabel0}: ${idValue0}</div>`;
-      const nameLine = nn0 ? `<div class="co-summary-nick">Nick: ${nn0}</div>` : '';
-      playerMeta = `
-        <div class="co-summary-meta">
-          ${idLine}
-          ${nameLine}
-        </div>`;
+    if (sumMeta && !directToPin && qCid0) {
+      const initialCtx = getEffectivePlayerContext({
+        uid: qCid0,
+        zid: (qs0.get('zid') || '').trim(),
+        nick: (qs0.get('nn') || '').trim(),
+      });
+      const idValue0 = initialCtx.zid ? `${qCid0}/${initialCtx.zid}` : qCid0;
+      sumMeta.textContent = 'ID ' + idValue0 + (initialCtx.nick ? ' · ' + initialCtx.nick : '');
     }
-    coTotal.innerHTML = `
-      <div class="co-summary">
-        <div class="co-summary-head">
-          <div class="co-summary-media">
-            ${leftImg}
-          </div>
-          <div class="co-summary-copy">
-            ${gameLabel}
-            ${playerMeta}
-          </div>
-          <div class="co-summary-price">
-            <div class="co-summary-price-row">
-              <div class="co-summary-value co-summary-value--total">...</div>
-            </div>
-            <div class="co-summary-qty">Cantidad: 1</div>
-          </div>
-        </div>
-      </div>
-    `;
   })();
 
   let allItems = [];
@@ -345,6 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
     coQrModalClose.addEventListener('click', closeQrModal);
   }
   if (coQrModal) {
+    // Toca fuera (o en cualquier parte del overlay) para cerrar
     coQrModal.addEventListener('click', (event) => {
       if (event.target === coQrModal) closeQrModal();
     });
@@ -358,6 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Restore selection and currency from URL first, then localStorage
   const qs = new URLSearchParams(window.location.search);
   const qSel = qs.get('sel');
+  const qItemId = qs.get('item'); // alternativa a 'sel': id del item (usado por "Reintentar pago")
   const qCur = qs.get('cur');
   const qMethod = qs.get('method'); // 'pm' | 'binance'
   const qCid = qs.get('cid');
@@ -496,7 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Backwards-compatible helper using current currency
     return formatPriceFor(currency, n);
   }
-  // Global delegated copy handler with fallback
+  // Global delegated copy handler with fallback (botones .copy-btn con data-copy)
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('.copy-btn');
     if (!btn) return;
@@ -523,7 +516,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-
+  async function copyTextRaw(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      try {
+        const tmp = document.createElement('textarea');
+        tmp.value = text;
+        tmp.style.cssText = 'position:fixed;opacity:0;';
+        document.body.appendChild(tmp);
+        tmp.select();
+        document.execCommand('copy');
+        document.body.removeChild(tmp);
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
+  }
 
   function computeTotals() {
     // Returns { amount, displayCurrency, usedCurrency, baseBeforeDiscount }
@@ -570,9 +581,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderHeader() {
-    if (!coTotal) return;
-    try { coTotal.removeAttribute('hidden'); } catch (_) {}
-
     const t = computeTotals();
     const qty = Math.max(1, quantity || 1);
     const originalAmount = Number(t.baseBeforeDiscount || 0);
@@ -590,174 +598,133 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (_) {}
 
-    const leftImg = gimg ? `<img class="co-summary-art" src="${gimg}" alt="${gname || 'Juego'}">` : '';
-    const gameLabel = gname ? `<div class="co-summary-game">${gname}</div>` : '';
+    if (sumPack) sumPack.textContent = selectedTitle || (gname || '...');
 
-    // Build player meta block (ID + Nick) only if CID is present (skip for gift cards)
-    let playerMeta = '';
-    const playerCtx = getEffectivePlayerContext();
-    const uid = playerCtx.uid;
-    if (!directToPin && uid) {
-      const nn = playerCtx.nick || '';
-      const zid = playerCtx.zid || '';
-      const safeName = nn || '';
-      const nameLine = safeName ? `<div class="co-summary-nick">Nick: ${safeName}</div>` : '';
-      const idLabel = zid ? 'ID/Zona ID' : 'ID';
-      const idValue = zid ? `${uid}/${zid}` : uid;
-      playerMeta = `
-        <div class="co-summary-meta">
-          <div class="co-summary-id">${idLabel}: ${idValue}</div>
-          ${nameLine}
-        </div>`;
+    // ID + Nick solo si hay CID (se omite para gift cards)
+    if (sumMeta) {
+      const playerCtx = getEffectivePlayerContext();
+      const uid = playerCtx.uid;
+      if (!directToPin && uid) {
+        const zid = playerCtx.zid || '';
+        const idValue = zid ? `${uid}/${zid}` : uid;
+        sumMeta.textContent = 'ID ' + idValue + (playerCtx.nick ? ' · ' + playerCtx.nick : '');
+      } else {
+        sumMeta.textContent = '';
+      }
     }
 
-    const copyBlock = `
-      <div class="co-summary-copy">
-        ${gameLabel}
-        ${selectedTitle ? `<div class="co-summary-item">${selectedTitle}</div>` : ''}
-        ${playerMeta}
-      </div>`;
+    const totalTxt = formatPriceFor(t.displayCurrency, totalAmount);
+    if (sumTotal) sumTotal.textContent = totalTxt;
+    if (payTotalEl) payTotalEl.textContent = totalTxt;
 
-    // Precio compacto a la derecha: total grande + (si hay descuento) precio anterior tachado.
+    // Precio anterior tachado cuando hay descuento aplicado
     const hasDiscount = discountAmount > 0 && originalAmount > totalAmount;
-    const priceMain = `<div class="co-summary-value co-summary-value--total">${formatPriceFor(t.displayCurrency, totalAmount)}</div>`;
-    const priceOld = hasDiscount
-      ? `<div class="co-summary-value co-summary-value--old">${formatPriceFor(t.displayCurrency, originalAmount)}</div>`
-      : '';
-    const priceBlock = `
-      <div class="co-summary-price">
-        <div class="co-summary-price-row">
-          ${priceMain}
-          ${priceOld}
-        </div>
-        <div class="co-summary-qty">Cantidad: ${qty}</div>
-      </div>`;
-
-    coTotal.innerHTML = `
-      <div class="co-summary">
-        <div class="co-summary-head">
-          <div class="co-summary-media">
-            ${leftImg}
-          </div>
-          ${copyBlock}
-          ${priceBlock}
-        </div>
-      </div>
-    `;
+    if (sumOld) {
+      if (hasDiscount) {
+        sumOld.hidden = false;
+        sumOld.textContent = formatPriceFor(t.displayCurrency, originalAmount);
+      } else {
+        sumOld.hidden = true;
+        sumOld.textContent = '';
+      }
+    }
+    if (sumQty) sumQty.textContent = 'Cantidad ' + qty;
 
     renderReferralStatusNote();
   }
 
   function renderInfo() {
-    if (!coInfo) return;
-    coInfo.innerHTML = '';
-    const shell = document.createElement('div');
-    shell.className = 'co-info-shell';
-    const list = document.createElement('div');
-    list.className = 'co-info-list';
-    shell.appendChild(list);
-    coInfo.appendChild(shell);
-    const svg = (name) => {
-      if (name === 'bank') return '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M3 10h18v2H3v-2zm2 3h2v5H5v-5zm4 0h2v5H9v-5zm4 0h2v5h-2v-5zm4 0h2v5h-2v-5zM3 21h18v2H3v-2zM12 2l9 6H3l9-6z"/></svg>';
-      if (name === 'email') return '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 13L2 6.76V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6.76L12 13zm0-2.4L22 4H2l10 6.6z"/></svg>';
-      if (name === 'user') return '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.33 0-8 2.17-8 5v1h16v-1c0-2.83-3.67-5-8-5z"/></svg>';
-      if (name === 'id') return '<svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M3 4h18v16H3z\" opacity=\".3\"/><path d=\"M21 2H3a1 1 0 0 0-1 1v18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM4 6h16v12H4zm3 2h6v2H7zm0 4h10v2H7z\"/></svg>';
-      return '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>';
-    };
-    const addItem = (iconName, value) => {
-      const row = document.createElement('div');
-      row.className = 'co-item';
-      row.style.gridTemplateColumns = '28px 1fr';
-      const ico = document.createElement('div');
-      ico.className = 'co-ico';
-      ico.innerHTML = svg(iconName);
-      const val = document.createElement('div');
-      val.className = 'co-val';
-      val.textContent = value || '-';
-      row.appendChild(ico);
-      row.appendChild(val);
-      list.appendChild(row);
-    };
-    const addCopyAllBtn = (getValues) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'copy-btn';
-      btn.style.cssText = 'width:100%; margin-top:10px; padding:10px 14px; font-size:13px; font-weight:800;';
-      btn.textContent = 'Copiar todo';
-      btn.addEventListener('click', async () => {
-        const values = typeof getValues === 'function' ? getValues() : getValues;
-        const text = values.filter(v => v).join('\n');
-        try {
-          await navigator.clipboard.writeText(text);
-          btn.textContent = '¡Copiado!';
-          setTimeout(() => { btn.textContent = 'Copiar todo'; }, 1200);
-        } catch (_) {
-          try {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            ta.style.cssText = 'position:fixed;opacity:0;';
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            btn.textContent = '¡Copiado!';
-            setTimeout(() => { btn.textContent = 'Copiar todo'; }, 1200);
-          } catch (_) { /* ignore */ }
-        }
+    if (!payFieldsEl) return;
+    payFieldsEl.innerHTML = '';
+
+    const addField = (label, value) => {
+      const safeValue = String(value || '').trim();
+      const tile = document.createElement('div');
+      tile.className = 'co-field';
+      tile.innerHTML = `
+        <div class="co-field-copy">
+          <div class="co-field-label"></div>
+          <div class="co-field-value"></div>
+        </div>
+        <div class="co-field-ico">⧉</div>`;
+      tile.querySelector('.co-field-label').textContent = label;
+      tile.querySelector('.co-field-value').textContent = safeValue || '-';
+      tile.addEventListener('click', async () => {
+        if (!safeValue) return;
+        const ok = await copyTextRaw(safeValue);
+        if (!ok) { alert('No se pudo copiar'); return; }
+        tile.classList.add('copied');
+        tile.querySelector('.co-field-ico').textContent = '✓';
+        setTimeout(() => {
+          tile.classList.remove('copied');
+          tile.querySelector('.co-field-ico').textContent = '⧉';
+        }, 1200);
       });
-      coInfo.appendChild(btn);
+      payFieldsEl.appendChild(tile);
+      return tile;
     };
-    const addQrCard = (src, title) => {
+
+    const addQrTile = (src, title) => {
       const safeSrc = String(src || '').trim();
       if (!safeSrc) return;
-      const qrCard = document.createElement('div');
-      qrCard.className = 'co-qr-card';
-      const qrTitle = document.createElement('div');
-      qrTitle.className = 'co-qr-title';
-      qrTitle.textContent = title || 'QR de pago';
-      const trigger = document.createElement('button');
-      trigger.type = 'button';
-      trigger.className = 'co-qr-trigger';
-      trigger.setAttribute('aria-label', `Abrir ${title || 'QR de pago'}`);
-      trigger.innerHTML = `<img class="co-qr-image" src="${safeSrc}" alt="${title || 'QR de pago'}">`;
-      trigger.addEventListener('click', () => openQrModal(safeSrc, title || 'QR de pago'));
-      qrCard.appendChild(qrTitle);
-      qrCard.appendChild(trigger);
-      shell.appendChild(qrCard);
+      const tile = document.createElement('div');
+      tile.className = 'co-qr-tile';
+      tile.innerHTML = `
+        <svg width="13" height="15" viewBox="0 0 24 24" fill="none" stroke="#3ee07f" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M14 14h3v3h-3zM18 18h3v3h-3z"></path></svg>
+        <div class="co-qr-tile-label">VER QR</div>`;
+      tile.addEventListener('click', () => openQrModal(safeSrc, title || 'QR de pago'));
+      payFieldsEl.appendChild(tile);
     };
-    // Optional player info lines (kept at top if present)
-    // Player ID (qCid) intentionally hidden from checkout UI, but still used internally
+
+    let copyValues = () => [];
+
     if (currency === 'BSD') {
+      if (methodNameEl) methodNameEl.textContent = 'PAGO MÓVIL';
       const bank = (paymentsCfg && paymentsCfg.pm_bank) || '';
       const cedula = (paymentsCfg && paymentsCfg.pm_id) || '';
       const phone = (paymentsCfg && paymentsCfg.pm_phone) || '';
       const qr = (paymentsCfg && paymentsCfg.pm_qr_path) || '';
-      addItem('bank', bank);
-      addItem('id', cedula);
-      addItem('user', phone);
-      addQrCard(qr, 'QR de Pago Móvil');
-      addCopyAllBtn(() => {
+      addField('BANCO', bank);
+      addField('CÉDULA', cedula);
+      addField('TELÉFONO', phone);
+      addQrTile(qr, 'QR de Pago Móvil');
+      copyValues = () => {
         const t = computeTotals();
         const monto = String(Math.round(Number(t.amount || 0)));
         return [bank, cedula, phone, monto];
-      });
+      };
     } else {
-      // Binance: show provider name, email and Pay ID
+      if (methodNameEl) methodNameEl.textContent = 'BINANCE';
+      const email = (paymentsCfg && paymentsCfg.binance_email) || '';
+      const phone = (paymentsCfg && paymentsCfg.binance_phone) || '';
       const qr = (paymentsCfg && paymentsCfg.binance_qr_path) || '';
-      addItem('bank', 'Binance');
-      addItem('email', (paymentsCfg && paymentsCfg.binance_email) || '');
-      addItem('user', (paymentsCfg && paymentsCfg.binance_phone) || '');
-      addQrCard(qr, 'QR de Binance');
-      // If Binance auto-verification is enabled for THIS item, show instructions about the beneficiary note
+      addField('PLATAFORMA', 'Binance');
+      addField('CORREO', email);
+      addField('USUARIO', phone);
+      addQrTile(qr, 'QR de Binance');
+      copyValues = () => {
+        const t = computeTotals();
+        return ['Binance', email, phone, String(Number(t.amount || 0).toFixed(2))];
+      };
+      // Si la verificación automática está activa para ESTE item, avisar sobre la nota del beneficiario
       if (isBinanceAuto) {
         const note = document.createElement('div');
-        note.style.cssText = 'margin-top:12px; padding:10px 14px; background:rgba(245,158,11,0.1); border:1.5px solid rgba(245,158,11,0.35); border-radius:10px; text-align:center;';
-        const refVal = coRef ? coRef.value.trim() : '';
-        note.innerHTML = '<div style="font-weight:900; color:#fbbf24; margin-bottom:6px;">⚠️ IMPORTANTE — Verificación automática</div>'
-          + '<div style="color:#e2e8f0; font-size:13px; line-height:1.4;">Al realizar el pago en Binance, <b>escribe tu número de referencia</b> en el campo <b>"Nota del beneficiario"</b> (memo/note).</div>'
-          + '<div style="color:#94a3b8; font-size:12px; margin-top:6px;">Sin este código en la nota, tu pago <b>NO</b> podrá ser verificado automáticamente y deberá ser aprobado manualmente.</div>';
-        list.appendChild(note);
+        note.className = 'co-binance-note';
+        note.innerHTML = '<div style="font-weight:700; color:#f0a52a; margin-bottom:6px;">⚠️ IMPORTANTE — Verificación automática</div>'
+          + '<div>Al realizar el pago en Binance, <b>escribe tu número de referencia</b> en el campo <b>"Nota del beneficiario"</b> (memo/note).</div>'
+          + '<div style="color:#8a8a8a; margin-top:6px;">Sin este código en la nota, tu pago <b>NO</b> podrá ser verificado automáticamente y deberá ser aprobado manualmente.</div>';
+        payFieldsEl.parentNode.insertBefore(note, payFieldsEl.nextSibling);
       }
+    }
+
+    if (copyAllBtn) {
+      copyAllBtn.onclick = async () => {
+        const text = copyValues().filter(v => v).join('\n');
+        const ok = await copyTextRaw(text);
+        if (!ok) return;
+        copyAllBtn.textContent = 'COPIADO ✓';
+        setTimeout(() => { copyAllBtn.textContent = 'COPIAR TODO'; }, 1400);
+      };
     }
   }
 
@@ -785,6 +752,11 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch('/store/payments').then(r => r.json()).catch(() => null)
   ]).then(([itemsRes, rateRes, payRes]) => {
     allItems = (itemsRes && itemsRes.items) || [];
+    // Permite llegar con ?item=<id> (ej. desde "Reintentar pago" en la página de gracias)
+    if (selectedIndex < 0 && qItemId) {
+      const byId = allItems.findIndex(it => String(it.id) === String(qItemId));
+      if (byId >= 0) selectedIndex = byId;
+    }
     if (selectedIndex < 0 && allItems.length > 0) selectedIndex = 0;
     rate = Number((rateRes && rateRes.rate_bsd_per_usd) || 0);
     paymentsCfg = (payRes && payRes.ok && payRes.payments) ? payRes.payments : null;
@@ -828,12 +800,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Binance Auto Mode Setup ──
   function setupBinanceAutoMode() {
-    // Hide proof card
+    // Hide proof card (columna del comprobante)
     const proofCard = proofDropzone ? proofDropzone.closest('.proof-card') : null;
     if (proofCard) proofCard.style.display = 'none';
-    // Hide reference section (label, input, digits, paste button, error, counter)
+    // Hide reference section (label, input, counter, error)
     const refGroup = coRef ? coRef.closest('.ref-group') : null;
     if (refGroup) refGroup.style.display = 'none';
+    // Refrescar la tarjeta de pago para que muestre la nota de verificación automática
+    renderInfo();
     // Fetch unique code from server
     fetch('/orders/generate-binance-code').then(r => r.json()).then(data => {
       if (data && data.ok && data.code) {
@@ -847,30 +821,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderBinanceAutoCard() {
-    // Insert a card with the code and instructions BEFORE the timer card
-    const timerCard = coTimer ? coTimer.closest('.co-card') : null;
-    if (!timerCard) return;
+    // Insert a card with the code and instructions BEFORE the final card
+    if (!finalCard || !finalCard.parentNode) return;
     const card = document.createElement('div');
-    card.className = 'co-card';
+    card.className = 'co-card co-pay-card';
     card.id = 'binance-auto-card';
     card.innerHTML = `
-      <h3>Verificación Automática Binance</h3>
-      <div style="text-align:center; padding:12px 0;">
-        <div style="color:#fbbf24; font-weight:900; font-size:14px; margin-bottom:10px;">⚠️ IMPORTANTE</div>
-        <div style="color:#e2e8f0; font-size:13px; line-height:1.5; margin-bottom:14px;">Al realizar el pago en Binance, escribe este código en el campo <b>"Nota del beneficiario"</b> (memo/note)</div>
-        <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin:16px 0;">
-          <div style="background:rgba(16,185,129,0.12); border:2px solid #10b981; border-radius:12px; padding:16px 28px; font-size:28px; font-weight:900; letter-spacing:8px; color:#10b981; font-family:monospace;">${binanceAutoCode}</div>
-          <button type="button" class="copy-btn" data-copy="${binanceAutoCode}" style="padding:10px 14px; font-size:13px;">Copiar</button>
+      <div class="co-method-row">
+        <div class="co-method-line l"></div>
+        <div style="font-family:'Outfit';font-size:15px;letter-spacing:.1em;white-space:nowrap">VERIFICACIÓN AUTOMÁTICA</div>
+        <div class="co-method-line r"></div>
+      </div>
+      <div style="text-align:center;">
+        <div style="color:#f0a52a; font-weight:700; font-size:13px; margin-bottom:8px;">⚠️ IMPORTANTE</div>
+        <div style="color:#c4c4c4; font-size:13px; line-height:1.5;">Al realizar el pago en Binance, escribe este código en el campo <b style="color:#eaeaea">"Nota del beneficiario"</b> (memo/note)</div>
+        <div class="co-auto-code">
+          <div class="co-auto-code-box">${binanceAutoCode}</div>
+          <button type="button" class="copy-btn" data-copy="${binanceAutoCode}" style="padding:10px 14px; font-size:12px; border:1px solid #2b2b2b; border-radius:8px; background:#0d0d0d; color:#eaeaea; cursor:pointer;">Copiar</button>
         </div>
-        <div style="color:#94a3b8; font-size:12px; margin-top:8px;">Sin este código en la nota, tu pago <b>NO</b> podrá ser verificado automáticamente.</div>
-        <div style="color:#94a3b8; font-size:12px; margin-top:6px;">Una vez realizado el pago, presiona <b>"Confirmar Pago"</b> y tu recarga será procesada automáticamente al verificar el pago.</div>
+        <div style="color:#8a8a8a; font-size:12px; margin-top:8px;">Sin este código en la nota, tu pago <b>NO</b> podrá ser verificado automáticamente.</div>
+        <div style="color:#8a8a8a; font-size:12px; margin-top:6px;">Una vez realizado el pago, presiona <b style="color:#3ee07f">"YA REALICÉ EL PAGO"</b> y tu recarga será procesada automáticamente al verificar el pago.</div>
       </div>
     `;
-    timerCard.parentNode.insertBefore(card, timerCard);
-    // Change confirm button text
-    if (btnConfirm) {
-      btnConfirm.textContent = 'Confirmar Pago';
-    }
+    finalCard.parentNode.insertBefore(card, finalCard);
   }
 
   if (proofDropzone && proofInput) {
@@ -920,6 +893,12 @@ document.addEventListener('DOMContentLoaded', () => {
       proofPreview.src = proofPreviewUrl;
       proofPreview.style.display = 'block';
     }
+    if (proofDropzone) {
+      proofDropzone.classList.add('uploaded');
+      proofDropzone.classList.remove('proof-dropzone--error');
+    }
+    if (proofTitle) proofTitle.textContent = 'Captura cargada';
+    if (proofHint) proofHint.textContent = 'Toca para reemplazar';
     if (proofInner) {
       proofInner.classList.add('proof-dropzone-inner--selected');
     }
@@ -946,7 +925,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Show only the count to avoid implying a fixed length
       refCounter.textContent = `${cnt}`;
       // Green when within valid range (1..21)
-      refCounter.style.color = (cnt >= 1 && cnt <= 21) ? '#10b981' : '#94a3b8';
+      refCounter.style.color = (cnt >= 1 && cnt <= 21) ? '#3ee07f' : '#6e6e6e';
     }
   }
 
@@ -958,23 +937,23 @@ document.addEventListener('DOMContentLoaded', () => {
       // Limit to 21 digits
       value = value.substring(0, 21);
       e.target.value = value;
-      
+
       // Update visual indicators
       updateDigitIndicators(value.length);
-      
+
       // Reset validation state
       isReferenceValid = false;
       if (refError) {
         refError.style.display = 'none';
         refError.textContent = '';
       }
-      
+
       // Enable/disable button based on length
       if (btnConfirm) {
         isReferenceValid = (value.length >= 1 && value.length <= 21);
         updateSubmitState();
       }
-      
+
       // Check for duplicate reference when at least 1 digit
       if (value.length >= 1) {
         checkReferenceAvailability(value);
@@ -1006,13 +985,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-  
+
   // Function to check if reference is already in use
   async function checkReferenceAvailability(reference) {
     try {
       const res = await fetch(`/orders/check-reference?reference=${encodeURIComponent(reference)}`);
       const data = await res.json();
-      
+
       if (res.ok && data.ok) {
         if (data.exists) {
           // Reference already in use
@@ -1024,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', () => {
           updateSubmitState();
           // Make counter text red to indicate error
           if (refCounter) {
-            refCounter.style.color = '#ef4444';
+            refCounter.style.color = '#ff5d5d';
           }
         } else {
           // Reference available
@@ -1036,7 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
           updateSubmitState();
           // Make counter text green to indicate success
           if (refCounter) {
-            refCounter.style.color = '#10b981';
+            refCounter.style.color = '#3ee07f';
           }
         }
       }

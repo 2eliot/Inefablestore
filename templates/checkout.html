@@ -1,978 +1,411 @@
-{% extends 'base.html' %}
+<!doctype html>
+<html lang="es">
+<head>
+  <!-- Meta Pixel Code -->
+  <script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '1375784344514516');
+  fbq('track', 'PageView');
+  </script>
+  <noscript><img height="1" width="1" style="display:none"
+  src="https://www.facebook.com/tr?id=1375784344514516&ev=PageView&noscript=1"
+  /></noscript>
+  <!-- End Meta Pixel Code -->
+  <meta charset="utf-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ site_name|default('InefableStore') }} - Pasarela de pago</title>
+  <link rel="icon" href="{{ url_for('static', filename='561553627_18409264204136226_1099017029378111495_n.ico') }}" type="image/x-icon">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='561553627_18409264204136226_1099017029378111495_n.ico') }}" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#000000;color:#eaeaea;font-family:'Outfit',Helvetica,sans-serif}
+    a{color:#3ee07f;text-decoration:none}
+    a:hover{color:#7af0a6}
+    input,button{font-family:inherit}
+    ::selection{background:#3ee07f;color:#000}
+    body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.07' stroke-width='1.2'%3E%3Cpath d='M40 18 L58 34 L40 62 L22 34 Z'/%3E%3Cpath d='M22 34 L58 34 M40 18 L33 34 L40 62 M40 18 L47 34'/%3E%3Ccircle cx='168' cy='44' r='15'/%3E%3Ccircle cx='168' cy='44' r='9'/%3E%3Cpath d='M232 100 L244 111 L232 130 L220 111 Z'/%3E%3Cpath d='M96 128 L110 141 L96 164 L82 141 Z'/%3E%3Cpath d='M82 141 L110 141'/%3E%3Ccircle cx='36' cy='196' r='13'/%3E%3Ccircle cx='36' cy='196' r='7'/%3E%3Cpath d='M188 178 L200 189 L188 208 L176 189 Z'/%3E%3Ccircle cx='128' cy='226' r='10'/%3E%3Cpath d='M244 214 L252 222 L244 236 L236 222 Z'/%3E%3Cpath d='M8 92 L18 101 L8 118 L-2 101 Z'/%3E%3C/g%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Ccircle cx='168' cy='44' r='7'/%3E%3Ccircle cx='36' cy='196' r='5'/%3E%3Ccircle cx='128' cy='226' r='8'/%3E%3C/g%3E%3C/svg%3E");background-size:260px 260px}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    @keyframes spin{to{transform:rotate(360deg)}}
 
-{% block styles %}
-<link rel="stylesheet" href="{{ static_url('css/store.css') }}">
-<style>
-  /* ======================================================
-     CHECKOUT â€” MATTE EMERALD GAMING REDESIGN
-     Mantiene IDs y clases originales (JS depende de ellas)
-     Acento: #15c26b sobre charcoal #0f0f10 / cards #161618
-     ====================================================== */
-  body {
-    background-color: #0f0f10 !important;
-    background-image:
-      radial-gradient(circle at 50% 0%, rgba(21,194,107,0.06), transparent 55%) !important;
-    background-attachment: fixed !important;
-    color: #e5e7eb;
-  }
+    .co-root{position:relative;z-index:1}
 
-  .co-wrap {
-    max-width: 760px;
-    margin: 0 auto;
-    padding: 18px 14px 36px;
-    position: relative;
-    z-index: 1;
-  }
-
-  /* ---------- Header del checkout: logo centrado, sin buscador ---------- */
-  .site-header.co-header .container {
-    position: relative;
-    display: flex !important;
-    align-items: center;
-    justify-content: flex-start;
-    grid-template-columns: none !important;
-    gap: 0;
-  }
-  .site-header.co-header .left-actions {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-  }
-  .site-header.co-header .brand {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    display: inline-flex;
-    align-items: center;
-    margin: 0;
-    pointer-events: auto;
-    z-index: 1;
-  }
-  .site-header.co-header .logo {
-    height: 40px !important;
-    width: auto;
-    max-width: min(260px, 60vw);
-    object-fit: contain;
-    display: block;
-  }
-  .site-header.co-header .logo-text {
-    display: inline-block;
-    text-align: center;
-  }
-  @media (max-width: 700px) {
-    .site-header.co-header .logo {
-      height: 32px !important;
-      max-width: min(200px, 55vw);
+    /* ---------- Barra superior ---------- */
+    .co-topbar{position:sticky;top:0;z-index:20;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid #1a1a1a;background:#000000d9;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+    .co-logo{font-family:'Outfit';font-size:20px;letter-spacing:.2em;font-weight:700;color:#eaeaea;white-space:nowrap}
+    .co-logo:hover{color:#eaeaea}
+    .co-logo-img{height:34px;object-fit:contain;display:block}
+    .co-headtag-wrap{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:9px}
+    .co-headdot{width:6px;height:6px;border-radius:50%;background:#3ee07f;animation:pulse 2s infinite}
+    .co-headtag{font-size:11px;letter-spacing:.18em;color:#8a8a8a;white-space:nowrap}
+    @media (max-width:719px){
+      .co-logo{font-size:13px;letter-spacing:.12em}
+      .co-logo-img{height:28px;max-width:32vw}
+      .co-headtag-wrap{left:auto;right:18px;transform:none}
+      .co-headtag{font-size:9px;letter-spacing:.12em;max-width:52vw;overflow:hidden;text-overflow:ellipsis}
     }
-  }
 
-  /* ---------- Subtítulo pasarela segura ---------- */
-  .co-subtitle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: #6b7280;
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: .28em;
-    text-transform: uppercase;
-    margin: -4px 0 14px;
-  }
-  .co-subtitle-dot {
-    width: 4px;
-    height: 4px;
-    border-radius: 999px;
-    background: #15c26b;
-    box-shadow: 0 0 6px rgba(21,194,107,0.6);
-  }
+    /* ---------- Overlay del QR ---------- */
+    #coQrModal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;background:#000000d9;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+    #coQrModal.is-open{display:flex}
+    #coQrModal[hidden]{display:none !important}
+    .co-qr-card{display:flex;flex-direction:column;align-items:center;gap:14px;border:1px solid #1f1f1f;background:#0a0a0a;border-radius:14px;padding:22px;max-width:92vw}
+    .co-qr-title{font-size:11px;letter-spacing:.16em;color:#8a8a8a;text-transform:uppercase}
+    #coQrModalImage{width:220px;height:220px;max-width:80vw;object-fit:contain;background:#ffffff;border-radius:8px;padding:6px}
+    .co-qr-hint{font-size:11px;color:#6e6e6e}
 
-  /* ---------- Cards comunes ---------- */
-  .co-banner,
-  .co-card,
-  #co-disc-note {
-    background: #161618;
-    color: #f8fafc;
-    border: 1px solid #27272a;
-    border-radius: 14px;
-    padding: 16px;
-    margin-bottom: 12px;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
-    transition: border-color .2s ease;
-  }
-  .co-banner:hover, .co-card:hover { border-color: #3f3f46; }
-  .co-banner[hidden] { display: none !important; }
+    /* ---------- Layout ---------- */
+    .co-wrap{max-width:760px;margin:0 auto;padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+    .co-card{border:1px solid #1f1f1f;background:#0a0a0a;border-radius:12px}
+    .co-divider{height:1px;background:#161616}
 
-  /* ---------- Headers de seccion ---------- */
-  .co-card h3 {
-    margin: 0 0 12px;
-    color: #9ca3af;
-    font-weight: 700;
-    font-size: 11px;
-    letter-spacing: .16em;
-    text-transform: uppercase;
-    text-align: left;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .co-card h3::before {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 999px;
-    background: #15c26b;
-    box-shadow: 0 0 6px rgba(21,194,107,0.7);
-  }
+    /* ---------- Resumen de la compra (colapsable) ---------- */
+    .co-sum-card{position:relative;overflow:hidden}
+    .co-sum-close{position:absolute;top:8px;right:10px;width:20px;height:20px;border-radius:6px;border:1px solid #1f1f1f;display:flex;align-items:center;justify-content:center;font-size:12px;color:#8a8a8a;z-index:2;transition:all .2s}
+    .co-sum-close:hover{border-color:#3ee07f;color:#3ee07f}
+    .co-sum-toggle{display:flex;align-items:center;gap:10px;padding:7px 44px 7px 12px;cursor:pointer}
+    .co-sum-thumb{width:30px;height:30px;flex:none;border-radius:7px;background:repeating-linear-gradient(135deg,#151515 0 6px,#0e0e0e 6px 12px);overflow:hidden;display:flex;align-items:center;justify-content:center}
+    .co-sum-thumb img{width:100%;height:100%;object-fit:cover}
+    .co-sum-headcopy{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+    .co-sum-title{font-family:'Outfit';font-size:15px;line-height:1;font-weight:700;letter-spacing:.06em;color:#eaeaea}
+    .co-sum-title span{color:#3ee07f}
+    .co-sum-sub{font-size:11px;color:#8a8a8a}
+    .co-sum-chevron{flex:none;font-size:13px;color:#8a8a8a;transition:transform .2s}
+    .co-sum-card.open .co-sum-chevron{transform:rotate(180deg)}
+    .co-sum-body{display:none}
+    .co-sum-card.open .co-sum-body{display:block}
+    .co-sum-row{display:flex;align-items:center;gap:14px;padding:12px 14px}
+    .co-sum-left{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+    #co-sum-game{font-size:10px;letter-spacing:.16em;color:#3ee07f;text-transform:uppercase}
+    #co-sum-pack{font-family:'Outfit';font-size:22px;line-height:1.15;font-weight:700;overflow:hidden;text-overflow:ellipsis}
+    #co-sum-meta{font-size:12px;color:#8a8a8a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .co-sum-right{text-align:right;flex:none}
+    #co-sum-total{font-family:'Outfit';font-size:24px;font-weight:700;color:#3ee07f;line-height:1}
+    #co-sum-old{font-size:12px;color:#6e6e6e;text-decoration:line-through;margin-top:2px}
+    #co-sum-qty{font-size:11px;color:#8a8a8a;margin-top:3px}
 
-  /* ---------- Resumen de compra (compacto horizontal) ---------- */
-  .co-summary { display: grid; gap: 8px; }
-  .co-summary-head {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 56px minmax(0, 1fr) auto;
-    gap: 14px;
-    align-items: center;
-  }
-  .co-summary-media {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .co-summary-mid-divider { display: none; }
-  .co-summary-copy {
-    display: grid;
-    gap: 3px;
-    text-align: left;
-    justify-items: start;
-    min-width: 0;
-    width: 100%;
-  }
-  .co-summary-art {
-    width: 56px;
-    height: 56px;
-    object-fit: cover;
-    border-radius: 10px;
-    border: 1px solid #27272a;
-  }
-  .co-summary-game {
-    font-size: 9px;
-    line-height: 1.15;
-    font-weight: 800;
-    color: #15c26b;
-    text-align: left;
-    letter-spacing: .18em;
-    text-transform: uppercase;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .co-summary-item {
-    font-size: 14px;
-    line-height: 1.2;
-    font-weight: 800;
-    color: #ffffff;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .co-summary-meta { display: grid; gap: 1px; justify-items: start; max-width: 100%; min-width: 0; }
-  .co-summary-nick {
-    color: #15c26b;
-    font-size: 11px;
-    font-weight: 700;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .co-summary-id {
-    color: #d1d5db;
-    font-size: 11px;
-    font-weight: 600;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .co-summary-divider {
-    width: 100%;
-    height: 1px;
-    background: rgba(255,255,255,0.04);
-    margin: 4px 0 0;
-  }
-  .co-summary-body { width: 100%; display: grid; gap: 4px; }
-  .co-summary-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 10px;
-    align-items: center;
-  }
-  .co-summary-row--total {
-    margin-top: 2px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255,255,255,0.04);
-  }
-  .co-summary-label {
-    color: #9ca3af;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    text-align: left;
-  }
-  .co-summary-value {
-    color: #e5e7eb;
-    font-size: 13px;
-    font-weight: 700;
-    text-align: right;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
-  .co-summary-value--muted { color: #6b7280; text-decoration: line-through; font-weight: 500; }
-  .co-summary-value--discount { color: #f43f5e; }
-  .co-summary-value--total {
-    color: #15c26b;
-    font-size: 20px;
-    font-weight: 900;
-    line-height: 1;
-  }
-  .co-summary-value--old {
-    color: #6b7280;
-    font-size: 11px;
-    font-weight: 700;
-    text-decoration: line-through;
-    text-decoration-thickness: 1px;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    align-self: center;
-  }
-  .co-summary-price {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    align-items: flex-end;
-    justify-self: end;
-    min-width: 0;
-  }
-  .co-summary-price-row {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    flex-wrap: nowrap;
-  }
-  .co-summary-qty {
-    color: #9ca3af;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: .02em;
-    white-space: nowrap;
-  }
-  .co-summary-empty {
-    color: #9ca3af;
-    font-size: 13px;
-    font-weight: 600;
-    text-align: center;
-    padding: 8px 0;
-  }
+    /* ---------- Nota de código de descuento inválido ---------- */
+    #co-disc-note{border:1px solid #3d1919;background:#1c0b0b;border-radius:12px;padding:12px 14px;text-align:center;font-size:12px;color:#fca5a5;font-weight:600}
+    #co-disc-note[hidden]{display:none !important}
 
-  /* ---------- Comprobante / referencia extraida ---------- */
-  .capture-ref-box {
-    margin: 0 0 10px;
-    border-radius: 10px;
-    border: 1px solid rgba(21,194,107,0.3);
-    background: rgba(21,194,107,0.06);
-    padding: 10px 12px;
-    text-align: center;
-  }
-  .capture-ref-box[hidden] { display: none !important; }
-  .capture-ref-label {
-    color: #6ee7b7;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: .14em;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-  }
-  .capture-ref-value {
-    color: #f8fafc;
-    font-size: 18px;
-    font-weight: 900;
-    line-height: 1.1;
-    word-break: break-word;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
-  .capture-ref-box--loading { border-color: rgba(245,158,11,0.38); background: rgba(120,53,15,0.18); }
-  .capture-ref-box--loading .capture-ref-label { color: #fbbf24; }
-  .capture-ref-box--error { border-color: rgba(239,68,68,0.34); background: rgba(127,29,29,0.18); }
-  .capture-ref-box--error .capture-ref-label { color: #fca5a5; }
-  .capture-ref-hint { color: #9ca3af; font-size: 11px; margin-top: 4px; line-height: 1.4; }
+    /* ---------- Información de pago ---------- */
+    .co-pay-card{display:flex;flex-direction:column;gap:12px;padding:16px}
+    .co-method-row{display:flex;align-items:center;justify-content:center;gap:12px}
+    .co-method-line{flex:0 1 60px;min-width:0;height:1px}
+    .co-method-line.l{background:linear-gradient(90deg,transparent,#3ee07f4d)}
+    .co-method-line.r{background:linear-gradient(90deg,#3ee07f4d,transparent)}
+    #co-method-name{font-family:'Outfit';font-size:15px;letter-spacing:.1em;white-space:nowrap;text-transform:uppercase}
+    .co-paytotal-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid #1f1f1f;background:#0d0d0d;border-radius:8px;padding:8px 12px}
+    .co-paytotal-label{font-size:10px;letter-spacing:.12em;color:#8a8a8a}
+    #co-pay-total{font-family:'Outfit';font-size:20px;font-weight:700;color:#3ee07f;line-height:1}
+    #co-pay-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+    .co-field{display:flex;align-items:center;gap:10px;border:1px solid #1f1f1f;background:#0d0d0d;border-radius:8px;padding:6px 10px;cursor:pointer;transition:border-color .2s;min-width:0}
+    .co-field:hover{border-color:#3ee07f}
+    .co-field-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+    .co-field-label{font-family:'Outfit';font-size:8px;font-weight:600;letter-spacing:.14em;color:#6e6e6e;text-transform:uppercase}
+    .co-field-value{font-family:'Outfit';font-size:13px;font-weight:500;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .co-field-ico{flex:none;font-size:13px;color:#6e6e6e}
+    .co-field.copied .co-field-ico{color:#3ee07f}
+    .co-qr-tile{display:flex;align-items:center;justify-content:center;gap:9px;border:1px solid #1f1f1f;background:#0d0d0d;border-radius:8px;padding:7px 10px;cursor:pointer;transition:border-color .2s}
+    .co-qr-tile:hover{border-color:#3ee07f}
+    .co-qr-tile-label{font-size:10px;letter-spacing:.1em;color:#eaeaea}
+    #co-copy-all{padding:8px 10px;border:1px solid #2b2b2b;border-radius:8px;background:#0d0d0d;color:#eaeaea;font-size:10px;font-weight:700;letter-spacing:.12em;cursor:pointer;transition:all .2s}
+    #co-copy-all:hover{border-color:#3ee07f;color:#3ee07f}
 
-  /* ---------- Información de pago ---------- */
-  #co-info { display: grid; gap: 10px; }
-  .co-info-shell {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 132px;
-    gap: 12px;
-    align-items: stretch;
-    width: 100%;
-  }
-  .co-info-list { display: grid; gap: 8px; min-width: 0; }
-  .co-item {
-    display: grid;
-    grid-template-columns: 32px 1fr auto;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 10px;
-    background: rgba(0,0,0,0.25);
-    border: 1px solid #27272a;
-    border-radius: 10px;
-    transition: background .15s ease, border-color .15s ease;
-  }
-  .co-item:hover { background: rgba(0,0,0,0.45); border-color: #3f3f46; }
-  .co-ico {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    background: rgba(21,194,107,0.10);
-    border: 1px solid rgba(21,194,107,0.25);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #15c26b;
-  }
-  .co-val {
-    color: #e5e7eb;
-    font-weight: 700;
-    font-size: 12px;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
-  .copy-btn {
-    border: 1px solid #3f3f46;
-    background: rgba(255,255,255,0.04);
-    color: #d1d5db;
-    border-radius: 6px;
-    padding: 5px 9px;
-    font-size: 10px;
-    font-weight: 700;
-    cursor: pointer;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    transition: all .15s ease;
-  }
-  .copy-btn:hover { background: rgba(21,194,107,0.12); border-color: rgba(21,194,107,0.5); color: #15c26b; }
+    /* Aviso de verificación automática Binance (modo auto) */
+    .co-binance-note{margin-top:2px;padding:10px 14px;background:rgba(240,165,42,.08);border:1.5px solid rgba(240,165,42,.35);border-radius:10px;text-align:center;font-size:12px;color:#c4c4c4;line-height:1.45}
+    .co-binance-note b{color:#f0a52a}
+    .co-auto-code{display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0 4px;flex-wrap:wrap}
+    .co-auto-code-box{background:#0f2416;border:2px solid #3ee07f;border-radius:12px;padding:14px 24px;font-size:26px;font-weight:700;letter-spacing:8px;color:#3ee07f;font-family:ui-monospace,monospace}
 
-  /* ---------- QR ---------- */
-  .co-qr-card {
-    display: grid;
-    gap: 6px;
-    justify-items: center;
-    align-content: center;
-    width: 132px;
-    justify-self: end;
-    padding: 10px;
-    min-height: 100%;
-    border: 1px solid #27272a;
-    border-radius: 10px;
-    background: rgba(0,0,0,0.25);
-    box-sizing: border-box;
-    transition: transform .25s ease, border-color .2s ease;
-  }
-  .co-qr-card:hover { transform: translateY(-1px); border-color: rgba(21,194,107,0.4); }
-  .co-qr-title {
-    color: #9ca3af;
-    font-size: 9px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: .14em;
-    text-align: center;
-  }
-  .co-qr-trigger {
-    display: block;
-    width: 100%;
-    max-width: 100px;
-    border: none;
-    background: transparent;
-    padding: 0;
-    cursor: zoom-in;
-    margin: 0 auto;
-  }
-  .co-qr-image {
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    object-fit: contain;
-    border-radius: 6px;
-    background: #ffffff;
-    padding: 4px;
-    box-sizing: border-box;
-  }
-  .co-qr-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 1200;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,0.85);
-    padding: 18px;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-  }
-  .co-qr-modal[hidden] { display: none !important; }
-  .co-qr-modal.is-open { display: flex; }
-  .co-qr-modal-card {
-    width: min(92vw, 520px);
-    background: #161618;
-    border: 1px solid #27272a;
-    border-radius: 14px;
-    padding: 20px;
-    position: relative;
-  }
-  .co-qr-modal-close {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 32px;
-    height: 32px;
-    border-radius: 999px;
-    border: 1px solid #3f3f46;
-    background: rgba(255,255,255,0.04);
-    color: #e5e7eb;
-    cursor: pointer;
-  }
-  .co-qr-modal-title {
-    color: #f8fafc;
-    font-size: 14px;
-    font-weight: 800;
-    text-align: center;
-    margin-bottom: 12px;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-  }
-  .co-qr-modal-image {
-    width: min(100%, 420px);
-    aspect-ratio: 1 / 1;
-    object-fit: contain;
-    display: block;
-    margin: 0 auto;
-    border-radius: 12px;
-    background: #ffffff;
-    padding: 12px;
-    box-sizing: border-box;
-  }
+    /* ---------- Tarjeta final: timer + formulario ---------- */
+    .co-final-card{display:flex;flex-direction:column;gap:14px;padding:16px}
+    .co-timer-row{display:flex;align-items:center;justify-content:center;gap:10px}
+    .co-timer-label{font-size:11px;letter-spacing:.14em;color:#6e6e6e}
+    #co-timer{font-family:'Outfit';font-size:24px;font-weight:700;color:#3ee07f;letter-spacing:.08em}
+    .co-form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:start}
+    .co-form-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+    .co-form-lab{font-size:9px;letter-spacing:.14em;color:#6e6e6e;text-align:center;text-transform:uppercase}
+    .co-input{width:100%;padding:9px 12px;border-radius:8px;border:1px solid #2b2b2b;background:#0d0d0d;color:#eaeaea;font-size:12px;outline:none;transition:border-color .15s}
+    .co-input::placeholder{color:#6e6e6e}
+    .co-input:focus{border-color:#3ee07f}
+    .co-ref-wrap{position:relative;display:flex;align-items:center}
+    #co-ref{width:100%;padding:9px 92px 9px 12px;border-radius:8px;border:1px solid #2b2b2b;background:#0d0d0d;color:#eaeaea;font-family:'Outfit';font-size:12px;text-overflow:ellipsis;outline:none;transition:border-color .15s}
+    #co-ref:focus{border-color:#3ee07f}
+    #co-ref::placeholder{color:#6e6e6e}
+    .co-oblig{position:absolute;right:10px;font-size:8px;letter-spacing:.1em;color:#3ee07f;pointer-events:none}
+    #ref-counter{color:#6e6e6e;font-size:10px;text-align:right;font-weight:700;font-family:ui-monospace,monospace}
+    #ref-error{color:#ff5d5d;font-size:11px;display:none}
+    .co-phone-row{display:flex;gap:8px}
+    .phone-prefix{position:relative;flex:none}
+    .phone-cc-btn{display:flex;align-items:center;gap:6px;padding:9px 10px;border-radius:8px;border:1px solid #2b2b2b;background:#0d0d0d;font-size:12px;color:#c4c4c4;cursor:pointer}
+    .phone-cc-btn img{width:16px;height:11px;border-radius:2px;display:block;flex:0 0 auto}
+    .phone-cc-menu{position:absolute;top:calc(100% + 4px);left:0;z-index:5;background:#0d0d0d;border:1px solid #2b2b2b;border-radius:8px;overflow:hidden}
+    .phone-cc-menu[hidden]{display:none}
+    .phone-cc-menu button{display:block;width:100%;padding:8px 12px;border:none;background:transparent;color:#eaeaea;font-size:12px;cursor:pointer;white-space:nowrap}
+    .phone-cc-menu button:hover{background:#161616}
+    .co-phone-row .co-input{flex:1;min-width:0}
+    .co-save-row{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+    .co-save-row input{position:absolute;opacity:0;width:0;height:0}
+    .co-check{width:17px;height:17px;flex:none;border-radius:5px;border:1px solid #2b2b2b;background:transparent;color:transparent;font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1;transition:all .15s}
+    .co-save-row input:checked ~ .co-check{border-color:#3ee07f;background:#3ee07f;color:#020a05}
+    .co-save-text{font-size:11px;color:#8a8a8a}
 
-  /* ---------- Tarjeta final (timer + grid 2col + warning + botón) ---------- */
-  .co-final-card { padding: 18px; }
+    /* Dropzone del comprobante */
+    .proof-dropzone{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;height:100%;min-height:132px;border-radius:10px;border:1px dashed #2b2b2b;background:#0d0d0d;cursor:pointer;transition:border-color .2s,background .2s;padding:10px;text-align:center}
+    .proof-dropzone.uploaded,.proof-dropzone.proof-dropzone--over{border-color:#3ee07f;background:#0f2416}
+    .proof-dropzone.proof-dropzone--error{border-color:#ff5d5d}
+    .proof-oblig{position:absolute;top:7px;right:9px;font-size:8px;letter-spacing:.1em;color:#3ee07f}
+    .proof-arrow{font-size:18px;color:#3ee07f;line-height:1}
+    #proofTitle{font-size:12px;font-weight:600;color:#3ee07f}
+    #proofHint{font-size:10px;color:#6e6e6e}
+    #proofPreview{max-width:100%;max-height:90px;border-radius:6px;object-fit:contain;display:none}
+    #proofFileName{font-size:9px;color:#8a8a8a;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:none}
 
-  #co-timer {
-    text-align: center;
-    font-weight: 900;
-    font-size: 20px;
-    color: #15c26b;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: .14em;
-    padding: 4px 0 12px;
-    margin: 0 0 14px;
-    border-bottom: 1px solid #27272a;
-    animation: pulse-timer 2.4s ease-in-out infinite;
-  }
-  .co-timer-label {
-    display: block;
-    color: #6b7280;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: .22em;
-    text-transform: uppercase;
-    margin-bottom: 2px;
-    font-family: 'Inter', sans-serif;
-  }
-  @keyframes pulse-timer {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.75; }
-  }
+    /* Caja de referencia extraída del comprobante */
+    #captureRefBox{border-radius:10px;border:1px solid #3ee07f4d;background:#0f2416;padding:10px 12px;text-align:center}
+    #captureRefBox[hidden]{display:none !important}
+    #captureRefBox.capture-ref-box--loading{border-color:rgba(240,165,42,.4);background:#1a1205}
+    #captureRefBox.capture-ref-box--loading #captureRefLabel{color:#f0a52a}
+    #captureRefLabel{color:#3ee07f;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}
+    #captureRefValue{color:#eaeaea;font-size:16px;font-weight:700;line-height:1.1;word-break:break-word;font-family:ui-monospace,monospace}
+    #captureRefHint{color:#8a8a8a;font-size:10px;margin-top:4px;line-height:1.4}
 
-  .co-form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 0;
-  }
-  .co-form-col {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 0;
-  }
-  .co-form-block { display: block; }
-  .co-form-label {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: #9ca3af;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: .16em;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-  }
-  .co-form-label-req {
-    color: #15c26b;
-    font-size: 8px;
-    font-weight: 800;
-    letter-spacing: .12em;
-  }
-  .co-form-label-opt {
-    color: #6b7280;
-    font-size: 8px;
-    font-weight: 600;
-    letter-spacing: .12em;
-    text-transform: none;
-  }
+    .co-warning{font-size:12px;color:#8a8a8a;text-align:center;text-wrap:pretty}
+    .co-warning strong{color:#3ee07f;font-weight:700;letter-spacing:.06em}
+    #btn-co-confirm{padding:15px;border:none;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.14em;cursor:pointer;background:#3ee07f;color:#020a05;transition:background .2s,color .2s}
+    #btn-co-confirm:hover:not(:disabled){background:#5cf094}
+    #btn-co-confirm:disabled{background:#151515;color:#5a5a5a;cursor:not-allowed}
 
-  /* ---------- Dropzone del comprobante (inline en col izq) ---------- */
-  .proof-card { display: contents; }
-  .proof-card h3 { display: none; }
-  .proof-card::before { display: none; }
-  .proof-warning {
-    margin: 12px 0 4px;
-    padding: 10px 12px 0;
-    text-align: center;
-    font-size: 10px;
-    color: rgba(21,194,107,0.9);
-    line-height: 1.5;
-    border-top: 1px solid #27272a;
-  }
-  .proof-warning strong {
-    color: #15c26b;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    font-weight: 800;
-    margin-right: 4px;
-  }
-  .proof-dropzone-title { color: #15c26b !important; font-size: 12px !important; }
+    /* ---------- Modal ID bloqueado ---------- */
+    .blocked-overlay{position:fixed;inset:0;background:#000000d9;display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);padding:18px}
+    .blocked-card{position:relative;width:min(92vw,480px);background:#0a0a0a;border:1px solid #3d1919;border-radius:14px;padding:20px;color:#eaeaea}
+    .blocked-close{position:absolute;top:10px;right:10px;background:transparent;border:none;color:#8a8a8a;font-size:18px;cursor:pointer}
+    .blocked-title{margin:4px 0 8px;font-family:'Outfit';font-weight:700;color:#ff5d5d}
+    .blocked-text{color:#c4c4c4;line-height:1.45;font-size:13px}
+    .blocked-actions{display:flex;gap:8px;margin-top:14px}
+    .btn-whatsapp{background:#3ee07f;color:#020a05;border:none;border-radius:10px;padding:11px 14px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.04em}
+    .btn-whatsapp:hover{background:#5cf094;color:#020a05}
 
-  /* ---------- Form: referencia, email, teléfono ---------- */
-  .ref-group { display: block; margin: 0; }
-  .ref-label-row { display: none !important; }
-  .ref-label { display: none !important; }
-  .ref-counter-text {
-    color: #6b7280;
-    font-size: 10px;
-    text-align: right;
-    margin-top: 4px;
-    font-weight: 700;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
-  .ref-input-wrap { position: relative; width: 100%; margin: 0; }
-  #co-ref.input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 11px 14px;
-    border: 1px solid #27272a;
-    border-radius: 10px;
-    background: rgba(0,0,0,0.4);
-    color: #ffffff;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px;
-    letter-spacing: .14em;
-    text-align: center;
-    outline: none;
-    transition: border-color .15s ease, box-shadow .15s ease;
-  }
-  #co-ref.input::placeholder { color: #4b5563; font-size: 11px; letter-spacing: .08em; }
-  #co-ref.input:focus {
-    border-color: rgba(21,194,107,0.5);
-    box-shadow: 0 0 0 3px rgba(21,194,107,0.18);
-  }
+    /* ---------- Footer ---------- */
+    .co-footer{position:relative;z-index:1;border-top:1px solid #1a1a1a;background:#050505;padding:32px 18px 22px;margin-top:22px}
+    .co-footer-inner{max-width:760px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:18px}
+    .co-footer-desc{font-size:14px;line-height:1.6;color:#c4c4c4;text-align:center;max-width:460px;text-wrap:pretty}
+    .co-chips{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;width:100%}
+    .co-chip{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:999px;background:#0f2416;color:#3ee07f;font-size:12px;font-weight:600;white-space:nowrap;flex:none}
+    .co-footer-div{width:100%;height:1px;background:#161616;margin:6px 0;flex:none}
+    .co-footer-contact{display:flex;flex-direction:column;align-items:center;gap:12px}
+    .co-footer-contact-title{font-size:12px;letter-spacing:.14em;font-weight:700;color:#eaeaea}
+    .co-footer-mail{display:flex;align-items:center;gap:8px;font-size:15px;color:#eaeaea}
+    .co-footer-wa{display:flex;align-items:center;gap:10px;padding:13px 26px;border-radius:10px;border:1px solid #3ee07f;background:#0b1a11;color:#3ee07f;font-size:14px;font-weight:700;letter-spacing:.04em}
+    .co-footer-wa:hover{background:#0f2416;color:#3ee07f}
+    .co-footer-bottom{width:100%;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;font-size:12px;color:#6e6e6e}
+    .co-footer-terms{color:#8a8a8a;text-decoration:underline}
+  </style>
+</head>
+<body>
+<div class="co-root">
 
-  .checkout-contact-fields {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin: 0;
-  }
-  .checkout-contact-fields .input {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    padding: 11px 14px;
-    border: 1px solid #27272a;
-    border-radius: 10px;
-    background: rgba(0,0,0,0.4);
-    color: #ffffff;
-    font-size: 12px;
-    outline: none;
-    transition: border-color .15s ease, box-shadow .15s ease;
-  }
-  .checkout-contact-fields .input::placeholder { color: #4b5563; }
-  .checkout-contact-fields .input:focus {
-    border-color: rgba(21,194,107,0.5);
-    box-shadow: 0 0 0 3px rgba(21,194,107,0.18);
-  }
-  .checkout-contact-fields .phone-field {
-    height: 42px;
-    background: rgba(0,0,0,0.4);
-    border: 1px solid #27272a;
-    border-radius: 10px;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    transition: border-color .15s ease, box-shadow .15s ease;
-  }
-  .checkout-contact-fields .phone-field:focus-within {
-    border-color: rgba(21,194,107,0.5);
-    box-shadow: 0 0 0 3px rgba(21,194,107,0.18);
-  }
-  .checkout-contact-fields .phone-cc-btn {
-    padding: 0 10px;
-    border-right: 1px solid #27272a;
-    background: rgba(0,0,0,0.3);
-    color: #9ca3af;
-    font-size: 11px;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .checkout-contact-fields .phone-cc-btn img {
-    width: 16px;
-    height: 11px;
-    border-radius: 2px;
-    display: block;
-    flex: 0 0 auto;
-  }
-  .checkout-contact-fields .phone-field .input#checkout-phone-local {
-    min-width: 0;
-    height: 100%;
-    padding: 0 12px;
-    border: none !important;
-    border-radius: 0;
-    background: transparent !important;
-    box-shadow: none;
-    flex: 1;
-  }
-  .checkout-contact-fields .phone-field .input#checkout-phone-local:focus { box-shadow: none; }
-
-  .checkout-save-row { display: flex; justify-content: flex-start; margin: 0; }
-  .checkout-save-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: #9ca3af;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    user-select: none;
-  }
-  .checkout-save-label input { width: 14px; height: 14px; accent-color: #15c26b; }
-
-  /* ---------- Botón confirmar (verde sólido) ---------- */
-  #btn-co-confirm,
-  .btn.primary {
-    width: 100%;
-    background: #15c26b !important;
-    color: #062a17 !important;
-    font-weight: 800 !important;
-    font-size: 12px !important;
-    letter-spacing: .18em !important;
-    text-transform: uppercase !important;
-    padding: 14px !important;
-    border: none !important;
-    border-radius: 10px !important;
-    cursor: pointer;
-    box-shadow: none;
-    transition: all .15s ease;
-  }
-  #btn-co-confirm { margin-top: 12px; }
-  #btn-co-confirm:hover:not(:disabled),
-  .btn.primary:hover:not(:disabled) {
-    background: #12a35a !important;
-    filter: brightness(1.02);
-  }
-  #btn-co-confirm:active:not(:disabled) { transform: scale(0.99); }
-  #btn-co-confirm:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background: #3f3f46 !important;
-    color: #6b7280 !important;
-    transform: none !important;
-    filter: grayscale(1);
-  }
-
-  /* ---------- Descuento ---------- */
-  #co-disc-note {
-    text-align: center;
-    color: #e5e7eb;
-    font-weight: 800;
-    width: 100%;
-    max-width: 100%;
-    border-color: rgba(244,63,94,0.25);
-    background: rgba(127,29,29,0.12);
-  }
-  .co-disc-note { text-align: center; color: #e5e7eb; font-weight: 800; }
-  .co-disc-note[hidden] { display: none; }
-
-  .price-old {
-    text-decoration: line-through;
-    color: #6b7280;
-    margin-right: 8px;
-    font-weight: 700;
-  }
-  .price-new {
-    color: #062a17;
-    background: #15c26b;
-    padding: 2px 8px;
-    border-radius: 6px;
-    font-weight: 900;
-  }
-  .discount-badge {
-    text-decoration: line-through;
-    color: #cbd5e1;
-    border: 1px solid #3f3f46;
-    padding: 2px 6px;
-    border-radius: 6px;
-    font-weight: 800;
-    margin-right: 8px;
-    background: rgba(148,163,184,0.06);
-  }
-
-  /* ---------- Modal bloqueado ---------- */
-  .blocked-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.78);
-    display: none; align-items: center; justify-content: center;
-    z-index: 1000;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-  }
-  .blocked-card {
-    position: relative;
-    width: min(92vw, 520px);
-    background: #161618;
-    border: 1px solid rgba(244,63,94,0.3);
-    border-radius: 14px;
-    padding: 18px;
-    color: #e5e7eb;
-  }
-  .blocked-close {
-    position: absolute; top: 10px; right: 10px;
-    background: transparent; border: none;
-    color: #9ca3af; font-size: 18px; cursor: pointer;
-  }
-  .blocked-title { margin: 4px 0 8px; font-weight: 900; color: #fca5a5; }
-  .blocked-text { color: #cbd5e1; line-height: 1.45; }
-  .blocked-actions { display: flex; gap: 8px; margin-top: 12px; }
-  .btn-whatsapp {
-    background: #15c26b; color: #062a17;
-    border: none; border-radius: 10px;
-    padding: 10px 12px; font-weight: 900;
-    cursor: pointer; text-decoration: none;
-    display: inline-flex; align-items: center; gap: 8px;
-  }
-  .btn-whatsapp:hover { filter: brightness(1.05); }
-
-  /* ---------- Responsive ---------- */
-  @media (max-width: 700px) {
-    .co-wrap { padding-left: 12px; padding-right: 12px; }
-    .co-banner, .co-card { padding: 14px; border-radius: 12px; }
-    .co-form-grid { grid-template-columns: 1fr; gap: 14px; }
-    .co-final-card { padding: 16px; }
-    .co-summary-head { grid-template-columns: 48px minmax(0,1fr) auto; gap: 10px; }
-    .co-summary-art { width: 48px; height: 48px; border-radius: 10px; }
-    .co-summary-game { font-size: 8px; letter-spacing: .14em; }
-    .co-summary-item { font-size: 13px; }
-    .co-summary-id, .co-summary-nick { font-size: 10px; }
-    .co-summary-value--total { font-size: 16px; }
-    .co-summary-value--old { font-size: 10px; }
-    /* Precio en mobile: precio anterior tachado ARRIBA, total a pagar ABAJO */
-    .co-summary-price-row {
-      flex-direction: column-reverse;
-      align-items: flex-end;
-      gap: 1px;
-    }
-    .co-summary-qty { font-size: 10px; }
-  }
-  @media (max-width: 460px) {
-    .checkout-contact-fields .phone-prefix { flex: 0 0 auto; }
-    .checkout-contact-fields .phone-cc-btn {
-      min-width: 44px; width: 44px;
-      justify-content: center; gap: 0; padding: 0 8px;
-    }
-    .checkout-contact-fields #checkout-phone-cc-label,
-    .checkout-contact-fields .phone-cc-btn .phone-caret { display: none; }
-    .checkout-contact-fields .phone-field .input#checkout-phone-local { padding-left: 10px; }
-    #co-timer { font-size: 18px; }
-    #co-ref.input { padding: 10px 12px; font-size: 12px; }
-    .co-summary-id, .co-summary-nick { font-size: 9px; }
-    .co-summary-item { font-size: 12px; }
-  }
-  @media (max-width: 380px) {
-    .co-info-shell { grid-template-columns: minmax(0, 1fr); }
-    .co-qr-card { justify-self: center; width: 100%; max-width: 200px; }
-    .co-summary-head { grid-template-columns: 42px minmax(0,1fr) auto; gap: 8px; }
-    .co-summary-art { width: 42px; height: 42px; }
-    .co-summary-value--total { font-size: 15px; }
-  }
-</style>
-{% endblock %}
-{% block header %}
-<header class="site-header co-header">
-  <div class="container">
-    <div class="left-actions">
-      <a href="/" class="icon-btn" aria-label="Volver" title="Volver">‹</a>
-    </div>
-    <a href="/" class="brand">
+  <div class="co-topbar">
+    <a href="/" class="co-logo" aria-label="Ir al inicio">
       {% if logo_url %}
-        <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="logo"/>
+        <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="co-logo-img"/>
       {% else %}
-        <span class="logo-text">{{ site_name|default('InefableStore') }}</span>
+        INEFABLE
       {% endif %}
     </a>
-  </div>
-</header>
-{% endblock %}
-
-{% block content %}
-<section class="co-wrap" id="checkout" data-gid="{{ gid }}" data-whatsapp="{{ whatsapp_url }}" data-gname="{{ game_name }}" data-gimg="{{ game_image }}" data-direct-pin="{{ direct_to_pin | lower }}">
-  <div class="co-subtitle">
-    <span class="co-subtitle-dot"></span>
-    <span>Pasarela de Pago Segura</span>
-    <span class="co-subtitle-dot"></span>
-  </div>
-
-  <div class="co-banner" id="co-total">
-    <div class="co-summary-empty">Cargando resumen...</div>
-  </div>
-  <div id="co-disc-note" class="co-disc-note" hidden></div>
-
-  <div class="co-card">
-    <h3>Información de pago</h3>
-    <div id="co-info"></div>
-  </div>
-
-  <div id="coQrModal" class="co-qr-modal" hidden>
-    <div class="co-qr-modal-card">
-      <button id="coQrModalClose" class="co-qr-modal-close" type="button" aria-label="Cerrar">✕</button>
-      <div id="coQrModalTitle" class="co-qr-modal-title">QR de pago</div>
-      <img id="coQrModalImage" class="co-qr-modal-image" alt="QR de pago ampliado">
+    <div class="co-headtag-wrap">
+      <div class="co-headdot"></div>
+      <div class="co-headtag">PASARELA DE PAGO SEGURA</div>
     </div>
   </div>
 
-  <!-- TARJETA FINAL UNIFICADA: timer + 2 columnas (upload+ref | email+phone+save) + warning + botón -->
-  <div class="co-card co-final-card">
-    <div id="co-timer">
-      <span class="co-timer-label">La sesión de pago expira en</span>
-      30:00
+  <div id="coQrModal" hidden>
+    <div class="co-qr-card">
+      <div id="coQrModalTitle" class="co-qr-title">QR de pago</div>
+      <img id="coQrModalImage" alt="QR de pago ampliado">
+      <div class="co-qr-hint">Toca fuera para cerrar</div>
+      <button id="coQrModalClose" type="button" style="display:none" aria-hidden="true"></button>
     </div>
+  </div>
 
-    <div class="co-form-grid">
-      <!-- COL IZQ: Captura + Referencia -->
-      <div class="co-form-col">
-        <div class="co-form-block proof-card">
-          <div class="co-form-label">
-            <span>Captura de Comprobante</span>
-            <span class="co-form-label-req">Obligatorio</span>
-          </div>
-          <div id="captureRefBox" class="capture-ref-box" hidden>
-            <div id="captureRefLabel" class="capture-ref-label">Analizando comprobante</div>
-            <div id="captureRefValue" class="capture-ref-value">...</div>
-            <div id="captureRefHint" class="capture-ref-hint"></div>
-          </div>
-          <div class="proof-dropzone" id="proofDropzone">
-            <input type="file" id="payment_capture" name="payment_capture" accept="image/*" style="display:none;">
-            <div class="proof-dropzone-inner" id="proofDropzoneInner">
-              <svg class="proof-dropzone-icon" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#6b7280;">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <img class="proof-preview" id="proofPreview" alt="Vista previa del comprobante" style="display:none;" />
-              <div class="proof-dropzone-title">Subir captura</div>
-              <div class="proof-dropzone-sub">Toca para seleccionar la imagen</div>
-              <div class="proof-file-name" id="proofFileName" style="display:none;"></div>
-            </div>
-          </div>
+  <section class="co-wrap" id="checkout" data-gid="{{ gid }}" data-whatsapp="{{ whatsapp_url }}" data-gname="{{ game_name }}" data-gimg="{{ game_image }}" data-direct-pin="{{ direct_to_pin | lower }}">
+
+    <!-- RESUMEN DE LA COMPRA (colapsable) -->
+    <div class="co-card co-sum-card" id="co-sum-card">
+      <a class="co-sum-close" href="/#pkg={{ gid }}" aria-label="Volver a la tienda">✕</a>
+      <div class="co-sum-toggle" id="co-sum-toggle">
+        <div class="co-sum-thumb" id="co-sum-thumb"></div>
+        <div class="co-sum-headcopy">
+          <div class="co-sum-title">RESUMEN DE LA <span>COMPRA</span></div>
+          <div class="co-sum-sub">Detalles de tu compra</div>
         </div>
-
-        <div class="co-form-block ref-group">
-          <div class="co-form-label">
-            <span>Número de referencia</span>
-            <span class="co-form-label-req">Obligatorio</span>
+        <div class="co-sum-chevron">⌄</div>
+      </div>
+      <div class="co-sum-body">
+        <div class="co-divider"></div>
+        <div class="co-sum-row">
+          <div class="co-sum-left">
+            <div id="co-sum-game">{{ game_name }}</div>
+            <div id="co-sum-pack">...</div>
+            <div id="co-sum-meta"></div>
           </div>
-          <div class="ref-input-wrap">
-            <input id="co-ref" class="input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="NUMERO DE REFERENCIA DE PAGO" required>
+          <div class="co-sum-right">
+            <div id="co-sum-total">...</div>
+            <div id="co-sum-old" hidden></div>
+            <div id="co-sum-qty">Cantidad 1</div>
           </div>
-          <div class="ref-counter-text" id="ref-counter">0</div>
-          <div id="ref-error" style="color: #ef4444; font-size: 11px; margin-top: 4px; display: none;"></div>
         </div>
       </div>
+    </div>
 
-      <!-- COL DER: Email + Telefono + Save -->
-      <div class="co-form-col">
-        <div class="co-form-block">
-          <div class="co-form-label">
-            <span>Correo Electrónico</span>
-          </div>
-          <div class="checkout-contact-fields" style="display:block;">
-            <input id="checkout-email" class="input" type="email" placeholder="ejemplo@correo.com" autocomplete="email">
-          </div>
-        </div>
+    <div id="co-disc-note" hidden></div>
 
-        <div class="co-form-block">
-          <div class="co-form-label">
-            <span>Teléfono</span>
-          </div>
-          <div class="checkout-contact-fields" style="display:block;">
-            <div class="phone-field">
-              <div class="phone-prefix">
-                <button id="checkout-phone-cc-btn" class="phone-cc-btn" type="button" aria-label="Código de país" aria-expanded="false">
-                  <img src="https://flagcdn.com/w20/ve.png" alt="VE" width="16" height="12" loading="lazy">
-                  <span id="checkout-phone-cc-label">+58</span>
-                  <span class="phone-caret" aria-hidden="true">▾</span>
-                </button>
-                <div class="phone-cc-menu" id="checkout-phone-cc-menu" hidden>
-                  <button type="button" data-cc="+58" data-flag="ve">🇻🇪 +58</button>
-                </div>
-                <input id="checkout-phone-cc" type="hidden" value="+58">
-              </div>
-              <input id="checkout-phone-local" class="input" type="tel" inputmode="tel" placeholder="Teléfono" autocomplete="tel-national">
-              <input id="checkout-phone" type="hidden">
+    <!-- INFORMACIÓN DE PAGO -->
+    <div class="co-card co-pay-card">
+      <div class="co-method-row">
+        <div class="co-method-line l"></div>
+        <div id="co-method-name">PAGO MÓVIL</div>
+        <div class="co-method-line r"></div>
+      </div>
+      <div class="co-paytotal-row">
+        <div class="co-paytotal-label">TOTAL A PAGAR</div>
+        <div id="co-pay-total">...</div>
+      </div>
+      <div id="co-pay-fields"></div>
+      <button id="co-copy-all" type="button">COPIAR TODO</button>
+    </div>
+
+    <!-- TARJETA FINAL: timer + formulario + confirmar -->
+    <div class="co-card co-final-card" id="co-final-card">
+      <div class="co-timer-row">
+        <div class="co-timer-label">TIEMPO RESTANTE</div>
+        <div id="co-timer">30:00</div>
+      </div>
+
+      <div class="co-form-grid">
+        <!-- COL IZQ: referencia + email + teléfono + guardar -->
+        <div class="co-form-col">
+          <div class="ref-group" style="display:flex;flex-direction:column;gap:8px">
+            <div class="co-form-lab">NÚMERO DE REFERENCIA</div>
+            <div class="co-ref-wrap">
+              <input id="co-ref" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Número de referencia" required>
+              <div class="co-oblig">OBLIGATORIO</div>
             </div>
+            <div id="ref-counter">0</div>
+            <div id="ref-error"></div>
           </div>
-        </div>
-
-        <div class="checkout-save-row">
-          <label class="checkout-save-label" for="checkout-save-contact">
+          <input id="checkout-email" class="co-input" type="email" placeholder="Correo electrónico" autocomplete="email">
+          <div class="co-phone-row">
+            <div class="phone-prefix">
+              <button id="checkout-phone-cc-btn" class="phone-cc-btn" type="button" aria-label="Código de país" aria-expanded="false">
+                <img src="https://flagcdn.com/w20/ve.png" alt="VE" width="16" height="12" loading="lazy">
+                <span id="checkout-phone-cc-label">+58</span>
+                <span class="phone-caret" aria-hidden="true">▾</span>
+              </button>
+              <div class="phone-cc-menu" id="checkout-phone-cc-menu" hidden>
+                <button type="button" data-cc="+58" data-flag="ve">🇻🇪 +58</button>
+              </div>
+              <input id="checkout-phone-cc" type="hidden" value="+58">
+            </div>
+            <input id="checkout-phone-local" class="co-input" type="tel" inputmode="tel" placeholder="Teléfono" autocomplete="tel-national">
+            <input id="checkout-phone" type="hidden">
+          </div>
+          <label class="co-save-row" for="checkout-save-contact">
             <input id="checkout-save-contact" type="checkbox">
-            <span>Guardar datos para futuras compras</span>
+            <span class="co-check">✓</span>
+            <span class="co-save-text">Guardar datos para futuras compras</span>
           </label>
         </div>
+
+        <!-- COL DER: captura del comprobante -->
+        <div class="co-form-col proof-card">
+          <div class="proof-dropzone" id="proofDropzone">
+            <input type="file" id="payment_capture" name="payment_capture" accept="image/*" style="display:none;">
+            <div class="proof-oblig">OBLIGATORIO</div>
+            <div id="proofDropzoneInner" style="display:flex;flex-direction:column;align-items:center;gap:5px;max-width:100%">
+              <img id="proofPreview" alt="Vista previa del comprobante">
+              <div class="proof-arrow">⬆</div>
+              <div id="proofTitle">Subir captura</div>
+              <div id="proofHint">Toca para seleccionar la imagen</div>
+              <div id="proofFileName"></div>
+            </div>
+          </div>
+          <div id="captureRefBox" hidden>
+            <div id="captureRefLabel">Analizando comprobante</div>
+            <div id="captureRefValue">...</div>
+            <div id="captureRefHint"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="co-divider"></div>
+
+      <div class="co-warning"><strong>IMPORTANTE:</strong> subir comprobantes falsos resultará en el bloqueo permanente de tu cuenta.</div>
+
+      <button id="btn-co-confirm" class="btn primary" type="button">YA REALICÉ EL PAGO</button>
+    </div>
+  </section>
+
+  <div id="blocked-overlay" class="blocked-overlay" role="dialog" aria-modal="true" aria-labelledby="blocked-title" aria-hidden="true">
+    <div class="blocked-card">
+      <button id="blocked-close" class="blocked-close" aria-label="Cerrar">✕</button>
+      <h3 id="blocked-title" class="blocked-title">ID bloqueado por los Moderadores</h3>
+      <p class="blocked-text">Este ID ha sido bloqueado por los Moderadores. Si crees que esto fue un error por favor contacta al soporte.</p>
+      <div class="blocked-actions">
+        <a id="blocked-whatsapp" href="#" target="_blank" rel="noopener" class="btn-whatsapp">
+          <span>Contactar por WhatsApp</span>
+        </a>
       </div>
     </div>
-
-    <p class="proof-warning"><strong>Importante:</strong> subir comprobantes falsos resultará en el bloqueo permanente de tu cuenta.</p>
-
-    <button id="btn-co-confirm" class="btn primary" type="button">Confirmar Pago</button>
   </div>
-</section>
-<div id="blocked-overlay" class="blocked-overlay" role="dialog" aria-modal="true" aria-labelledby="blocked-title" aria-hidden="true">
-  <div class="blocked-card">
-    <button id="blocked-close" class="blocked-close" aria-label="Cerrar">✕</button>
-    <h3 id="blocked-title" class="blocked-title">ID bloqueado por los Moderadores</h3>
-    <p class="blocked-text">Este ID ha sido bloqueado por los Moderadores. Si crees que esto fue un error por favor contacta al soporte.</p>
-    <div class="blocked-actions">
-      <a id="blocked-whatsapp" href="#" target="_blank" rel="noopener" class="btn-whatsapp">
-        <span>Contactar por WhatsApp</span>
-      </a>
+
+  <footer class="co-footer">
+    <div class="co-footer-inner">
+      <div class="co-footer-desc">Tu tienda de confianza para recargas de juegos, Gift Cards y productos digitales. Entrega inmediata y segura.</div>
+      <div class="co-chips">
+        <div class="co-chip">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5.5v6c0 4.8 3.4 9.3 8 10.5 4.6-1.2 8-5.7 8-10.5v-6L12 2z"></path></svg>
+          Compra Segura
+        </div>
+        <div class="co-chip">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 13v-1a8 8 0 0 1 16 0v1"></path><rect x="2.5" y="13" width="4.5" height="6" rx="2"></rect><rect x="17" y="13" width="4.5" height="6" rx="2"></rect></svg>
+          Soporte 24/7
+        </div>
+      </div>
+      <div class="co-footer-div"></div>
+      <div class="co-footer-contact">
+        <div class="co-footer-contact-title">CONTACTO Y SOPORTE</div>
+        <a href="mailto:soporte@inefablestore.com" class="co-footer-mail">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3ee07f" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg>
+          soporte@inefablestore.com
+        </a>
+        <a href="{{ whatsapp_url }}" target="_blank" rel="noopener" class="co-footer-wa">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.3A10 10 0 1 0 12 2zm5.3 14c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.7-.1a12 12 0 0 1-6.6-5.6c-.5-.9-.8-1.8-.5-2.7.2-.6.7-1.1 1-1.3.2-.2.6-.2.8-.2h.6c.2 0 .4 0 .6.5l.8 2c.1.2.1.4 0 .6l-.4.6c-.2.2-.3.3-.1.6a8.6 8.6 0 0 0 3.7 3.2c.3.1.5.1.7-.1l.8-1c.2-.2.3-.2.6-.1l2 1c.2.1.4.2.4.3.1.2.1.5 0 1.1z"></path></svg>
+          CONTACTAR POR WHATSAPP
+        </a>
+      </div>
+      <div class="co-footer-div"></div>
+      <div class="co-footer-bottom">
+        <div>© 2026 {{ site_name|default('Inefablestore') }}. Todos los derechos reservados.</div>
+        <a href="/terms" class="co-footer-terms">Términos y Condiciones</a>
+      </div>
     </div>
-  </div>
-  </div>
-{% endblock %}
+  </footer>
+</div>
 
-{% block scripts %}
 <script src="{{ static_url('js/checkout.js') }}" defer></script>
-{% endblock %}
+</body>
+</html>

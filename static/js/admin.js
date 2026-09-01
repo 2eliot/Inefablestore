@@ -32,7 +32,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const hero1 = document.getElementById('hero-1');
   const hero2 = document.getElementById('hero-2');
   const hero3 = document.getElementById('hero-3');
+  const hero4 = document.getElementById('hero-4');
   const btnSaveHero = document.getElementById('btn-save-hero');
+  const bannerTextInput = (n, field) => document.getElementById('banner-' + n + '-' + field);
   // Rate config
   const inputRate = document.getElementById('rate-bsd');
   const btnSaveRate = document.getElementById('btn-save-rate');
@@ -3967,6 +3969,13 @@ window.fetchRate = fetchRate;window.fetchRate = fetchRate;
         if (hero1) { hero1.value = data.hero_1 || ''; syncDropdown(hero1); }
         if (hero2) { hero2.value = data.hero_2 || ''; syncDropdown(hero2); }
         if (hero3) { hero3.value = data.hero_3 || ''; syncDropdown(hero3); }
+        if (hero4) { hero4.value = data.hero_4 || ''; syncDropdown(hero4); }
+        for (let n = 1; n <= 4; n++) {
+          ['tag', 'title', 'sub'].forEach((field) => {
+            const input = bannerTextInput(n, field);
+            if (input) input.value = data['banner_' + n + '_' + field] || '';
+          });
+        }
       }
 window.fetchHero = fetchHero;
     } catch (_) { /* ignore */ }
@@ -3976,8 +3985,15 @@ window.fetchHero = fetchHero;
     const payload = {
       hero_1: hero1 ? hero1.value.trim() : '',
       hero_2: hero2 ? hero2.value.trim() : '',
-      hero_3: hero3 ? hero3.value.trim() : ''
+      hero_3: hero3 ? hero3.value.trim() : '',
+      hero_4: hero4 ? hero4.value.trim() : ''
     };
+    for (let n = 1; n <= 4; n++) {
+      ['tag', 'title', 'sub'].forEach((field) => {
+        const input = bannerTextInput(n, field);
+        payload['banner_' + n + '_' + field] = input ? input.value.trim() : '';
+      });
+    }
     const res = await fetch('/admin/config/hero', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -4171,6 +4187,7 @@ window.fetchHero = fetchHero;
   mountConfigDropdown('slot-hero-1', hero1);
   mountConfigDropdown('slot-hero-2', hero2);
   mountConfigDropdown('slot-hero-3', hero3);
+  mountConfigDropdown('slot-hero-4', hero4);
   mountConfigDropdown('slot-pm-image', pmImage);
   mountConfigDropdown('slot-binance-image', binImage);
   mountConfigDropdown('slot-pm-qr-image', pmQrImage);
