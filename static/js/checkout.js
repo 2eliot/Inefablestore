@@ -924,6 +924,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (refCounter) {
       // Show only the count to avoid implying a fixed length
       refCounter.textContent = `${cnt}`;
+      // Oculto mientras no haya dígitos (evita el "0" suelto entre campos)
+      refCounter.style.display = cnt > 0 ? 'block' : 'none';
       // Green when within valid range (1..21)
       refCounter.style.color = (cnt >= 1 && cnt <= 21) ? '#3ee07f' : '#6e6e6e';
     }

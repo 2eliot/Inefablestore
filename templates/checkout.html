@@ -141,11 +141,11 @@
     .co-input::placeholder{color:#6e6e6e}
     .co-input:focus{border-color:#3ee07f}
     .co-ref-wrap{position:relative;display:flex;align-items:center}
-    #co-ref{width:100%;padding:9px 92px 9px 12px;border-radius:8px;border:1px solid #2b2b2b;background:#0d0d0d;color:#eaeaea;font-family:'Outfit';font-size:12px;text-overflow:ellipsis;outline:none;transition:border-color .15s}
+    #co-ref{width:100%;padding:9px 62px 9px 12px;border-radius:8px;border:1px solid #2b2b2b;background:#0d0d0d;color:#eaeaea;font-family:'Outfit';font-size:12px;text-overflow:ellipsis;outline:none;transition:border-color .15s}
     #co-ref:focus{border-color:#3ee07f}
     #co-ref::placeholder{color:#6e6e6e}
-    .co-oblig{position:absolute;right:10px;font-size:8px;letter-spacing:.1em;color:#3ee07f;pointer-events:none}
-    #ref-counter{color:#6e6e6e;font-size:10px;text-align:right;font-weight:700;font-family:ui-monospace,monospace}
+    .co-oblig{position:absolute;right:10px;font-size:6px;letter-spacing:.1em;color:#3ee07f;pointer-events:none}
+    #ref-counter{color:#6e6e6e;font-size:10px;text-align:right;font-weight:700;font-family:ui-monospace,monospace;display:none}
     #ref-error{color:#ff5d5d;font-size:11px;display:none}
     .co-phone-row{display:flex;gap:8px}
     .phone-prefix{position:relative;flex:none}
@@ -156,17 +156,17 @@
     .phone-cc-menu button{display:block;width:100%;padding:8px 12px;border:none;background:transparent;color:#eaeaea;font-size:12px;cursor:pointer;white-space:nowrap}
     .phone-cc-menu button:hover{background:#161616}
     .co-phone-row .co-input{flex:1;min-width:0}
-    .co-save-row{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+    .co-save-row{grid-column:1/-1;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;min-width:0}
     .co-save-row input{position:absolute;opacity:0;width:0;height:0}
     .co-check{width:17px;height:17px;flex:none;border-radius:5px;border:1px solid #2b2b2b;background:transparent;color:transparent;font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1;transition:all .15s}
     .co-save-row input:checked ~ .co-check{border-color:#3ee07f;background:#3ee07f;color:#020a05}
-    .co-save-text{font-size:11px;color:#8a8a8a}
+    .co-save-text{font-size:11px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
     /* Dropzone del comprobante */
     .proof-dropzone{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;height:100%;min-height:132px;border-radius:10px;border:1px dashed #2b2b2b;background:#0d0d0d;cursor:pointer;transition:border-color .2s,background .2s;padding:10px;text-align:center}
     .proof-dropzone.uploaded,.proof-dropzone.proof-dropzone--over{border-color:#3ee07f;background:#0f2416}
     .proof-dropzone.proof-dropzone--error{border-color:#ff5d5d}
-    .proof-oblig{position:absolute;top:7px;right:9px;font-size:8px;letter-spacing:.1em;color:#3ee07f}
+    .proof-oblig{position:absolute;top:7px;right:9px;font-size:6px;letter-spacing:.1em;color:#3ee07f}
     .proof-arrow{font-size:18px;color:#3ee07f;line-height:1}
     #proofTitle{font-size:12px;font-weight:600;color:#3ee07f}
     #proofHint{font-size:10px;color:#6e6e6e}
@@ -303,7 +303,7 @@
               <input id="co-ref" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Número de referencia" required>
               <div class="co-oblig">OBLIGATORIO</div>
             </div>
-            <div id="ref-counter">0</div>
+            <div id="ref-counter"></div>
             <div id="ref-error"></div>
           </div>
           <input id="checkout-email" class="co-input" type="email" placeholder="Correo electrónico" autocomplete="email">
@@ -321,11 +321,6 @@
             <input id="checkout-phone-local" class="co-input" type="tel" inputmode="tel" placeholder="Teléfono" autocomplete="tel-national">
             <input id="checkout-phone" type="hidden">
           </div>
-          <label class="co-save-row" for="checkout-save-contact">
-            <input id="checkout-save-contact" type="checkbox">
-            <span class="co-check">✓</span>
-            <span class="co-save-text">Guardar datos para futuras compras</span>
-          </label>
         </div>
 
         <!-- COL DER: captura del comprobante -->
@@ -347,6 +342,12 @@
             <div id="captureRefHint"></div>
           </div>
         </div>
+
+        <label class="co-save-row" for="checkout-save-contact">
+          <input id="checkout-save-contact" type="checkbox">
+          <span class="co-check">✓</span>
+          <span class="co-save-text">Guardar datos para futuras compras</span>
+        </label>
       </div>
 
       <div class="co-divider"></div>
