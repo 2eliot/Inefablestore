@@ -56,7 +56,7 @@
         .st-topbar{position:sticky;top:0;z-index:50;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #1a1a1a;background:#000000d9;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
         .st-logo{font-family:'Outfit';font-size:22px;letter-spacing:.22em;font-weight:700;white-space:nowrap;flex:none;color:#eaeaea}
         .st-logo span{color:#3ee07f}
-        .st-logo-img{height:38px;object-fit:contain;display:block}
+        .st-logo-img{height:16px;object-fit:contain;display:block}
         .st-ticker-wrap{flex:1;min-width:0;display:flex;justify-content:center;padding:0 24px}
         .st-ticker-box{height:30px;overflow:hidden;border:1px solid #1a1a1a;border-radius:8px;background:#0a0a0a;padding:0 14px;display:flex;align-items:center;min-width:340px;justify-content:center}
         .st-ticker-item{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:11.5px;color:#8a8a8a;animation:push .55s cubic-bezier(.2,.85,.2,1);overflow:hidden}
@@ -70,7 +70,7 @@
         @media (max-width:859px){
           .st-topbar{padding:0 14px}
           .st-logo{font-size:15px;letter-spacing:.14em}
-          .st-logo-img{height:30px}
+          .st-logo-img{height:11px}
           .st-ticker-wrap{padding:0 8px}
           .st-ticker-box{height:26px;padding:0 8px;max-width:100%;min-width:0;justify-content:flex-start}
           .st-ticker-item{gap:5px;font-size:9.5px}
@@ -132,7 +132,6 @@
         .st-headnum{width:20px;height:20px;flex:none;border-radius:6px;background:#3ee07f;color:#020a05;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
         .st-headtitle{font-family:'Outfit';font-size:19px;letter-spacing:.06em;white-space:nowrap}
         .st-headdiamond{width:6px;height:6px;flex:none;background:#3ee07f;transform:rotate(45deg)}
-        @media (max-width:459px){ .st-headtitle{font-size:16px} }
 
         /* Tabs Juegos/Tarjetas + redes */
         .st-tabsrow{width:100%;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap}
@@ -207,7 +206,6 @@
         .st-pack-icon{width:20px;height:20px;flex:none;object-fit:contain}
         @media (max-width:859px){
           #packages-container{grid-template-columns:repeat(2,minmax(0,1fr))}
-          .st-pack-amount{font-size:22px}
         }
 
         /* CTA inline (solo móvil) */
@@ -257,7 +255,9 @@
         body.has-mob-bar #mobile-checkout-bar{display:flex;animation:push .35s cubic-bezier(.2,.85,.2,1)}
         @media (min-width:860px){ body.has-mob-bar #mobile-checkout-bar{display:none} }
         .st-mob-row{display:flex;align-items:center;gap:12px}
-        #mob-badge{width:22px;height:22px;flex:none;background:repeating-linear-gradient(135deg,#1c1c1c 0 4px,#131313 4px 8px);clip-path:polygon(50% 0,100% 38%,50% 100%,0 38%)}
+        #mob-badge{width:34px;height:34px;flex:none;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+        #mob-badge img{width:100%;height:100%;object-fit:contain}
+        #mob-badge .mob-gem{width:22px;height:22px;background:repeating-linear-gradient(135deg,#1c1c1c 0 4px,#131313 4px 8px);clip-path:polygon(50% 0,100% 38%,50% 100%,0 38%)}
         .st-mob-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
         .st-mob-line{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
         #mob-item-name{font-size:14px;font-weight:600}
@@ -498,7 +498,7 @@
     <!-- BARRA FLOTANTE MÓVIL (aparece al elegir un paquete) -->
     <div id="mobile-checkout-bar">
         <div class="st-mob-row">
-            <div id="mob-badge"></div>
+            <div id="mob-badge"><div class="mob-gem"></div></div>
             <div class="st-mob-info">
                 <div class="st-mob-line">
                     <span id="mob-item-name">---</span>
@@ -1394,6 +1394,24 @@
             }
 
             // Sincronizar barra flotante movil
+            const mobArt = document.getElementById('mob-badge');
+            if (mobArt) {
+                // Imagen del item (icono del admin) o, si no tiene, la del juego
+                const artSrc = (item.icon_path && item.icon_path.trim()) || pkg.image_path || '';
+                const currentImg = mobArt.querySelector('img');
+                if (artSrc) {
+                    if (!currentImg || currentImg.getAttribute('src') !== artSrc) {
+                        const artImg = document.createElement('img');
+                        artImg.src = artSrc;
+                        artImg.alt = '';
+                        artImg.onerror = function() { mobArt.innerHTML = '<div class="mob-gem"></div>'; };
+                        mobArt.innerHTML = '';
+                        mobArt.appendChild(artImg);
+                    }
+                } else {
+                    mobArt.innerHTML = '<div class="mob-gem"></div>';
+                }
+            }
             const mobItem2 = document.getElementById('mob-item-name');
             const mobBadge2 = document.getElementById('mob-item-badge');
             const mobGame2 = document.getElementById('mob-game-name');

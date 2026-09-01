@@ -46,15 +46,14 @@
     .co-topbar{position:sticky;top:0;z-index:20;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid #1a1a1a;background:#000000d9;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
     .co-logo{font-family:'Outfit';font-size:20px;letter-spacing:.2em;font-weight:700;color:#eaeaea;white-space:nowrap}
     .co-logo:hover{color:#eaeaea}
-    .co-logo-img{height:34px;object-fit:contain;display:block}
+    .co-logo-img{height:14px;object-fit:contain;display:block}
     .co-headtag-wrap{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:9px}
     .co-headdot{width:6px;height:6px;border-radius:50%;background:#3ee07f;animation:pulse 2s infinite}
     .co-headtag{font-size:11px;letter-spacing:.18em;color:#8a8a8a;white-space:nowrap}
     @media (max-width:719px){
       .co-logo{font-size:13px;letter-spacing:.12em}
-      .co-logo-img{height:28px;max-width:32vw}
-      .co-headtag-wrap{left:auto;right:18px;transform:none}
-      .co-headtag{font-size:9px;letter-spacing:.12em;max-width:52vw;overflow:hidden;text-overflow:ellipsis}
+      .co-logo-img{height:9px}
+      .co-headtag{font-size:9px;letter-spacing:.12em}
     }
 
     /* ---------- Overlay del QR ---------- */
@@ -311,7 +310,6 @@
           <div class="co-phone-row">
             <div class="phone-prefix">
               <button id="checkout-phone-cc-btn" class="phone-cc-btn" type="button" aria-label="Código de país" aria-expanded="false">
-                <img src="https://flagcdn.com/w20/ve.png" alt="VE" width="16" height="12" loading="lazy">
                 <span id="checkout-phone-cc-label">+58</span>
                 <span class="phone-caret" aria-hidden="true">▾</span>
               </button>
