@@ -808,7 +808,6 @@
             <div class="p-6 flex flex-col items-center">
                 <div class="w-full mb-3 flex items-center justify-between gap-2 flex-wrap">
                     <div class="min-w-0">
-                        <h2 class="font-bold text-sm text-gray-200">Premios: <span id="rl-prize" class="text-[#3ee07f]">--</span></h2>
                         <p class="text-xs text-gray-400">Gira y descubre si te toca premio instantáneo.</p>
                     </div>
                     <div class="bg-[#3ee07f]/10 border border-[#3ee07f]/30 text-[#7af0a6] text-[11px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap">
@@ -2535,12 +2534,6 @@
                 document.getElementById('rl-points').innerText = logged ? points : '—';
                 var sub = document.getElementById('rl-sub');
                 if (sub) sub.innerText = (cfg && cfg.game) ? ('Ruleta de ' + cfg.game) : 'Gira con tus puntos';
-                // Varios premios posibles: si gana, sale uno al azar de esta lista
-                var prizes = (cfg && cfg.prizes) || [];
-                var prizeTxt = prizes.length
-                    ? prizes.map(function (p) { return p.title + (p.game ? ' (' + p.game + ')' : ''); }).join('  ·  ')
-                    : '--';
-                document.getElementById('rl-prize').innerText = prizeTxt;
                 var zone = document.getElementById('rl-zone');
                 if (zone) zone.style.display = (cfg && cfg.requires_zone) ? '' : 'none';
                 var status = document.getElementById('rl-status');

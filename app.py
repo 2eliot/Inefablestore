@@ -9788,6 +9788,36 @@ def admin_config_ruleta_get():
     })
 
 
+@app.route("/admin/config/ruleta/all", methods=["GET"])
+def admin_config_ruleta_all():
+    """Resumen de todas las ruletas configuradas (una por juego)."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    out = []
+    for pkg in StorePackage.query.order_by(StorePackage.name.asc()).all():
+        explicit = get_config_value(f"ruleta_g{pkg.id}_enabled", "") != ""
+        cfg = _ruleta_config_for_game(pkg.id)
+        # Mostrar el juego si tiene config propia guardada o hereda la global vieja
+        if not explicit and not cfg["enabled"]:
+            continue
+        try:
+            spin_counter = int(get_config_value(f"ruleta_g{pkg.id}_spin_counter", "0") or 0)
+        except Exception:
+            spin_counter = 0
+        prizes = _ruleta_prizes_payload(cfg)
+        out.append({
+            "gid": pkg.id,
+            "game": pkg.name,
+            "enabled": bool(cfg["enabled"] and prizes),
+            "cost_points": cfg["cost_points"],
+            "spins_to_win": cfg["spins_to_win"],
+            "spin_counter": spin_counter,
+            "prizes": [p["title"] for p in prizes],
+        })
+    return jsonify({"ok": True, "ruletas": out})
+
+
 @app.route("/admin/config/ruleta", methods=["POST"])
 def admin_config_ruleta_set():
     user = session.get("user")

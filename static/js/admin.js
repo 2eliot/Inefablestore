@@ -5198,7 +5198,50 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (e) { /* silencioso */ }
   }
 
+  var rlSavedList = document.getElementById('rl-saved-list');
+
+  async function loadSavedRuletas() {
+    if (!rlSavedList) return;
+    try {
+      var res = await fetch('/admin/config/ruleta/all');
+      var data = await res.json();
+      var rows = (data && data.ruletas) || [];
+      if (!rows.length) {
+        rlSavedList.innerHTML = '<span style="color:#64748b; font-size:13px;">Ningún juego tiene ruleta configurada todavía.</span>';
+        return;
+      }
+      rlSavedList.innerHTML = rows.map(function (r) {
+        var estado = r.enabled
+          ? '<span style="color:#16a34a; font-weight:800;">Activa</span>'
+          : '<span style="color:#94a3b8; font-weight:800;">Apagada</span>';
+        var premios = (r.prizes && r.prizes.length) ? r.prizes.map(esc).join(' · ') : 'Sin premios';
+        return '<div style="border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:8px 10px; display:grid; gap:4px; min-width:0;">' +
+          '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+          '<strong style="font-size:13px;">' + esc(r.game) + '</strong>' + estado +
+          '<span style="color:#64748b; font-size:12px;">' + r.cost_points + ' pts/giro · gana 1 de ' + r.spins_to_win + ' · lleva ' + r.spin_counter + ' giros</span>' +
+          '<button class="btn btn-rl-edit" data-gid="' + r.gid + '" type="button" style="margin-left:auto; padding:2px 10px;">Editar</button>' +
+          '</div>' +
+          '<div style="color:#475569; font-size:12px; overflow:hidden; text-overflow:ellipsis;">Premios: ' + premios + '</div>' +
+          '</div>';
+      }).join('');
+    } catch (e) {
+      rlSavedList.innerHTML = '<span style="color:#64748b; font-size:13px;">No se pudo cargar el resumen.</span>';
+    }
+  }
+
+  if (rlSavedList) {
+    rlSavedList.addEventListener('click', function (e) {
+      var btn = e.target.closest('.btn-rl-edit');
+      if (!btn) return;
+      var gid = btn.getAttribute('data-gid');
+      if (rlTargetGame) rlTargetGame.value = gid;
+      loadRuletaForGame(gid);
+      if (rlSaveStatus) rlSaveStatus.textContent = '';
+    });
+  }
+
   async function loadRuleta() {
+    loadSavedRuletas();
     // Poblar los selects de juegos (juego de la ruleta + juego del premio)
     try {
       var res = await fetch('/admin/packages');
@@ -5307,6 +5350,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (rlSaveStatus) rlSaveStatus.textContent = '✓ Ruleta guardada';
       setTimeout(function () { if (rlSaveStatus) rlSaveStatus.textContent = ''; }, 2500);
       loadRuletaForGame(payload.gid);
+      loadSavedRuletas();
       return true;
     } catch (err) {
       if (rlSaveStatus) rlSaveStatus.textContent = err.message || 'Error al guardar';
