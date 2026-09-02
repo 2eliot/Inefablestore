@@ -7480,7 +7480,17 @@ def _ensure_minigame_tables_ready():
 
 # Initialize
 with app.app_context():
-    db.create_all()
+    # Varios workers de gunicorn arrancan a la vez: si dos intentan crear la misma
+    # tabla nueva, el perdedor recibe UniqueViolation. No debe tumbar el worker —
+    # la tabla ya existe, creada por el otro.
+    try:
+        db.create_all()
+    except Exception as _exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print(f"[init] create_all: {_exc}")
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     # Ensure legacy DB gets the new 'category' column (SQLite runtime migration)
     try:
