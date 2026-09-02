@@ -85,6 +85,9 @@
         #fan-disc{position:absolute;left:-1px;top:8px;width:96px;height:192px;border-radius:96px 0 0 96px;border:1px solid #2b2b2b;border-right:none;background:#0a0a0af2;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:transform .35s cubic-bezier(.3,.9,.25,1),opacity .3s;transform:translateX(118px);opacity:0}
         .fan-line{position:absolute;left:-1px;top:104px;width:96px;height:1px;transform-origin:right center;background:linear-gradient(to left,transparent 0 26px,#2b2b2b 26px,#242424);opacity:0;transition:all .35s}
         #fan-gift{position:absolute;left:54px;top:141px;width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;border:none;background:none;color:#3ee07f;cursor:pointer;transition:all .3s .12s;transform:scale(.3);opacity:0;pointer-events:none}
+        #fan-ruleta{position:absolute;left:54px;top:31px;width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;border:none;background:none;color:#ef4444;cursor:pointer;transition:all .3s .12s;transform:scale(.3);opacity:0;pointer-events:none}
+        #fan-gift[hidden],#fan-ruleta[hidden]{display:none !important}
+        #fan-wrap.open #fan-ruleta{transform:scale(1);opacity:1;pointer-events:auto}
         #fan-tab{position:absolute;z-index:2;right:0;top:50%;transform:translateY(-50%);pointer-events:auto;width:26px;height:52px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid #1f1f1f;border-right:none;border-radius:9px 0 0 9px;background:#0d0d0d;color:#3ee07f;font-size:15px;line-height:1;transition:all .3s}
         #fan-wrap.open #fan-disc{transform:translateX(0);opacity:1}
         #fan-wrap.open .fan-line{opacity:1}
@@ -201,6 +204,7 @@
         .st-pack-amount{font-family:'Outfit';font-size:26px;line-height:1;font-weight:700;color:#ffffff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
         .st-pack-badge{font-size:10px;color:#6e6e6e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
         .st-pack.on .st-pack-badge{color:#3ee07f}
+        .st-pack-pts{font-size:9px;color:#facc15;letter-spacing:.04em;white-space:nowrap}
         .st-pack-gem{width:20px;height:20px;flex:none;background:repeating-linear-gradient(135deg,#1c1c1c 0 4px,#131313 4px 8px);clip-path:polygon(50% 0,100% 38%,50% 100%,0 38%);opacity:.7}
         .st-pack.on .st-pack-gem{opacity:1}
         .st-pack-icon{width:20px;height:20px;flex:none;object-fit:contain}
@@ -271,6 +275,18 @@
         #mob-qty{font-size:14px;min-width:16px;text-align:center}
         .st-mob-go{flex:none;width:38px;height:38px;display:flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:9px;background:#3ee07f;color:#020a05;font-size:17px;font-weight:700;cursor:pointer}
 
+        /* ============ RULETA DE PUNTOS (neón rojo) ============ */
+        @keyframes rl-neon{0%,100%{box-shadow:0 0 25px rgba(239,68,68,.4),inset 0 0 15px rgba(239,68,68,.15)}50%{box-shadow:0 0 45px rgba(220,38,38,.7),inset 0 0 25px rgba(220,38,38,.3)}}
+        @keyframes rl-shake{0%,100%{transform:rotate(0) scale(1)}20%{transform:rotate(-15deg) scale(1.15)}40%{transform:rotate(15deg) scale(1.15)}60%{transform:rotate(-10deg) scale(1.15)}80%{transform:rotate(10deg) scale(1.15)}}
+        @keyframes rl-pop{0%{transform:scale(.3);opacity:0}70%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
+        .rl-card{animation:rl-neon 4s infinite ease-in-out}
+        .rl-shake{animation:rl-shake .5s ease-in-out infinite}
+        .rl-pop{animation:rl-pop .5s cubic-bezier(.175,.885,.32,1.275) forwards}
+        .rl-frame{background:radial-gradient(circle,#121212 0%,#000000 70%),conic-gradient(from 0deg,#ef4444,#b91c1c,#f87171,#991b1b,#ef4444);box-shadow:0 0 35px rgba(239,68,68,.5),inset 0 0 20px rgba(185,28,28,.4);border:4px solid #000000;transition:box-shadow .3s ease}
+        .rl-frame.spinning{box-shadow:0 0 75px rgba(255,0,0,.9),inset 0 0 40px rgba(239,68,68,.75)}
+        .rl-btn{background:linear-gradient(135deg,#ef4444 0%,#dc2626 50%,#991b1b 100%);box-shadow:0 0 25px rgba(239,68,68,.6)}
+        .rl-btn:hover{background:linear-gradient(135deg,#f87171 0%,#ef4444 50%,#b91c1c 100%);box-shadow:0 0 35px rgba(239,68,68,.8)}
+
         /* ============ FOOTER ============ */
         .st-footer{position:relative;z-index:1;border-top:1px solid #1a1a1a;background:#050505;padding:36px 24px 22px}
         body.has-mob-bar .st-footer{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
@@ -332,6 +348,9 @@
         <div class="fan-line" style="transform:rotate(-90deg) scaleX(var(--fs,0))"></div>
         <button id="fan-gift" onclick="fanOpenGift()" type="button" aria-label="Redimir código de regalo" title="Redimir código de regalo">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="10" width="17" height="10.5" rx="1.5"></rect><rect x="2.5" y="6.5" width="19" height="3.5" rx="1"></rect><path d="M12 6.5v14"></path></svg>
+        </button>
+        <button id="fan-ruleta" onclick="fanOpenRuleta()" type="button" aria-label="Ruleta de puntos" title="Ruleta de puntos" hidden>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 5 13h6l-1 9 8-11h-6l1-9z" stroke-linejoin="round"></path></svg>
         </button>
         <button id="fan-tab" onclick="toggleFan()" type="button" aria-label="Abrir acciones rápidas">‹</button>
     </div>
@@ -770,6 +789,76 @@
         </div>
     </div>
 
+    <!-- RULETA DE PUNTOS: giros pagados con los puntos que dan las compras -->
+    <div id="ruleta-modal" class="fixed inset-0 z-[85] items-center justify-center p-4 bg-black/90 backdrop-blur-md overflow-y-auto" style="display:none">
+        <div class="rl-card w-full max-w-md bg-[#0a0a0a] border border-red-500/30 rounded-3xl overflow-hidden relative shadow-2xl my-6">
+            <div class="p-5 border-b border-red-500/20 flex items-center justify-between bg-[#050505]/80">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/40 flex items-center justify-center text-red-400 font-black text-xl">⚡</div>
+                    <div>
+                        <h1 class="text-lg font-black tracking-wider text-white uppercase">Ruleta</h1>
+                        <p class="text-xs text-red-400 font-semibold tracking-wide">Gira con tus puntos</p>
+                    </div>
+                </div>
+                <button onclick="closeRuletaModal()" class="w-9 h-9 rounded-xl bg-[#141414] border border-gray-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer" aria-label="Cerrar">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div class="p-6 flex flex-col items-center">
+                <div class="w-full mb-3 flex items-center justify-between gap-2 flex-wrap">
+                    <div class="min-w-0">
+                        <h2 class="font-bold text-sm text-gray-200 truncate">Premio: <span id="rl-prize" class="text-red-400">--</span></h2>
+                        <p class="text-xs text-gray-400">Gira y descubre si te toca premio instantáneo.</p>
+                    </div>
+                    <div class="bg-red-500/10 border border-red-500/30 text-red-300 text-[11px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap">
+                        💎 <span id="rl-cost">--</span> PTS POR GIRO
+                    </div>
+                </div>
+
+                <div class="w-full mb-3 flex items-center justify-between bg-[#0d0d0d] border border-[#1f1f1f] rounded-xl px-3 py-2">
+                    <span class="text-[11px] text-gray-400 uppercase tracking-wider">Tus puntos</span>
+                    <span id="rl-points" class="text-sm font-black text-yellow-400">--</span>
+                </div>
+
+                <div class="w-full mb-2 space-y-2">
+                    <input id="rl-player" type="text" inputmode="numeric" autocomplete="off" placeholder="Tu ID de jugador"
+                           class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-red-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                    <input id="rl-zone" type="text" inputmode="numeric" autocomplete="off" placeholder="Zona ID" style="display:none"
+                           class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-red-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                </div>
+
+                <div class="relative w-72 h-72 my-2 flex items-center justify-center">
+                    <div class="absolute -top-3 z-30 w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[22px] border-t-red-500" style="filter:drop-shadow(0 0 12px rgba(239,68,68,.9))"></div>
+                    <div id="rl-frame" class="absolute inset-0 rounded-full rl-frame p-2 flex items-center justify-center">
+                        <div class="w-full h-full rounded-full border-2 border-dashed border-red-500/30 absolute inset-0 pointer-events-none animate-spin" style="animation-duration:35s;"></div>
+                    </div>
+                    <canvas id="rl-canvas" width="320" height="320" class="w-full h-full rounded-full relative z-10 p-3"></canvas>
+                    <div class="absolute z-20 flex items-center justify-center">
+                        <button id="rl-go" onclick="ruletaSpin()" class="w-16 h-16 rl-btn rounded-full border-4 border-[#000000] flex items-center justify-center font-black text-white text-base tracking-widest hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer">GO</button>
+                    </div>
+                </div>
+
+                <p id="rl-status" class="mt-4 text-xs text-gray-400 text-center font-medium tracking-wide">
+                    Pulsa <span class="text-red-400 font-bold">GO</span> para girar.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resultado de la ruleta -->
+    <div id="rl-result" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[95] items-center justify-center p-4 flex" style="display:none">
+        <div class="bg-[#0a0a0a] border border-red-500/40 rounded-3xl p-7 max-w-sm w-full text-center relative overflow-hidden" style="box-shadow:0 0 50px rgba(239,68,68,.3)">
+            <div class="absolute -top-16 left-1/2 -translate-x-1/2 w-40 h-40 bg-red-500/20 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="my-5 relative flex items-center justify-center min-h-[120px]">
+                <div id="rl-emoji" class="text-7xl transition-transform duration-300">🎁</div>
+            </div>
+            <h3 id="rl-result-title" class="text-2xl font-black text-white mb-2 tracking-wide">...</h3>
+            <p id="rl-result-desc" class="text-sm text-gray-300 mb-6 leading-relaxed">...</p>
+            <button onclick="closeRuletaResult()" class="w-full py-3 rl-btn text-white font-extrabold text-sm rounded-2xl transition cursor-pointer tracking-wider">CONTINUAR</button>
+        </div>
+    </div>
+
     <!-- TOAST -->
     <div id="toast-success" class="fixed bottom-20 md:bottom-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-950/95 border-2 border-emerald-500 text-emerald-400 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold transition-all transform translate-y-12 opacity-0 pointer-events-none">
         <i class="fa-solid fa-circle-check text-base"></i>
@@ -1154,6 +1243,14 @@
                     badge.innerText = extra;
                     col.appendChild(badge);
                 }
+                // Puntos que gana el comprador con este paquete (editable en el admin)
+                const pts = parseInt(item.points_reward || 0, 10);
+                if (pts > 0) {
+                    const ptsEl = document.createElement('div');
+                    ptsEl.className = 'st-pack-pts';
+                    ptsEl.innerText = '⚡ +' + pts + ' pts';
+                    col.appendChild(ptsEl);
+                }
                 card.appendChild(col);
 
                 // Icono del item: imagen del admin si existe, si no la gema
@@ -1480,14 +1577,10 @@
             // Find the item index in the FULL (unfiltered) currentItems array from the API
             const itemIndex = currentItems.findIndex(it => it.id === selectedItemId);
 
-            // Build query params for the checkout page
+            // Build query params for the payment-method page
             const params = new URLSearchParams();
             params.set('sel', itemIndex >= 0 ? itemIndex : 0);
             params.set('q', purchaseQuantity);
-
-            // Default to BSD/Pago Móvil (same as current modal default)
-            params.set('method', 'pm');
-            params.set('cur', 'BSD');
 
             // Player ID and nickname for mobile games
             if (currentCategory === 'mobile' && !selectedPkgDirectToPin) {
@@ -1502,7 +1595,8 @@
                 if (code) params.set('rc', code);
             }
 
-            window.location.href = '/checkout/' + currentSelectedPkgId + '?' + params.toString();
+            // Paso intermedio: elegir el método de pago (Pago Móvil / Binance)
+            window.location.href = '/pago/' + currentSelectedPkgId + '?' + params.toString();
         }
 
         // ============ CARRUSEL DE BANNERS (imagen + textos del admin) ============
@@ -2338,16 +2432,229 @@
             if (evt.key === 'Escape' && modal && modal.style.display === 'flex') closeGiftModal();
         });
 
-        // La rueda lateral solo aparece si el canje esta encendido en el admin.
-        fetch('/store/gift/config')
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                var fan = el('fan-wrap');
-                if (data && data.ok && data.enabled && fan) {
-                    fan.style.display = 'block';
+        // La rueda lateral aparece si el canje o la ruleta están encendidos en el admin;
+        // cada botón se muestra solo si su función está activa.
+        Promise.all([
+            fetch('/store/gift/config').then(function (r) { return r.json(); }).catch(function () { return null; }),
+            fetch('/store/ruleta/config').then(function (r) { return r.json(); }).catch(function () { return null; })
+        ]).then(function (results) {
+            var giftOn = !!(results[0] && results[0].ok && results[0].enabled);
+            var ruletaOn = !!(results[1] && results[1].ok && results[1].enabled);
+            var fan = el('fan-wrap');
+            var giftBtn = el('fan-gift');
+            var ruletaBtn = el('fan-ruleta');
+            if (giftBtn) giftBtn.hidden = !giftOn;
+            if (ruletaBtn) ruletaBtn.hidden = !ruletaOn;
+            if (fan && (giftOn || ruletaOn)) fan.style.display = 'block';
+        });
+    })();
+    </script>
+    <!-- RULETA DE PUNTOS: giros pagados con los puntos acumulados por compras -->
+    <script>
+    (function () {
+        var cfg = null;          // /store/ruleta/config
+        var points = 0;
+        var logged = false;
+        var spinning = false;
+        var currentAngle = 0;
+        var SEGMENTS = 10;       // pares = 🎁 premio, impares = ❌ fallo
+        var canvas = null, ctx = null;
+
+        function drawWheel(angle) {
+            if (!canvas || !ctx) return;
+            var centerX = canvas.width / 2;
+            var centerY = canvas.height / 2;
+            var radius = canvas.width / 2 - 10;
+            var arcSize = (2 * Math.PI) / SEGMENTS;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (var i = 0; i < SEGMENTS; i++) {
+                var startAngle = angle + i * arcSize;
+                var endAngle = startAngle + arcSize;
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fillStyle = (i % 2 === 0) ? '#0a0a0a' : '#141414';
+                ctx.fill();
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(startAngle + arcSize / 2);
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = "26px 'Outfit', sans-serif";
+                ctx.fillText((i % 2 === 0) ? '🎁' : '❌', radius - 45, 0);
+                ctx.restore();
+            }
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 38, 0, 2 * Math.PI);
+            ctx.fillStyle = '#000000';
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#ef4444';
+            ctx.stroke();
+        }
+
+        async function refreshRuleta() {
+            try {
+                var results = await Promise.all([
+                    fetch('/store/ruleta/config').then(function (r) { return r.json(); }),
+                    fetch('/store/points/me').then(function (r) { return r.json(); })
+                ]);
+                cfg = (results[0] && results[0].ok) ? results[0] : null;
+                logged = !!(results[1] && results[1].logged_in);
+                points = (results[1] && results[1].points) || 0;
+                document.getElementById('rl-cost').innerText = cfg ? cfg.cost_points : '--';
+                document.getElementById('rl-points').innerText = logged ? points : '—';
+                var prizeTxt = (cfg && cfg.prize && cfg.prize.title)
+                    ? cfg.prize.title + (cfg.prize.game ? ' · ' + cfg.prize.game : '')
+                    : '--';
+                document.getElementById('rl-prize').innerText = prizeTxt;
+                var zone = document.getElementById('rl-zone');
+                if (zone) zone.style.display = (cfg && cfg.prize && cfg.prize.requires_zone) ? '' : 'none';
+                var status = document.getElementById('rl-status');
+                if (!logged) {
+                    status.innerHTML = 'Inicia sesión para girar con tus puntos. <button onclick="closeRuletaModal();openLoginModal();" class="text-red-400 font-bold underline">Entrar</button>';
+                } else if (cfg && points < cfg.cost_points) {
+                    status.innerHTML = 'Te faltan <b class="text-red-400">' + (cfg.cost_points - points) + '</b> puntos. Gana puntos comprando recargas.';
+                } else {
+                    status.innerHTML = 'Pulsa <span class="text-red-400 font-bold">GO</span> para girar.';
                 }
-            })
-            .catch(function () { /* si falla, la rueda se queda oculta */ });
+            } catch (e) { /* silencioso */ }
+        }
+
+        window.fanOpenRuleta = function () {
+            var wrap = document.getElementById('fan-wrap');
+            if (wrap && wrap.classList.contains('open')) toggleFan();
+            openRuletaModal();
+        };
+
+        window.openRuletaModal = function () {
+            var modal = document.getElementById('ruleta-modal');
+            if (!modal) return;
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            canvas = document.getElementById('rl-canvas');
+            ctx = canvas ? canvas.getContext('2d') : null;
+            drawWheel(currentAngle);
+            // Precargar el ID escrito en la tienda
+            var idInput = document.getElementById('id-verification-input');
+            var rlp = document.getElementById('rl-player');
+            if (idInput && rlp && !rlp.value) rlp.value = idInput.value.trim();
+            refreshRuleta();
+        };
+
+        window.closeRuletaModal = function () {
+            if (spinning) return; // no cerrar a mitad de giro
+            var modal = document.getElementById('ruleta-modal');
+            if (modal) modal.style.display = 'none';
+            document.body.style.overflow = '';
+        };
+
+        window.closeRuletaResult = function () {
+            var m = document.getElementById('rl-result');
+            if (m) m.style.display = 'none';
+        };
+
+        function animateTo(targetIndex, done) {
+            var sliceAngle = (2 * Math.PI) / SEGMENTS;
+            var extraSpins = 6 + Math.floor(Math.random() * 3);
+            var targetCenter = targetIndex * sliceAngle + sliceAngle / 2;
+            var desiredFinal = -Math.PI / 2 - targetCenter;
+            var totalRotation = (extraSpins * 2 * Math.PI) + (desiredFinal - (currentAngle % (2 * Math.PI)));
+            var startAngle = currentAngle;
+            var duration = 4500;
+            var startTime = null;
+            function step(ts) {
+                if (!startTime) startTime = ts;
+                var progress = Math.min((ts - startTime) / duration, 1);
+                var easeOut = 1 - Math.pow(1 - progress, 3);
+                currentAngle = startAngle + (totalRotation * easeOut);
+                drawWheel(currentAngle);
+                if (progress < 1) requestAnimationFrame(step);
+                else done();
+            }
+            requestAnimationFrame(step);
+        }
+
+        function showRuletaResult(won, resp) {
+            var modal = document.getElementById('rl-result');
+            var emoji = document.getElementById('rl-emoji');
+            var title = document.getElementById('rl-result-title');
+            var desc = document.getElementById('rl-result-desc');
+            modal.style.display = 'flex';
+            if (won) {
+                emoji.textContent = '🎁';
+                emoji.className = 'text-7xl rl-shake';
+                setTimeout(function () { emoji.textContent = '📦✨'; emoji.className = 'text-7xl rl-pop'; }, 600);
+                setTimeout(function () { emoji.textContent = '🎉🎁💎'; }, 1400);
+                title.textContent = '¡Ganaste ' + ((resp.prize && resp.prize.title) || 'el premio') + '!';
+                desc.textContent = resp.message || '¡Felicidades! Tu premio está en camino.';
+            } else {
+                emoji.textContent = '❌';
+                emoji.className = 'text-7xl';
+                title.textContent = '¡Sin premio esta vez!';
+                desc.textContent = resp.message || 'La ruleta no arrojó premio en este giro.';
+            }
+        }
+
+        window.ruletaSpin = async function () {
+            if (spinning) return;
+            if (!logged) { closeRuletaModal(); openLoginModal(); return; }
+            if (!cfg || !cfg.enabled) { showToast('La ruleta está desactivada.', true); return; }
+            var player = (document.getElementById('rl-player').value || '').trim();
+            var zone = (document.getElementById('rl-zone').value || '').trim();
+            if (!player) { showToast('Escribe tu ID de jugador para girar.', true); return; }
+            if (cfg.prize && cfg.prize.requires_zone && !zone) { showToast('Escribe tu Zona ID.', true); return; }
+            if (points < cfg.cost_points) { showToast('Te faltan puntos para girar.', true); return; }
+
+            spinning = true;
+            var go = document.getElementById('rl-go');
+            go.disabled = true;
+            go.classList.add('opacity-50', 'cursor-not-allowed');
+            document.getElementById('rl-frame').classList.add('spinning');
+            document.getElementById('rl-status').innerText = 'Girando ruleta...';
+
+            var resp = null;
+            try {
+                var res = await fetch('/store/ruleta/spin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: player, zone_id: zone })
+                });
+                resp = await res.json();
+            } catch (e) { resp = null; }
+
+            if (!resp || !resp.ok) {
+                spinning = false;
+                go.disabled = false;
+                go.classList.remove('opacity-50', 'cursor-not-allowed');
+                document.getElementById('rl-frame').classList.remove('spinning');
+                document.getElementById('rl-status').innerText = (resp && resp.error) || 'No se pudo girar. Intenta de nuevo.';
+                refreshRuleta();
+                return;
+            }
+
+            points = resp.points || 0;
+            document.getElementById('rl-points').innerText = points;
+
+            // El resultado lo decide el servidor: la rueda cae en un segmento acorde
+            var candidates = [];
+            for (var i = 0; i < SEGMENTS; i++) {
+                if ((i % 2 === 0) === !!resp.won) candidates.push(i);
+            }
+            var target = candidates[Math.floor(Math.random() * candidates.length)];
+            animateTo(target, function () {
+                spinning = false;
+                go.disabled = false;
+                go.classList.remove('opacity-50', 'cursor-not-allowed');
+                document.getElementById('rl-frame').classList.remove('spinning');
+                document.getElementById('rl-status').innerText = resp.won ? '¡Premio reclamado con éxito!' : 'Giro completado.';
+                showRuletaResult(!!resp.won, resp);
+            });
+        };
     })();
     </script>
 

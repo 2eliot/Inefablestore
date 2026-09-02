@@ -4344,6 +4344,7 @@ window.fetchHero = fetchHero;
                 <div class="pkg-edit-field"><label>T\u00edtulo</label><input class="new-item-title" type="text" placeholder="Nuevo item" /></div>
                 <div class="pkg-edit-field"><label>Subtítulo (opc.)</label><input class="new-item-subtitle" type="text" placeholder="+10 Extra" /></div>
                 <div class="pkg-edit-field"><label>Precio</label><input class="new-item-price" type="number" step="0.01" min="0" placeholder="0.00" /></div>
+                <div class="pkg-edit-field"><label>Puntos</label><input class="new-item-points" type="number" step="1" min="0" placeholder="0" /></div>
                 <div class="pkg-edit-field" style="display:flex;align-items:end;"><button class="btn btn-item-create" type="button">+ Agregar</button></div>
                 <div class="pkg-new-item-extras">
                   <div class="pkg-edit-field" style="flex:1;min-width:180px;"><label>Icono (opc.)</label>
@@ -4815,6 +4816,7 @@ if (btnSaveHero) {
           const titleEl = row.querySelector('.it-title');
           const subtitleEl = row.querySelector('.it-subtitle');
           const priceEl = row.querySelector('.it-price');
+          const pointsEl = row.querySelector('.it-points');
           const specialEl = row.querySelector('.it-special');
           const noDiscountEl = row.querySelector('.it-no-discount');
           const iconEl = row.querySelector('.it-icon');
@@ -4824,6 +4826,7 @@ if (btnSaveHero) {
             title: titleEl ? titleEl.value.trim() : '',
             subtitle: subtitleEl ? subtitleEl.value.trim() : '',
             price: priceEl ? parseFloat(priceEl.value || '0') : 0,
+            points_reward: pointsEl ? (parseInt(pointsEl.value || '0', 10) || 0) : 0,
             sticker: specialEl && specialEl.checked ? 'special' : '',
             no_discount: noDiscountEl ? !!noDiscountEl.checked : false,
             is_subcat_b: subcatBEl ? !!subcatBEl.checked : false,
@@ -4865,11 +4868,13 @@ if (btnSaveHero) {
         const titleEl = game && game.querySelector('.new-item-title');
         const subtitleEl = game && game.querySelector('.new-item-subtitle');
         const priceEl = game && game.querySelector('.new-item-price');
+        const pointsEl = game && game.querySelector('.new-item-points');
         const iconEl = game && game.querySelector('.new-item-icon');
         const subcatBEl = game && game.querySelector('.new-item-subcat-b');
         const title = titleEl ? titleEl.value.trim() : '';
         const subtitle = subtitleEl ? subtitleEl.value.trim() : '';
         const price = priceEl ? parseFloat(priceEl.value || '0') : 0;
+        const points_reward = pointsEl ? (parseInt(pointsEl.value || '0', 10) || 0) : 0;
         const icon_path = iconEl ? iconEl.value.trim() : '';
         const is_subcat_b = subcatBEl ? !!subcatBEl.checked : false;
         if (!gid || !title) { toast('T\u00edtulo requerido'); return; }
@@ -4878,12 +4883,13 @@ if (btnSaveHero) {
           const res = await fetch(`/admin/package/${gid}/items`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, subtitle, price, icon_path, is_subcat_b })
+            body: JSON.stringify({ title, subtitle, price, points_reward, icon_path, is_subcat_b })
           });
           if (!res.ok) throw new Error('No se pudo crear');
           if (titleEl) titleEl.value = '';
           if (subtitleEl) subtitleEl.value = '';
           if (priceEl) priceEl.value = '';
+          if (pointsEl) pointsEl.value = '';
           if (iconEl) iconEl.value = '';
           await loadGameItems(game, gid);
         } catch (err) {
@@ -4952,6 +4958,9 @@ if (btnSaveHero) {
         </label>
         <label class="pkg-edit-field"><span>Precio</span>
           <input class="it-price" type="number" step="0.01" min="0" value="${Number(it.price || 0)}" placeholder="Precio" />
+        </label>
+        <label class="pkg-edit-field"><span>Puntos</span>
+          <input class="it-points" type="number" step="1" min="0" value="${Number(it.points_reward || 0)}" placeholder="0" title="Puntos que gana el comprador con este paquete" />
         </label>
         <div class="pkg-item-extras">
           <label class="pkg-edit-field" style="flex:0 auto;"><span>Especial</span>
@@ -5027,6 +5036,207 @@ function closeCaptureModal() {
   if (img) img.src = '';
   if (modal) modal.style.display = 'none';
 }
+
+// ── Usuarios registrados (datos + puntos) y Ruleta de puntos ────────────────
+document.addEventListener('DOMContentLoaded', function () {
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ===== Usuarios =====
+  var usersList = document.getElementById('users-list');
+  var usersSearch = document.getElementById('users-search');
+  var btnUsersRefresh = document.getElementById('btn-users-refresh');
+  var usersLoaded = false;
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z');
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  }
+
+  async function fetchUsers() {
+    if (!usersList) return;
+    var q = usersSearch ? usersSearch.value.trim() : '';
+    usersList.innerHTML = '<div class="empty-state"><p>Cargando usuarios...</p></div>';
+    try {
+      var res = await fetch('/admin/users' + (q ? ('?q=' + encodeURIComponent(q)) : ''));
+      var data = await res.json();
+      if (!data || !data.ok) throw new Error((data && data.error) || 'No se pudo cargar');
+      renderUsers(data.users || []);
+    } catch (err) {
+      usersList.innerHTML = '<div class="empty-state"><p>' + esc(err.message || 'Error') + '</p></div>';
+    }
+  }
+
+  function renderUsers(users) {
+    if (!users.length) {
+      usersList.innerHTML = '<div class="empty-state"><p>No hay usuarios que coincidan.</p></div>';
+      return;
+    }
+    var head = '<div style="display:grid; grid-template-columns: 2fr 1.5fr 1.2fr 90px 80px 90px; gap:8px; padding:8px 10px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#64748b;">' +
+      '<div>Correo</div><div>Nombre</div><div>Teléfono</div><div>Puntos</div><div>Registro</div><div></div></div>';
+    var rows = users.map(function (u) {
+      return '<div class="user-admin-row" data-id="' + u.id + '" style="display:grid; grid-template-columns: 2fr 1.5fr 1.2fr 90px 80px 90px; gap:8px; align-items:center; padding:8px 10px; border:1px solid rgba(148,163,184,.18); border-radius:10px; margin-bottom:6px;">' +
+        '<input class="ua-email" type="email" value="' + esc(u.email) + '" style="width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:6px; min-width:0;" />' +
+        '<input class="ua-name" type="text" value="' + esc(u.name) + '" placeholder="Sin nombre" style="width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:6px; min-width:0;" />' +
+        '<input class="ua-phone" type="text" value="' + esc(u.phone) + '" placeholder="—" style="width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:6px; min-width:0;" />' +
+        '<input class="ua-points" type="number" min="0" step="1" value="' + (u.points || 0) + '" style="width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:6px; min-width:0;" title="Puntos para la ruleta" />' +
+        '<div style="font-size:12px; color:#64748b;">' + esc(fmtDate(u.created_at)) + '</div>' +
+        '<button class="btn btn-user-save" type="button">Guardar</button>' +
+        '</div>';
+    }).join('');
+    usersList.innerHTML = '<div style="overflow-x:auto; min-width:0;"><div style="min-width:720px;">' + head + rows + '</div></div>';
+  }
+
+  if (usersList) {
+    usersList.addEventListener('click', async function (e) {
+      var btn = e.target.closest('.btn-user-save');
+      if (!btn) return;
+      var row = btn.closest('.user-admin-row');
+      var id = row && row.getAttribute('data-id');
+      if (!id) return;
+      var payload = {
+        email: (row.querySelector('.ua-email') || {}).value || '',
+        name: (row.querySelector('.ua-name') || {}).value || '',
+        phone: (row.querySelector('.ua-phone') || {}).value || '',
+        points: parseInt((row.querySelector('.ua-points') || {}).value || '0', 10) || 0
+      };
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        var res = await fetch('/admin/users/' + id, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo guardar');
+        btn.textContent = '✓ Listo';
+        setTimeout(function () { btn.textContent = 'Guardar'; btn.disabled = false; }, 1400);
+      } catch (err) {
+        btn.textContent = 'Guardar';
+        btn.disabled = false;
+        alert(err.message || 'No se pudo guardar el usuario');
+      }
+    });
+  }
+
+  if (btnUsersRefresh) btnUsersRefresh.addEventListener('click', fetchUsers);
+  if (usersSearch) {
+    usersSearch.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); fetchUsers(); }
+    });
+  }
+  // Cargar al abrir la pestaña por primera vez
+  document.querySelectorAll('[data-target="#tab-users"]').forEach(function (tabBtn) {
+    tabBtn.addEventListener('click', function () {
+      if (!usersLoaded) { usersLoaded = true; fetchUsers(); }
+    });
+  });
+
+  // ===== Ruleta de puntos =====
+  var rlEnabled = document.getElementById('rl-enabled');
+  var rlCost = document.getElementById('rl-cost-input');
+  var rlWin = document.getElementById('rl-win-input');
+  var rlGameSelect = document.getElementById('rl-game-select');
+  var rlItemSelect = document.getElementById('rl-item-select');
+  var btnSaveRuleta = document.getElementById('btn-save-ruleta');
+  var rlSaveStatus = document.getElementById('rl-save-status');
+  var rlLoaded = false;
+
+  async function loadRuletaItems(gid, selectedItemId) {
+    if (!rlItemSelect) return;
+    rlItemSelect.innerHTML = '<option value="">— Elegir paquete —</option>';
+    if (!gid) return;
+    try {
+      var res = await fetch('/admin/package/' + gid + '/items');
+      var data = await res.json();
+      (data && data.items || []).forEach(function (it) {
+        var opt = document.createElement('option');
+        opt.value = it.id;
+        opt.textContent = it.title + (it.subtitle ? (' ' + it.subtitle) : '');
+        if (selectedItemId && Number(selectedItemId) === Number(it.id)) opt.selected = true;
+        rlItemSelect.appendChild(opt);
+      });
+    } catch (e) { /* silencioso */ }
+  }
+
+  async function loadRuleta() {
+    try {
+      var results = await Promise.all([
+        fetch('/admin/config/ruleta').then(function (r) { return r.json(); }),
+        fetch('/admin/packages').then(function (r) { return r.json(); })
+      ]);
+      var cfg = results[0] || {};
+      var pkgs = (results[1] && results[1].packages) || [];
+      if (rlGameSelect) {
+        rlGameSelect.innerHTML = '<option value="">— Elegir juego —</option>';
+        pkgs.forEach(function (p) {
+          var opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.name;
+          if (cfg.prize_store_package_id && Number(cfg.prize_store_package_id) === Number(p.id)) opt.selected = true;
+          rlGameSelect.appendChild(opt);
+        });
+      }
+      if (rlEnabled) rlEnabled.checked = !!cfg.enabled;
+      if (rlCost) rlCost.value = cfg.cost_points != null ? cfg.cost_points : '';
+      if (rlWin) rlWin.value = cfg.win_percent != null ? cfg.win_percent : '';
+      if (cfg.prize_store_package_id) {
+        await loadRuletaItems(cfg.prize_store_package_id, cfg.prize_item_id);
+      }
+    } catch (e) { /* silencioso */ }
+  }
+
+  if (rlGameSelect) {
+    rlGameSelect.addEventListener('change', function () {
+      loadRuletaItems(rlGameSelect.value, null);
+    });
+  }
+
+  if (btnSaveRuleta) {
+    btnSaveRuleta.addEventListener('click', async function () {
+      var payload = {
+        enabled: rlEnabled ? rlEnabled.checked : false,
+        cost_points: rlCost ? (parseInt(rlCost.value || '0', 10) || 0) : 0,
+        win_percent: rlWin ? (parseFloat(rlWin.value || '0') || 0) : 0,
+        prize_item_id: rlItemSelect ? (parseInt(rlItemSelect.value || '0', 10) || 0) : 0
+      };
+      if (payload.enabled && !payload.prize_item_id) {
+        if (rlSaveStatus) rlSaveStatus.textContent = 'Elige el paquete premio antes de activarla.';
+        return;
+      }
+      btnSaveRuleta.disabled = true;
+      if (rlSaveStatus) rlSaveStatus.textContent = 'Guardando...';
+      try {
+        var res = await fetch('/admin/config/ruleta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo guardar');
+        if (rlSaveStatus) rlSaveStatus.textContent = '✓ Ruleta guardada';
+        setTimeout(function () { if (rlSaveStatus) rlSaveStatus.textContent = ''; }, 2500);
+      } catch (err) {
+        if (rlSaveStatus) rlSaveStatus.textContent = err.message || 'Error al guardar';
+      } finally {
+        btnSaveRuleta.disabled = false;
+      }
+    });
+  }
+
+  // Cargar la config al abrir la pestaña Minijuegos (donde vive la tarjeta)
+  document.querySelectorAll('[data-target="#tab-minigames"]').forEach(function (tabBtn) {
+    tabBtn.addEventListener('click', function () {
+      if (!rlLoaded) { rlLoaded = true; loadRuleta(); }
+    });
+  });
+});
 
 function showAdminConfirmDialog(options) {
   const config = options || {};

@@ -138,8 +138,20 @@
       <div class="name" id="who-name">Usuario</div>
       <div class="email" id="who-email">correo@example.com</div>
     </div>
+    <span class="pill" id="points-pill" title="Puntos acumulados por tus compras — úsalos en la ruleta de la tienda" style="display:none;">⚡ <span id="points-value">0</span> pts</span>
     <span class="pill">Cuenta</span>
   </div>
+  <script>
+    // Puntos por compra: se acreditan al consultar y se gastan en la ruleta de la tienda
+    fetch('/store/points/me').then(function (r) { return r.json(); }).then(function (data) {
+      if (data && data.ok && data.logged_in) {
+        var pill = document.getElementById('points-pill');
+        var val = document.getElementById('points-value');
+        if (val) val.textContent = data.points || 0;
+        if (pill) pill.style.display = '';
+      }
+    }).catch(function () {});
+  </script>
 
   <div class="user-grid">
     <div class="user-card">

@@ -1124,6 +1124,9 @@ class Order(db.Model):
     credit_user_id = db.Column(db.Integer, nullable=True)
     credit_amount_usd = db.Column(db.Float, default=0.0)
     credit_refunded_at = db.Column(db.DateTime, nullable=True)
+    # Puntos acreditados al comprador por esta orden (0 = pendiente de acreditar,
+    # -1 = procesada sin puntos; premios/canjes se crean en -1 para no acumular)
+    points_awarded = db.Column(db.Integer, default=0)
     # Optional: JSON string with multiple items: [{"item_id": int, "qty": int, "title": str, "price": float}]
     items_json = db.Column(db.Text, default="")
     # Revendedores API automation state (pending_verification, success, etc.)
@@ -2393,6 +2396,8 @@ class GamePackageItem(db.Model):
     icon_path = db.Column(db.String(300), default="")
     # When True, discount codes do not apply to this item
     no_discount = db.Column(db.Boolean, default=False)
+    # Puntos que gana el comprador (con sesión) por cada unidad comprada
+    points_reward = db.Column(db.Integer, default=0)
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # Sub-category: False = label_a (e.g. Diamantes), True = label_b (e.g. Tarjetas)
@@ -6374,6 +6379,23 @@ class User(db.Model):
     phone = db.Column(db.String(80), default="")
     password_hash = db.Column(db.String(300), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Puntos acumulados por compras entregadas (se gastan en la ruleta de la tienda)
+    points = db.Column(db.Integer, default=0)
+
+
+class RouletteSpin(db.Model):
+    """Historial de giros de la ruleta de puntos."""
+    __tablename__ = "roulette_spins"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    points_spent = db.Column(db.Integer, default=0)
+    won = db.Column(db.Boolean, default=False)
+    prize_item_id = db.Column(db.Integer, nullable=True)
+    prize_title = db.Column(db.String(250), default="")
+    customer_id = db.Column(db.String(120), default="")
+    customer_zone = db.Column(db.String(120), default="")
+    order_id = db.Column(db.Integer, nullable=True)
 
 
 class PasswordResetCode(db.Model):
@@ -6964,6 +6986,250 @@ def store_gift_history():
     })
 
 
+# ==============================
+# Puntos por compra + Ruleta de puntos
+# ==============================
+
+def _ruleta_config_raw() -> dict:
+    """Configuración de la ruleta de puntos (editable en el admin)."""
+    try:
+        cost = int(float(get_config_value("ruleta_cost_points", "0") or 0))
+    except Exception:
+        cost = 0
+    try:
+        win = float(get_config_value("ruleta_win_percent", "10") or 0)
+    except Exception:
+        win = 0.0
+    try:
+        prize_item_id = int(get_config_value("ruleta_prize_item_id", "0") or 0)
+    except Exception:
+        prize_item_id = 0
+    return {
+        "enabled": get_config_value("ruleta_enabled", "0") == "1",
+        "cost_points": max(cost, 0),
+        "win_percent": min(max(win, 0.0), 100.0),
+        "prize_item_id": prize_item_id,
+    }
+
+
+def _ruleta_prize_payload(cfg=None) -> dict:
+    cfg = cfg or _ruleta_config_raw()
+    item = GamePackageItem.query.get(int(cfg.get("prize_item_id") or 0)) if cfg.get("prize_item_id") else None
+    if not item or not item.active:
+        return {}
+    pkg = StorePackage.query.get(item.store_package_id)
+    title = (item.title or "").strip()
+    if (item.subtitle or "").strip():
+        title = f"{title} {item.subtitle.strip()}".strip()
+    return {
+        "item_id": item.id,
+        "title": title,
+        "game": (pkg.name if pkg else ""),
+        "image": (item.icon_path or (pkg.image_path if pkg else "")),
+        "requires_zone": bool(_package_effective_requires_zone(item.store_package_id)),
+    }
+
+
+def _order_points_total(order_obj) -> int:
+    """Puntos que otorga una orden según sus items (points_reward × cantidad)."""
+    total = 0
+    try:
+        for ent in _get_order_item_entries(order_obj):
+            item = GamePackageItem.query.get(int(ent.get("item_id") or 0))
+            if item:
+                total += int(item.points_reward or 0) * max(int(ent.get("qty") or 1), 1)
+    except Exception:
+        return 0
+    return max(total, 0)
+
+
+def _sync_user_points(user_row) -> int:
+    """Acredita puntos pendientes de órdenes entregadas/aprobadas del usuario.
+
+    Se acredita al consultar (perfil / ruleta / admin): una sola vía sin importar
+    cómo llegó la orden a aprobada (admin, webhook o recarga automática).
+    """
+    if not user_row:
+        return 0
+    try:
+        from sqlalchemy import or_
+        pending = Order.query.filter(
+            Order.user_id == user_row.id,
+            Order.status.in_(("approved", "delivered")),
+            or_(Order.points_awarded == None, Order.points_awarded == 0),
+        ).all()
+        earned = 0
+        for o in pending:
+            pts = _order_points_total(o)
+            o.points_awarded = pts if pts > 0 else -1
+            earned += pts
+        if pending:
+            if earned > 0:
+                user_row.points = int(user_row.points or 0) + earned
+            db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    return int(user_row.points or 0)
+
+
+@app.route("/store/points/me")
+def store_points_me():
+    """Saldo de puntos del usuario con sesión (acredita pendientes al consultar)."""
+    u = session.get("user") or {}
+    uid = u.get("user_id")
+    if not uid:
+        return jsonify({"ok": True, "logged_in": False, "points": 0})
+    user_row = db.session.get(User, int(uid))
+    if not user_row:
+        return jsonify({"ok": True, "logged_in": False, "points": 0})
+    pts = _sync_user_points(user_row)
+    return jsonify({"ok": True, "logged_in": True, "points": pts})
+
+
+@app.route("/store/ruleta/config")
+def store_ruleta_config():
+    cfg = _ruleta_config_raw()
+    prize = _ruleta_prize_payload(cfg) if cfg["enabled"] else {}
+    return jsonify({
+        "ok": True,
+        "enabled": bool(cfg["enabled"] and prize),
+        "cost_points": cfg["cost_points"],
+        "prize": prize,
+    })
+
+
+@app.route("/store/ruleta/spin", methods=["POST"])
+def store_ruleta_spin():
+    """Gira la ruleta: descuenta puntos y, si gana, entrega el premio como una orden."""
+    import random as _random
+    u = session.get("user") or {}
+    uid = u.get("user_id")
+    if not uid:
+        return jsonify({"ok": False, "error": "Inicia sesión para usar la ruleta"}), 401
+    cfg = _ruleta_config_raw()
+    prize = _ruleta_prize_payload(cfg)
+    if not cfg["enabled"] or not prize:
+        return jsonify({"ok": False, "error": "La ruleta está desactivada"}), 403
+
+    data = request.get_json(silent=True) or {}
+    player_id = (data.get("player_id") or "").strip()
+    zone_id = (data.get("zone_id") or "").strip()
+    if not player_id:
+        return jsonify({"ok": False, "error": "Escribe tu ID de jugador"}), 400
+    if len(player_id) > 120:
+        return jsonify({"ok": False, "error": "Ese ID no es válido"}), 400
+    if zone_id and not zone_id.isdigit():
+        return jsonify({"ok": False, "error": "La Zona ID debe ser numérica"}), 400
+    if prize.get("requires_zone") and not zone_id:
+        return jsonify({"ok": False, "error": "La Zona ID es requerida para este juego"}), 400
+
+    # Misma lista negra que el checkout público
+    try:
+        blk = BlockedCustomer.query.filter(
+            db.func.lower(BlockedCustomer.customer_id) == player_id.lower(),
+            BlockedCustomer.active == True,
+        ).first()
+        if blk:
+            return jsonify({"ok": False, "error": "Este ID de jugador está bloqueado. Contacta soporte"}), 403
+    except Exception:
+        pass
+
+    user_row = db.session.get(User, int(uid))
+    if not user_row:
+        return jsonify({"ok": False, "error": "Inicia sesión para usar la ruleta"}), 401
+    _sync_user_points(user_row)
+
+    cost = int(cfg["cost_points"] or 0)
+    if cost > 0:
+        # Descuento atómico: solo si el saldo alcanza (evita doble gasto en dos pestañas)
+        updated = User.query.filter(User.id == user_row.id, User.points >= cost).update(
+            {User.points: User.points - cost}, synchronize_session=False
+        )
+        if not updated:
+            db.session.rollback()
+            faltan = max(cost - int(user_row.points or 0), 0)
+            return jsonify({"ok": False, "error": f"Te faltan {faltan} puntos para girar"}), 400
+        db.session.commit()
+        db.session.refresh(user_row)
+
+    won = (_random.random() * 100.0) < float(cfg["win_percent"] or 0)
+    spin = RouletteSpin(
+        user_id=user_row.id,
+        points_spent=cost,
+        won=won,
+        prize_item_id=prize.get("item_id"),
+        prize_title=prize.get("title") or "",
+        customer_id=player_id,
+        customer_zone=zone_id,
+    )
+    db.session.add(spin)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    order = None
+    message = "Esta vez no hubo premio. ¡Sigue acumulando puntos!"
+    if won:
+        item = GamePackageItem.query.get(int(prize["item_id"]))
+        try:
+            order = Order(
+                status="pending",
+                store_package_id=int(item.store_package_id),
+                item_id=int(item.id),
+                customer_name=(user_row.name or "").strip()[:200],
+                customer_id=player_id,
+                customer_zone=zone_id,
+                name="Premio de la ruleta",
+                email=(user_row.email or ""),
+                method="ruleta",
+                currency="USD",
+                amount=0.0,
+                price=0.0,
+                reference=f"RULETA-{uuid.uuid4().hex[:10].upper()}",
+                active=True,
+                user_id=user_row.id,
+                points_awarded=-1,  # premio gratis: no acumula puntos
+            )
+            db.session.add(order)
+            db.session.commit()
+            spin.order_id = order.id
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            print(f"[Ruleta] No se pudo crear la orden del premio: {exc}")
+            order = None
+
+        # Misma vía que el canje de regalos: si el ítem tiene recarga automática
+        # mapeada sale sola; si no, la orden queda para que el admin la entregue.
+        entregado = False
+        if order is not None:
+            try:
+                _try_transition_order_to_approved(order)
+                result = _dispatch_order_auto_recharges(order)
+                summary = (result or {}).get("summary") or {}
+                total_units = int(summary.get("total_units") or 0)
+                entregado = total_units > 0 and int(summary.get("completed_units") or 0) >= total_units
+            except Exception as exc:
+                print(f"[Ruleta] Error entregando el premio: {exc}")
+        if entregado:
+            message = f"¡Ganaste {prize['title']}! Tu recarga ya fue enviada."
+        else:
+            message = f"¡Ganaste {prize['title']}! Estamos procesando tu premio."
+
+    return jsonify({
+        "ok": True,
+        "won": bool(won),
+        "message": message,
+        "order_id": int(order.id) if order else 0,
+        "points": int(user_row.points or 0),
+        "prize": prize if won else None,
+    })
+
+
 # --- Rutas de administración ---
 
 @app.route("/admin/gift-codes", methods=["GET"])
@@ -7296,6 +7562,7 @@ with app.app_context():
             add_order_col('payment_verified_at', f"payment_verified_at {'TIMESTAMP' if _is_pg else 'TEXT'}")
             add_order_col('payment_verification_attempts', "payment_verification_attempts INTEGER DEFAULT 0")
             add_order_col('payment_last_verification_at', f"payment_last_verification_at {'TIMESTAMP' if _is_pg else 'TEXT'}")
+            add_order_col('points_awarded', "points_awarded INTEGER DEFAULT 0")
             db.session.commit()
             try:
                 db.session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_idempotency_key ON orders (idempotency_key)"))
@@ -7401,8 +7668,28 @@ with app.app_context():
         if "no_discount" not in gp_cols:
             db.session.execute(text("ALTER TABLE game_packages ADD COLUMN no_discount INTEGER DEFAULT 0"))
             db.session.commit()
+        if "points_reward" not in gp_cols:
+            db.session.execute(text("ALTER TABLE game_packages ADD COLUMN points_reward INTEGER DEFAULT 0"))
+            db.session.commit()
     except Exception:
         pass
+
+    # Puntos por compra: columna de saldo en users
+    try:
+        from sqlalchemy import text
+        if db.engine.dialect.name == "postgresql":
+            _u_rows = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")).fetchall()
+            u_cols = {row[0] for row in _u_rows}
+        else:
+            u_cols = {row[1] for row in db.session.execute(text("PRAGMA table_info(users)")).fetchall()}
+        if u_cols and "points" not in u_cols:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0"))
+            db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
 
 # ==============================
 # Special Users API
@@ -9379,6 +9666,112 @@ def admin_config_hero_set():
     return jsonify({"ok": True})
 
 
+@app.route("/admin/config/ruleta", methods=["GET"])
+def admin_config_ruleta_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    cfg = _ruleta_config_raw()
+    prize = _ruleta_prize_payload(cfg)
+    prize_pkg_id = None
+    if cfg.get("prize_item_id"):
+        item = GamePackageItem.query.get(int(cfg["prize_item_id"]))
+        prize_pkg_id = item.store_package_id if item else None
+    return jsonify({"ok": True, **cfg, "prize_store_package_id": prize_pkg_id, "prize": prize})
+
+
+@app.route("/admin/config/ruleta", methods=["POST"])
+def admin_config_ruleta_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        cost = max(int(float(data.get("cost_points") or 0)), 0)
+    except Exception:
+        cost = 0
+    try:
+        win = min(max(float(data.get("win_percent") or 0), 0.0), 100.0)
+    except Exception:
+        win = 0.0
+    try:
+        prize_item_id = int(data.get("prize_item_id") or 0)
+    except Exception:
+        prize_item_id = 0
+    try:
+        set_config_values({
+            "ruleta_enabled": "1" if data.get("enabled") else "0",
+            "ruleta_cost_points": str(cost),
+            "ruleta_win_percent": str(win),
+            "ruleta_prize_item_id": str(prize_item_id),
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar la ruleta: {exc}"}), 500
+    return jsonify({"ok": True})
+
+
+# ==============================
+# Admin: Usuarios registrados (datos + puntos)
+# ==============================
+@app.route("/admin/users", methods=["GET"])
+def admin_users_list():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    q = (request.args.get("q") or "").strip().lower()
+    query = User.query
+    if q:
+        from sqlalchemy import or_
+        like = f"%{q}%"
+        query = query.filter(or_(
+            db.func.lower(User.email).like(like),
+            db.func.lower(User.name).like(like),
+            User.phone.like(like),
+        ))
+    rows = query.order_by(User.id.desc()).limit(200).all()
+    # Acreditar puntos pendientes de lo que se liste (mantiene el saldo al día)
+    out = []
+    for row in rows:
+        out.append({
+            "id": row.id,
+            "name": row.name or "",
+            "email": row.email,
+            "phone": row.phone or "",
+            "points": _sync_user_points(row),
+            "created_at": row.created_at.isoformat() if row.created_at else "",
+        })
+    return jsonify({"ok": True, "users": out})
+
+
+@app.route("/admin/users/<int:user_id>", methods=["POST"])
+def admin_users_update(user_id: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    row = db.session.get(User, user_id)
+    if not row:
+        return jsonify({"ok": False, "error": "Usuario no existe"}), 404
+    data = request.get_json(silent=True) or {}
+    if "name" in data:
+        row.name = (data.get("name") or "").strip()
+    if "phone" in data:
+        row.phone = (data.get("phone") or "").strip()
+    if "email" in data:
+        email = (data.get("email") or "").strip()
+        if email and email.lower() != (row.email or "").lower():
+            exists = User.query.filter(db.func.lower(User.email) == email.lower(), User.id != row.id).first()
+            if exists:
+                return jsonify({"ok": False, "error": "Ese email ya está registrado"}), 400
+            row.email = email
+    if "points" in data:
+        try:
+            row.points = max(int(float(data.get("points") or 0)), 0)
+        except Exception:
+            pass
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 # ==============================
 # Admin: Images APIs
 # ==============================
@@ -10210,6 +10603,24 @@ def store_game_detail(gid: int):
         so_connections=so_connections,
         so_connections_json=so_connections_json,
         related_packages=[{"id": p.id, "name": p.name, "image_path": p.image_path, "category": (p.category or 'mobile')} for p in related],
+    )
+
+
+@app.route("/pago/<int:gid>")
+def store_pay_method(gid: int):
+    """Paso intermedio entre la tienda y el checkout: elegir el método de pago."""
+    game = StorePackage.query.get(gid)
+    if not game or not game.active:
+        return redirect(url_for("index"))
+    logo_url = get_config_value("logo_path", "")
+    site_name = get_config_value("site_name", "InefableStore")
+    return render_template(
+        "method.html",
+        gid=gid,
+        logo_url=logo_url,
+        site_name=site_name,
+        game_name=game.name,
+        game_image=game.image_path,
     )
 
 
@@ -12253,7 +12664,7 @@ def store_game_items(gid: int):
         "subcat_label_a": (game.subcat_label_a or "Diamantes"),
         "subcat_label_b": (game.subcat_label_b or "Tarjetas"),
         "items": [
-            {"id": it.id, "title": it.title, "subtitle": (it.subtitle or ""), "price": it.price, "description": (it.description or ""), "sticker": (it.sticker or ""), "icon_path": (it.icon_path or ""), "no_discount": bool(it.no_discount), "is_subcat_b": bool(it.is_subcat_b)}
+            {"id": it.id, "title": it.title, "subtitle": (it.subtitle or ""), "price": it.price, "description": (it.description or ""), "sticker": (it.sticker or ""), "icon_path": (it.icon_path or ""), "no_discount": bool(it.no_discount), "is_subcat_b": bool(it.is_subcat_b), "points_reward": int(it.points_reward or 0)}
             for it in items
         ]
     })
@@ -12652,6 +13063,8 @@ def admin_game_items_list(gid: int):
                 "icon_path": (it.icon_path or ""),
                 "active": it.active,
                 "is_subcat_b": bool(it.is_subcat_b),
+                "points_reward": int(it.points_reward or 0),
+                "no_discount": bool(it.no_discount),
             }
             for it in items
         ]
@@ -12680,7 +13093,11 @@ def admin_game_items_create(gid: int):
     if not title:
         return jsonify({"ok": False, "error": "Título requerido"}), 400
     is_subcat_b = bool(data.get("is_subcat_b", False))
-    item = GamePackageItem(store_package_id=gid, title=title, subtitle=subtitle, description=description, price=price, sticker=sticker, icon_path=icon_path, active=True, is_subcat_b=is_subcat_b)
+    try:
+        points_reward = max(int(float(data.get("points_reward") or 0)), 0)
+    except Exception:
+        points_reward = 0
+    item = GamePackageItem(store_package_id=gid, title=title, subtitle=subtitle, description=description, price=price, sticker=sticker, icon_path=icon_path, active=True, is_subcat_b=is_subcat_b, points_reward=points_reward)
     db.session.add(item)
     db.session.commit()
     return jsonify({"ok": True, "item": {"id": item.id, "title": item.title, "subtitle": (item.subtitle or ""), "price": item.price, "description": item.description, "sticker": (item.sticker or ""), "icon_path": (item.icon_path or ""), "active": item.active}})
@@ -12727,6 +13144,12 @@ def admin_game_items_update(item_id: int):
         item.is_subcat_b = bool(data.get("is_subcat_b"))
     if "no_discount" in data:
         item.no_discount = bool(data.get("no_discount"))
+    if "points_reward" in data:
+        try:
+            item.points_reward = max(int(float(data.get("points_reward") or 0)), 0)
+        except Exception:
+            item.points_reward = 0
+    db.session.commit()
     return jsonify({"ok": True})
 
 @app.route("/admin/package/item/<int:item_id>", methods=["DELETE"])
@@ -12789,6 +13212,11 @@ def admin_game_items_bulk_update(gid: int):
             item.no_discount = bool(entry.get("no_discount"))
         if "is_subcat_b" in entry:
             item.is_subcat_b = bool(entry.get("is_subcat_b"))
+        if "points_reward" in entry:
+            try:
+                item.points_reward = max(int(float(entry.get("points_reward") or 0)), 0)
+            except Exception:
+                pass
         updated += 1
     db.session.commit()
     return jsonify({"ok": True, "updated": updated})

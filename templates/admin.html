@@ -211,6 +211,7 @@
       <button class="tab" data-target="#tab-config" aria-selected="false">Configuración</button>
       <button class="tab" data-target="#tab-smileone" aria-selected="false">Smile.One</button>
       <button class="tab" data-target="#tab-affiliates" aria-selected="false">Afiliados</button>
+      <button class="tab" data-target="#tab-users" aria-selected="false">Usuarios</button>
       <button class="tab" data-target="#tab-blocked" aria-selected="false">IDs Bloqueados</button>
     </nav>
   </aside>
@@ -315,6 +316,24 @@
     </div>
 
     <!-- IDs Bloqueados -->
+    <!-- Usuarios registrados: datos + puntos -->
+    <div id="tab-users" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Usuarios</h2>
+        <div class="actions" style="gap:8px;">
+          <input id="users-search" type="search" placeholder="Buscar por correo, nombre o teléfono" style="min-width:240px;">
+          <button id="btn-users-refresh" class="btn" type="button">Buscar</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div style="margin:0 0 10px; color:#64748b; font-size:13px;">
+          Usuarios registrados en la tienda. Puedes editar sus datos y sus puntos:
+          los puntos se ganan con compras entregadas (con sesión iniciada) y se gastan girando la ruleta.
+        </div>
+        <div id="users-list"><div class="empty-state"><p>Pulsa Buscar para cargar los usuarios.</p></div></div>
+      </div>
+    </div>
+
     <div id="tab-blocked" class="tab-panel" role="tabpanel" hidden>
       <div class="panel-header">
         <h2>IDs Bloqueados</h2>
@@ -482,6 +501,42 @@
           <h3>Ganadores</h3>
           <div id="minigames-winners-list" class="minigame-winners-list">
             <div class="empty-state"><p>Cargando ganadores...</p></div>
+          </div>
+        </div>
+
+        <div class="minigame-card">
+          <h3>Ruleta de puntos (tienda)</h3>
+          <p style="margin:0 0 12px; color:#94a3b8; font-size:13px;">
+            Los clientes ganan puntos por cada compra entregada (el campo "Puntos" de cada paquete)
+            y los gastan girando esta ruleta desde la rueda lateral de la tienda. El premio se entrega
+            como una orden: automática si el ítem tiene recarga mapeada, manual si no.
+          </p>
+          <div class="form-row">
+            <label>Activa</label>
+            <input id="rl-enabled" type="checkbox">
+          </div>
+          <div class="form-row">
+            <label for="rl-cost-input">Puntos por giro</label>
+            <input id="rl-cost-input" type="number" min="0" step="1" placeholder="Ej: 100">
+          </div>
+          <div class="form-row">
+            <label for="rl-win-input">% de ganar</label>
+            <input id="rl-win-input" type="number" min="0" max="100" step="0.1" placeholder="Ej: 10">
+          </div>
+          <div class="form-row">
+            <label for="rl-game-select">Juego del premio</label>
+            <select id="rl-game-select"><option value="">— Elegir juego —</option></select>
+          </div>
+          <div class="form-row">
+            <label for="rl-item-select">Paquete premio</label>
+            <select id="rl-item-select"><option value="">— Elegir paquete —</option></select>
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-save-ruleta" class="btn primary" type="button">Guardar ruleta</button>
+              <span id="rl-save-status" style="margin-left:8px; color:#64748b; font-size:13px;"></span>
+            </div>
           </div>
         </div>
       </div>
