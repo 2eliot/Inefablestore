@@ -507,10 +507,16 @@
         <div class="minigame-card">
           <h3>Ruleta de puntos (tienda)</h3>
           <p style="margin:0 0 12px; color:#94a3b8; font-size:13px;">
+            Cada juego tiene su propia ruleta: elige el juego, configúrala y guárdala.
+            En la tienda, el botón ⚡ de la rueda lateral abre la ruleta del juego seleccionado.
             Los clientes ganan puntos por cada compra entregada (el campo "Puntos" de cada paquete)
-            y los gastan girando esta ruleta desde la rueda lateral de la tienda. El premio se entrega
-            como una orden: automática si el ítem tiene recarga mapeada, manual si no.
+            y los gastan girando; el premio se entrega como una orden (automática si el ítem tiene
+            recarga mapeada, manual si no).
           </p>
+          <div class="form-row">
+            <label for="rl-target-game">Juego de la ruleta</label>
+            <select id="rl-target-game"><option value="">— Elegir juego —</option></select>
+          </div>
           <div class="form-row">
             <label>Activa</label>
             <input id="rl-enabled" type="checkbox">

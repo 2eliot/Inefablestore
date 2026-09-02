@@ -6990,8 +6990,17 @@ def store_gift_history():
 # Puntos por compra + Ruleta de puntos
 # ==============================
 
-def _ruleta_config_raw() -> dict:
-    """Configuración de la ruleta de puntos (editable en el admin)."""
+def _parse_id_list(raw: str) -> list:
+    ids = []
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if part.isdigit() and int(part) > 0 and int(part) not in ids:
+            ids.append(int(part))
+    return ids
+
+
+def _ruleta_legacy_config() -> dict:
+    """Config global vieja (antes de la ruleta por juego)."""
     try:
         cost = int(float(get_config_value("ruleta_cost_points", "0") or 0))
     except Exception:
@@ -7000,14 +7009,8 @@ def _ruleta_config_raw() -> dict:
         spins_to_win = int(float(get_config_value("ruleta_spins_to_win", "35") or 0))
     except Exception:
         spins_to_win = 35
-    # Varios premios posibles (de uno o varios juegos), separados por coma
-    ids = []
-    for part in (get_config_value("ruleta_prize_item_ids", "") or "").split(","):
-        part = part.strip()
-        if part.isdigit() and int(part) > 0 and int(part) not in ids:
-            ids.append(int(part))
+    ids = _parse_id_list(get_config_value("ruleta_prize_item_ids", ""))
     if not ids:
-        # Compatibilidad con la config vieja de un solo premio
         try:
             legacy = int(get_config_value("ruleta_prize_item_id", "0") or 0)
             if legacy > 0:
@@ -7020,6 +7023,58 @@ def _ruleta_config_raw() -> dict:
         "spins_to_win": max(spins_to_win, 1),
         "prize_item_ids": ids,
     }
+
+
+def _ruleta_config_for_game(gid) -> dict:
+    """Config de la ruleta del juego `gid`: cada juego tiene su propia ruleta."""
+    try:
+        gid = int(gid or 0)
+    except Exception:
+        gid = 0
+    if gid <= 0:
+        return {"gid": 0, "enabled": False, "cost_points": 0, "spins_to_win": 35, "prize_item_ids": []}
+
+    enabled_raw = get_config_value(f"ruleta_g{gid}_enabled", "")
+    if enabled_raw == "":
+        # Compatibilidad: la config global vieja aplica al juego de su primer premio
+        legacy = _ruleta_legacy_config()
+        if legacy["enabled"] and legacy["prize_item_ids"]:
+            first = GamePackageItem.query.get(int(legacy["prize_item_ids"][0]))
+            if first and int(first.store_package_id) == gid:
+                legacy["gid"] = gid
+                return legacy
+        return {"gid": gid, "enabled": False, "cost_points": 0, "spins_to_win": 35, "prize_item_ids": []}
+
+    try:
+        cost = int(float(get_config_value(f"ruleta_g{gid}_cost_points", "0") or 0))
+    except Exception:
+        cost = 0
+    try:
+        spins_to_win = int(float(get_config_value(f"ruleta_g{gid}_spins_to_win", "35") or 0))
+    except Exception:
+        spins_to_win = 35
+    return {
+        "gid": gid,
+        "enabled": enabled_raw == "1",
+        "cost_points": max(cost, 0),
+        "spins_to_win": max(spins_to_win, 1),
+        "prize_item_ids": _parse_id_list(get_config_value(f"ruleta_g{gid}_prize_item_ids", "")),
+    }
+
+
+def _current_points_user_row():
+    """Usuario de la sesión para puntos: por user_id o, si no hay (ej. sesión
+    de admin/afiliado), por el correo de la sesión."""
+    u = session.get("user") or {}
+    uid = u.get("user_id")
+    if uid:
+        row = db.session.get(User, int(uid))
+        if row:
+            return row
+    email = (u.get("email") or "").strip().lower()
+    if email:
+        return User.query.filter(db.func.lower(User.email) == email).first()
+    return None
 
 
 def _ruleta_prize_item_payload(item) -> dict:
@@ -7096,12 +7151,11 @@ def _sync_user_points(user_row) -> int:
 
 @app.route("/store/points/me")
 def store_points_me():
-    """Saldo de puntos del usuario con sesión (acredita pendientes al consultar)."""
-    u = session.get("user") or {}
-    uid = u.get("user_id")
-    if not uid:
-        return jsonify({"ok": True, "logged_in": False, "points": 0})
-    user_row = db.session.get(User, int(uid))
+    """Saldo de puntos del usuario con sesión (acredita pendientes al consultar).
+
+    Si la sesión no trae user_id (ej. admin o afiliado), se resuelve por correo.
+    """
+    user_row = _current_points_user_row()
     if not user_row:
         return jsonify({"ok": True, "logged_in": False, "points": 0})
     pts = _sync_user_points(user_row)
@@ -7110,16 +7164,18 @@ def store_points_me():
 
 @app.route("/store/ruleta/config")
 def store_ruleta_config():
-    cfg = _ruleta_config_raw()
+    """Config pública de la ruleta del juego indicado (?gid=)."""
+    cfg = _ruleta_config_for_game(request.args.get("gid"))
     prizes = _ruleta_prizes_payload(cfg) if cfg["enabled"] else []
+    game = StorePackage.query.get(cfg["gid"]) if cfg["gid"] else None
     return jsonify({
         "ok": True,
+        "gid": cfg["gid"],
+        "game": (game.name if game else ""),
         "enabled": bool(cfg["enabled"] and prizes),
         "cost_points": cfg["cost_points"],
         "prizes": prizes,
         "requires_zone": any(p.get("requires_zone") for p in prizes),
-        # compatibilidad con clientes que esperan un solo premio
-        "prize": prizes[0] if prizes else {},
     })
 
 
@@ -7127,16 +7183,12 @@ def store_ruleta_config():
 def store_ruleta_spin():
     """Gira la ruleta: descuenta puntos y, si gana, entrega el premio como una orden."""
     import random as _random
-    u = session.get("user") or {}
-    uid = u.get("user_id")
-    if not uid:
-        return jsonify({"ok": False, "error": "Inicia sesión para usar la ruleta"}), 401
-    cfg = _ruleta_config_raw()
+    data = request.get_json(silent=True) or {}
+    cfg = _ruleta_config_for_game(data.get("gid"))
     prizes = _ruleta_prizes_payload(cfg)
     if not cfg["enabled"] or not prizes:
-        return jsonify({"ok": False, "error": "La ruleta está desactivada"}), 403
+        return jsonify({"ok": False, "error": "La ruleta está desactivada para este juego"}), 403
 
-    data = request.get_json(silent=True) or {}
     player_id = (data.get("player_id") or "").strip()
     zone_id = (data.get("zone_id") or "").strip()
     if not player_id:
@@ -7159,7 +7211,7 @@ def store_ruleta_spin():
     except Exception:
         pass
 
-    user_row = db.session.get(User, int(uid))
+    user_row = _current_points_user_row()
     if not user_row:
         return jsonify({"ok": False, "error": "Inicia sesión para usar la ruleta"}), 401
     _sync_user_points(user_row)
@@ -7177,15 +7229,16 @@ def store_ruleta_spin():
         db.session.commit()
         db.session.refresh(user_row)
 
-    # Gana 1 de cada N giros (contador global editable en el admin)
+    # Gana 1 de cada N giros (contador por juego, editable en el admin)
     n_spins = int(cfg["spins_to_win"] or 1)
+    counter_key = f"ruleta_g{cfg['gid']}_spin_counter"
     try:
-        spin_count = int(get_config_value("ruleta_spin_counter", "0") or 0) + 1
+        spin_count = int(get_config_value(counter_key, "0") or 0) + 1
     except Exception:
         spin_count = 1
     won = spin_count >= n_spins
     try:
-        set_config_values({"ruleta_spin_counter": "0" if won else str(spin_count)})
+        set_config_values({counter_key: "0" if won else str(spin_count)})
     except Exception:
         pass
 
@@ -9716,9 +9769,15 @@ def admin_config_ruleta_get():
     user = session.get("user")
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
-    cfg = _ruleta_config_raw()
     try:
-        spin_counter = int(get_config_value("ruleta_spin_counter", "0") or 0)
+        gid = int(request.args.get("gid") or 0)
+    except Exception:
+        gid = 0
+    if gid <= 0:
+        return jsonify({"ok": False, "error": "Falta el juego (gid)"}), 400
+    cfg = _ruleta_config_for_game(gid)
+    try:
+        spin_counter = int(get_config_value(f"ruleta_g{gid}_spin_counter", "0") or 0)
     except Exception:
         spin_counter = 0
     return jsonify({
@@ -9735,6 +9794,12 @@ def admin_config_ruleta_set():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     data = request.get_json(silent=True) or {}
+    try:
+        gid = int(data.get("gid") or 0)
+    except Exception:
+        gid = 0
+    if gid <= 0 or not StorePackage.query.get(gid):
+        return jsonify({"ok": False, "error": "Elige el juego de la ruleta"}), 400
     try:
         cost = max(int(float(data.get("cost_points") or 0)), 0)
     except Exception:
@@ -9754,15 +9819,19 @@ def admin_config_ruleta_set():
             except Exception:
                 continue
     values = {
-        "ruleta_enabled": "1" if data.get("enabled") else "0",
-        "ruleta_cost_points": str(cost),
-        "ruleta_spins_to_win": str(spins_to_win),
-        "ruleta_prize_item_ids": ",".join(str(i) for i in ids),
-        # limpiar la clave vieja de un solo premio para que no reaparezca
-        "ruleta_prize_item_id": "0",
+        f"ruleta_g{gid}_enabled": "1" if data.get("enabled") else "0",
+        f"ruleta_g{gid}_cost_points": str(cost),
+        f"ruleta_g{gid}_spins_to_win": str(spins_to_win),
+        f"ruleta_g{gid}_prize_item_ids": ",".join(str(i) for i in ids),
     }
     if data.get("reset_counter"):
-        values["ruleta_spin_counter"] = "0"
+        values[f"ruleta_g{gid}_spin_counter"] = "0"
+    # Si la config global vieja apuntaba a este juego, apagarla: ya migró a por-juego
+    legacy = _ruleta_legacy_config()
+    if legacy["enabled"] and legacy["prize_item_ids"]:
+        first = GamePackageItem.query.get(int(legacy["prize_item_ids"][0]))
+        if first and int(first.store_package_id) == gid:
+            values["ruleta_enabled"] = "0"
     try:
         set_config_values(values)
     except Exception as exc:
@@ -10771,10 +10840,18 @@ def thanks_order(oid: int):
             retry_url = f"/checkout/{order_obj.store_package_id}?{urlencode({k: v for k, v in retry_params.items() if v})}"
         except Exception:
             retry_url = f"/checkout/{order_obj.store_package_id}" if order_obj.store_package_id else "/"
+    # Puntos que gana esta compra (solo si se hizo con sesión iniciada)
+    points_earned = 0
+    if order_obj and order_obj.user_id:
+        try:
+            points_earned = _order_points_total(order_obj)
+        except Exception:
+            points_earned = 0
     whatsapp_url = get_config_value("whatsapp_url", "https://api.whatsapp.com/send?phone=%2B584125712917")
     return render_template(
         "thanks.html",
         order_id=oid,
+        points_earned=points_earned,
         logo_url=logo_url,
         site_name=site_name,
         player_display=order_meta.get("player_display") or "",

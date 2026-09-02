@@ -5138,7 +5138,8 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  // ===== Ruleta de puntos =====
+  // ===== Ruleta de puntos (una por juego) =====
+  var rlTargetGame = document.getElementById('rl-target-game');
   var rlEnabled = document.getElementById('rl-enabled');
   var rlCost = document.getElementById('rl-cost-input');
   var rlSpins = document.getElementById('rl-spins-input');
@@ -5198,31 +5199,56 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   async function loadRuleta() {
+    // Poblar los selects de juegos (juego de la ruleta + juego del premio)
     try {
-      var results = await Promise.all([
-        fetch('/admin/config/ruleta').then(function (r) { return r.json(); }),
-        fetch('/admin/packages').then(function (r) { return r.json(); })
-      ]);
-      var cfg = results[0] || {};
-      var pkgs = (results[1] && results[1].packages) || [];
-      if (rlGameSelect) {
-        rlGameSelect.innerHTML = '<option value="">— Elegir juego —</option>';
+      var res = await fetch('/admin/packages');
+      var data = await res.json();
+      var pkgs = (data && data.packages) || [];
+      [rlTargetGame, rlGameSelect].forEach(function (sel) {
+        if (!sel) return;
+        sel.innerHTML = '<option value="">— Elegir juego —</option>';
         pkgs.forEach(function (p) {
           var opt = document.createElement('option');
           opt.value = p.id;
           opt.textContent = p.name;
-          rlGameSelect.appendChild(opt);
+          sel.appendChild(opt);
         });
-      }
+      });
+    } catch (e) { /* silencioso */ }
+  }
+
+  async function loadRuletaForGame(gid) {
+    rlPrizes = [];
+    renderRuletaPrizes();
+    if (rlEnabled) rlEnabled.checked = false;
+    if (rlCost) rlCost.value = '';
+    if (rlSpins) rlSpins.value = '';
+    if (rlCounterInfo) rlCounterInfo.textContent = '';
+    if (!gid) return;
+    try {
+      var res = await fetch('/admin/config/ruleta?gid=' + gid);
+      var cfg = await res.json();
+      if (!cfg || !cfg.ok) return;
       if (rlEnabled) rlEnabled.checked = !!cfg.enabled;
       if (rlCost) rlCost.value = cfg.cost_points != null ? cfg.cost_points : '';
       if (rlSpins) rlSpins.value = cfg.spins_to_win != null ? cfg.spins_to_win : '';
-      if (rlCounterInfo) rlCounterInfo.textContent = 'Giros desde el último premio: ' + (cfg.spin_counter || 0) + '.';
+      if (rlCounterInfo) rlCounterInfo.textContent = 'Giros desde el último premio en este juego: ' + (cfg.spin_counter || 0) + '.';
       rlPrizes = (cfg.prizes || []).map(function (p) {
         return { item_id: p.item_id, title: p.title || ('Item ' + p.item_id), game: p.game || '' };
       });
       renderRuletaPrizes();
+      // Por comodidad, el selector de premios arranca en el mismo juego
+      if (rlGameSelect && !rlGameSelect.value) {
+        rlGameSelect.value = String(gid);
+        loadRuletaItems(gid);
+      }
     } catch (e) { /* silencioso */ }
+  }
+
+  if (rlTargetGame) {
+    rlTargetGame.addEventListener('change', function () {
+      loadRuletaForGame(rlTargetGame.value);
+    });
   }
 
   if (rlGameSelect) {
@@ -5252,7 +5278,13 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   async function saveRuleta(extra) {
+    var gid = rlTargetGame ? parseInt(rlTargetGame.value || '0', 10) : 0;
+    if (!gid) {
+      if (rlSaveStatus) rlSaveStatus.textContent = 'Elige primero el juego de la ruleta.';
+      return false;
+    }
     var payload = {
+      gid: gid,
       enabled: rlEnabled ? rlEnabled.checked : false,
       cost_points: rlCost ? (parseInt(rlCost.value || '0', 10) || 0) : 0,
       spins_to_win: rlSpins ? (parseInt(rlSpins.value || '0', 10) || 0) : 0,
@@ -5274,7 +5306,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo guardar');
       if (rlSaveStatus) rlSaveStatus.textContent = '✓ Ruleta guardada';
       setTimeout(function () { if (rlSaveStatus) rlSaveStatus.textContent = ''; }, 2500);
-      loadRuleta();
+      loadRuletaForGame(payload.gid);
       return true;
     } catch (err) {
       if (rlSaveStatus) rlSaveStatus.textContent = err.message || 'Error al guardar';

@@ -13,6 +13,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const sumTotal = document.getElementById('co-sum-total');
   const sumOld = document.getElementById('co-sum-old');
   const sumQty = document.getElementById('co-sum-qty');
+  const sumPts = document.getElementById('co-sum-pts');
+  let pointsLoggedIn = false;
+  // Puntos que ganará esta compra: solo se muestran con sesión iniciada
+  fetch('/store/points/me').then(r => r.json()).then(d => {
+    pointsLoggedIn = !!(d && d.logged_in);
+    if (pointsLoggedIn) renderHeader();
+  }).catch(() => {});
   // Información de pago
   const methodNameEl = document.getElementById('co-method-name');
   const payTotalEl = document.getElementById('co-pay-total');
@@ -629,6 +636,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     if (sumQty) sumQty.textContent = 'Cantidad ' + qty;
+
+    // Puntos que gana esta compra (con sesión iniciada)
+    if (sumPts) {
+      let ptsTotal = 0;
+      try {
+        if (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) {
+          ptsTotal = (parseInt(allItems[selectedIndex].points_reward || 0, 10) || 0) * qty;
+        }
+      } catch (_) {}
+      if (pointsLoggedIn && ptsTotal > 0) {
+        sumPts.textContent = '⚡ +' + ptsTotal + ' pts';
+        sumPts.style.display = '';
+      } else {
+        sumPts.style.display = 'none';
+      }
+    }
 
     renderReferralStatusNote();
   }

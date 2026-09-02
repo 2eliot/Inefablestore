@@ -268,6 +268,12 @@
           <div class="k">TOTAL PAGADO</div>
           <div id="en-total">{{ total_display or '—' }}</div>
         </div>
+        {% if points_earned and points_earned > 0 %}
+        <div class="en-voucher-total" style="border-top:1px dashed #262626">
+          <div class="k">PUNTOS GANADOS</div>
+          <div style="font-family:'Outfit';font-size:15px;font-weight:700;color:#facc15">⚡ +{{ points_earned }} pts</div>
+        </div>
+        {% endif %}
       </div>
 
       <div id="ty-pins-section">

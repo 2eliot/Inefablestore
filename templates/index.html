@@ -275,17 +275,17 @@
         #mob-qty{font-size:14px;min-width:16px;text-align:center}
         .st-mob-go{flex:none;width:38px;height:38px;display:flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:9px;background:#3ee07f;color:#020a05;font-size:17px;font-weight:700;cursor:pointer}
 
-        /* ============ RULETA DE PUNTOS (neón rojo) ============ */
-        @keyframes rl-neon{0%,100%{box-shadow:0 0 25px rgba(239,68,68,.4),inset 0 0 15px rgba(239,68,68,.15)}50%{box-shadow:0 0 45px rgba(220,38,38,.7),inset 0 0 25px rgba(220,38,38,.3)}}
+        /* ============ RULETA DE PUNTOS (colores de la web) ============ */
+        @keyframes rl-neon{0%,100%{box-shadow:0 0 25px rgba(62,224,127,.35),inset 0 0 15px rgba(62,224,127,.12)}50%{box-shadow:0 0 45px rgba(34,197,94,.6),inset 0 0 25px rgba(34,197,94,.25)}}
         @keyframes rl-shake{0%,100%{transform:rotate(0) scale(1)}20%{transform:rotate(-15deg) scale(1.15)}40%{transform:rotate(15deg) scale(1.15)}60%{transform:rotate(-10deg) scale(1.15)}80%{transform:rotate(10deg) scale(1.15)}}
         @keyframes rl-pop{0%{transform:scale(.3);opacity:0}70%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
         .rl-card{animation:rl-neon 4s infinite ease-in-out}
         .rl-shake{animation:rl-shake .5s ease-in-out infinite}
         .rl-pop{animation:rl-pop .5s cubic-bezier(.175,.885,.32,1.275) forwards}
-        .rl-frame{background:radial-gradient(circle,#121212 0%,#000000 70%),conic-gradient(from 0deg,#ef4444,#b91c1c,#f87171,#991b1b,#ef4444);box-shadow:0 0 35px rgba(239,68,68,.5),inset 0 0 20px rgba(185,28,28,.4);border:4px solid #000000;transition:box-shadow .3s ease}
-        .rl-frame.spinning{box-shadow:0 0 75px rgba(255,0,0,.9),inset 0 0 40px rgba(239,68,68,.75)}
-        .rl-btn{background:linear-gradient(135deg,#ef4444 0%,#dc2626 50%,#991b1b 100%);box-shadow:0 0 25px rgba(239,68,68,.6)}
-        .rl-btn:hover{background:linear-gradient(135deg,#f87171 0%,#ef4444 50%,#b91c1c 100%);box-shadow:0 0 35px rgba(239,68,68,.8)}
+        .rl-frame{background:radial-gradient(circle,#121212 0%,#000000 70%),conic-gradient(from 0deg,#3ee07f,#16803f,#7af0a6,#0f5c2c,#3ee07f);box-shadow:0 0 35px rgba(62,224,127,.45),inset 0 0 20px rgba(22,128,63,.4);border:4px solid #000000;transition:box-shadow .3s ease}
+        .rl-frame.spinning{box-shadow:0 0 75px rgba(62,224,127,.85),inset 0 0 40px rgba(62,224,127,.65)}
+        .rl-btn{background:linear-gradient(135deg,#5cf094 0%,#3ee07f 50%,#16a34a 100%);box-shadow:0 0 25px rgba(62,224,127,.55);color:#020a05}
+        .rl-btn:hover{background:linear-gradient(135deg,#7af0a6 0%,#5cf094 50%,#22c55e 100%);box-shadow:0 0 35px rgba(62,224,127,.75)}
 
         /* ============ FOOTER ============ */
         .st-footer{position:relative;z-index:1;border-top:1px solid #1a1a1a;background:#050505;padding:36px 24px 22px}
@@ -789,15 +789,15 @@
         </div>
     </div>
 
-    <!-- RULETA DE PUNTOS: giros pagados con los puntos que dan las compras -->
+    <!-- RULETA DE PUNTOS: cada juego tiene su ruleta; giros pagados con puntos -->
     <div id="ruleta-modal" class="fixed inset-0 z-[85] items-center justify-center p-4 bg-black/90 backdrop-blur-md overflow-y-auto" style="display:none">
-        <div class="rl-card w-full max-w-md bg-[#0a0a0a] border border-red-500/30 rounded-3xl overflow-hidden relative shadow-2xl my-6">
-            <div class="p-5 border-b border-red-500/20 flex items-center justify-between bg-[#050505]/80">
+        <div class="rl-card w-full max-w-md bg-[#0a0a0a] border border-[#3ee07f]/30 rounded-3xl overflow-hidden relative shadow-2xl my-6">
+            <div class="p-5 border-b border-[#3ee07f]/20 flex items-center justify-between bg-[#050505]/80">
                 <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/40 flex items-center justify-center text-red-400 font-black text-xl">⚡</div>
+                    <div class="w-10 h-10 rounded-xl bg-[#3ee07f]/10 border border-[#3ee07f]/40 flex items-center justify-center text-[#3ee07f] font-black text-xl">⚡</div>
                     <div>
                         <h1 class="text-lg font-black tracking-wider text-white uppercase">Ruleta</h1>
-                        <p class="text-xs text-red-400 font-semibold tracking-wide">Gira con tus puntos</p>
+                        <p id="rl-sub" class="text-xs text-[#3ee07f] font-semibold tracking-wide">Gira con tus puntos</p>
                     </div>
                 </div>
                 <button onclick="closeRuletaModal()" class="w-9 h-9 rounded-xl bg-[#141414] border border-gray-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer" aria-label="Cerrar">
@@ -808,10 +808,10 @@
             <div class="p-6 flex flex-col items-center">
                 <div class="w-full mb-3 flex items-center justify-between gap-2 flex-wrap">
                     <div class="min-w-0">
-                        <h2 class="font-bold text-sm text-gray-200">Premios: <span id="rl-prize" class="text-red-400">--</span></h2>
+                        <h2 class="font-bold text-sm text-gray-200">Premios: <span id="rl-prize" class="text-[#3ee07f]">--</span></h2>
                         <p class="text-xs text-gray-400">Gira y descubre si te toca premio instantáneo.</p>
                     </div>
-                    <div class="bg-red-500/10 border border-red-500/30 text-red-300 text-[11px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap">
+                    <div class="bg-[#3ee07f]/10 border border-[#3ee07f]/30 text-[#7af0a6] text-[11px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap">
                         💎 <span id="rl-cost">--</span> PTS POR GIRO
                     </div>
                 </div>
@@ -823,24 +823,24 @@
 
                 <div class="w-full mb-2 space-y-2">
                     <input id="rl-player" type="text" inputmode="numeric" autocomplete="off" placeholder="Tu ID de jugador"
-                           class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-red-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                           class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-[#3ee07f] rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                     <input id="rl-zone" type="text" inputmode="numeric" autocomplete="off" placeholder="Zona ID" style="display:none"
-                           class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-red-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                           class="w-full bg-[#0d0d0d] border border-[#2b2b2b] focus:border-[#3ee07f] rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                 </div>
 
                 <div class="relative w-72 h-72 my-2 flex items-center justify-center">
-                    <div class="absolute -top-3 z-30 w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[22px] border-t-red-500" style="filter:drop-shadow(0 0 12px rgba(239,68,68,.9))"></div>
+                    <div class="absolute -top-3 z-30 w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[22px] border-t-[#3ee07f]" style="filter:drop-shadow(0 0 12px rgba(62,224,127,.9))"></div>
                     <div id="rl-frame" class="absolute inset-0 rounded-full rl-frame p-2 flex items-center justify-center">
-                        <div class="w-full h-full rounded-full border-2 border-dashed border-red-500/30 absolute inset-0 pointer-events-none animate-spin" style="animation-duration:35s;"></div>
+                        <div class="w-full h-full rounded-full border-2 border-dashed border-[#3ee07f]/30 absolute inset-0 pointer-events-none animate-spin" style="animation-duration:35s;"></div>
                     </div>
                     <canvas id="rl-canvas" width="320" height="320" class="w-full h-full rounded-full relative z-10 p-3"></canvas>
                     <div class="absolute z-20 flex items-center justify-center">
-                        <button id="rl-go" onclick="ruletaSpin()" class="w-16 h-16 rl-btn rounded-full border-4 border-[#000000] flex items-center justify-center font-black text-white text-base tracking-widest hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer">GO</button>
+                        <button id="rl-go" onclick="ruletaSpin()" class="w-16 h-16 rl-btn rounded-full border-4 border-[#000000] flex items-center justify-center font-black text-base tracking-widest hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer">GO</button>
                     </div>
                 </div>
 
                 <p id="rl-status" class="mt-4 text-xs text-gray-400 text-center font-medium tracking-wide">
-                    Pulsa <span class="text-red-400 font-bold">GO</span> para girar.
+                    Pulsa <span class="text-[#3ee07f] font-bold">GO</span> para girar.
                 </p>
             </div>
         </div>
@@ -848,14 +848,14 @@
 
     <!-- Resultado de la ruleta -->
     <div id="rl-result" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[95] items-center justify-center p-4 flex" style="display:none">
-        <div class="bg-[#0a0a0a] border border-red-500/40 rounded-3xl p-7 max-w-sm w-full text-center relative overflow-hidden" style="box-shadow:0 0 50px rgba(239,68,68,.3)">
-            <div class="absolute -top-16 left-1/2 -translate-x-1/2 w-40 h-40 bg-red-500/20 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="bg-[#0a0a0a] border border-[#3ee07f]/40 rounded-3xl p-7 max-w-sm w-full text-center relative overflow-hidden" style="box-shadow:0 0 50px rgba(62,224,127,.3)">
+            <div class="absolute -top-16 left-1/2 -translate-x-1/2 w-40 h-40 bg-[#3ee07f]/20 rounded-full blur-3xl pointer-events-none"></div>
             <div class="my-5 relative flex items-center justify-center min-h-[120px]">
                 <div id="rl-emoji" class="text-7xl transition-transform duration-300">🎁</div>
             </div>
             <h3 id="rl-result-title" class="text-2xl font-black text-white mb-2 tracking-wide">...</h3>
             <p id="rl-result-desc" class="text-sm text-gray-300 mb-6 leading-relaxed">...</p>
-            <button onclick="closeRuletaResult()" class="w-full py-3 rl-btn text-white font-extrabold text-sm rounded-2xl transition cursor-pointer tracking-wider">CONTINUAR</button>
+            <button onclick="closeRuletaResult()" class="w-full py-3 rl-btn font-extrabold text-sm rounded-2xl transition cursor-pointer tracking-wider">CONTINUAR</button>
         </div>
     </div>
 
@@ -886,6 +886,8 @@
         let discountPercent = 0;
         let currentSlide = 0;
         let productsOpen = false;    // selector de productos expandido ("+N juegos")
+        let giftEnabledGlobal = false;   // canje de códigos activo (config del admin)
+        let ruletaCfgForGame = null;     // config de la ruleta del juego seleccionado
 
         function isMobileView() { return window.matchMedia('(max-width: 859px)').matches; }
 
@@ -974,6 +976,34 @@
                 currentItems = [];
                 renderSelectedPackages();
             }
+            // Cada juego tiene su propia ruleta: refrescar el botón de la rueda
+            updateRuletaAvailability();
+        }
+
+        // ============ DISPONIBILIDAD DE LA RUEDA LATERAL ============
+        function syncFanVisibility() {
+            const fan = document.getElementById('fan-wrap');
+            const giftBtn = document.getElementById('fan-gift');
+            const ruletaBtn = document.getElementById('fan-ruleta');
+            const ruletaOn = !!(ruletaCfgForGame && ruletaCfgForGame.enabled);
+            if (giftBtn) giftBtn.hidden = !giftEnabledGlobal;
+            if (ruletaBtn) ruletaBtn.hidden = !ruletaOn;
+            if (fan) fan.style.display = (giftEnabledGlobal || ruletaOn) ? 'block' : 'none';
+        }
+        window.__setGiftEnabled = function (on) { giftEnabledGlobal = !!on; syncFanVisibility(); };
+
+        async function updateRuletaAvailability() {
+            const gid = currentSelectedPkgId;
+            if (!gid) { ruletaCfgForGame = null; syncFanVisibility(); return; }
+            try {
+                const data = await fetchJSON('/store/ruleta/config?gid=' + gid);
+                if (gid === currentSelectedPkgId) {
+                    ruletaCfgForGame = (data && data.ok && data.enabled) ? data : null;
+                    syncFanVisibility();
+                }
+            } catch (e) {
+                if (gid === currentSelectedPkgId) { ruletaCfgForGame = null; syncFanVisibility(); }
+            }
         }
 
         // ============ CATEGORIAS ============
@@ -1016,6 +1046,7 @@
                 renderSelectedPackages();
                 renderCategoryMosaics();
                 updatePurchaseSummary();
+                updateRuletaAvailability();
             }
         }
 
@@ -2432,21 +2463,14 @@
             if (evt.key === 'Escape' && modal && modal.style.display === 'flex') closeGiftModal();
         });
 
-        // La rueda lateral aparece si el canje o la ruleta están encendidos en el admin;
-        // cada botón se muestra solo si su función está activa.
-        Promise.all([
-            fetch('/store/gift/config').then(function (r) { return r.json(); }).catch(function () { return null; }),
-            fetch('/store/ruleta/config').then(function (r) { return r.json(); }).catch(function () { return null; })
-        ]).then(function (results) {
-            var giftOn = !!(results[0] && results[0].ok && results[0].enabled);
-            var ruletaOn = !!(results[1] && results[1].ok && results[1].enabled);
-            var fan = el('fan-wrap');
-            var giftBtn = el('fan-gift');
-            var ruletaBtn = el('fan-ruleta');
-            if (giftBtn) giftBtn.hidden = !giftOn;
-            if (ruletaBtn) ruletaBtn.hidden = !ruletaOn;
-            if (fan && (giftOn || ruletaOn)) fan.style.display = 'block';
-        });
+        // El canje se muestra si está encendido en el admin; la ruleta depende
+        // del juego seleccionado (window.__setGiftEnabled sincroniza la rueda).
+        fetch('/store/gift/config')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (window.__setGiftEnabled) window.__setGiftEnabled(!!(data && data.ok && data.enabled));
+            })
+            .catch(function () { /* si falla, el canje se queda oculto */ });
     })();
     </script>
     <!-- RULETA DE PUNTOS: giros pagados con los puntos acumulados por compras -->
@@ -2476,7 +2500,7 @@
                 ctx.closePath();
                 ctx.fillStyle = (i % 2 === 0) ? '#0a0a0a' : '#141414';
                 ctx.fill();
-                ctx.strokeStyle = '#ef4444';
+                ctx.strokeStyle = '#3ee07f';
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 ctx.save();
@@ -2493,14 +2517,15 @@
             ctx.fillStyle = '#000000';
             ctx.fill();
             ctx.lineWidth = 4;
-            ctx.strokeStyle = '#ef4444';
+            ctx.strokeStyle = '#3ee07f';
             ctx.stroke();
         }
 
         async function refreshRuleta() {
             try {
+                var gid = currentSelectedPkgId || 0;
                 var results = await Promise.all([
-                    fetch('/store/ruleta/config').then(function (r) { return r.json(); }),
+                    fetch('/store/ruleta/config?gid=' + gid).then(function (r) { return r.json(); }),
                     fetch('/store/points/me').then(function (r) { return r.json(); })
                 ]);
                 cfg = (results[0] && results[0].ok) ? results[0] : null;
@@ -2508,6 +2533,8 @@
                 points = (results[1] && results[1].points) || 0;
                 document.getElementById('rl-cost').innerText = cfg ? cfg.cost_points : '--';
                 document.getElementById('rl-points').innerText = logged ? points : '—';
+                var sub = document.getElementById('rl-sub');
+                if (sub) sub.innerText = (cfg && cfg.game) ? ('Ruleta de ' + cfg.game) : 'Gira con tus puntos';
                 // Varios premios posibles: si gana, sale uno al azar de esta lista
                 var prizes = (cfg && cfg.prizes) || [];
                 var prizeTxt = prizes.length
@@ -2517,12 +2544,14 @@
                 var zone = document.getElementById('rl-zone');
                 if (zone) zone.style.display = (cfg && cfg.requires_zone) ? '' : 'none';
                 var status = document.getElementById('rl-status');
-                if (!logged) {
-                    status.innerHTML = 'Inicia sesión para girar con tus puntos. <button onclick="closeRuletaModal();openLoginModal();" class="text-red-400 font-bold underline">Entrar</button>';
-                } else if (cfg && points < cfg.cost_points) {
-                    status.innerHTML = 'Te faltan <b class="text-red-400">' + (cfg.cost_points - points) + '</b> puntos. Gana puntos comprando recargas.';
+                if (!cfg || !cfg.enabled) {
+                    status.innerHTML = 'La ruleta de este juego no está disponible por ahora.';
+                } else if (!logged) {
+                    status.innerHTML = 'Inicia sesión para girar con tus puntos. <button onclick="closeRuletaModal();openLoginModal();" class="text-[#3ee07f] font-bold underline">Entrar</button>';
+                } else if (points < cfg.cost_points) {
+                    status.innerHTML = 'Te faltan <b class="text-[#3ee07f]">' + (cfg.cost_points - points) + '</b> puntos. Gana puntos comprando recargas.';
                 } else {
-                    status.innerHTML = 'Pulsa <span class="text-red-400 font-bold">GO</span> para girar.';
+                    status.innerHTML = 'Pulsa <span class="text-[#3ee07f] font-bold">GO</span> para girar.';
                 }
             } catch (e) { /* silencioso */ }
         }
@@ -2624,7 +2653,7 @@
                 var res = await fetch('/store/ruleta/spin', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ player_id: player, zone_id: zone })
+                    body: JSON.stringify({ player_id: player, zone_id: zone, gid: (cfg && cfg.gid) || currentSelectedPkgId || 0 })
                 });
                 resp = await res.json();
             } catch (e) { resp = null; }
