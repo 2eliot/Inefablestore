@@ -302,11 +302,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  let minigameWinnersAll = [];
+  let minigameWinnersPage = 1;
+  const MINIGAME_WINNERS_PER_PAGE = 10;
+
   function renderMinigameWinners(items) {
+    minigameWinnersAll = items || [];
+    minigameWinnersPage = 1;
+    renderMinigameWinnersPage();
+  }
+
+  function renderMinigameWinnersPage() {
     if (!minigamesWinnersList) return;
-    if (!items || items.length === 0) {
+    const pager = document.getElementById('minigames-winners-pager');
+    const all = minigameWinnersAll;
+    if (!all || all.length === 0) {
       minigamesWinnersList.innerHTML = '<div class="empty-state"><p>Aún no hay ganadores registrados.</p></div>';
+      if (pager) pager.innerHTML = '';
       return;
+    }
+    const totalPages = Math.max(1, Math.ceil(all.length / MINIGAME_WINNERS_PER_PAGE));
+    if (minigameWinnersPage > totalPages) minigameWinnersPage = totalPages;
+    if (minigameWinnersPage < 1) minigameWinnersPage = 1;
+    const start = (minigameWinnersPage - 1) * MINIGAME_WINNERS_PER_PAGE;
+    const items = all.slice(start, start + MINIGAME_WINNERS_PER_PAGE);
+    if (pager) {
+      pager.innerHTML = totalPages > 1
+        ? '<div style="display:flex; align-items:center; gap:8px; justify-content:flex-end; flex-wrap:wrap;">' +
+          '<button class="btn" type="button" data-wpage="prev"' + (minigameWinnersPage <= 1 ? ' disabled' : '') + '>« Anterior</button>' +
+          '<span style="font-size:12px; color:#94a3b8;">Página ' + minigameWinnersPage + ' de ' + totalPages + ' · ' + all.length + ' ganadores</span>' +
+          '<button class="btn" type="button" data-wpage="next"' + (minigameWinnersPage >= totalPages ? ' disabled' : '') + '>Siguiente »</button>' +
+          '</div>'
+        : '';
     }
     minigamesWinnersList.innerHTML = items.map(item => {
       const statusClass = item.reward_status === 'completed' ? 'approved' : item.reward_status === 'processing' ? '' : 'rejected';
@@ -333,6 +360,14 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
     }).join('');
   }
+
+  // Paginación de los ganadores (10 por página)
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-wpage]');
+    if (!btn || btn.disabled) return;
+    minigameWinnersPage += (btn.getAttribute('data-wpage') === 'next' ? 1 : -1);
+    renderMinigameWinnersPage();
+  });
 
   async function saveMinigamesConfig() {
     if (!minigamesConfigList) return;
@@ -5199,33 +5234,68 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   var rlSavedList = document.getElementById('rl-saved-list');
+  var rlSavedPager = document.getElementById('rl-saved-pager');
+  var rlSavedAll = [];
+  var rlSavedPage = 1;
+  var RL_SAVED_PER_PAGE = 10;
+
+  function renderSavedRuletasPage() {
+    if (!rlSavedList) return;
+    if (!rlSavedAll.length) {
+      rlSavedList.innerHTML = '<span style="color:#64748b; font-size:13px;">Ningún juego tiene ruleta configurada todavía.</span>';
+      if (rlSavedPager) rlSavedPager.innerHTML = '';
+      return;
+    }
+    var totalPages = Math.max(1, Math.ceil(rlSavedAll.length / RL_SAVED_PER_PAGE));
+    if (rlSavedPage > totalPages) rlSavedPage = totalPages;
+    if (rlSavedPage < 1) rlSavedPage = 1;
+    var start = (rlSavedPage - 1) * RL_SAVED_PER_PAGE;
+    var rows = rlSavedAll.slice(start, start + RL_SAVED_PER_PAGE);
+    rlSavedList.innerHTML = rows.map(function (r) {
+      var estado = r.enabled
+        ? '<span style="color:#16a34a; font-weight:800;">Activa</span>'
+        : '<span style="color:#94a3b8; font-weight:800;">Apagada</span>';
+      var premios = (r.prizes && r.prizes.length) ? r.prizes.map(esc).join(' · ') : 'Sin premios';
+      return '<div style="border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:8px 10px; display:grid; gap:4px; min-width:0;">' +
+        '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+        '<strong style="font-size:13px;">' + esc(r.game) + '</strong>' + estado +
+        '<span style="color:#64748b; font-size:12px;">' + r.cost_points + ' pts/giro · gana 1 de ' + r.spins_to_win + ' · lleva ' + r.spin_counter + ' giros</span>' +
+        '<button class="btn btn-rl-edit" data-gid="' + r.gid + '" type="button" style="margin-left:auto; padding:2px 10px;">Editar</button>' +
+        '</div>' +
+        '<div style="color:#475569; font-size:12px; overflow:hidden; text-overflow:ellipsis;">Premios: ' + premios + '</div>' +
+        '</div>';
+    }).join('');
+    if (rlSavedPager) {
+      rlSavedPager.innerHTML = totalPages > 1
+        ? '<div style="display:flex; align-items:center; gap:8px; justify-content:flex-end; flex-wrap:wrap;">' +
+          '<button class="btn" type="button" data-rlspage="prev"' + (rlSavedPage <= 1 ? ' disabled' : '') + '>« Anterior</button>' +
+          '<span style="font-size:12px; color:#94a3b8;">Página ' + rlSavedPage + ' de ' + totalPages + ' · ' + rlSavedAll.length + ' ruletas</span>' +
+          '<button class="btn" type="button" data-rlspage="next"' + (rlSavedPage >= totalPages ? ' disabled' : '') + '>Siguiente »</button>' +
+          '</div>'
+        : '';
+    }
+  }
+
+  if (rlSavedPager) {
+    rlSavedPager.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-rlspage]');
+      if (!btn || btn.disabled) return;
+      rlSavedPage += (btn.getAttribute('data-rlspage') === 'next' ? 1 : -1);
+      renderSavedRuletasPage();
+    });
+  }
 
   async function loadSavedRuletas() {
     if (!rlSavedList) return;
     try {
       var res = await fetch('/admin/config/ruleta/all');
       var data = await res.json();
-      var rows = (data && data.ruletas) || [];
-      if (!rows.length) {
-        rlSavedList.innerHTML = '<span style="color:#64748b; font-size:13px;">Ningún juego tiene ruleta configurada todavía.</span>';
-        return;
-      }
-      rlSavedList.innerHTML = rows.map(function (r) {
-        var estado = r.enabled
-          ? '<span style="color:#16a34a; font-weight:800;">Activa</span>'
-          : '<span style="color:#94a3b8; font-weight:800;">Apagada</span>';
-        var premios = (r.prizes && r.prizes.length) ? r.prizes.map(esc).join(' · ') : 'Sin premios';
-        return '<div style="border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:8px 10px; display:grid; gap:4px; min-width:0;">' +
-          '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
-          '<strong style="font-size:13px;">' + esc(r.game) + '</strong>' + estado +
-          '<span style="color:#64748b; font-size:12px;">' + r.cost_points + ' pts/giro · gana 1 de ' + r.spins_to_win + ' · lleva ' + r.spin_counter + ' giros</span>' +
-          '<button class="btn btn-rl-edit" data-gid="' + r.gid + '" type="button" style="margin-left:auto; padding:2px 10px;">Editar</button>' +
-          '</div>' +
-          '<div style="color:#475569; font-size:12px; overflow:hidden; text-overflow:ellipsis;">Premios: ' + premios + '</div>' +
-          '</div>';
-      }).join('');
+      rlSavedAll = (data && data.ruletas) || [];
+      rlSavedPage = 1;
+      renderSavedRuletasPage();
     } catch (e) {
       rlSavedList.innerHTML = '<span style="color:#64748b; font-size:13px;">No se pudo cargar el resumen.</span>';
+      if (rlSavedPager) rlSavedPager.innerHTML = '';
     }
   }
 
@@ -5374,10 +5444,55 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // Cargar la config al abrir la pestaña Minijuegos (donde vive la tarjeta)
+  // Cargar la config al abrir la pestaña Minijuegos (donde vive la suite)
   document.querySelectorAll('[data-target="#tab-minigames"]').forEach(function (tabBtn) {
     tabBtn.addEventListener('click', function () {
       if (!rlLoaded) { rlLoaded = true; loadRuleta(); }
+    });
+  });
+
+  // ===== Suite de Ruletas (modal con Ruleta Gracias + Ruleta de Puntos) =====
+  var suiteModal = document.getElementById('ruleta-suite-modal');
+  var btnOpenSuite = document.getElementById('btn-open-ruleta-suite');
+  var btnCloseSuite = document.getElementById('ruleta-suite-close');
+
+  function openRuletaSuite() {
+    if (!suiteModal) return;
+    // Mover el modal al body: position:fixed se rompe con transform/opacity en padres
+    if (suiteModal.parentElement !== document.body) {
+      document.body.appendChild(suiteModal);
+    }
+    suiteModal.style.display = 'flex';
+    if (!rlLoaded) { rlLoaded = true; loadRuleta(); }
+    else loadSavedRuletas();
+  }
+
+  function closeRuletaSuite() {
+    if (suiteModal) suiteModal.style.display = 'none';
+  }
+
+  if (btnOpenSuite) btnOpenSuite.addEventListener('click', openRuletaSuite);
+  if (btnCloseSuite) btnCloseSuite.addEventListener('click', closeRuletaSuite);
+  if (suiteModal) {
+    suiteModal.addEventListener('click', function (e) {
+      if (e.target === suiteModal) closeRuletaSuite();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && suiteModal && suiteModal.style.display === 'flex') closeRuletaSuite();
+  });
+
+  document.querySelectorAll('.suite-tab').forEach(function (tabBtn) {
+    tabBtn.addEventListener('click', function () {
+      document.querySelectorAll('.suite-tab').forEach(function (b) {
+        b.classList.toggle('primary', b === tabBtn);
+      });
+      var target = tabBtn.getAttribute('data-pane');
+      ['#suite-pane-gracias', '#suite-pane-puntos'].forEach(function (sel) {
+        var pane = document.querySelector(sel);
+        // .minigame-grid fija display:grid, así que el atributo hidden no basta
+        if (pane) pane.style.display = (sel === target) ? '' : 'none';
+      });
     });
   });
 });

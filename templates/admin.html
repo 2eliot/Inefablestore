@@ -476,11 +476,35 @@
       <div class="panel-header">
         <h2>Minijuegos</h2>
         <div class="actions" style="gap:8px;">
+          <button id="btn-open-ruleta-suite" class="btn primary" type="button">🎰 Abrir Suite de Ruletas</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="empty-state">
+          <h3>Suite de Ruletas</h3>
+          <p>Toda la gestión vive en la suite: <strong>Ruleta Gracias</strong> (el minijuego al completar la compra)
+          y <strong>Ruleta de Puntos</strong> (se juega con los puntos acumulados en la tienda).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUITE DE RULETAS (modal): Ruleta Gracias + Ruleta de Puntos -->
+    <div id="ruleta-suite-modal" style="position:fixed; inset:0; z-index:1200; display:none; align-items:flex-start; justify-content:center; background:rgba(2,6,23,.66); padding:24px; overflow-y:auto;">
+      <div style="width:min(1100px,96vw); background:#0e1526; border:1px solid #24304a; border-radius:14px; padding:16px; margin:auto; box-shadow:0 24px 60px rgba(0,0,0,.5);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+          <h2 style="margin:0; font-size:18px;">Suite de Ruletas</h2>
+          <div style="display:flex; gap:6px; margin-left:12px;">
+            <button class="btn primary suite-tab" data-pane="#suite-pane-gracias" type="button">Ruleta Gracias</button>
+            <button class="btn suite-tab" data-pane="#suite-pane-puntos" type="button">Ruleta de Puntos</button>
+          </div>
+          <button id="ruleta-suite-close" class="btn" type="button" style="margin-left:auto;">✕ Cerrar</button>
+        </div>
+
+        <div id="suite-pane-gracias" class="minigame-grid">
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
           <button id="btn-minigames-refresh" class="btn" type="button">Refrescar</button>
           <button id="btn-minigames-save" class="btn primary" type="button">Guardar premios</button>
         </div>
-      </div>
-      <div class="panel-body minigame-grid">
         <div class="minigame-card">
           <h3>Resumen de la ruleta</h3>
           <div id="minigames-summary" class="minigame-summary">
@@ -502,8 +526,11 @@
           <div id="minigames-winners-list" class="minigame-winners-list">
             <div class="empty-state"><p>Cargando ganadores...</p></div>
           </div>
+          <div id="minigames-winners-pager" style="margin-top:10px;"></div>
+        </div>
         </div>
 
+        <div id="suite-pane-puntos" class="minigame-grid" style="display:none">
         <div class="minigame-card">
           <h3>Ruleta de puntos (tienda)</h3>
           <p style="margin:0 0 12px; color:#94a3b8; font-size:13px;">
@@ -515,8 +542,11 @@
           </p>
           <div class="form-row">
             <label>Ruletas guardadas</label>
-            <div id="rl-saved-list" style="display:grid; gap:6px; min-width:0;">
-              <span style="color:#64748b; font-size:13px;">Cargando...</span>
+            <div style="display:grid; gap:6px; min-width:0;">
+              <div id="rl-saved-list" style="display:grid; gap:6px; min-width:0;">
+                <span style="color:#64748b; font-size:13px;">Cargando...</span>
+              </div>
+              <div id="rl-saved-pager"></div>
             </div>
           </div>
           <hr style="margin:14px 0; opacity:.4;">
@@ -565,6 +595,7 @@
               <span id="rl-save-status" style="margin-left:8px; color:#64748b; font-size:13px;"></span>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
