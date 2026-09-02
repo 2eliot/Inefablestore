@@ -5141,14 +5141,47 @@ document.addEventListener('DOMContentLoaded', function () {
   // ===== Ruleta de puntos =====
   var rlEnabled = document.getElementById('rl-enabled');
   var rlCost = document.getElementById('rl-cost-input');
-  var rlWin = document.getElementById('rl-win-input');
+  var rlSpins = document.getElementById('rl-spins-input');
   var rlGameSelect = document.getElementById('rl-game-select');
   var rlItemSelect = document.getElementById('rl-item-select');
+  var btnAddPrize = document.getElementById('btn-rl-add-prize');
+  var rlPrizesList = document.getElementById('rl-prizes-list');
+  var rlCounterInfo = document.getElementById('rl-counter-info');
   var btnSaveRuleta = document.getElementById('btn-save-ruleta');
+  var btnResetCounter = document.getElementById('btn-rl-reset-counter');
   var rlSaveStatus = document.getElementById('rl-save-status');
   var rlLoaded = false;
+  var rlPrizes = []; // [{item_id, title, game}]
 
-  async function loadRuletaItems(gid, selectedItemId) {
+  function renderRuletaPrizes() {
+    if (!rlPrizesList) return;
+    if (!rlPrizes.length) {
+      rlPrizesList.innerHTML = '<span style="color:#64748b; font-size:13px;">Sin premios todavía.</span>';
+      return;
+    }
+    rlPrizesList.innerHTML = rlPrizes.map(function (p, i) {
+      return '<div style="display:flex; align-items:center; gap:8px; border:1px solid rgba(148,163,184,.25); border-radius:8px; padding:6px 10px;">' +
+        '<span style="flex:1; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' +
+        esc(p.title) + (p.game ? ' <span style="color:#64748b;">· ' + esc(p.game) + '</span>' : '') +
+        '</span>' +
+        '<button class="btn btn-rl-remove" data-index="' + i + '" type="button" style="padding:2px 10px;">✕</button>' +
+        '</div>';
+    }).join('');
+  }
+
+  if (rlPrizesList) {
+    rlPrizesList.addEventListener('click', function (e) {
+      var btn = e.target.closest('.btn-rl-remove');
+      if (!btn) return;
+      var idx = parseInt(btn.getAttribute('data-index') || '-1', 10);
+      if (idx >= 0) {
+        rlPrizes.splice(idx, 1);
+        renderRuletaPrizes();
+      }
+    });
+  }
+
+  async function loadRuletaItems(gid) {
     if (!rlItemSelect) return;
     rlItemSelect.innerHTML = '<option value="">— Elegir paquete —</option>';
     if (!gid) return;
@@ -5159,7 +5192,6 @@ document.addEventListener('DOMContentLoaded', function () {
         var opt = document.createElement('option');
         opt.value = it.id;
         opt.textContent = it.title + (it.subtitle ? (' ' + it.subtitle) : '');
-        if (selectedItemId && Number(selectedItemId) === Number(it.id)) opt.selected = true;
         rlItemSelect.appendChild(opt);
       });
     } catch (e) { /* silencioso */ }
@@ -5179,54 +5211,90 @@ document.addEventListener('DOMContentLoaded', function () {
           var opt = document.createElement('option');
           opt.value = p.id;
           opt.textContent = p.name;
-          if (cfg.prize_store_package_id && Number(cfg.prize_store_package_id) === Number(p.id)) opt.selected = true;
           rlGameSelect.appendChild(opt);
         });
       }
       if (rlEnabled) rlEnabled.checked = !!cfg.enabled;
       if (rlCost) rlCost.value = cfg.cost_points != null ? cfg.cost_points : '';
-      if (rlWin) rlWin.value = cfg.win_percent != null ? cfg.win_percent : '';
-      if (cfg.prize_store_package_id) {
-        await loadRuletaItems(cfg.prize_store_package_id, cfg.prize_item_id);
-      }
+      if (rlSpins) rlSpins.value = cfg.spins_to_win != null ? cfg.spins_to_win : '';
+      if (rlCounterInfo) rlCounterInfo.textContent = 'Giros desde el último premio: ' + (cfg.spin_counter || 0) + '.';
+      rlPrizes = (cfg.prizes || []).map(function (p) {
+        return { item_id: p.item_id, title: p.title || ('Item ' + p.item_id), game: p.game || '' };
+      });
+      renderRuletaPrizes();
     } catch (e) { /* silencioso */ }
   }
 
   if (rlGameSelect) {
     rlGameSelect.addEventListener('change', function () {
-      loadRuletaItems(rlGameSelect.value, null);
+      loadRuletaItems(rlGameSelect.value);
     });
+  }
+
+  if (btnAddPrize) {
+    btnAddPrize.addEventListener('click', function () {
+      var itemId = rlItemSelect ? parseInt(rlItemSelect.value || '0', 10) : 0;
+      if (!itemId) {
+        if (rlSaveStatus) rlSaveStatus.textContent = 'Elige un juego y un paquete para agregarlo.';
+        return;
+      }
+      if (rlPrizes.some(function (p) { return Number(p.item_id) === itemId; })) {
+        if (rlSaveStatus) rlSaveStatus.textContent = 'Ese premio ya está en la lista.';
+        return;
+      }
+      var itemText = rlItemSelect.options[rlItemSelect.selectedIndex].textContent || ('Item ' + itemId);
+      var gameText = (rlGameSelect && rlGameSelect.selectedIndex > 0)
+        ? rlGameSelect.options[rlGameSelect.selectedIndex].textContent : '';
+      rlPrizes.push({ item_id: itemId, title: itemText, game: gameText });
+      renderRuletaPrizes();
+      if (rlSaveStatus) rlSaveStatus.textContent = 'Recuerda guardar la ruleta.';
+    });
+  }
+
+  async function saveRuleta(extra) {
+    var payload = {
+      enabled: rlEnabled ? rlEnabled.checked : false,
+      cost_points: rlCost ? (parseInt(rlCost.value || '0', 10) || 0) : 0,
+      spins_to_win: rlSpins ? (parseInt(rlSpins.value || '0', 10) || 0) : 0,
+      prize_item_ids: rlPrizes.map(function (p) { return p.item_id; })
+    };
+    if (extra) Object.assign(payload, extra);
+    if (payload.enabled && !payload.prize_item_ids.length) {
+      if (rlSaveStatus) rlSaveStatus.textContent = 'Agrega al menos un premio antes de activarla.';
+      return false;
+    }
+    if (rlSaveStatus) rlSaveStatus.textContent = 'Guardando...';
+    try {
+      var res = await fetch('/admin/config/ruleta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo guardar');
+      if (rlSaveStatus) rlSaveStatus.textContent = '✓ Ruleta guardada';
+      setTimeout(function () { if (rlSaveStatus) rlSaveStatus.textContent = ''; }, 2500);
+      loadRuleta();
+      return true;
+    } catch (err) {
+      if (rlSaveStatus) rlSaveStatus.textContent = err.message || 'Error al guardar';
+      return false;
+    }
   }
 
   if (btnSaveRuleta) {
     btnSaveRuleta.addEventListener('click', async function () {
-      var payload = {
-        enabled: rlEnabled ? rlEnabled.checked : false,
-        cost_points: rlCost ? (parseInt(rlCost.value || '0', 10) || 0) : 0,
-        win_percent: rlWin ? (parseFloat(rlWin.value || '0') || 0) : 0,
-        prize_item_id: rlItemSelect ? (parseInt(rlItemSelect.value || '0', 10) || 0) : 0
-      };
-      if (payload.enabled && !payload.prize_item_id) {
-        if (rlSaveStatus) rlSaveStatus.textContent = 'Elige el paquete premio antes de activarla.';
-        return;
-      }
       btnSaveRuleta.disabled = true;
-      if (rlSaveStatus) rlSaveStatus.textContent = 'Guardando...';
-      try {
-        var res = await fetch('/admin/config/ruleta', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        var data = await res.json().catch(function () { return {}; });
-        if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo guardar');
-        if (rlSaveStatus) rlSaveStatus.textContent = '✓ Ruleta guardada';
-        setTimeout(function () { if (rlSaveStatus) rlSaveStatus.textContent = ''; }, 2500);
-      } catch (err) {
-        if (rlSaveStatus) rlSaveStatus.textContent = err.message || 'Error al guardar';
-      } finally {
-        btnSaveRuleta.disabled = false;
-      }
+      await saveRuleta(null);
+      btnSaveRuleta.disabled = false;
+    });
+  }
+
+  if (btnResetCounter) {
+    btnResetCounter.addEventListener('click', async function () {
+      btnResetCounter.disabled = true;
+      await saveRuleta({ reset_counter: true });
+      btnResetCounter.disabled = false;
     });
   }
 

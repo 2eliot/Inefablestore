@@ -520,21 +520,35 @@
             <input id="rl-cost-input" type="number" min="0" step="1" placeholder="Ej: 100">
           </div>
           <div class="form-row">
-            <label for="rl-win-input">% de ganar</label>
-            <input id="rl-win-input" type="number" min="0" max="100" step="0.1" placeholder="Ej: 10">
+            <label for="rl-spins-input">Giros para ganar</label>
+            <input id="rl-spins-input" type="number" min="1" step="1" placeholder="Ej: 35">
+          </div>
+          <div style="margin:-6px 0 10px 200px; color:#64748b; font-size:12px;">
+            Sale un premio garantizado cada N giros (contador global entre todos los usuarios).
+            <span id="rl-counter-info"></span>
           </div>
           <div class="form-row">
-            <label for="rl-game-select">Juego del premio</label>
-            <select id="rl-game-select"><option value="">— Elegir juego —</option></select>
+            <label for="rl-game-select">Agregar premio</label>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <select id="rl-game-select"><option value="">— Elegir juego —</option></select>
+              <select id="rl-item-select"><option value="">— Elegir paquete —</option></select>
+              <button id="btn-rl-add-prize" class="btn" type="button">+ Agregar</button>
+            </div>
           </div>
           <div class="form-row">
-            <label for="rl-item-select">Paquete premio</label>
-            <select id="rl-item-select"><option value="">— Elegir paquete —</option></select>
+            <label>Premios posibles</label>
+            <div id="rl-prizes-list" style="display:grid; gap:6px; min-width:0;">
+              <span style="color:#64748b; font-size:13px;">Sin premios todavía.</span>
+            </div>
+          </div>
+          <div style="margin:0 0 10px 200px; color:#64748b; font-size:12px;">
+            Cuando un giro gana, el premio sale al azar entre esta lista. Puedes mezclar paquetes de varios juegos.
           </div>
           <div class="form-row">
             <label>&nbsp;</label>
             <div>
               <button id="btn-save-ruleta" class="btn primary" type="button">Guardar ruleta</button>
+              <button id="btn-rl-reset-counter" class="btn" type="button" title="Vuelve a empezar el conteo de giros para el próximo premio">Reiniciar contador</button>
               <span id="rl-save-status" style="margin-left:8px; color:#64748b; font-size:13px;"></span>
             </div>
           </div>

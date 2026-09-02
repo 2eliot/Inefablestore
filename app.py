@@ -6997,24 +6997,32 @@ def _ruleta_config_raw() -> dict:
     except Exception:
         cost = 0
     try:
-        win = float(get_config_value("ruleta_win_percent", "10") or 0)
+        spins_to_win = int(float(get_config_value("ruleta_spins_to_win", "35") or 0))
     except Exception:
-        win = 0.0
-    try:
-        prize_item_id = int(get_config_value("ruleta_prize_item_id", "0") or 0)
-    except Exception:
-        prize_item_id = 0
+        spins_to_win = 35
+    # Varios premios posibles (de uno o varios juegos), separados por coma
+    ids = []
+    for part in (get_config_value("ruleta_prize_item_ids", "") or "").split(","):
+        part = part.strip()
+        if part.isdigit() and int(part) > 0 and int(part) not in ids:
+            ids.append(int(part))
+    if not ids:
+        # Compatibilidad con la config vieja de un solo premio
+        try:
+            legacy = int(get_config_value("ruleta_prize_item_id", "0") or 0)
+            if legacy > 0:
+                ids = [legacy]
+        except Exception:
+            pass
     return {
         "enabled": get_config_value("ruleta_enabled", "0") == "1",
         "cost_points": max(cost, 0),
-        "win_percent": min(max(win, 0.0), 100.0),
-        "prize_item_id": prize_item_id,
+        "spins_to_win": max(spins_to_win, 1),
+        "prize_item_ids": ids,
     }
 
 
-def _ruleta_prize_payload(cfg=None) -> dict:
-    cfg = cfg or _ruleta_config_raw()
-    item = GamePackageItem.query.get(int(cfg.get("prize_item_id") or 0)) if cfg.get("prize_item_id") else None
+def _ruleta_prize_item_payload(item) -> dict:
     if not item or not item.active:
         return {}
     pkg = StorePackage.query.get(item.store_package_id)
@@ -7023,11 +7031,22 @@ def _ruleta_prize_payload(cfg=None) -> dict:
         title = f"{title} {item.subtitle.strip()}".strip()
     return {
         "item_id": item.id,
+        "store_package_id": item.store_package_id,
         "title": title,
         "game": (pkg.name if pkg else ""),
         "image": (item.icon_path or (pkg.image_path if pkg else "")),
         "requires_zone": bool(_package_effective_requires_zone(item.store_package_id)),
     }
+
+
+def _ruleta_prizes_payload(cfg=None) -> list:
+    cfg = cfg or _ruleta_config_raw()
+    out = []
+    for iid in cfg.get("prize_item_ids") or []:
+        p = _ruleta_prize_item_payload(GamePackageItem.query.get(int(iid)))
+        if p:
+            out.append(p)
+    return out
 
 
 def _order_points_total(order_obj) -> int:
@@ -7092,12 +7111,15 @@ def store_points_me():
 @app.route("/store/ruleta/config")
 def store_ruleta_config():
     cfg = _ruleta_config_raw()
-    prize = _ruleta_prize_payload(cfg) if cfg["enabled"] else {}
+    prizes = _ruleta_prizes_payload(cfg) if cfg["enabled"] else []
     return jsonify({
         "ok": True,
-        "enabled": bool(cfg["enabled"] and prize),
+        "enabled": bool(cfg["enabled"] and prizes),
         "cost_points": cfg["cost_points"],
-        "prize": prize,
+        "prizes": prizes,
+        "requires_zone": any(p.get("requires_zone") for p in prizes),
+        # compatibilidad con clientes que esperan un solo premio
+        "prize": prizes[0] if prizes else {},
     })
 
 
@@ -7110,8 +7132,8 @@ def store_ruleta_spin():
     if not uid:
         return jsonify({"ok": False, "error": "Inicia sesión para usar la ruleta"}), 401
     cfg = _ruleta_config_raw()
-    prize = _ruleta_prize_payload(cfg)
-    if not cfg["enabled"] or not prize:
+    prizes = _ruleta_prizes_payload(cfg)
+    if not cfg["enabled"] or not prizes:
         return jsonify({"ok": False, "error": "La ruleta está desactivada"}), 403
 
     data = request.get_json(silent=True) or {}
@@ -7123,8 +7145,8 @@ def store_ruleta_spin():
         return jsonify({"ok": False, "error": "Ese ID no es válido"}), 400
     if zone_id and not zone_id.isdigit():
         return jsonify({"ok": False, "error": "La Zona ID debe ser numérica"}), 400
-    if prize.get("requires_zone") and not zone_id:
-        return jsonify({"ok": False, "error": "La Zona ID es requerida para este juego"}), 400
+    if any(p.get("requires_zone") for p in prizes) and not zone_id:
+        return jsonify({"ok": False, "error": "La Zona ID es requerida para participar"}), 400
 
     # Misma lista negra que el checkout público
     try:
@@ -7155,13 +7177,26 @@ def store_ruleta_spin():
         db.session.commit()
         db.session.refresh(user_row)
 
-    won = (_random.random() * 100.0) < float(cfg["win_percent"] or 0)
+    # Gana 1 de cada N giros (contador global editable en el admin)
+    n_spins = int(cfg["spins_to_win"] or 1)
+    try:
+        spin_count = int(get_config_value("ruleta_spin_counter", "0") or 0) + 1
+    except Exception:
+        spin_count = 1
+    won = spin_count >= n_spins
+    try:
+        set_config_values({"ruleta_spin_counter": "0" if won else str(spin_count)})
+    except Exception:
+        pass
+
+    # Si gana, el premio sale al azar entre los configurados
+    prize = _random.choice(prizes) if won else None
     spin = RouletteSpin(
         user_id=user_row.id,
         points_spent=cost,
         won=won,
-        prize_item_id=prize.get("item_id"),
-        prize_title=prize.get("title") or "",
+        prize_item_id=(prize.get("item_id") if prize else None),
+        prize_title=(prize.get("title") if prize else "") or "",
         customer_id=player_id,
         customer_zone=zone_id,
     )
@@ -9682,12 +9717,16 @@ def admin_config_ruleta_get():
     if not user or user.get("role") != "admin":
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     cfg = _ruleta_config_raw()
-    prize = _ruleta_prize_payload(cfg)
-    prize_pkg_id = None
-    if cfg.get("prize_item_id"):
-        item = GamePackageItem.query.get(int(cfg["prize_item_id"]))
-        prize_pkg_id = item.store_package_id if item else None
-    return jsonify({"ok": True, **cfg, "prize_store_package_id": prize_pkg_id, "prize": prize})
+    try:
+        spin_counter = int(get_config_value("ruleta_spin_counter", "0") or 0)
+    except Exception:
+        spin_counter = 0
+    return jsonify({
+        "ok": True,
+        **cfg,
+        "prizes": _ruleta_prizes_payload(cfg),
+        "spin_counter": spin_counter,
+    })
 
 
 @app.route("/admin/config/ruleta", methods=["POST"])
@@ -9701,20 +9740,31 @@ def admin_config_ruleta_set():
     except Exception:
         cost = 0
     try:
-        win = min(max(float(data.get("win_percent") or 0), 0.0), 100.0)
+        spins_to_win = max(int(float(data.get("spins_to_win") or 0)), 1)
     except Exception:
-        win = 0.0
+        spins_to_win = 35
+    ids = []
+    raw_ids = data.get("prize_item_ids")
+    if isinstance(raw_ids, list):
+        for v in raw_ids:
+            try:
+                iv = int(v)
+                if iv > 0 and iv not in ids:
+                    ids.append(iv)
+            except Exception:
+                continue
+    values = {
+        "ruleta_enabled": "1" if data.get("enabled") else "0",
+        "ruleta_cost_points": str(cost),
+        "ruleta_spins_to_win": str(spins_to_win),
+        "ruleta_prize_item_ids": ",".join(str(i) for i in ids),
+        # limpiar la clave vieja de un solo premio para que no reaparezca
+        "ruleta_prize_item_id": "0",
+    }
+    if data.get("reset_counter"):
+        values["ruleta_spin_counter"] = "0"
     try:
-        prize_item_id = int(data.get("prize_item_id") or 0)
-    except Exception:
-        prize_item_id = 0
-    try:
-        set_config_values({
-            "ruleta_enabled": "1" if data.get("enabled") else "0",
-            "ruleta_cost_points": str(cost),
-            "ruleta_win_percent": str(win),
-            "ruleta_prize_item_id": str(prize_item_id),
-        })
+        set_config_values(values)
     except Exception as exc:
         return jsonify({"ok": False, "error": f"No se pudo guardar la ruleta: {exc}"}), 500
     return jsonify({"ok": True})

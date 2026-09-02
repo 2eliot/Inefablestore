@@ -808,7 +808,7 @@
             <div class="p-6 flex flex-col items-center">
                 <div class="w-full mb-3 flex items-center justify-between gap-2 flex-wrap">
                     <div class="min-w-0">
-                        <h2 class="font-bold text-sm text-gray-200 truncate">Premio: <span id="rl-prize" class="text-red-400">--</span></h2>
+                        <h2 class="font-bold text-sm text-gray-200">Premios: <span id="rl-prize" class="text-red-400">--</span></h2>
                         <p class="text-xs text-gray-400">Gira y descubre si te toca premio instantáneo.</p>
                     </div>
                     <div class="bg-red-500/10 border border-red-500/30 text-red-300 text-[11px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap">
@@ -2508,12 +2508,14 @@
                 points = (results[1] && results[1].points) || 0;
                 document.getElementById('rl-cost').innerText = cfg ? cfg.cost_points : '--';
                 document.getElementById('rl-points').innerText = logged ? points : '—';
-                var prizeTxt = (cfg && cfg.prize && cfg.prize.title)
-                    ? cfg.prize.title + (cfg.prize.game ? ' · ' + cfg.prize.game : '')
+                // Varios premios posibles: si gana, sale uno al azar de esta lista
+                var prizes = (cfg && cfg.prizes) || [];
+                var prizeTxt = prizes.length
+                    ? prizes.map(function (p) { return p.title + (p.game ? ' (' + p.game + ')' : ''); }).join('  ·  ')
                     : '--';
                 document.getElementById('rl-prize').innerText = prizeTxt;
                 var zone = document.getElementById('rl-zone');
-                if (zone) zone.style.display = (cfg && cfg.prize && cfg.prize.requires_zone) ? '' : 'none';
+                if (zone) zone.style.display = (cfg && cfg.requires_zone) ? '' : 'none';
                 var status = document.getElementById('rl-status');
                 if (!logged) {
                     status.innerHTML = 'Inicia sesión para girar con tus puntos. <button onclick="closeRuletaModal();openLoginModal();" class="text-red-400 font-bold underline">Entrar</button>';
@@ -2607,7 +2609,7 @@
             var player = (document.getElementById('rl-player').value || '').trim();
             var zone = (document.getElementById('rl-zone').value || '').trim();
             if (!player) { showToast('Escribe tu ID de jugador para girar.', true); return; }
-            if (cfg.prize && cfg.prize.requires_zone && !zone) { showToast('Escribe tu Zona ID.', true); return; }
+            if (cfg.requires_zone && !zone) { showToast('Escribe tu Zona ID.', true); return; }
             if (points < cfg.cost_points) { showToast('Te faltan puntos para girar.', true); return; }
 
             spinning = true;
