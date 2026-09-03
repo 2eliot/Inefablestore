@@ -80,6 +80,9 @@
     .mt-method.on{background:#0f2416;border-color:#3ee07f}
     .mt-dot{width:10px;height:10px;flex:none;border-radius:50%;border:1px solid #3a3a3a;background:transparent;transition:all .2s}
     .mt-method.on .mt-dot{border-color:#3ee07f;background:#3ee07f}
+    .mt-method-icon{width:34px;height:34px;flex:none;border-radius:8px;background:#111;display:none;align-items:center;justify-content:center;overflow:hidden}
+    .mt-method-icon.has-img{display:flex}
+    .mt-method-icon img{width:100%;height:100%;object-fit:contain}
     .mt-method-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
     .mt-method-name{font-weight:600;color:#eaeaea}
     .mt-method-note{font-size:11px;color:#8a8a8a}
@@ -135,6 +138,7 @@
       <div class="mt-methods">
         <div class="mt-method on" data-method="pm">
           <div class="mt-dot"></div>
+          <div class="mt-method-icon" id="mt-icon-pm"></div>
           <div class="mt-method-info">
             <div class="mt-method-name">Pago móvil</div>
             <div class="mt-method-note">Bolívares · Instantáneo</div>
@@ -146,6 +150,7 @@
         </div>
         <div class="mt-method" data-method="binance">
           <div class="mt-dot"></div>
+          <div class="mt-method-icon" id="mt-icon-binance"></div>
           <div class="mt-method-info">
             <div class="mt-method-name">Binance</div>
             <div class="mt-method-note">USDT · Instantáneo</div>
@@ -176,6 +181,22 @@
   var rcCode = (qs.get('rc') || '').trim();
 
   document.getElementById('mt-qty').textContent = 'Cantidad ' + qty;
+
+  // Logos de método de pago configurados en el admin
+  fetch('/store/payments').then(function (r) { return r.json(); }).then(function (data) {
+    var cfg = (data && data.ok && data.payments) || {};
+    var map = { pm: ['mt-icon-pm', cfg.pm_image_path], binance: ['mt-icon-binance', cfg.binance_image_path] };
+    Object.keys(map).forEach(function (key) {
+      var elId = map[key][0];
+      var url = (map[key][1] || '').trim();
+      var el = document.getElementById(elId);
+      if (!el) return;
+      if (url) {
+        el.innerHTML = '<img src="' + url + '" alt="">';
+        el.classList.add('has-img');
+      }
+    });
+  }).catch(function () {});
 
   Promise.all([
     fetch('/store/package/' + gid + '/items').then(function (r) { return r.json(); }).catch(function () { return null; }),
