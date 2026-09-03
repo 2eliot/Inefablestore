@@ -147,7 +147,7 @@
         .st-tab.on .caret{opacity:1}
         .st-tab.on .lbl{color:#3ee07f}
         .st-tabsep{color:#333333}
-        .st-socials{display:flex;align-items:center;gap:6px;flex:none}
+        .st-socials{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
         .st-social{width:26px;height:26px;border-radius:7px;border:1px solid #212a24;background:#10160f;display:flex;align-items:center;justify-content:center;color:#8a8a8a;transition:all .2s}
         .st-social:hover{border-color:#3ee07f;color:#3ee07f}
 
@@ -156,22 +156,22 @@
         #mosaic-expanded{display:flex;flex-direction:column;gap:10px}
         #mosaic-scroll{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
         .st-prod{cursor:pointer;flex:none;display:flex;flex-direction:column;align-items:center;gap:7px}
-        .st-prod-art{width:84px;height:84px;border-radius:10px;background:repeating-linear-gradient(135deg,#171d18 0 6px,#11150f 6px 12px);border:1px solid transparent;display:flex;align-items:center;justify-content:center;font-family:'Outfit';font-size:12px;color:#5a5a5a;transition:border-color .2s,box-shadow .2s;overflow:hidden}
+        .st-prod-art{width:100px;height:100px;border-radius:10px;background:repeating-linear-gradient(135deg,#171d18 0 6px,#11150f 6px 12px);border:1px solid transparent;display:flex;align-items:center;justify-content:center;font-family:'Outfit';font-size:12px;color:#5a5a5a;transition:border-color .2s,box-shadow .2s;overflow:hidden}
         .st-prod-art img{width:100%;height:100%;object-fit:contain;background:#0d120e}
         .st-prod.on .st-prod-art{border-color:#3ee07f;box-shadow:0 0 0 3px #3ee07f1f}
-        .st-prod-name{width:92px;font-size:11px;text-align:center;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .st-prod-name{width:108px;font-size:11px;text-align:center;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .st-prod.on .st-prod-name{color:#eaeaea}
-        .st-extra-art{width:84px;height:84px;display:flex;align-items:center;justify-content:center}
-        .st-extra-circle{width:30px;height:30px;border-radius:50%;background:repeating-linear-gradient(135deg,#1c2320 0 4px,#141a16 4px 8px);border:1px solid #282f2a;display:flex;align-items:center;justify-content:center;font-size:9px;color:#8a8a8a;overflow:hidden}
+        .st-extra-art{width:100px;height:100px;display:flex;align-items:center;justify-content:center}
+        .st-extra-circle{width:36px;height:36px;border-radius:50%;background:repeating-linear-gradient(135deg,#1c2320 0 4px,#141a16 4px 8px);border:1px solid #282f2a;display:flex;align-items:center;justify-content:center;font-size:10px;color:#8a8a8a;overflow:hidden}
         .st-extra-circle img{width:100%;height:100%;object-fit:contain}
-        .st-extra-plus{width:30px;height:30px;border-radius:50%;margin-left:-9px;border:1px solid #3ee07f;color:#3ee07f;background:#050706;display:flex;align-items:center;justify-content:center;font-size:14px}
-        .st-extra-label{width:92px;text-align:center;font-size:11px;color:#8a8a8a}
+        .st-extra-plus{width:36px;height:36px;border-radius:50%;margin-left:-10px;border:1px solid #3ee07f;color:#3ee07f;background:#050706;display:flex;align-items:center;justify-content:center;font-size:15px}
+        .st-extra-label{width:108px;text-align:center;font-size:11px;color:#8a8a8a}
         .st-verless{align-self:center;font-size:12px;color:#8a8a8a;cursor:pointer}
         .st-verless:hover{color:#3ee07f}
         @media (max-width:859px){
           #mosaic-container{gap:8px}
-          .st-prod-art,.st-extra-art{width:68px;height:68px}
-          .st-prod-name,.st-extra-label{width:74px;font-size:10px}
+          .st-prod-art,.st-extra-art{width:80px;height:80px}
+          .st-prod-name,.st-extra-label{width:88px;font-size:10px}
         }
 
         /* ID de jugador */
@@ -379,40 +379,18 @@
                 <div id="carousel-dots"></div>
             </section>
 
-            <!-- 1 · SELECCIONA EL PRODUCTO -->
+            <!-- SELECTOR DE JUEGO / TARJETA -->
             <section class="st-section">
-                <div class="st-headrow">
-                    <div class="st-headcenter">
-                        <div class="st-headline l"></div>
-                        <div class="st-headmid">
-                            <div class="st-headnum">1</div>
-                            <div class="st-headtitle">SELECCIONA EL PRODUCTO</div>
-                            <div class="st-headdiamond"></div>
+                <div class="st-tabsrow">
+                    <div class="st-tabs">
+                        <div id="tab-juegos" class="st-tab on" onclick="setCategory('mobile')">
+                            <div class="caret">▸</div>
+                            <div class="lbl">Juegos</div>
                         </div>
-                        <div class="st-headline r"></div>
-                    </div>
-                    <div class="st-tabsrow">
-                        <div class="st-tabs">
-                            <div id="tab-juegos" class="st-tab on" onclick="setCategory('mobile')">
-                                <div class="caret">▸</div>
-                                <div class="lbl">Juegos</div>
-                            </div>
-                            <div class="st-tabsep">/</div>
-                            <div id="tab-tarjetas" class="st-tab" onclick="setCategory('gift')">
-                                <div class="caret">▸</div>
-                                <div class="lbl">Tarjetas</div>
-                            </div>
-                        </div>
-                        <div class="st-socials">
-                            <a href="https://www.facebook.com/InefablestoreR/" target="_blank" rel="noopener" class="st-social" aria-label="Facebook">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 22v-9h3l.5-3.5h-3.5V7.3c0-1 .3-1.7 1.7-1.7H17V2.4c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v2.7H7V13h3v9h3.5z"></path></svg>
-                            </a>
-                            <a href="https://www.instagram.com/inefable_store_12/" target="_blank" rel="noopener" class="st-social" aria-label="Instagram">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none"></circle></svg>
-                            </a>
-                            <a href="https://www.tiktok.com/@inefablestore" target="_blank" rel="noopener" class="st-social" aria-label="TikTok">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M16.6 5.8a4.8 4.8 0 0 1-1.2-3.2h-3v13a2.7 2.7 0 1 1-1.9-2.6V9.9a5.8 5.8 0 1 0 4.9 5.7V9.4a7.9 7.9 0 0 0 4.6 1.5v-3a4.8 4.8 0 0 1-3.4-2.1z"></path></svg>
-                            </a>
+                        <div class="st-tabsep">/</div>
+                        <div id="tab-tarjetas" class="st-tab" onclick="setCategory('gift')">
+                            <div class="caret">▸</div>
+                            <div class="lbl">Tarjetas</div>
                         </div>
                     </div>
                 </div>
@@ -423,12 +401,12 @@
                 </div>
             </section>
 
-            <!-- 2 · ID DE JUGADOR (oculto en Tarjetas / gift cards) -->
+            <!-- 1 · ID DE JUGADOR (oculto en Tarjetas / gift cards) -->
             <section class="st-section" id="verification-section">
                 <div class="st-headcenter">
                     <div class="st-headline l"></div>
                     <div class="st-headmid">
-                        <div class="st-headnum">2</div>
+                        <div class="st-headnum">1</div>
                         <div class="st-headtitle">ID DE JUGADOR</div>
                         <div class="st-headdiamond"></div>
                     </div>
@@ -445,6 +423,19 @@
                     <div id="verification-status" style="display:none"></div>
                 </div>
             </section>
+
+            <!-- Redes sociales, debajo del formulario de ID (siempre visibles) -->
+            <div class="st-socials">
+                <a href="https://www.facebook.com/InefablestoreR/" target="_blank" rel="noopener" class="st-social" aria-label="Facebook">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 22v-9h3l.5-3.5h-3.5V7.3c0-1 .3-1.7 1.7-1.7H17V2.4c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v2.7H7V13h3v9h3.5z"></path></svg>
+                </a>
+                <a href="https://www.instagram.com/inefable_store_12/" target="_blank" rel="noopener" class="st-social" aria-label="Instagram">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none"></circle></svg>
+                </a>
+                <a href="https://www.tiktok.com/@inefablestore" target="_blank" rel="noopener" class="st-social" aria-label="TikTok">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M16.6 5.8a4.8 4.8 0 0 1-1.2-3.2h-3v13a2.7 2.7 0 1 1-1.9-2.6V9.9a5.8 5.8 0 1 0 4.9 5.7V9.4a7.9 7.9 0 0 0 4.6 1.5v-3a4.8 4.8 0 0 1-3.4-2.1z"></path></svg>
+                </a>
+            </div>
 
             <!-- 3 · ELIGE EL PAQUETE -->
             <section class="st-section">
