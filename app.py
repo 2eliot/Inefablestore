@@ -152,6 +152,7 @@ MAIL_APP_PASSWORD = os.environ.get("MAIL_APP_PASSWORD", "")
 MAIL_SMTP_HOST = os.environ.get("MAIL_SMTP_HOST", "smtp.gmail.com")
 MAIL_SMTP_PORT = int(os.environ.get("MAIL_SMTP_PORT", "587"))
 ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "")  # default destination for new order alerts
+ADMIN_MANUAL_APPROVE_PIN = os.environ.get("ADMIN_MANUAL_APPROVE_PIN", "8812")  # PIN requerido para aprobar una orden manualmente (sin verificación de Pabilo)
 
 # ── Binance Pay Auto-Verification ──
 BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY", "").strip()
@@ -12038,6 +12039,32 @@ def admin_orders_set_status(oid: int):
     o = Order.query.get(oid)
     if not o:
         return jsonify({"ok": False, "error": "No existe"}), 404
+
+    # PIN requerido para aprobar manualmente sin verificación de Pabilo (evita aprobaciones accidentales/no autorizadas).
+    if status == "approved" and skip_payment_verification:
+        submitted_pin = str(data.get("manual_approve_pin") or "").strip()
+        if submitted_pin != ADMIN_MANUAL_APPROVE_PIN:
+            return jsonify({"ok": False, "error": "PIN incorrecto", "pin_required": True}), 403
+
+    # Bloquea aprobar si la referencia ya fue usada en otra orden activa (previene duplicados).
+    if status == "approved" and (o.status or "").lower() == "pending":
+        dup_order = _find_existing_order_by_reference(
+            o.reference,
+            exclude_order_id=o.id,
+            statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
+        )
+        if not dup_order:
+            dup_order = _find_existing_order_by_capture_reference(
+                o.reference,
+                exclude_order_id=o.id,
+                statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
+            )
+        if dup_order:
+            return jsonify({
+                "ok": False,
+                "error": _reference_conflict_error_message(dup_order),
+                "duplicate_reference": True,
+            }), 409
 
     # Enforce payment verification via Pabilo for mapped auto-recharge orders when enabled.
     if status == "approved" and (o.status or "").lower() == "pending" and _order_is_pabilo_eligible(o) and not skip_payment_verification:

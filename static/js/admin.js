@@ -3894,14 +3894,26 @@ window.refreshGallery = refreshGallery;
               danger: true,
             });
             if (override) {
+              const pin = await showAdminPinDialog({
+                title: 'PIN requerido',
+                message: 'Ingresa el PIN de administrador para aprobar esta orden manualmente sin verificación de Pabilo.',
+              });
+              if (!pin) return;
               payload.skip_payment_verification = true;
+              payload.manual_approve_pin = pin;
               const res2 = await fetch(`/admin/orders/${id}/status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
               });
               const data2 = await res2.json();
-              if (!res2.ok || !data2.ok) throw new Error(data2.error || 'No se pudo aprobar manualmente');
+              if (!res2.ok || !data2.ok) {
+                if (res2.status === 403 && data2.pin_required) {
+                  toast('PIN incorrecto', 'error');
+                  return;
+                }
+                throw new Error(data2.error || 'No se pudo aprobar manualmente');
+              }
               // Handle auto-recharge response same as normal flow
               if (data2.webb_recarga) {
                 if (data2.webb_recarga.ok) {
@@ -5583,6 +5595,130 @@ function showAdminConfirmDialog(options) {
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
     confirmBtn.focus();
+  });
+}
+
+function showAdminPinDialog(options) {
+  const config = options || {};
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(2,6,23,0.82)';
+    overlay.style.zIndex = '10002';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.padding = '16px';
+    overlay.style.boxSizing = 'border-box';
+
+    const panel = document.createElement('div');
+    panel.style.width = '100%';
+    panel.style.maxWidth = '380px';
+    panel.style.background = '#111827';
+    panel.style.border = '1px solid rgba(255,255,255,.1)';
+    panel.style.borderRadius = '14px';
+    panel.style.boxShadow = '0 20px 60px rgba(0,0,0,.6)';
+    panel.style.padding = '18px';
+    panel.style.color = '#e2e8f0';
+
+    const title = document.createElement('h3');
+    title.textContent = config.title || 'PIN requerido';
+    title.style.margin = '0 0 12px';
+    title.style.fontSize = '16px';
+
+    const body = document.createElement('div');
+    body.textContent = config.message || 'Ingresa el PIN de administrador para continuar.';
+    body.style.whiteSpace = 'pre-wrap';
+    body.style.lineHeight = '1.5';
+    body.style.fontSize = '14px';
+    body.style.color = '#cbd5e1';
+    body.style.marginBottom = '14px';
+
+    const input = document.createElement('input');
+    input.type = 'password';
+    input.inputMode = 'numeric';
+    input.autocomplete = 'off';
+    input.placeholder = 'PIN';
+    input.style.width = '100%';
+    input.style.boxSizing = 'border-box';
+    input.style.padding = '10px 12px';
+    input.style.borderRadius = '10px';
+    input.style.border = '1px solid rgba(255,255,255,.15)';
+    input.style.background = '#0b1220';
+    input.style.color = '#fff';
+    input.style.fontSize = '16px';
+    input.style.letterSpacing = '2px';
+
+    const errorMsg = document.createElement('div');
+    errorMsg.style.color = '#f87171';
+    errorMsg.style.fontSize = '13px';
+    errorMsg.style.marginTop = '8px';
+    errorMsg.style.minHeight = '16px';
+
+    const actions = document.createElement('div');
+    actions.style.display = 'flex';
+    actions.style.justifyContent = 'flex-end';
+    actions.style.gap = '10px';
+    actions.style.marginTop = '14px';
+    actions.style.flexWrap = 'wrap';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = 'Cancelar';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'btn';
+    confirmBtn.textContent = 'Confirmar';
+    confirmBtn.style.background = '#2563eb';
+    confirmBtn.style.border = '1px solid rgba(255,255,255,.12)';
+    confirmBtn.style.color = '#fff';
+
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      document.removeEventListener('keydown', onKeyDown, true);
+      resolve(result);
+    };
+    const submit = () => {
+      const value = (input.value || '').trim();
+      if (!value) {
+        errorMsg.textContent = 'Ingresa el PIN.';
+        return;
+      }
+      finish(value);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        finish(null);
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        submit();
+      }
+    };
+
+    cancelBtn.addEventListener('click', () => finish(null));
+    confirmBtn.addEventListener('click', submit);
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) finish(null);
+    });
+    document.addEventListener('keydown', onKeyDown, true);
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(confirmBtn);
+    panel.appendChild(title);
+    panel.appendChild(body);
+    panel.appendChild(input);
+    panel.appendChild(errorMsg);
+    panel.appendChild(actions);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    input.focus();
   });
 }
 
