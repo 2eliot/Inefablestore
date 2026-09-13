@@ -5136,6 +5136,42 @@ def _order_invalid_player_id_message(auto_state) -> str:
     return ""
 
 
+THANKS_SESSION_ORDERS_KEY = "thanks_orders"
+
+
+def _remember_thanks_order(order_id) -> None:
+    """Marca en la sesión que este navegador creó la orden, para poder
+    mostrarle sus códigos/PINs en la página de gracias."""
+    try:
+        oid = int(order_id)
+        remembered = [int(x) for x in (session.get(THANKS_SESSION_ORDERS_KEY) or []) if str(x).isdigit()]
+        if oid in remembered:
+            return
+        session[THANKS_SESSION_ORDERS_KEY] = (remembered + [oid])[-30:]
+    except Exception:
+        pass
+
+
+def _thanks_viewer_owns_order(order_obj) -> bool:
+    """Los códigos entregados solo se exponen a quien compró: el navegador que
+    creó la orden, el usuario logueado dueño de ella o el admin. /gracias/<id>
+    es público y los IDs son secuenciales, así que sin esto se podrían
+    recorrer órdenes ajenas y robar códigos."""
+    if not order_obj:
+        return False
+    try:
+        user = session.get("user") or {}
+        if user.get("role") == "admin":
+            return True
+        uid = user.get("user_id")
+        if uid and order_obj.user_id and int(uid) == int(order_obj.user_id):
+            return True
+        remembered = session.get(THANKS_SESSION_ORDERS_KEY) or []
+        return int(order_obj.id) in {int(x) for x in remembered if str(x).isdigit()}
+    except Exception:
+        return False
+
+
 def _thanks_progress_payload(order_obj):
     """Build dynamic progress state for the thank-you page.
 
@@ -5172,22 +5208,34 @@ def _thanks_progress_payload(order_obj):
         if (unit.get("status") or "") != "completed":
             continue
         pin_code = str(unit.get("pin_code") or "").strip()
-        pins_list = unit.get("pins") or []
-        if pin_code:
+        # "pins" trae cada PIN por separado; pin_code puede venir unido con comas
+        unit_codes = [str(p).strip() for p in (unit.get("pins") or []) if str(p).strip()]
+        if not unit_codes and pin_code:
+            unit_codes = [pin_code]
+        for code in unit_codes:
             delivered_pins.append({
                 "title": str(unit.get("title") or "PIN"),
-                "pin_code": pin_code,
+                "pin_code": code,
                 "transaction_id": str(unit.get("transaction_id") or ""),
                 "control_number": str(unit.get("control_number") or ""),
             })
-        elif pins_list:
-            for p in pins_list:
-                delivered_pins.append({
-                    "title": str(unit.get("title") or "PIN"),
-                    "pin_code": str(p),
-                    "transaction_id": str(unit.get("transaction_id") or ""),
-                    "control_number": str(unit.get("control_number") or ""),
-                })
+
+    # Códigos que el admin carga a mano al aprobar (gift cards / pines manuales)
+    manual_codes_delivered = False
+    if order_status in ("approved", "delivered"):
+        seen_codes = {p["pin_code"] for p in delivered_pins}
+        manual_title = order_meta.get("package_display") or "Código"
+        for code in _email_delivery_codes(order_obj):
+            if code in seen_codes:
+                continue
+            seen_codes.add(code)
+            delivered_pins.append({
+                "title": manual_title,
+                "pin_code": code,
+                "transaction_id": "",
+                "control_number": "",
+            })
+            manual_codes_delivered = True
 
     # Recarga rechazada por el proveedor por ID de jugador inválido → avisar al cliente
     invalid_id_message = _order_invalid_player_id_message(auto_state)
@@ -5203,6 +5251,8 @@ def _thanks_progress_payload(order_obj):
         order_validated = order_status in ("approved", "delivered")
         if order_status == "rejected":
             manual_message = rejected_message
+        elif manual_codes_delivered:
+            manual_message = "Tu código ya fue entregado"
         elif order_validated:
             manual_message = "Su orden está siendo procesada manualmente. Puede tardar de 5 a 10 minutos."
         else:
@@ -5248,9 +5298,9 @@ def _thanks_progress_payload(order_obj):
                 "verification_id": str(order_obj.payment_verification_id or ""),
             },
             "pins": delivered_pins,
-            "completed": False,
-            "current_message": (rejected_message or invalid_id_message or manual_message),
-            "error_message": (rejected_message or invalid_id_message),
+            "completed": manual_codes_delivered,
+            "current_message": (rejected_message or ("" if manual_codes_delivered else invalid_id_message) or manual_message),
+            "error_message": (rejected_message or ("" if manual_codes_delivered else invalid_id_message)),
             "player_display": order_meta.get("player_display") or "",
             "package_display": order_meta.get("package_display") or "",
         }
@@ -5313,6 +5363,8 @@ def _thanks_progress_payload(order_obj):
     current_message = "Procesando tu recarga..."
     if rejected_message:
         current_message = rejected_message
+    elif manual_codes_delivered:
+        current_message = "Tu código ya fue entregado"
     elif invalid_id_message and not recharge_done:
         current_message = invalid_id_message
     elif recharge_done:
@@ -5346,9 +5398,9 @@ def _thanks_progress_payload(order_obj):
             "verification_id": str(pay_state.get("verification_id") or ""),
         },
         "pins": delivered_pins,
-        "completed": recharge_done,
+        "completed": bool(recharge_done or manual_codes_delivered),
         "current_message": current_message,
-        "error_message": (rejected_message or ("" if recharge_done else invalid_id_message)),
+        "error_message": (rejected_message or ("" if (recharge_done or manual_codes_delivered) else invalid_id_message)),
         "player_display": order_meta.get("player_display") or "",
         "package_display": order_meta.get("package_display") or "",
     }
@@ -10903,7 +10955,11 @@ def thanks_order_progress(oid: int):
     o = Order.query.get(oid)
     if not o:
         return jsonify({"ok": False, "error": "No existe"}), 404
-    return jsonify(_thanks_progress_payload(o))
+    payload = _thanks_progress_payload(o)
+    if payload.get("pins") and not _thanks_viewer_owns_order(o):
+        payload["pins"] = []
+        payload["pins_hidden"] = True
+    return jsonify(payload)
 
 
 @app.route("/gracias/<int:oid>/minijuego", methods=["GET"])
@@ -11406,6 +11462,7 @@ def create_order():
         if idempotency_key:
             existing_idempotent_order = _find_order_by_idempotency_key(idempotency_key)
             if existing_idempotent_order:
+                _remember_thanks_order(existing_idempotent_order.id)
                 return jsonify({"ok": True, "order_id": existing_idempotent_order.id, "idempotent": True})
 
         if payer_dni_type and payer_dni_type not in ("V", "E", "J", "P", "G"):
@@ -11659,6 +11716,7 @@ def create_order():
             if idempotency_key:
                 existing_idempotent_order = _find_order_by_idempotency_key(idempotency_key)
                 if existing_idempotent_order:
+                    _remember_thanks_order(existing_idempotent_order.id)
                     return jsonify({"ok": True, "order_id": existing_idempotent_order.id, "idempotent": True})
             raise
         try:
@@ -11682,6 +11740,7 @@ def create_order():
                 db.session.commit()
         except Exception:
             db.session.rollback()
+        _remember_thanks_order(o.id)
         return jsonify({"ok": True, "order_id": o.id})
     except Exception as e:
         # Return error to client to help diagnose instead of 500

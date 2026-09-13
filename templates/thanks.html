@@ -124,6 +124,7 @@
     .ty-pin-copy-btn{background:#10160f;border:1px solid #2d362f;color:#3ee07f;padding:6px 14px;border-radius:8px;cursor:pointer;font-weight:700;font-size:11px;transition:all .2s;white-space:nowrap}
     .ty-pin-copy-btn:hover{border-color:#3ee07f}
     .ty-pin-copy-btn.copied{background:#3ee07f;color:#020a05;border-color:#3ee07f}
+    .ty-pins-hidden-note{background:#10160f;border:1px solid #2d362f;border-radius:10px;padding:12px 14px;color:#c4c4c4;font-size:13px;line-height:1.5}
 
     /* Acciones */
     #en-actions{display:none;width:100%;grid-template-columns:1fr 1fr;gap:9px}
@@ -277,7 +278,7 @@
       </div>
 
       <div id="ty-pins-section">
-        <h4 class="ty-pins-title">Tus PINs de Recarga</h4>
+        <h4 class="ty-pins-title">Tus códigos / PINs</h4>
         <div id="ty-pins-list"></div>
       </div>
 
@@ -463,6 +464,16 @@
         if (key === 'failed' && payload && payload.error_message) subText = payload.error_message;
         subEl.textContent = subText;
       }
+      // Compras de tarjetas / pines: el producto es el código, no una recarga
+      var hasCodes = !!(payload && ((Array.isArray(payload.pins) && payload.pins.length) || payload.pins_hidden));
+      if (key === 'success' && hasCodes) {
+        if (titleEl) titleEl.textContent = '¡Compra completada!';
+        if (subEl) {
+          subEl.textContent = payload.pins_hidden
+            ? 'Tu código ya fue entregado. También te lo enviamos por correo.'
+            : 'Tu código ya está disponible abajo. También te lo enviamos por correo.';
+        }
+      }
 
       // Mensaje de error del proveedor (ej. ID de jugador inválido) en revisión/éxito
       if (errEl) {
@@ -507,7 +518,17 @@
       var listEl = document.getElementById('ty-pins-list');
       if (!sectionEl || !listEl) return;
       var pins = Array.isArray(payload && payload.pins) ? payload.pins : [];
-      if (pins.length === 0 || card.classList.contains('searching')) { sectionEl.classList.remove('visible'); return; }
+      if (card.classList.contains('searching')) { sectionEl.classList.remove('visible'); return; }
+      if (pins.length === 0) {
+        if (payload && payload.pins_hidden) {
+          // El backend no expone códigos a quien no hizo la compra
+          sectionEl.classList.add('visible');
+          listEl.innerHTML = '<div class="ty-pins-hidden-note">Por seguridad tu código solo se muestra en el dispositivo donde hiciste la compra o iniciando sesión con tu cuenta. También lo tienes en tu correo.</div>';
+        } else {
+          sectionEl.classList.remove('visible');
+        }
+        return;
+      }
       sectionEl.classList.add('visible');
       listEl.innerHTML = pins.map(function (pin) {
         var code = String(pin.pin_code || '').trim();
