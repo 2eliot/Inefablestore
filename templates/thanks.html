@@ -511,6 +511,9 @@
         }
       }
       syncActionsLayout();
+      // Si la orden ya venía completada en el primer poll, el polling se
+      // detuvo mientras seguía la animación de búsqueda: pintar los PINs aquí.
+      renderPins(payload);
     }
 
     function renderPins(payload) {

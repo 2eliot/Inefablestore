@@ -5571,6 +5571,11 @@ def _build_order_auto_recharge_units(order_obj, automation_state=None):
             "last_checked_at": str((previous or {}).get("last_checked_at") or ""),
             "last_provider": str((previous or {}).get("last_provider") or _unit_delivery_source(planned)),
         }
+        # Conservar los PINs ya entregados: si no, cualquier re-guardado del
+        # estado (verificación, reintento de otra unidad) los borraba.
+        for pin_field in ("pin_code", "pins", "transaction_id", "control_number"):
+            if (previous or {}).get(pin_field):
+                unit[pin_field] = previous[pin_field]
         units.append(unit)
     return units
 
