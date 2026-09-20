@@ -9163,6 +9163,17 @@ def user_page():
                            mini_videos_enabled=_mini_videos_enabled(),
                            logo_url=logo_url, site_name=site_name)
 
+def _attach_maintenance_pass(response):
+    """Cookie con la que nginx deja ver la tienda cerrada por mantenimiento. Solo para el admin."""
+    maintenance_pass = (os.environ.get("MAINTENANCE_PASS") or "").strip()
+    if maintenance_pass:
+        response.set_cookie(
+            "ine_pase", maintenance_pass, max_age=12 * 3600,
+            secure=True, httponly=True, samesite="Lax", path="/",
+        )
+    return response
+
+
 @app.route("/admin")
 def admin_page():
     user = session.get("user")
@@ -9174,7 +9185,9 @@ def admin_page():
         response = make_response(render_template("admin_login.html", site_name=site_name, notice=notice))
         response.headers["Cache-Control"] = "no-store"
         return response
-    return render_template("admin.html", site_name=site_name, body_class="theme-admin-dark")
+    # Renueva el pase en cada carga del panel: cubre sesiones anteriores al pase y su vencimiento.
+    response = make_response(render_template("admin.html", site_name=site_name, body_class="theme-admin-dark"))
+    return _attach_maintenance_pass(response)
 
 @app.route("/store/hero")
 def store_hero():
@@ -14304,13 +14317,7 @@ def auth_login():
         response = jsonify({"ok": True, "user": session["user"]})
         # Pase de mantenimiento: nginx deja ver la tienda cerrada solo a quien traiga esta cookie.
         # Se entrega únicamente al admin, para que un cliente no pueda comprar antes de la apertura.
-        maintenance_pass = (os.environ.get("MAINTENANCE_PASS") or "").strip()
-        if maintenance_pass:
-            response.set_cookie(
-                "ine_pase", maintenance_pass, max_age=12 * 3600,
-                secure=True, httponly=True, samesite="Lax", path="/",
-            )
-        return response
+        return _attach_maintenance_pass(response)
     # Affiliate / mini influencer login (by email, or by their own code)
     su = SpecialUser.query.filter(db.func.lower(SpecialUser.email) == email.lower()).first()
     if not su:
