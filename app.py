@@ -14301,7 +14301,16 @@ def auth_login():
     # Admin login (env credentials)
     if email.lower() == (ADMIN_EMAIL or "").lower() and password == (ADMIN_PASSWORD or ""):
         session["user"] = {"email": ADMIN_EMAIL, "role": "admin"}
-        return jsonify({"ok": True, "user": session["user"]})
+        response = jsonify({"ok": True, "user": session["user"]})
+        # Pase de mantenimiento: nginx deja ver la tienda cerrada solo a quien traiga esta cookie.
+        # Se entrega únicamente al admin, para que un cliente no pueda comprar antes de la apertura.
+        maintenance_pass = (os.environ.get("MAINTENANCE_PASS") or "").strip()
+        if maintenance_pass:
+            response.set_cookie(
+                "ine_pase", maintenance_pass, max_age=12 * 3600,
+                secure=True, httponly=True, samesite="Lax", path="/",
+            )
+        return response
     # Affiliate / mini influencer login (by email, or by their own code)
     su = SpecialUser.query.filter(db.func.lower(SpecialUser.email) == email.lower()).first()
     if not su:
