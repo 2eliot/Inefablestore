@@ -12,7 +12,7 @@ import hashlib
 import hmac as _hmac_module
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import datetime, timedelta, timezone
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory, current_app, Response
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory, current_app, Response, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -9166,9 +9166,14 @@ def user_page():
 @app.route("/admin")
 def admin_page():
     user = session.get("user")
-    if not user or user.get("role") != "admin":
-        return redirect("/?next=/admin")
     site_name = get_config_value("site_name", "InefableStore")
+    if not user or user.get("role") != "admin":
+        # Login propio del panel, separado de la tienda: así el admin entra aunque la
+        # portada esté cerrada por mantenimiento.
+        notice = "Esa cuenta no es de administrador." if user else ""
+        response = make_response(render_template("admin_login.html", site_name=site_name, notice=notice))
+        response.headers["Cache-Control"] = "no-store"
+        return response
     return render_template("admin.html", site_name=site_name, body_class="theme-admin-dark")
 
 @app.route("/store/hero")
