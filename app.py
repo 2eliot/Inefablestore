@@ -4187,6 +4187,54 @@ def _pabilo_response_match_info(response_data: dict, order_obj) -> dict:
     )
 
 
+def _pabilo_payment_date_verdict(response_data: dict) -> str:
+    """Piso de fecha (PAYMENT_MIN_DATE, día de Venezuela) para los pagos de Pabilo.
+
+    La tienda reabrió con la base vacía y se perdió el registro de referencias ya usadas:
+    sin este piso un cliente podría reclamar otra vez un pago móvil viejo. Pabilo informa
+    `movement_date` (día del movimiento en el banco) y `created_at` (cuándo registró el
+    pago por primera vez). Devuelve 'ok', 'old' o 'unknown'.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    day = (os.environ.get("PAYMENT_MIN_DATE") or "").strip()
+    if not day:
+        return "ok"
+    try:
+        # Medianoche de Venezuela (UTC-4) del día configurado.
+        floor = _dt.fromisoformat(f"{day}T04:00:00+00:00")
+    except ValueError:
+        return "ok"
+
+    def _parse(value):
+        if not value:
+            return None
+        try:
+            parsed = _dt.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=_tz.utc)
+        # Pabilo manda '0001-01-01T00:00:00Z' cuando no conoce una fecha.
+        return parsed if parsed.year >= 2000 else None
+
+    data = response_data.get("data") if isinstance(response_data, dict) else None
+    data = data if isinstance(data, dict) else {}
+    payment = data.get("user_bank_payment") if isinstance(data.get("user_bank_payment"), dict) else {}
+    is_new = bool(data.get("is_new"))
+    movement = _parse(payment.get("movement_date"))
+    created = _parse(payment.get("created_at"))
+
+    if movement is not None and movement < floor:
+        return "old"
+    # Ya estaba registrado en Pabilo antes del piso: lo cobró la tienda anterior.
+    if not is_new and created is not None and created < floor:
+        return "old"
+    if movement is None and created is None:
+        return "unknown"
+    return "ok"
+
+
 def _pabilo_response_match_info_for_reference(response_data: dict, order_obj, reference_value: str) -> dict:
     expected_amount = _ubii_parse_amount(getattr(order_obj, "amount", None))
     expected_reference = _pabilo_normalize_reference_value(reference_value)
@@ -4242,6 +4290,8 @@ def _pabilo_response_match_info_for_reference(response_data: dict, order_obj, re
     reference_matches = bool(expected_reference) and expected_reference in reference_candidates
     amount_valid = amount_present and amount_equal_or_greater
     reference_valid = (not reference_present) or reference_matches
+    # Un pago viejo (o sin fecha) nunca se da por válido aunque monto y referencia coincidan.
+    payment_date_verdict = _pabilo_payment_date_verdict(response_data)
     matched_amount = None
     if expected_amount is not None:
         eligible_amounts = [candidate for candidate in amount_candidates if candidate >= expected_amount]
@@ -4261,7 +4311,8 @@ def _pabilo_response_match_info_for_reference(response_data: dict, order_obj, re
         "amount_candidates": amount_candidates,
         "matched_amount": matched_amount,
         "reference_candidates": reference_candidates,
-        "matched": amount_valid and reference_valid,
+        "payment_date_verdict": payment_date_verdict,
+        "matched": amount_valid and reference_valid and payment_date_verdict == "ok",
     }
 
 
