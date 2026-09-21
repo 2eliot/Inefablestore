@@ -1060,7 +1060,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="order-card rev-map-row" data-store-item-id="${it.id}" data-mapped-catalog-id="${mappedCatalogId || ''}" data-has-mapping="${mapping ? '1' : '0'}">
           <div class="order-head">
             <div>
-              <div class="order-id">${it.title || ('Item #' + it.id)}</div>
+              <div class="order-id">${it.title || ('Item #' + it.id)}${it.active === false ? ' <span class="badge rejected" title="No se muestra en la tienda hasta activarlo en Paquetes">INACTIVO</span>' : ''}</div>
               <div class="order-meta">
                 <span>ID ${it.id}</span>
                 <span>USD ${Number(it.price || 0).toFixed(2)}</span>
@@ -4921,6 +4921,7 @@ if (btnSaveHero) {
           const noDiscountEl = row.querySelector('.it-no-discount');
           const iconEl = row.querySelector('.it-icon');
           const subcatBEl = row.querySelector('.it-subcat-b');
+          const activeEl = row.querySelector('.it-active');
           itemsPayload.push({
             id: parseInt(itemId, 10),
             title: titleEl ? titleEl.value.trim() : '',
@@ -4930,7 +4931,8 @@ if (btnSaveHero) {
             sticker: specialEl && specialEl.checked ? 'special' : '',
             no_discount: noDiscountEl ? !!noDiscountEl.checked : false,
             is_subcat_b: subcatBEl ? !!subcatBEl.checked : false,
-            icon_path: iconEl ? iconEl.value.trim() : ''
+            icon_path: iconEl ? iconEl.value.trim() : '',
+            ...(activeEl ? { active: !!activeEl.checked } : {})
           });
         });
         try {
@@ -5063,6 +5065,9 @@ if (btnSaveHero) {
           <input class="it-points" type="number" step="1" min="0" value="${Number(it.points_reward || 0)}" placeholder="0" title="Puntos que gana el comprador con este paquete" />
         </label>
         <div class="pkg-item-extras">
+          <label class="pkg-edit-field" style="flex:0 auto;" title="Si está desmarcado, el paquete no se muestra en la tienda"><span>Activo</span>
+            <input class="it-active" type="checkbox" ${it.active !== false ? 'checked' : ''}/>
+          </label>
           <label class="pkg-edit-field" style="flex:0 auto;"><span>Especial</span>
             <input class="it-special" type="checkbox" ${(it.sticker||'').toLowerCase()==='special' ? 'checked' : ''}/>
           </label>

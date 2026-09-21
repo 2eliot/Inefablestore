@@ -13221,9 +13221,9 @@ def admin_revendedores_mapping_data():
     store_items = []
     mappings_by_item = {}
     if selected_package_id:
+        # Incluye los inactivos: los paquetes importados llegan inactivos y hay que poder mapearlos
         store_items = GamePackageItem.query.filter_by(
             store_package_id=selected_package_id,
-            active=True,
         ).order_by(GamePackageItem.id.asc()).all()
     else:
         # Requiere selección explícita de juego para desplegar ítems.
@@ -13325,6 +13325,7 @@ def admin_revendedores_mapping_data():
             {
                 "id": it.id,
                 "title": it.title,
+                "active": bool(it.active),
                 "price": float(it.price or 0.0),
                 "store_package_id": it.store_package_id,
                 "store_package_name": package_name_by_id.get(int(it.store_package_id), ""),
