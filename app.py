@@ -2476,6 +2476,8 @@ class GamePackageItem(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # Sub-category: False = label_a (e.g. Diamantes), True = label_b (e.g. Tarjetas)
     is_subcat_b = db.Column(db.Boolean, default=False)
+    # Posición del paquete dentro de su juego (menor = primero). Se edita con ↑↓ en el admin.
+    sort_order = db.Column(db.Integer, default=0)
 
 
 class RevendedoresCatalogItem(db.Model):
@@ -7965,6 +7967,9 @@ with app.app_context():
         if "points_reward" not in gp_cols:
             db.session.execute(text("ALTER TABLE game_packages ADD COLUMN points_reward INTEGER DEFAULT 0"))
             db.session.commit()
+        if "sort_order" not in gp_cols:
+            db.session.execute(text("ALTER TABLE game_packages ADD COLUMN sort_order INTEGER DEFAULT 0"))
+            db.session.commit()
     except Exception:
         pass
 
@@ -13082,7 +13087,7 @@ def store_game_items(gid: int):
     items = (
         GamePackageItem.query
         .filter_by(store_package_id=gid, active=True)
-        .order_by(GamePackageItem.created_at.asc())
+        .order_by(GamePackageItem.sort_order.asc(), GamePackageItem.id.asc())
         .all()
     )
     return jsonify({
@@ -13556,12 +13561,14 @@ def admin_revendedores_import_items():
             except (TypeError, ValueError):
                 costo = 0.0
             titulo, subtitulo = _split_remote_package_name(cat.remote_package_name)
+            siguiente_orden = (db.session.query(db.func.max(GamePackageItem.sort_order)).filter_by(store_package_id=gid).scalar() or 0) + 1
             item = GamePackageItem(
                 store_package_id=gid,
                 title=titulo or f'Paquete {cat.remote_package_id}',
                 subtitle=subtitulo,
                 price=costo,
                 active=False,
+                sort_order=siguiente_orden,
             )
             db.session.add(item)
             db.session.flush()
@@ -13592,7 +13599,7 @@ def admin_game_items_list(gid: int):
     game = StorePackage.query.get(gid)
     if not game:
         return jsonify({"ok": False, "error": "Juego no existe"}), 404
-    items = GamePackageItem.query.filter_by(store_package_id=gid).order_by(GamePackageItem.created_at.asc()).all()
+    items = GamePackageItem.query.filter_by(store_package_id=gid).order_by(GamePackageItem.sort_order.asc(), GamePackageItem.id.asc()).all()
     return jsonify({
         "ok": True,
         "items": [
@@ -13754,6 +13761,11 @@ def admin_game_items_bulk_update(gid: int):
                 pass
         if "active" in entry:
             item.active = bool(entry.get("active"))
+        if "sort_order" in entry:
+            try:
+                item.sort_order = int(entry.get("sort_order") or 0)
+            except (TypeError, ValueError):
+                pass
         if "no_discount" in entry:
             item.no_discount = bool(entry.get("no_discount"))
         if "is_subcat_b" in entry:

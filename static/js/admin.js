@@ -4910,6 +4910,7 @@ if (btnSaveHero) {
         // Collect all item rows
         const itemRows = card.querySelectorAll('.pkg-item-row');
         const itemsPayload = [];
+        let posicion = 0;
         itemRows.forEach(row => {
           const itemId = row.getAttribute('data-id');
           if (!itemId) return;
@@ -4932,7 +4933,8 @@ if (btnSaveHero) {
             no_discount: noDiscountEl ? !!noDiscountEl.checked : false,
             is_subcat_b: subcatBEl ? !!subcatBEl.checked : false,
             icon_path: iconEl ? iconEl.value.trim() : '',
-            ...(activeEl ? { active: !!activeEl.checked } : {})
+            ...(activeEl ? { active: !!activeEl.checked } : {}),
+            sort_order: ++posicion
           });
         });
         try {
@@ -5024,6 +5026,28 @@ if (btnSaveHero) {
   }
 
   // Helpers for game items rendering
+  // Mover un paquete arriba/abajo entre las filas de su juego. El orden se guarda con 'Guardar'.
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.btn-item-move');
+    if (!btn) return;
+    const row = btn.closest('.pkg-item-row');
+    if (!row || !row.getAttribute('data-id')) return;
+    const hermano = (el, dir) => {
+      let x = dir === 'up' ? el.previousElementSibling : el.nextElementSibling;
+      while (x && !(x.classList.contains('pkg-item-row') && x.getAttribute('data-id'))) {
+        x = dir === 'up' ? x.previousElementSibling : x.nextElementSibling;
+      }
+      return x;
+    };
+    const dir = btn.getAttribute('data-dir');
+    const destino = hermano(row, dir);
+    if (!destino) return;
+    if (dir === 'up') destino.before(row); else destino.after(row);
+    row.style.outline = '1px solid #10b981';
+    setTimeout(() => { row.style.outline = ''; }, 600);
+    if (typeof toast === 'function') toast('Orden cambiado. Pulsa Guardar para aplicarlo en la tienda.');
+  });
+
   async function loadGameItems(gameContainer, gid) {
     if (!gameContainer || !gid) return;
     const list = gameContainer.querySelector('.items-list');
@@ -5065,6 +5089,12 @@ if (btnSaveHero) {
           <input class="it-points" type="number" step="1" min="0" value="${Number(it.points_reward || 0)}" placeholder="0" title="Puntos que gana el comprador con este paquete" />
         </label>
         <div class="pkg-item-extras">
+          <div class="pkg-edit-field" style="flex:0 auto;"><span>Posición</span>
+            <div style="display:flex;gap:4px;">
+              <button class="btn btn-item-move" type="button" data-dir="up" title="Subir" aria-label="Subir paquete">↑</button>
+              <button class="btn btn-item-move" type="button" data-dir="down" title="Bajar" aria-label="Bajar paquete">↓</button>
+            </div>
+          </div>
           <label class="pkg-edit-field" style="flex:0 auto;" title="Si está desmarcado, el paquete no se muestra en la tienda"><span>Activo</span>
             <input class="it-active" type="checkbox" ${it.active !== false ? 'checked' : ''}/>
           </label>
