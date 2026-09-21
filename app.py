@@ -13521,9 +13521,17 @@ def admin_revendedores_import_items():
     if not catalog:
         return jsonify({'ok': False, 'error': 'Ese juego no tiene paquetes en el catálogo. Pulsa primero Sincronizar catálogo.'}), 404
 
+    # Mapeos huérfanos: el paquete se borró pero el mapeo quedó. No cuentan como 'ya importado'
+    # (si no, nunca se vuelve a crear) y se eliminan.
+    items_vivos = {it.id for it in GamePackageItem.query.filter_by(store_package_id=gid).all()}
+    for m in RevendedoresItemMapping.query.filter_by(store_package_id=gid).all():
+        if m.store_item_id not in items_vivos:
+            db.session.delete(m)
+    db.session.flush()
     ya_mapeados = {
         (int(m.remote_package_id), str(m.remote_label or ''))
         for m in RevendedoresItemMapping.query.filter_by(store_package_id=gid, active=True).all()
+        if m.store_item_id in items_vivos
     }
     ya_mapeados_ids = {rp for rp, _ in ya_mapeados}
     zona_local = _package_effective_requires_zone(gid)
@@ -13695,6 +13703,8 @@ def admin_game_items_delete(item_id: int):
     item = GamePackageItem.query.get(item_id)
     if not item:
         return jsonify({"ok": False, "error": "No existe"}), 404
+    # Sin esto el mapeo queda huérfano y el importador cree que el paquete sigue existiendo
+    RevendedoresItemMapping.query.filter_by(store_item_id=item.id).delete(synchronize_session=False)
     db.session.delete(item)
     db.session.commit()
     return jsonify({"ok": True})
@@ -13903,6 +13913,7 @@ def admin_packages_delete(pid: int):
     item = StorePackage.query.get(pid)
     if not item:
         return jsonify({"ok": False, "error": "No existe"}), 404
+    RevendedoresItemMapping.query.filter_by(store_package_id=pid).delete(synchronize_session=False)
     db.session.delete(item)
     db.session.commit()
     return jsonify({"ok": True})
