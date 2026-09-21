@@ -406,6 +406,103 @@ def _revendedores_verify_name_nick(uid: str) -> str:
     raise RuntimeError(f"verify-name HTTP {resp.status_code}: {(resp.text or '')[:200]}")
 
 
+# ==============================
+# Verificación de ID por Revendedores (por juego, desde el admin)
+# ==============================
+# Config 'rev_verify_games' = JSON {"<id juego tienda>": "freefire|bloodstrike|mobilelegends"}.
+# Tiene prioridad sobre Smile.One y sobre la config legada (active_login_game_id, bs/ml_package_id).
+REV_VERIFY_GAMES = {
+    "freefire": {"label": "Free Fire", "requires_zone": False},
+    "bloodstrike": {"label": "Blood Strike", "requires_zone": False},
+    "mobilelegends": {"label": "Mobile Legends", "requires_zone": True},
+}
+
+
+def _rev_verify_map() -> dict:
+    try:
+        raw = json.loads(get_config_value("rev_verify_games", "") or "{}")
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): v for k, v in raw.items() if v in REV_VERIFY_GAMES}
+
+
+def _rev_verify_game_for(gid) -> str:
+    """Tipo de juego de Revendedores con el que se verifica este juego de la tienda, o \"\"."""
+    try:
+        return _rev_verify_map().get(str(int(gid)), "")
+    except (TypeError, ValueError):
+        return ""
+
+
+def _rev_verify_cache_key(game: str, uid: str, zid: str = "") -> str:
+    if game == "freefire":
+        return f"ffid_verify:{uid}"  # misma caché que el verificador legado de Free Fire
+    key = f"revv_{game}:{uid}"
+    if REV_VERIFY_GAMES[game]["requires_zone"]:
+        key += f":{zid}"
+    return key
+
+
+def _revendedores_verify_name_game(game: str, uid: str, zid: str = "") -> str:
+    """POST /api/v1/verify-name de Revendedores (multi-juego). Misma semántica que
+    _revendedores_verify_name_nick: \"\" si el ID no existe, excepción si el servicio falla."""
+    base_url = (os.environ.get("REVENDEDORES_BASE_URL") or os.environ.get("WEBB_URL") or "").strip().rstrip("/")
+    api_key = (os.environ.get("REVENDEDORES_API_KEY") or os.environ.get("WEBB_API_KEY") or "").strip()
+    if not base_url or not api_key:
+        raise RuntimeError("REVENDEDORES_BASE_URL/REVENDEDORES_API_KEY no configurados")
+    body = {"game": game, "player_id": str(uid).strip()}
+    if zid:
+        body["player_id2"] = str(zid).strip()
+    resp = _requests_lib.post(
+        f"{base_url}/api/v1/verify-name",
+        json=body,
+        headers={"X-API-Key": api_key, "Content-Type": "application/json"},
+        timeout=(5, _VERIFY_NAME_TIMEOUT_S),
+    )
+    if resp.status_code == 404:
+        return ""
+    if resp.status_code == 200:
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {}
+        return str(data.get("player_name") or "").strip() if data.get("ok") else ""
+    raise RuntimeError(f"verify-name HTTP {resp.status_code}: {(resp.text or '')[:200]}")
+
+
+def _rev_verify_lookup(game: str, uid: str, zid: str = ""):
+    """Devuelve (payload, status) con la forma de /store/verify-player."""
+    uid = (uid or "").strip()
+    zid = (zid or "").strip()
+    needs_zone = REV_VERIFY_GAMES[game]["requires_zone"]
+    if not uid or not uid.isdigit():
+        return {"ok": False, "error": "ID invalido"}, 400
+    if needs_zone and (not zid or not zid.isdigit()):
+        return {"ok": False, "error": "Zona ID requerida", "requires_zone": True}, 422
+    if not needs_zone:
+        zid = ""
+    cache_key = _rev_verify_cache_key(game, uid, zid)
+    extra = {"zid": zid} if needs_zone else {}
+    cached = _player_cache_get(cache_key)
+    if cached:
+        return {"ok": True, "uid": uid, "nick": cached, "cached": True, **extra}, 200
+    try:
+        nick = _player_lookup_singleflight(
+            cache_key,
+            lambda: _revendedores_verify_name_game(game, uid, zid),
+            wait_timeout=_VERIFY_NAME_TIMEOUT_S + 10,
+        )
+    except Exception:
+        return {"ok": False, "error": "No se pudo verificar el ID"}, 502
+    if not nick:
+        _player_cache_set(cache_key, nick, ttl_seconds=45)
+        return {"ok": False, "error": "ID no encontrado"}, 404
+    _player_cache_set(cache_key, nick, ttl_seconds=600)
+    return {"ok": True, "uid": uid, "nick": nick, "cached": False, **extra}, 200
+
+
 def _smileone_is_valid_username(value: str) -> bool:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     if not text:
@@ -682,6 +779,15 @@ def _server_verify_player(gid, uid: str, zid: str = ""):
     bs_id = (get_config_value("bs_package_id", "") or "").strip()
     ff_id = (get_config_value("active_login_game_id", "") or "").strip()
 
+    rev_game = _rev_verify_game_for(gid_str)
+    if rev_game:
+        payload, status = _rev_verify_lookup(rev_game, uid, zid)
+        if status == 200:
+            return "ok", payload.get("nick", "")
+        if status in (400, 404, 422):
+            return "not_found", ""
+        return "error", ""
+
     # Mismo orden que static/js/details.js: Smile.One > Mobile Legends > Blood Strike > Free Fire
     if so_conn:
         cache_key = f"so_{so_conn.id}:{uid}" + (f":{zid}" if so_conn.requires_zone else "")
@@ -938,6 +1044,11 @@ def _resolve_player_nick(gid_raw, uid, zid=""):
     except ValueError:
         return {"ok": False, "error": "Juego invalido"}, 400
 
+    # 0) Verificación por Revendedores configurada en el admin (pestaña Verificación ID)
+    rev_game = _rev_verify_game_for(gid)
+    if rev_game:
+        return _rev_verify_lookup(rev_game, uid, zid)
+
     # 1) Dynamic SmileOne connections (most flexible — check first)
     so_conn = SmileOneConnection.query.filter_by(store_package_id=gid, active=True).first()
     if so_conn:
@@ -1047,6 +1158,11 @@ def store_player_verify_smileone():
     if not gid_raw or not gid_raw.isdigit():
         return jsonify({"ok": False, "error": "Juego inválido"}), 400
 
+    rev_game = _rev_verify_game_for(gid_raw)
+    if rev_game:
+        payload, status = _rev_verify_lookup(rev_game, uid, zid)
+        return jsonify(payload), status
+
     conn = SmileOneConnection.query.filter_by(
         store_package_id=int(gid_raw), active=True
     ).first()
@@ -1087,6 +1203,11 @@ def store_player_verify():
         return jsonify({"ok": False, "error": "ID inválido"}), 400
     if not gid_raw or not gid_raw.isdigit():
         return jsonify({"ok": False, "error": "Juego inválido"}), 400
+
+    rev_game = _rev_verify_game_for(gid_raw)
+    if rev_game:
+        payload, status = _rev_verify_lookup(rev_game, uid, request.args.get("zid") or "")
+        return jsonify(payload), status
 
     active_login_game_id = (get_config_value("active_login_game_id", "") or "").strip()
     if not active_login_game_id or active_login_game_id != gid_raw:
@@ -3362,6 +3483,9 @@ def _package_effective_requires_zone(store_package_id) -> bool:
             return True
     except Exception:
         pass
+    rev_game = _rev_verify_game_for(package_id)
+    if rev_game:
+        return REV_VERIFY_GAMES[rev_game]["requires_zone"]
     try:
         ml_package_id = (get_config_value("ml_package_id", "") or "").strip()
         if ml_package_id and str(package_id) == ml_package_id:
@@ -10269,6 +10393,82 @@ def admin_config_ml_smile_pid_set():
 
 
 # ==============================
+# Admin: Verificación de ID por Revendedores
+# ==============================
+def _rev_verify_admin_payload():
+    rev_map = _rev_verify_map()
+    nombres = {str(p.id): p.name for p in StorePackage.query.filter(StorePackage.id.in_([int(k) for k in rev_map if k.isdigit()] or [0])).all()}
+    return {
+        "ok": True,
+        "types": [{"key": k, "label": v["label"], "requires_zone": v["requires_zone"]} for k, v in REV_VERIFY_GAMES.items()],
+        "games": [
+            {
+                "store_package_id": int(k),
+                "name": nombres.get(k, f"Juego #{k} (borrado)"),
+                "game": v,
+                "game_label": REV_VERIFY_GAMES[v]["label"],
+                "requires_zone": REV_VERIFY_GAMES[v]["requires_zone"],
+            }
+            for k, v in sorted(rev_map.items(), key=lambda kv: nombres.get(kv[0], "").lower()) if k.isdigit()
+        ],
+        "configured": bool((os.environ.get("REVENDEDORES_BASE_URL") or os.environ.get("WEBB_URL")) and (os.environ.get("REVENDEDORES_API_KEY") or os.environ.get("WEBB_API_KEY"))),
+    }
+
+
+@app.route("/admin/rev-verify", methods=["GET"])
+def admin_rev_verify_list():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify(_rev_verify_admin_payload())
+
+
+@app.route("/admin/rev-verify", methods=["POST"])
+def admin_rev_verify_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    game = str(data.get("game") or "").strip()
+    try:
+        gid = int(data.get("store_package_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Elige un juego"}), 400
+    if game not in REV_VERIFY_GAMES:
+        return jsonify({"ok": False, "error": "Tipo de juego inválido"}), 400
+    if not StorePackage.query.get(gid):
+        return jsonify({"ok": False, "error": "El juego no existe"}), 404
+    rev_map = _rev_verify_map()
+    rev_map[str(gid)] = game
+    set_config_value("rev_verify_games", json.dumps(rev_map))
+    return jsonify(_rev_verify_admin_payload())
+
+
+@app.route("/admin/rev-verify/<int:gid>", methods=["DELETE"])
+def admin_rev_verify_delete(gid: int):
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    rev_map = _rev_verify_map()
+    rev_map.pop(str(gid), None)
+    set_config_value("rev_verify_games", json.dumps(rev_map))
+    return jsonify(_rev_verify_admin_payload())
+
+
+@app.route("/admin/rev-verify/test", methods=["POST"])
+def admin_rev_verify_test():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+    game = str(data.get("game") or "").strip()
+    if game not in REV_VERIFY_GAMES:
+        return jsonify({"ok": False, "error": "Tipo de juego inválido"}), 400
+    payload, status = _rev_verify_lookup(game, str(data.get("uid") or ""), str(data.get("zid") or ""))
+    return jsonify(payload), status
+
+
+# ==============================
 # Admin: Smile.One Connections CRUD
 # ==============================
 @app.route("/admin/smileone/connections", methods=["GET"])
@@ -10953,6 +11153,12 @@ def store_game_detail(gid: int):
     try:
         so_conns = SmileOneConnection.query.filter_by(active=True).all()
         so_connections = [{"store_package_id": c.store_package_id, "requires_zone": bool(c.requires_zone)} for c in so_conns]
+        rev_map = _rev_verify_map()
+        so_connections = [c for c in so_connections if str(c["store_package_id"]) not in rev_map]
+        so_connections += [
+            {"store_package_id": int(k), "requires_zone": REV_VERIFY_GAMES[v]["requires_zone"]}
+            for k, v in rev_map.items() if str(k).isdigit()
+        ]
         so_connections_json = json.dumps(so_connections)
     except Exception:
         pass
@@ -13066,6 +13272,8 @@ def admin_minigames_winners_get():
 
 def _package_has_verification(gid: int) -> bool:
     """Return True if the package has a configured ID verification scraper."""
+    if _rev_verify_game_for(gid):
+        return True
     # Dynamic SmileOne connections
     if SmileOneConnection.query.filter_by(store_package_id=gid, active=True).first():
         return True

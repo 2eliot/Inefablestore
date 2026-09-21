@@ -1858,6 +1858,7 @@ window.fetchPayments = fetchPayments;
     if (target === '#tab-gift-codes') { fetchGiftCodes(); }
     if (target === '#tab-stats') { fetchStatsPackages(); fetchGlobalStatsSummary(); }
     if (target === '#tab-smileone') { fetchSmileOneConnections(); }
+    if (target === '#tab-rev-verify') { fetchRevVerify(); }
     if (target === '#tab-blocked') { fetchBlocked(); }
   }
 
@@ -4623,6 +4624,165 @@ if (btnSaveHero) {
   const soList = document.getElementById('so-list');
 
   let _soConnections = [];
+
+  // =====================
+  // Verificación de ID por Revendedores (pestaña propia)
+  // =====================
+  const rvStorePkg = document.getElementById('rv-store-pkg');
+  const rvGame = document.getElementById('rv-game');
+  const rvList = document.getElementById('rv-list');
+  const rvTestGame = document.getElementById('rv-test-game');
+  const rvTestUid = document.getElementById('rv-test-uid');
+  const rvTestZid = document.getElementById('rv-test-zid');
+  const rvTestResult = document.getElementById('rv-test-result');
+  let _rvTypes = [];
+
+  const rvEsc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // Sugiere el tipo según el nombre del juego (se puede cambiar a mano)
+  function rvGuessType(name) {
+    const n = String(name || '').toLowerCase();
+    if (/blood/.test(n)) return 'bloodstrike';
+    if (/mobile|legends|\bml\b|mlbb/.test(n)) return 'mobilelegends';
+    if (/free\s*fire|\bff\b/.test(n)) return 'freefire';
+    return '';
+  }
+
+  function rvFillTypes(sel) {
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = _rvTypes.map(t => `<option value="${rvEsc(t.key)}">${rvEsc(t.label)}${t.requires_zone ? ' (con Zona ID)' : ''}</option>`).join('');
+    if (prev) sel.value = prev;
+  }
+
+  function renderRevVerify(data) {
+    _rvTypes = data.types || [];
+    rvFillTypes(rvGame);
+    rvFillTypes(rvTestGame);
+    const warn = document.getElementById('rv-warning');
+    if (warn) warn.style.display = data.configured ? 'none' : 'block';
+    if (!rvList) return;
+    const games = data.games || [];
+    if (!games.length) {
+      rvList.innerHTML = '<div class="empty-state"><h3>Ningún juego activo</h3><p>Elige un juego arriba y pulsa Activar.</p></div>';
+      return;
+    }
+    rvList.innerHTML = games.map(g => `
+      <div class="order-item" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div class="order-id">${rvEsc(g.name)} <span class="badge approved">ACTIVA</span></div>
+          <div style="color:#94a3b8;font-size:13px;">Juego #${g.store_package_id} · verifica como ${rvEsc(g.game_label)}${g.requires_zone ? ' (pide Zona ID)' : ''}</div>
+        </div>
+        <button class="btn btn-rv-off" type="button" data-gid="${g.store_package_id}" data-name="${rvEsc(g.name)}">Desactivar</button>
+      </div>`).join('');
+  }
+
+  async function fetchRevVerify() {
+    try {
+      const [rvRes, pkRes] = await Promise.all([fetch('/admin/rev-verify'), fetch('/admin/packages')]);
+      const data = await rvRes.json();
+      const pk = await pkRes.json().catch(() => ({}));
+      if (!rvRes.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar');
+      if (rvStorePkg && pk && pk.ok) {
+        const prev = rvStorePkg.value;
+        rvStorePkg.innerHTML = '<option value="">— Selecciona un juego —</option>' + (pk.packages || [])
+          .map(p => `<option value="${p.id}">${rvEsc(p.name)}${p.active ? '' : ' (inactivo)'}</option>`).join('');
+        if (prev) rvStorePkg.value = prev;
+      }
+      renderRevVerify(data);
+    } catch (e) {
+      if (rvList) rvList.innerHTML = `<div class="empty-state"><p>${rvEsc(e.message || 'Error')}</p></div>`;
+    }
+  }
+
+  if (rvStorePkg) {
+    rvStorePkg.addEventListener('change', () => {
+      const txt = rvStorePkg.options[rvStorePkg.selectedIndex]?.text || '';
+      const guess = rvGuessType(txt);
+      if (guess && rvGame) rvGame.value = guess;
+    });
+  }
+
+  const btnRvActivate = document.getElementById('btn-rv-activate');
+  if (btnRvActivate) {
+    btnRvActivate.addEventListener('click', async () => {
+      const gid = rvStorePkg ? rvStorePkg.value : '';
+      const game = rvGame ? rvGame.value : '';
+      if (!gid) { toast('Elige el juego de la tienda'); return; }
+      if (!game) { toast('Elige el tipo de verificación'); return; }
+      try {
+        btnRvActivate.disabled = true;
+        const res = await fetch('/admin/rev-verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ store_package_id: Number(gid), game }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo activar');
+        renderRevVerify(data);
+        toast('Verificación activada');
+      } catch (e) {
+        toast(e.message || 'Error');
+      } finally {
+        btnRvActivate.disabled = false;
+      }
+    });
+  }
+
+  if (rvList) {
+    rvList.addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('.btn-rv-off');
+      if (!btn) return;
+      if (!confirm(`¿Desactivar la verificación de ID en "${btn.dataset.name}"?`)) return;
+      try {
+        btn.disabled = true;
+        const res = await fetch(`/admin/rev-verify/${btn.dataset.gid}`, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo desactivar');
+        renderRevVerify(data);
+        toast('Verificación desactivada');
+      } catch (e) {
+        btn.disabled = false;
+        toast(e.message || 'Error');
+      }
+    });
+  }
+
+  if (rvTestGame && rvTestZid) {
+    rvTestGame.addEventListener('change', () => {
+      const t = _rvTypes.find(x => x.key === rvTestGame.value);
+      rvTestZid.style.display = t && t.requires_zone ? '' : 'none';
+    });
+  }
+
+  const btnRvTest = document.getElementById('btn-rv-test');
+  if (btnRvTest) {
+    btnRvTest.addEventListener('click', async () => {
+      const uid = (rvTestUid ? rvTestUid.value : '').trim();
+      if (!uid) { toast('Escribe un ID'); return; }
+      if (rvTestResult) { rvTestResult.style.color = '#94a3b8'; rvTestResult.textContent = 'Consultando... (la primera vez puede tardar hasta 45 s)'; }
+      try {
+        btnRvTest.disabled = true;
+        const res = await fetch('/admin/rev-verify/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game: rvTestGame ? rvTestGame.value : '', uid, zid: rvTestZid ? rvTestZid.value.trim() : '' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (rvTestResult) {
+          rvTestResult.style.color = data.ok ? '#86efac' : '#fca5a5';
+          rvTestResult.textContent = data.ok ? `✔ ${data.nick}` : `✖ ${data.error || 'Error'}`;
+        }
+      } catch (e) {
+        if (rvTestResult) { rvTestResult.style.color = '#fca5a5'; rvTestResult.textContent = e.message || 'Error'; }
+      } finally {
+        btnRvTest.disabled = false;
+      }
+    });
+  }
+
+  const btnRvRefresh = document.getElementById('btn-rv-refresh');
+  if (btnRvRefresh) btnRvRefresh.addEventListener('click', fetchRevVerify);
 
   async function fetchSmileOneConnections() {
     try {

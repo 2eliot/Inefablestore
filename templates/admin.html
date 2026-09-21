@@ -210,6 +210,7 @@
       <button class="tab" data-target="#tab-images" aria-selected="false">Imágenes</button>
       <button class="tab" data-target="#tab-config" aria-selected="false">Configuración</button>
       <button class="tab" data-target="#tab-smileone" aria-selected="false">Smile.One</button>
+      <button class="tab" data-target="#tab-rev-verify" aria-selected="false">Verificación ID</button>
       <button class="tab" data-target="#tab-affiliates" aria-selected="false">Afiliados</button>
       <button class="tab" data-target="#tab-users" aria-selected="false">Usuarios</button>
       <button class="tab" data-target="#tab-blocked" aria-selected="false">IDs Bloqueados</button>
@@ -1296,6 +1297,48 @@
           <div class="empty-state">
             <h3>Sin conexiones</h3>
             <p>Agrega conexiones a Smile.One para verificar IDs de jugadores automáticamente.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Verificación de ID por Revendedores -->
+    <div id="tab-rev-verify" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-header">
+        <h2>Verificación de ID – Revendedores</h2>
+        <div class="actions">
+          <button id="btn-rv-refresh" class="btn" type="button">Refrescar</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div id="rv-warning" style="display:none;border:1px solid rgba(239,68,68,0.35);background:rgba(239,68,68,0.08);border-radius:10px;padding:12px;margin-bottom:16px;color:#fca5a5;">Falta REVENDEDORES_BASE_URL / REVENDEDORES_API_KEY en el .env del servidor: la verificación no podrá consultar.</div>
+        <div style="border:1px solid rgba(34,197,94,0.25); background:rgba(34,197,94,0.06); border-radius:10px; padding:16px; margin-bottom:20px;">
+          <h3 style="margin:0 0 6px; color:#86efac;">Activar verificación en un juego</h3>
+          <p style="margin:0 0 12px;color:#94a3b8;font-size:13px;">El cliente verá su nombre de jugador antes de pagar y no podrá comprar con un ID inexistente. Tiene prioridad sobre Smile.One y la configuración anterior.</p>
+          <form class="config-form" onsubmit="return false;">
+            <div class="form-row">
+              <label for="rv-store-pkg">Juego de la tienda</label>
+              <select id="rv-store-pkg" class="input"><option value="">— Selecciona un juego —</option></select>
+            </div>
+            <div class="form-row">
+              <label for="rv-game">Verificar como</label>
+              <select id="rv-game" class="input"></select>
+            </div>
+            <div class="form-row">
+              <label>&nbsp;</label>
+              <div><button id="btn-rv-activate" class="btn primary" type="button">Activar</button></div>
+            </div>
+          </form>
+        </div>
+        <div id="rv-list" class="orders-list"></div>
+        <div style="border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;margin-top:20px;">
+          <h3 style="margin:0 0 12px;">Probar un ID</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select id="rv-test-game" class="input" style="max-width:200px;"></select>
+            <input id="rv-test-uid" class="input" type="text" inputmode="numeric" placeholder="ID del jugador" style="max-width:200px;">
+            <input id="rv-test-zid" class="input" type="text" inputmode="numeric" placeholder="Zona ID" style="max-width:120px;display:none;">
+            <button id="btn-rv-test" class="btn" type="button">Probar</button>
+            <span id="rv-test-result" style="color:#94a3b8;"></span>
           </div>
         </div>
       </div>
