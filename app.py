@@ -13469,6 +13469,112 @@ def admin_revendedores_mappings_bulk_save():
     return jsonify({"ok": True, "saved": saved, "disabled": disabled})
 
 
+def _split_remote_package_name(name: str):
+    """Reparte el nombre de un paquete de Revendedores en título y subtítulo equilibrados.
+
+    'Recarga Free Fire Razer - 1060 Diamantes + 106 Bono' -> ('1060 Diamantes', '+106 Bono')
+    '5.600+560 💎'                                         -> ('5.600 💎', '+560 Bono')
+    '100 Gold + 5 Bonus'                                   -> ('100 Gold', '+5 Bonus')
+    'Strike Pass Elite'                                    -> ('Strike Pass Elite', '')
+    """
+    import re as _re
+    text = ' '.join(_re.sub(r'<[^>]+>', ' ', str(name or '')).split())
+    if ' - ' in text:
+        # 'Juego Proveedor - 1060 Diamantes...': el prefijo repite el juego, sobra en la tienda
+        text = text.split(' - ')[-1].strip()
+    if '+' not in text:
+        return text[:200], ''
+    head, tail = text.split('+', 1)
+    head, tail = head.strip(), tail.strip()
+    if not head or not tail:
+        return text[:200], ''
+    # Emoji o unidad al final ('560 💎'): pasa al título, que es la cantidad principal
+    m = _re.match(r'^([\d.,\s]+)(.*)$', tail)
+    unit = (m.group(2).strip() if m else '')
+    if m and unit and not _re.search(r'[A-Za-zÁÉÍÓÚáéíóúñÑ]', unit):
+        return f'{head} {unit}'.strip()[:200], f'+{m.group(1).strip()} Bono'[:200]
+    return head[:200], f'+{tail}'[:200]
+
+
+@app.route("/admin/revendedores/import-items", methods=["POST"])
+def admin_revendedores_import_items():
+    """Crea en un juego de la tienda los paquetes de un juego de Revendedores, ya mapeados.
+
+    Cada paquete nuevo queda INACTIVO con el costo de Revendedores como precio de referencia:
+    el admin pone su precio de venta y lo activa. Los que ya estaban mapeados se saltan.
+    """
+    user = session.get('user')
+    if not user or user.get('role') != 'admin':
+        return jsonify({'ok': False, 'error': 'No autorizado'}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        gid = int(data.get('store_package_id') or 0)
+        remote_product_id = int(data.get('remote_product_id'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'Elige el juego de la tienda y el juego de Revendedores'}), 400
+    pkg = StorePackage.query.get(gid)
+    if not pkg:
+        return jsonify({'ok': False, 'error': 'Juego de la tienda no encontrado'}), 404
+
+    catalog = RevendedoresCatalogItem.query.filter_by(remote_product_id=remote_product_id, active=True) \
+        .order_by(RevendedoresCatalogItem.remote_package_id).all()
+    if not catalog:
+        return jsonify({'ok': False, 'error': 'Ese juego no tiene paquetes en el catálogo. Pulsa primero Sincronizar catálogo.'}), 404
+
+    ya_mapeados = {
+        (int(m.remote_package_id), str(m.remote_label or ''))
+        for m in RevendedoresItemMapping.query.filter_by(store_package_id=gid, active=True).all()
+    }
+    ya_mapeados_ids = {rp for rp, _ in ya_mapeados}
+    zona_local = _package_effective_requires_zone(gid)
+    creados, saltados, incompatibles = 0, 0, 0
+    try:
+        for cat in catalog:
+            remote_label = f"{(cat.remote_product_name or '').strip()} · {(cat.remote_package_name or '').strip()}".strip(' ·')
+            if int(cat.remote_package_id) in ya_mapeados_ids and any(lbl == remote_label for rp, lbl in ya_mapeados if rp == int(cat.remote_package_id)):
+                saltados += 1
+                continue
+            try:
+                meta = json.loads(cat.raw_json or '{}')
+                meta = meta if isinstance(meta, dict) else {}
+            except Exception:
+                meta = {}
+            if _revendedores_catalog_requires_player_id2(meta) and not zona_local:
+                incompatibles += 1
+                continue
+            try:
+                costo = round(float(meta.get('price') or 0), 2)
+            except (TypeError, ValueError):
+                costo = 0.0
+            titulo, subtitulo = _split_remote_package_name(cat.remote_package_name)
+            item = GamePackageItem(
+                store_package_id=gid,
+                title=titulo or f'Paquete {cat.remote_package_id}',
+                subtitle=subtitulo,
+                price=costo,
+                active=False,
+            )
+            db.session.add(item)
+            db.session.flush()
+            db.session.add(RevendedoresItemMapping(
+                store_package_id=gid,
+                store_item_id=item.id,
+                remote_product_id=_revendedores_effective_product_id(cat.remote_product_id, meta, cat.remote_product_name or ''),
+                remote_package_id=cat.remote_package_id,
+                remote_label=remote_label,
+                auto_enabled=True,
+                direct_to_script=False,
+                direct_to_pin=bool(getattr(pkg, 'direct_to_pin', False)),
+                active=True,
+            ))
+            creados += 1
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': f'No se pudo importar: {exc}'}), 500
+    return jsonify({'ok': True, 'created': creados, 'skipped': saltados, 'incompatible': incompatibles})
+
+
 @app.route("/admin/package/<int:gid>/items", methods=["GET"])
 def admin_game_items_list(gid: int):
     user = session.get("user")

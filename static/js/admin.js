@@ -892,6 +892,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnRevSync = document.getElementById('btn-rev-sync');
   const btnRevRefresh = document.getElementById('btn-rev-refresh');
   const btnRevSave = document.getElementById('btn-rev-save');
+  const btnRevImport = document.getElementById('btn-rev-import');
+  const revImportProduct = document.getElementById('rev-import-product');
   const revStorePackage = document.getElementById('rev-store-package');
   const revMapList = document.getElementById('rev-map-list');
   let revMappingData = null;
@@ -974,7 +976,29 @@ document.addEventListener('DOMContentLoaded', () => {
     renderRevCatalogMappingInfo(row, catalogSelect ? catalogSelect.value : '');
   }
 
+  function fillRevImportProducts() {
+    if (!revImportProduct || !revMappingData) return;
+    const previo = revImportProduct.value;
+    const juegos = new Map();
+    (Array.isArray(revMappingData.remote_catalog) ? revMappingData.remote_catalog : []).forEach((rc) => {
+      if (rc.remote_product_id == null) return;
+      const key = String(rc.remote_product_id);
+      const actual = juegos.get(key) || { name: (rc.remote_product_name || '').trim() || `Juego ${key}`, count: 0 };
+      actual.count += 1;
+      juegos.set(key, actual);
+    });
+    revImportProduct.innerHTML = '<option value="">— Juego de Revendedores —</option>';
+    [...juegos.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name)).forEach(([id, g]) => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = `${g.name} (${g.count} paquetes)`;
+      revImportProduct.appendChild(opt);
+    });
+    if (previo && juegos.has(previo)) revImportProduct.value = previo;
+  }
+
   function renderRevMapping() {
+    fillRevImportProducts();
     if (!revMapList || !revStorePackage || !revMappingData) return;
     const pkgs = Array.isArray(revMappingData.store_packages) ? revMappingData.store_packages : [];
     const items = Array.isArray(revMappingData.store_items) ? revMappingData.store_items : [];
@@ -1979,6 +2003,35 @@ window.fetchPayments = fetchPayments;
         toast(e.message || 'Error al sincronizar');
       } finally {
         btnRevSync.disabled = false;
+      }
+    });
+  }
+
+  if (btnRevImport) {
+    btnRevImport.addEventListener('click', async () => {
+      const gid = revStorePackage ? revStorePackage.value : '';
+      const remote = revImportProduct ? revImportProduct.value : '';
+      if (!gid) { toast('Primero elige el juego de InefableStore'); return; }
+      if (!remote) { toast('Elige el juego de Revendedores a importar'); return; }
+      const destino = revStorePackage.options[revStorePackage.selectedIndex]?.text || 'el juego';
+      const origen = revImportProduct.options[revImportProduct.selectedIndex]?.text || 'Revendedores';
+      if (!confirm(`¿Importar a "${destino}" los paquetes de ${origen} que aún no tiene?`)) return;
+      try {
+        btnRevImport.disabled = true;
+        const res = await fetch('/admin/revendedores/import-items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ store_package_id: gid, remote_product_id: remote }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo importar');
+        const extra = data.incompatible ? `, ${data.incompatible} omitido(s): piden Zona ID y este juego no` : '';
+        toast(`Importados ${data.created || 0} paquete(s), ${data.skipped || 0} ya estaban${extra}. Llegan inactivos: pon el precio de venta y actívalos.`);
+        await fetchRevMappingData(gid);
+      } catch (e) {
+        toast(e.message || 'Error al importar');
+      } finally {
+        btnRevImport.disabled = false;
       }
     });
   }

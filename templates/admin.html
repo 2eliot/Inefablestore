@@ -461,6 +461,16 @@
               <option value="">— Selecciona un juego —</option>
             </select>
           </div>
+          <div class="form-row">
+            <label for="rev-import-product">Importar paquetes de Revendedores</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <select id="rev-import-product" class="input" style="max-width:320px;">
+                <option value="">— Juego de Revendedores —</option>
+              </select>
+              <button id="btn-rev-import" class="btn" type="button">Importar paquetes</button>
+            </div>
+            <small style="display:block;color:#94a3b8;margin-top:4px;">Crea en el juego elegido arriba los paquetes que falten, ya mapeados. Llegan <strong>inactivos</strong> con el costo de Revendedores como precio: pon tu precio de venta y actívalos.</small>
+          </div>
         </form>
         <div id="rev-map-list" class="orders-list">
           <div class="empty-state">
