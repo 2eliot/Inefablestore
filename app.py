@@ -653,6 +653,79 @@ def _scrape_smileone_mobilelegends_nick(role_id: str, zone_id: str) -> str:
         return ""
 
 
+# ==============================
+# Verificación de ID obligatoria en el servidor
+# ==============================
+def _server_verify_player(gid, uid: str, zid: str = ""):
+    """Decide si el juego exige verificar el ID y lo confirma en el servidor.
+
+    Devuelve (estado, nick). estado: "skip" (el juego no tiene verificador), "ok",
+    "not_found" (el proveedor dice que el ID no existe) o "error" (no se pudo consultar).
+    Usa los mismos verificadores y la misma caché que /store/player/verify*, así que si
+    el cliente ya vio su nombre en pantalla, aquí no se vuelve a consultar al proveedor.
+    """
+    if (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() != "true"):
+        return "skip", ""
+    try:
+        gid_str = str(int(gid))
+    except (TypeError, ValueError):
+        return "skip", ""
+    uid = (uid or "").strip()
+    zid = (zid or "").strip()
+
+    so_conn = None
+    try:
+        so_conn = SmileOneConnection.query.filter_by(store_package_id=int(gid_str), active=True).first()
+    except Exception:
+        so_conn = None
+    ml_id = (get_config_value("ml_package_id", "") or "").strip()
+    bs_id = (get_config_value("bs_package_id", "") or "").strip()
+    ff_id = (get_config_value("active_login_game_id", "") or "").strip()
+
+    # Mismo orden que static/js/details.js: Smile.One > Mobile Legends > Blood Strike > Free Fire
+    if so_conn:
+        cache_key = f"so_{so_conn.id}:{uid}" + (f":{zid}" if so_conn.requires_zone else "")
+        loader = lambda: _scrape_smileone_generic(so_conn, uid, zid)
+    elif ml_id and ml_id == gid_str:
+        cache_key = f"ml_smileone:{uid}:{zid}"
+        loader = lambda: _scrape_smileone_mobilelegends_nick(uid, zid)
+    elif bs_id and bs_id == gid_str:
+        cache_key = f"bs_smileone:{uid}"
+        loader = lambda: _scrape_smileone_bloodstrike_nick(uid)
+    elif ff_id and ff_id == gid_str:
+        cache_key = f"ffid_verify:{uid}"
+        loader = lambda: _player_lookup_singleflight(
+            f"ffid_verify:{uid}",
+            lambda: _revendedores_verify_name_nick(uid),
+            wait_timeout=_VERIFY_NAME_TIMEOUT_S + 10,
+        )
+    else:
+        return "skip", ""
+
+    if not uid or not uid.isdigit():
+        return "not_found", ""
+    cached = _player_cache_get(cache_key)
+    if cached:
+        return "ok", cached
+    try:
+        nick = loader()
+    except Exception:
+        return "error", ""
+    if not nick:
+        return "not_found", ""
+    _player_cache_set(cache_key, nick, ttl_seconds=600)
+    return "ok", nick
+
+
+def _verified_player_error(estado: str):
+    """Respuesta al cliente cuando la verificación obligatoria no pasa (o None si pasa)."""
+    if estado == "not_found":
+        return jsonify({"ok": False, "error": "No encontramos ese ID de jugador. Revísalo: solo se puede recargar a un ID verificado."}), 400
+    if estado == "error":
+        return jsonify({"ok": False, "error": "No pudimos verificar tu ID en este momento. Intenta de nuevo en unos segundos."}), 503
+    return None
+
+
 @app.route("/store/player/verify/bloodstrike")
 def store_player_verify_bloodstrike():
     scrape_enabled = (os.environ.get("SCRAPE_ENABLED", "true").strip().lower() == "true")
@@ -7038,6 +7111,14 @@ def store_gift_redeem():
 
     if _package_effective_requires_zone(gift.store_package_id) and not zone_id:
         return jsonify({"ok": False, "error": "La Zona ID es requerida para este juego."}), 400
+    # El premio también es una recarga: exige el mismo ID verificado que el checkout.
+    _ver_estado, _ver_nick = _server_verify_player(gift.store_package_id, player_id, zone_id)
+    _ver_error = _verified_player_error(_ver_estado)
+    if _ver_error:
+        return _ver_error
+    if _ver_estado == "ok":
+        nickname = _ver_nick
+
 
     # Misma lista negra que el checkout público.
     try:
@@ -7308,6 +7389,12 @@ def store_ruleta_spin():
         return jsonify({"ok": False, "error": "La Zona ID debe ser numérica"}), 400
     if any(p.get("requires_zone") for p in prizes) and not zone_id:
         return jsonify({"ok": False, "error": "La Zona ID es requerida para participar"}), 400
+    # Verificar antes de cobrar los puntos: el premio se entrega a este ID.
+    _ver_estado, _ver_nick = _server_verify_player(cfg.get("gid"), player_id, zone_id)
+    _ver_error = _verified_player_error(_ver_estado)
+    if _ver_error:
+        return _ver_error
+
 
     # Misma lista negra que el checkout público
     try:
@@ -8630,6 +8717,10 @@ def mini_redeem_credit():
             return jsonify({"ok": False, "error": "La Zona ID es requerida para este juego"}), 400
         if not email or "@" not in email:
             return jsonify({"ok": False, "error": "Correo inválido"}), 400
+        _ver_estado, _ver_nick = _server_verify_player(gid, customer_id, customer_zone)
+        _ver_error = _verified_player_error(_ver_estado)
+        if _ver_error:
+            return _ver_error
         # Misma lista negra que el checkout publico
         try:
             blk = BlockedCustomer.query.filter(
@@ -11564,6 +11655,17 @@ def create_order():
             so_conn = None
         if so_conn and bool(getattr(so_conn, "requires_zone", False)) and not customer_zone:
             return jsonify({"ok": False, "error": "La Zona ID es requerida para este juego"}), 400
+
+        # ID obligatorio y verificado en los juegos que tienen verificador: el nick que manda
+        # el navegador (nn) no se usa como prueba, se confirma aquí.
+        _ver_estado, _ver_nick = _server_verify_player(gid, customer_id, customer_zone)
+        if _ver_estado != "skip":
+            if not customer_id:
+                return jsonify({"ok": False, "error": "Escribe tu ID de jugador"}), 400
+            _ver_error = _verified_player_error(_ver_estado)
+            if _ver_error:
+                return _ver_error
+            verified_nick = _ver_nick
 
         # Blocklist check for player IDs
         try:
