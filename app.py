@@ -1,4 +1,5 @@
 import os
+import mimetypes
 import json
 import re
 import time
@@ -10798,8 +10799,14 @@ def _extract_capture_reference(relative_path: str):
     uploaded_file = None
     try:
         _genai_model()
-        uploaded_file = genai.upload_file(path=capture_path)
-        model, response = _genai_extract_reference_with_retries(uploaded_file)
+        # La imagen va dentro de la misma petición (inline). genai.upload_file usa el endpoint
+        # de discovery de Google, que rechaza las llaves nuevas "AQ." con API_KEY_INVALID
+        # aunque generate_content sí las acepta.
+        with open(capture_path, "rb") as fh:
+            image_bytes = fh.read()
+        mime_type = mimetypes.guess_type(capture_path)[0] or "image/jpeg"
+        image_part = {"mime_type": mime_type, "data": image_bytes}
+        model, response = _genai_extract_reference_with_retries(image_part)
         if model is not None:
             _GENAI_MODEL = model
             _GENAI_MODEL_READY = True
