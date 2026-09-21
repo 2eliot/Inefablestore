@@ -213,11 +213,11 @@
         #packages-container{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
         .st-pack{cursor:pointer;border-radius:10px;padding:7px 14px;display:flex;align-items:center;justify-content:center;gap:10px;background:#10160f;border:1px solid #212a24;transition:border-color .2s,background .2s;min-width:0}
         .st-pack.on{background:#0f2416;border-color:#3ee07f}
-        .st-pack-col{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0}
-        .st-pack-amount{font-family:'Outfit';font-size:26px;line-height:1;font-weight:700;color:#f4f3ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-        .st-pack-badge{font-size:10px;color:#6e6e6e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+        .st-pack-col{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+        .st-pack-amount{font-family:'Outfit';font-size:24px;line-height:1;font-weight:700;color:#f4f3ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+        .st-pack-badge{font-family:'Outfit';font-size:14px;font-weight:600;line-height:1.1;color:#a3a3a3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
         .st-pack.on .st-pack-badge{color:#3ee07f}
-        .st-pack-pts{font-size:9px;color:#facc15;letter-spacing:.04em;white-space:nowrap}
+        .st-pack-pts{font-size:11px;font-weight:600;color:#facc15;letter-spacing:.04em;white-space:nowrap}
         .st-pack-gem{width:32px;height:32px;flex:none;background:repeating-linear-gradient(135deg,#1e2621 0 4px,#161c17 4px 8px);clip-path:polygon(50% 0,100% 38%,50% 100%,0 38%);opacity:.7}
         .st-pack.on .st-pack-gem{opacity:1}
         .st-pack-icon{width:32px;height:32px;flex:none;object-fit:contain}
@@ -1284,10 +1284,12 @@
                 amount.innerText = item.title;
                 col.appendChild(amount);
                 const extra = item.sticker || item.subtitle || '';
+                // Un subtítulo que es solo un número es el bono: se muestra como '+10'
+                const extraText = (!item.sticker && /^\d[\d.,]*$/.test(String(extra).trim())) ? '+' + String(extra).trim() : extra;
                 if (extra) {
                     const badge = document.createElement('div');
                     badge.className = 'st-pack-badge';
-                    badge.innerText = extra;
+                    badge.innerText = extraText;
                     col.appendChild(badge);
                 }
                 // Puntos que gana el comprador con este paquete (editable en el admin)
