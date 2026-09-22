@@ -211,14 +211,15 @@
         #discount-status.ok{color:#3ee07f}
         #discount-status.err{color:#ff5d5d}
         #packages-container{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-        .st-pack{cursor:pointer;border-radius:10px;padding:7px 14px;display:flex;align-items:center;justify-content:center;gap:10px;background:#10160f;border:1px solid #212a24;transition:border-color .2s,background .2s;min-width:0}
-        .st-pack.on{background:#0f2416;border-color:#3ee07f}
+        .st-pack{cursor:pointer;border-radius:10px;padding:7px 14px;display:flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(180deg,#16181b 0%,#101113 100%);border:1px solid #24272b;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);transition:border-color .2s,background .2s,box-shadow .2s;min-width:0}
+        .st-pack:hover{border-color:#33373c}
+        .st-pack.on{background:linear-gradient(180deg,#141a17 0%,#0e1110 100%);border-color:#3ee07f;box-shadow:0 0 0 1px rgba(62,224,127,.18),0 0 18px rgba(62,224,127,.10)}
         .st-pack-col{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
         .st-pack-amount{font-family:'Outfit';font-size:24px;line-height:1;font-weight:700;color:#f4f3ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
         .st-pack-badge{font-family:'Outfit';font-size:14px;font-weight:600;line-height:1.1;color:#a3a3a3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
         .st-pack.on .st-pack-badge{color:#3ee07f}
         .st-pack-pts{font-size:11px;font-weight:600;color:#facc15;letter-spacing:.04em;white-space:nowrap}
-        .st-pack-gem{width:32px;height:32px;flex:none;background:repeating-linear-gradient(135deg,#1e2621 0 4px,#161c17 4px 8px);clip-path:polygon(50% 0,100% 38%,50% 100%,0 38%);opacity:.7}
+        .st-pack-gem{width:32px;height:32px;flex:none;background:repeating-linear-gradient(135deg,#23262a 0 4px,#1a1c1f 4px 8px);clip-path:polygon(50% 0,100% 38%,50% 100%,0 38%);opacity:.7}
         .st-pack.on .st-pack-gem{opacity:1}
         .st-pack-icon{width:32px;height:32px;flex:none;object-fit:contain}
         @media (max-width:859px){
@@ -274,7 +275,7 @@
         .st-mob-row{display:flex;align-items:center;gap:12px}
         #mob-badge{width:34px;height:34px;flex:none;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}
         #mob-badge img{width:100%;height:100%;object-fit:contain}
-        #mob-badge .mob-gem{width:22px;height:22px;background:repeating-linear-gradient(135deg,#1e2621 0 4px,#161c17 4px 8px);clip-path:polygon(50% 0,100% 38%,50% 100%,0 38%)}
+        #mob-badge .mob-gem{width:22px;height:22px;background:repeating-linear-gradient(135deg,#23262a 0 4px,#1a1c1f 4px 8px);clip-path:polygon(50% 0,100% 38%,50% 100%,0 38%)}
         .st-mob-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
         .st-mob-line{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
         #mob-item-name{font-size:14px;font-weight:600}
