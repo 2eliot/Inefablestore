@@ -44,6 +44,11 @@ def _get_deploy_version():
     if _DEPLOY_VERSION is not None:
         return _DEPLOY_VERSION
     try:
+        # Deploys sin git (copia de archivos): el deploy escribe el commit en .deploy_version
+        version_file = pathlib.Path(app.root_path) / ".deploy_version"
+        if version_file.exists():
+            _DEPLOY_VERSION = version_file.read_text().strip()[:12] or "0"
+            return _DEPLOY_VERSION
         head = pathlib.Path(app.root_path) / ".git" / "HEAD"
         if head.exists():
             ref = head.read_text().strip()

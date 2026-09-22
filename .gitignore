@@ -27,3 +27,4 @@ Thumbs.db
 
 # Node modules (if any future frontend tooling)
 node_modules/
+.deploy_version
