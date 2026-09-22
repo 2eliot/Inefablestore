@@ -161,6 +161,11 @@ BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET", "").strip()
 BINANCE_PROXY = os.environ.get("BINANCE_PROXY", "").strip()
 BINANCE_REQUEST_TIMEOUT = float(os.environ.get("BINANCE_REQUEST_TIMEOUT_SECONDS", "4"))
 BINANCE_TOTAL_TIMEOUT = float(os.environ.get("BINANCE_TOTAL_TIMEOUT_SECONDS", "8"))
+# ── Binance Pay Merchant (checkout directo) ──
+BINANCE_PAY_API_KEY = os.environ.get("BINANCE_PAY_API_KEY", "").strip()
+BINANCE_PAY_SECRET_KEY = os.environ.get("BINANCE_PAY_SECRET_KEY", "").strip()
+BINANCE_PAY_BASE_URL = (os.environ.get("BINANCE_PAY_BASE_URL", "https://bpay.binanceapi.com") or "https://bpay.binanceapi.com").strip().rstrip("/")
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
 GENAI_API_KEY = (
     os.environ.get("GENAI_API_KEY", "")
     or os.environ.get("GEMINI_API_KEY", "")
@@ -1567,6 +1572,7 @@ _LOCK_ORDER_CLEANUP = 911001
 _LOCK_BINANCE_VERIFY = 911002
 _LOCK_REV_VERIFY = 911003
 _LOCK_PABILO_VERIFY = 911004
+_LOCK_BINANCE_PAY_SYNC = 911005
 _SINGLETON_LOCK_CONNS = {}
 
 
@@ -1911,6 +1917,8 @@ def _binance_order_verification_loop():
                 ).all()
                 for order in pending_orders:
                     try:
+                        if _is_binance_pay_order(order):
+                            continue  # las verifica el hilo de Binance Pay
                         if not _order_has_auto_recharges(order):
                             continue
                         if not order.reference:
@@ -1946,6 +1954,246 @@ def _binance_order_verification_loop():
 
 _binance_thread = threading.Thread(target=_binance_order_verification_loop, daemon=True)
 _binance_thread.start()
+
+
+# ==============================
+# Binance Pay Merchant (checkout directo)
+# ==============================
+# El cliente paga en la pantalla de Binance Pay; Binance nos avisa por webhook y
+# además un hilo consulta el estado de las órdenes pendientes. En ambos casos el
+# pago se confirma consultando la orden a la API (nunca confiando en el webhook).
+
+_BINANCE_PAY_FINAL_FAIL_STATUSES = ("CANCELED", "EXPIRED", "ERROR")
+_BINANCE_PAY_ORDER_TTL_MINUTES = 30
+
+
+def _binance_pay_configured() -> bool:
+    return bool(BINANCE_PAY_API_KEY and BINANCE_PAY_SECRET_KEY)
+
+
+def _binance_pay_enabled() -> bool:
+    return _binance_pay_configured() and get_config_value("binance_pay_enabled", "0") == "1"
+
+
+def _binance_pay_fee_percent() -> float:
+    try:
+        pct = float(get_config_value("binance_pay_fee_percent", "1") or 0)
+    except Exception:
+        pct = 1.0
+    return min(max(pct, 0.0), 20.0)
+
+
+def _normalize_fee_percent(raw_value) -> str:
+    try:
+        pct = float(str(raw_value if raw_value is not None else "1").replace(",", ".").strip() or 0)
+    except Exception:
+        pct = 1.0
+    return str(round(min(max(pct, 0.0), 20.0), 2))
+
+
+def _binance_pay_fee_for(amount_usd: float) -> float:
+    """Comisión que se suma al total, redondeada al centavo (mitad hacia arriba, igual que el checkout)."""
+    fee = Decimal(str(amount_usd or 0)) * Decimal(str(_binance_pay_fee_percent())) / Decimal("100")
+    return float(fee.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _is_binance_pay_order(order_obj) -> bool:
+    if (getattr(order_obj, "method", "") or "").strip().lower() != "binance":
+        return False
+    try:
+        return _pabilo_get_payment_state(order_obj).get("provider") == "binance_pay"
+    except Exception:
+        return False
+
+
+def _binance_pay_request(path: str, payload: dict, timeout: float = 10.0) -> dict:
+    """POST firmado a la API de Binance Pay. Devuelve el JSON o lanza RuntimeError."""
+    body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    timestamp = str(int(time.time() * 1000))
+    nonce = secrets.token_hex(16)  # 32 caracteres
+    to_sign = f"{timestamp}\n{nonce}\n{body}\n"
+    signature = _hmac_module.new(
+        BINANCE_PAY_SECRET_KEY.encode("utf-8"),
+        to_sign.encode("utf-8"),
+        hashlib.sha512,
+    ).hexdigest().upper()
+    headers = {
+        "Content-Type": "application/json",
+        "BinancePay-Timestamp": timestamp,
+        "BinancePay-Nonce": nonce,
+        "BinancePay-Certificate-SN": BINANCE_PAY_API_KEY,
+        "BinancePay-Signature": signature,
+    }
+    proxies = {"https": BINANCE_PROXY, "http": BINANCE_PROXY} if BINANCE_PROXY else None
+    resp = _requests_lib.post(
+        f"{BINANCE_PAY_BASE_URL}{path}",
+        data=body.encode("utf-8"),
+        headers=headers,
+        proxies=proxies,
+        timeout=timeout,
+    )
+    try:
+        data = resp.json()
+    except Exception:
+        raise RuntimeError(f"Binance Pay HTTP {resp.status_code}: {resp.text[:200]}")
+    if str(data.get("status") or "").upper() != "SUCCESS":
+        raise RuntimeError(
+            f"Binance Pay {data.get('code') or resp.status_code}: {data.get('errorMessage') or 'error desconocido'}"
+        )
+    return data.get("data") or {}
+
+
+def _binance_pay_generate_trade_no() -> str:
+    # Solo letras y dígitos (máx 32) — también se usa como referencia de la orden.
+    return "BP" + secrets.token_hex(7).upper()
+
+
+def _binance_pay_create_checkout(order_obj, base_url: str, *, fee: float = 0.0) -> dict:
+    """Crea la orden en Binance Pay y guarda los datos en el estado de pago de la orden."""
+    amount = round(float(order_obj.amount or 0.0), 2)
+    pkg = StorePackage.query.get(order_obj.store_package_id) if order_obj.store_package_id else None
+    entries = _get_order_item_entries(order_obj) or []
+    title = " + ".join(
+        f"{str(e.get('title') or '').strip()}" + (f" x{int(e.get('qty') or 1)}" if int(e.get("qty") or 1) > 1 else "")
+        for e in entries if str(e.get("title") or "").strip()
+    )
+    pkg_name = (pkg.name or "").strip() if pkg else ""
+    description = (f"{pkg_name} - {title}" if pkg_name and title else (title or pkg_name or f"Orden #{order_obj.id}"))[:250]
+    goods_name = (title or pkg_name or f"Orden {order_obj.id}")[:250]
+    thanks_url = f"{base_url}/gracias/{order_obj.id}"
+    payload = {
+        "env": {"terminalType": "WEB"},
+        "merchantTradeNo": order_obj.reference,
+        "orderAmount": amount,
+        "currency": "USDT",
+        "description": description,
+        "goodsDetails": [{
+            "goodsType": "02",
+            "goodsCategory": "Z000",
+            "referenceGoodsId": str(order_obj.item_id or order_obj.store_package_id or order_obj.id),
+            "goodsName": goods_name,
+        }],
+        "returnUrl": thanks_url,
+        "cancelUrl": thanks_url,
+        "webhookUrl": f"{base_url}/webhook-binance-pay",
+        "orderExpireTime": int((time.time() + _BINANCE_PAY_ORDER_TTL_MINUTES * 60) * 1000),
+    }
+    data = _binance_pay_request("/binancepay/openapi/v3/order", payload)
+    checkout_url = str(data.get("universalUrl") or data.get("checkoutUrl") or "")
+    state = _pabilo_get_payment_state(order_obj)
+    _pabilo_set_payment_state(order_obj, {
+        **state,
+        "provider": "binance_pay",
+        "binance_pay_prepay_id": str(data.get("prepayId") or ""),
+        "binance_pay_checkout_url": checkout_url,
+        "binance_pay_amount": amount,
+        "binance_pay_fee": round(float(fee or 0.0), 2),
+        "binance_pay_currency": "USDT",
+        "binance_pay_status": "INITIAL",
+    })
+    db.session.commit()
+    return {"checkout_url": checkout_url, "prepay_id": str(data.get("prepayId") or "")}
+
+
+def _binance_pay_sync_order(order_obj, *, source_label: str = "BinancePay") -> str:
+    """Consulta el estado en Binance Pay y aprueba/rechaza la orden. Devuelve el estado de Binance."""
+    if not _binance_pay_configured() or not _is_binance_pay_order(order_obj):
+        return ""
+    if (order_obj.status or "").lower() != "pending":
+        return ""
+    try:
+        data = _binance_pay_request(
+            "/binancepay/openapi/v2/order/query",
+            {"merchantTradeNo": order_obj.reference},
+            timeout=6.0,
+        )
+    except Exception as exc:
+        print(f"[{source_label}] Error consultando orden #{order_obj.id}: {exc}")
+        return ""
+    bp_status = str(data.get("status") or "").upper()
+    state = _pabilo_get_payment_state(order_obj)
+    state.update({
+        "binance_pay_status": bp_status,
+        "binance_pay_transaction_id": str(data.get("transactionId") or state.get("binance_pay_transaction_id") or ""),
+        "last_checked_at": datetime.utcnow().isoformat(),
+    })
+    _pabilo_set_payment_state(order_obj, state)
+    db.session.commit()
+
+    if bp_status == "PAID":
+        expected = float(state.get("binance_pay_amount") or order_obj.amount or 0.0)
+        try:
+            paid_amount = float(data.get("orderAmount") or 0.0)
+        except Exception:
+            paid_amount = 0.0
+        paid_currency = str(data.get("currency") or "").upper()
+        if paid_currency != "USDT" or abs(paid_amount - expected) > 0.01:
+            print(f"[{source_label}] Orden #{order_obj.id}: monto/moneda no coinciden ({paid_amount} {paid_currency} vs {expected} USDT). Se deja pendiente.")
+            return bp_status
+        state["verified"] = True
+        state["verification_id"] = state.get("binance_pay_transaction_id") or ""
+        _pabilo_set_payment_state(order_obj, state)
+        order_obj.payment_verified_at = datetime.utcnow()
+        order_obj.capture_reference = (state.get("binance_pay_transaction_id") or "")[:120]
+        db.session.commit()
+        print(f"[{source_label}] Pago confirmado para la orden #{order_obj.id}. Aprobando.")
+        _auto_approve_order(order_obj, source_label=source_label, binance_auto=True)
+    elif bp_status in _BINANCE_PAY_FINAL_FAIL_STATUSES:
+        _auto_reject_order(
+            order_obj,
+            reason="El pago con Binance Pay fue cancelado o expiró",
+            source_label=source_label,
+        )
+    return bp_status
+
+
+def _binance_pay_maybe_sync(order_obj, min_interval_seconds: int = 8) -> None:
+    """Sincroniza bajo demanda (p. ej. desde la página de gracias) sin saturar la API."""
+    if not _is_binance_pay_order(order_obj) or (order_obj.status or "").lower() != "pending":
+        return
+    last = str(_pabilo_get_payment_state(order_obj).get("last_checked_at") or "")
+    try:
+        if last and (datetime.utcnow() - datetime.fromisoformat(last)).total_seconds() < min_interval_seconds:
+            return
+    except Exception:
+        pass
+    _binance_pay_sync_order(order_obj, source_label="BinancePayPoll")
+
+
+def _binance_pay_sync_loop():
+    """Respaldo del webhook: consulta cada 20 s las órdenes Binance Pay pendientes."""
+    import time as _t
+    _t.sleep(40)
+    while not _acquire_singleton_lock(_LOCK_BINANCE_PAY_SYNC):
+        _t.sleep(30)
+    while True:
+        try:
+            with app.app_context():
+                if _binance_pay_configured():
+                    since = datetime.utcnow() - timedelta(hours=3)
+                    pending = Order.query.filter(
+                        Order.method == "binance",
+                        Order.status == "pending",
+                        Order.created_at >= since,
+                    ).all()
+                    for order in pending:
+                        try:
+                            if _is_binance_pay_order(order):
+                                _binance_pay_sync_order(order, source_label="BinancePaySync")
+                        except Exception as exc:
+                            try:
+                                db.session.rollback()
+                            except Exception:
+                                pass
+                            print(f"[BinancePaySync] Error en orden #{order.id}: {exc}")
+                        _t.sleep(1)
+        except Exception as exc:
+            print(f"[BinancePaySync] Thread error: {exc}")
+        _t.sleep(20)
+
+
+_binance_pay_thread = threading.Thread(target=_binance_pay_sync_loop, daemon=True)
+_binance_pay_thread.start()
 
 
 def _ensure_automation_json_column():
@@ -9557,6 +9805,8 @@ def store_payments():
         "pm_qr_path": get_config_value("pm_qr_path", ""),
         "binance_qr_path": get_config_value("binance_qr_path", ""),
         "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
+        "binance_pay_enabled": "1" if _binance_pay_enabled() else "0",
+        "binance_pay_fee_percent": _binance_pay_fee_percent(),
         "payment_verification_provider": _payment_verification_provider(),
         "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
         "pabilo_method": get_config_value("pabilo_method", "pm"),
@@ -9922,6 +10172,10 @@ def admin_config_payments_get():
         "pm_qr_path": get_config_value("pm_qr_path", ""),
         "binance_qr_path": get_config_value("binance_qr_path", ""),
         "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
+        "binance_pay_enabled": get_config_value("binance_pay_enabled", "0"),
+        "binance_pay_fee_percent": _binance_pay_fee_percent(),
+        "binance_pay_configured": _binance_pay_configured(),
+        "binance_pay_webhook_path": "/webhook-binance-pay",
         "payment_verification_provider": _payment_verification_provider(),
         "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
         "pabilo_api_key": get_config_value("pabilo_api_key", ""),
@@ -9960,6 +10214,8 @@ def admin_config_payments_set():
         "pm_qr_path": (data.get("pm_qr_path") or "").strip(),
         "binance_qr_path": (data.get("binance_qr_path") or "").strip(),
         "binance_auto_enabled": "1" if data.get("binance_auto_enabled") else "0",
+        "binance_pay_enabled": "1" if data.get("binance_pay_enabled") else "0",
+        "binance_pay_fee_percent": _normalize_fee_percent(data.get("binance_pay_fee_percent")),
         "pabilo_auto_verify_enabled": "1" if data.get("pabilo_auto_verify_enabled") else "0",
         "pabilo_api_key": (data.get("pabilo_api_key") or "").strip(),
         "pabilo_user_bank_id": (data.get("pabilo_user_bank_id") or "").strip(),
@@ -10015,6 +10271,8 @@ def admin_config_payments_set():
             "pm_qr_path": values.get("pm_qr_path", ""),
             "binance_qr_path": values.get("binance_qr_path", ""),
             "binance_auto_enabled": values.get("binance_auto_enabled", "0"),
+            "binance_pay_enabled": values.get("binance_pay_enabled", "0"),
+            "binance_pay_fee_percent": float(values.get("binance_pay_fee_percent", "1")),
             "payment_verification_provider": values.get("payment_verification_provider", ""),
             "pabilo_auto_verify_enabled": values.get("pabilo_auto_verify_enabled", "0"),
             "pabilo_api_key": values.get("pabilo_api_key", ""),
@@ -11338,6 +11596,13 @@ def thanks_order_progress(oid: int):
     o = Order.query.get(oid)
     if not o:
         return jsonify({"ok": False, "error": "No existe"}), 404
+    try:
+        _binance_pay_maybe_sync(o)
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
     payload = _thanks_progress_payload(o)
     if payload.get("pins") and not _thanks_viewer_owns_order(o):
         payload["pins"] = []
@@ -11601,6 +11866,8 @@ def _start_checkout_automation(order_id: int, app_obj) -> None:
 
                 if (order_obj.status or "").lower() != "pending":
                     return
+                if _is_binance_pay_order(order_obj):
+                    return
 
                 request_info = _pabilo_request_info(order_obj)
                 eligibility = _pabilo_eligibility_info(order_obj)
@@ -11777,6 +12044,59 @@ def admin_orders_update_reference(oid: int):
         "changed": True,
     })
 
+def _public_base_url() -> str:
+    """URL pública del sitio para los enlaces de retorno/webhook de Binance Pay."""
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL
+    base = (request.url_root or "").rstrip("/")
+    host = urllib.parse.urlparse(base).hostname or ""
+    if base.startswith("http://") and host not in ("localhost", "127.0.0.1"):
+        base = "https://" + base[len("http://"):]
+    return base
+
+
+def _order_created_payload(order_obj, *, idempotent: bool = False) -> dict:
+    payload = {"ok": True, "order_id": order_obj.id}
+    if idempotent:
+        payload["idempotent"] = True
+    if _is_binance_pay_order(order_obj) and (order_obj.status or "").lower() == "pending":
+        checkout_url = str(_pabilo_get_payment_state(order_obj).get("binance_pay_checkout_url") or "")
+        if checkout_url:
+            payload["binance_pay_url"] = checkout_url
+    return payload
+
+
+@app.route("/webhook-binance-pay", methods=["POST"])
+def webhook_binance_pay():
+    """Notificación de Binance Pay. No se confía en el cuerpo: solo se usa para saber
+    qué orden consultar; el pago se confirma con la API de consulta."""
+    ok_resp = jsonify({"returnCode": "SUCCESS", "returnMessage": None})
+    try:
+        body = request.get_json(silent=True) or {}
+        inner = body.get("data")
+        if isinstance(inner, str):
+            try:
+                inner = json.loads(inner)
+            except Exception:
+                inner = {}
+        trade_no = str((inner or {}).get("merchantTradeNo") or "").strip()
+        if not trade_no or not re.fullmatch(r"[A-Za-z0-9]{1,32}", trade_no):
+            return ok_resp
+        order_obj = Order.query.filter(
+            Order.reference == trade_no,
+            Order.method == "binance",
+        ).order_by(Order.id.desc()).first()
+        if order_obj:
+            _binance_pay_sync_order(order_obj, source_label="BinancePayWebhook")
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print(f"[BinancePayWebhook] Error: {exc}")
+    return ok_resp
+
+
 @app.route("/orders", methods=["POST"])
 def create_order():
     try:
@@ -11846,7 +12166,14 @@ def create_order():
             existing_idempotent_order = _find_order_by_idempotency_key(idempotency_key)
             if existing_idempotent_order:
                 _remember_thanks_order(existing_idempotent_order.id)
-                return jsonify({"ok": True, "order_id": existing_idempotent_order.id, "idempotent": True})
+                return jsonify(_order_created_payload(existing_idempotent_order, idempotent=True))
+
+        use_binance_pay = (method == "binance" and _binance_pay_enabled())
+        if use_binance_pay:
+            if currency_upper != "USD":
+                return jsonify({"ok": False, "error": "Binance Pay solo acepta montos en USD"}), 400
+            # La referencia la genera el servidor: es el merchantTradeNo de Binance Pay
+            reference = _binance_pay_generate_trade_no()
 
         if payer_dni_type and payer_dni_type not in ("V", "E", "J", "P", "G"):
             payer_dni_type = ""
@@ -11897,16 +12224,17 @@ def create_order():
         except Exception:
             pass
 
-        reference_ok, reference_or_error = _validate_reference_input(method, reference)
-        if not reference_ok:
-            return jsonify({"ok": False, "error": reference_or_error}), 400
-        reference = reference_or_error
+        if not use_binance_pay:
+            reference_ok, reference_or_error = _validate_reference_input(method, reference)
+            if not reference_ok:
+                return jsonify({"ok": False, "error": reference_or_error}), 400
+            reference = reference_or_error
 
-        existing_order = _find_existing_order_by_reference(
+        existing_order = None if use_binance_pay else _find_existing_order_by_reference(
             reference,
             statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
         )
-        if not existing_order:
+        if not existing_order and not use_binance_pay:
             # También contra referencias extraídas de comprobantes de otras órdenes
             existing_order = _find_existing_order_by_capture_reference(
                 reference,
@@ -12060,9 +12388,15 @@ def create_order():
             return jsonify({"ok": False, "error": "No se pudo calcular un monto válido para la orden"}), 400
         o.amount = canonical_amount
         o.price = round(float(order_total_usd or 0.0), 2)
+        # Binance Pay: la comisión la paga el cliente. Solo sube `amount` (lo cobrado);
+        # `price` sigue siendo el precio base para estadísticas y comisiones de afiliados.
+        binance_pay_fee = 0.0
+        if use_binance_pay:
+            binance_pay_fee = _binance_pay_fee_for(o.amount)
+            o.amount = float(Decimal(str(o.amount)) + Decimal(str(binance_pay_fee)))
 
         # Optional enforcement: mapped auto-recharge orders must use selected Pabilo method.
-        if _is_pabilo_payment_method_enforced_for_order(o):
+        if not use_binance_pay and _is_pabilo_payment_method_enforced_for_order(o):
             required_method = (_pabilo_config().get("method") or "pm").strip().lower()
             if (method or "").strip().lower() != required_method:
                 return jsonify({
@@ -12111,8 +12445,21 @@ def create_order():
                 existing_idempotent_order = _find_order_by_idempotency_key(idempotency_key)
                 if existing_idempotent_order:
                     _remember_thanks_order(existing_idempotent_order.id)
-                    return jsonify({"ok": True, "order_id": existing_idempotent_order.id, "idempotent": True})
+                    return jsonify(_order_created_payload(existing_idempotent_order, idempotent=True))
             raise
+        if use_binance_pay:
+            try:
+                _binance_pay_create_checkout(o, _public_base_url(), fee=binance_pay_fee)
+            except Exception as exc:
+                print(f"[BinancePay] No se pudo crear el cobro para la orden #{o.id}: {exc}")
+                try:
+                    db.session.rollback()
+                    SpecialCodeUsage.query.filter_by(order_id=o.id).delete()
+                    db.session.delete(o)
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                return jsonify({"ok": False, "error": "No se pudo iniciar el pago con Binance Pay. Intenta de nuevo."}), 502
         try:
             _start_checkout_automation(o.id, current_app._get_current_object())
         except Exception:
@@ -12135,7 +12482,7 @@ def create_order():
         except Exception:
             db.session.rollback()
         _remember_thanks_order(o.id)
-        return jsonify({"ok": True, "order_id": o.id})
+        return jsonify(_order_created_payload(o))
     except Exception as e:
         # Return error to client to help diagnose instead of 500
         try:

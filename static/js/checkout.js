@@ -70,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let hasCapture = false;
   let isBinanceAuto = false;
   let binanceAutoCode = '';
+  let isBinancePay = false; // pago directo en la pasarela de Binance Pay
   let checkoutRequestInFlight = false;
   let checkoutAttemptKey = '';
   let captureAnalysisInFlight = false;
@@ -579,7 +580,25 @@ document.addEventListener('DOMContentLoaded', () => {
       // Fallback to USD if rate is not available to avoid showing 0
       return { amount: totalUsd, displayCurrency: 'USD', usedCurrency: 'USD', baseBeforeDiscount: baseUsd };
     }
+    if (isBinancePay) {
+      // La comisión de Binance Pay la paga el cliente (mismo redondeo que el servidor)
+      const fee = binancePayFeeFor(totalUsd);
+      return { amount: roundCents(roundCents(totalUsd) + fee), displayCurrency: 'USD', usedCurrency: 'USD', baseBeforeDiscount: roundCents(roundCents(baseUsd) + binancePayFeeFor(baseUsd)), binancePayFee: fee };
+    }
     return { amount: totalUsd, displayCurrency: 'USD', usedCurrency: 'USD', baseBeforeDiscount: baseUsd };
+  }
+
+  function roundCents(value) {
+    return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+  }
+
+  function binancePayFeePercent() {
+    const pct = Number(paymentsCfg && paymentsCfg.binance_pay_fee_percent);
+    return (isFinite(pct) && pct > 0) ? pct : 0;
+  }
+
+  function binancePayFeeFor(usd) {
+    return roundCents(roundCents(usd) * binancePayFeePercent() / 100);
   }
 
   function currentCheckoutMethod() {
@@ -716,6 +735,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const monto = String(Math.round(Number(t.amount || 0)));
         return [bank, cedula, phone, monto];
       };
+    } else if (isBinancePay) {
+      if (methodNameEl) methodNameEl.textContent = 'BINANCE PAY';
+      const note = document.createElement('div');
+      note.className = 'co-binance-note';
+      note.style.gridColumn = '1 / -1';
+      note.innerHTML = '<div style="font-weight:700; color:#f0a52a; margin-bottom:6px;">Pago directo con Binance Pay</div>'
+        + '<div>Al presionar <b>"PAGAR CON BINANCE PAY"</b> se abrirá Binance para que confirmes el pago en USDT.</div>'
+        + '<div style="color:#8a8a8a; margin-top:6px;">No necesitas referencia ni comprobante: tu orden se aprueba sola al confirmarse el pago.</div>';
+      const feePct = binancePayFeePercent();
+      const feeAmount = Number(computeTotals().binancePayFee || 0);
+      if (feePct > 0 && feeAmount > 0) {
+        const feeLine = document.createElement('div');
+        feeLine.style.marginTop = '6px';
+        feeLine.textContent = `El total incluye la comisión de Binance Pay (${feePct}%): ${formatPriceFor('USD', feeAmount)}`;
+        note.appendChild(feeLine);
+      }
+      payFieldsEl.appendChild(note);
+      if (copyAllBtn) copyAllBtn.style.display = 'none';
+      return;
     } else {
       if (methodNameEl) methodNameEl.textContent = 'BINANCE';
       const email = (paymentsCfg && paymentsCfg.binance_email) || '';
@@ -786,10 +824,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Detect Binance auto-verification mode PER ITEM
     const globalBinanceAuto = (qMethod === 'binance' && paymentsCfg && paymentsCfg.binance_auto_enabled === '1');
     isBinanceAuto = false; // will be set after item auto-check
+    isBinancePay = (qMethod === 'binance' && paymentsCfg && paymentsCfg.binance_pay_enabled === '1');
+    if (isBinancePay) setupBinancePayMode();
     renderHeader();
     renderInfo();
     startTimer(30*60);
-    if (globalBinanceAuto && allItems.length > 0 && selectedIndex >= 0 && selectedIndex < allItems.length) {
+    if (!isBinancePay && globalBinanceAuto &&allItems.length > 0 && selectedIndex >= 0 && selectedIndex < allItems.length) {
       const selItem = allItems[selectedIndex];
       fetch(`/store/item/${selItem.id}/auto-check`).then(r => r.json()).then(data => {
         if (data && data.ok && data.auto) {
@@ -812,13 +852,27 @@ document.addEventListener('DOMContentLoaded', () => {
         btnConfirm.disabled = true;
         return;
       }
-      if (isBinanceAuto) {
+      if (isBinancePay) {
+        btnConfirm.disabled = false;
+      } else if (isBinanceAuto) {
         // In auto mode only need the generated code (always present once fetched)
         btnConfirm.disabled = !binanceAutoCode;
       } else {
         btnConfirm.disabled = !(hasCapture && isReferenceValid);
       }
     }
+  }
+
+  // ── Binance Pay: sin referencia ni comprobante, se paga en la pasarela ──
+  function setupBinancePayMode() {
+    const proofCard = proofDropzone ? proofDropzone.closest('.proof-card') : null;
+    if (proofCard) proofCard.style.display = 'none';
+    const refGroup = coRef ? coRef.closest('.ref-group') : null;
+    if (refGroup) refGroup.style.display = 'none';
+    const warning = finalCard ? finalCard.querySelector('.co-warning') : null;
+    if (warning) warning.style.display = 'none';
+    if (btnConfirm) btnConfirm.textContent = 'PAGAR CON BINANCE PAY';
+    updateSubmitState();
   }
 
   // ── Binance Auto Mode Setup ──
@@ -1065,6 +1119,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.__validRef = { code: qRefCode, discount: Number(data.discount || 0), item_discounts: Array.isArray(data.item_discounts) ? data.item_discounts : null };
         referralCodeError = '';
         renderHeader();
+        if (isBinancePay) renderInfo(); // la comisión cambia con el descuento
         return;
       }
       window.__validRef = null;
@@ -1084,9 +1139,9 @@ document.addEventListener('DOMContentLoaded', () => {
       btnConfirm.disabled = true;
       const idempotencyKey = getCheckoutAttemptKey();
 
-      // ── Binance Auto Mode: simplified flow ──
-      if (isBinanceAuto) {
-        if (!binanceAutoCode) {
+      // ── Binance Pay / Binance Auto Mode: simplified flow ──
+      if (isBinancePay || isBinanceAuto) {
+        if (!isBinancePay && !binanceAutoCode) {
           alert('Código de verificación no disponible');
           releaseCheckoutRequest();
           return;
@@ -1124,7 +1179,7 @@ document.addEventListener('DOMContentLoaded', () => {
           amount: totals.amount,
           currency: totals.usedCurrency,
           method: 'binance',
-          reference: binanceAutoCode,
+          reference: isBinancePay ? '' : binanceAutoCode,
           name: name,
           email: email,
           phone: phone,
@@ -1161,6 +1216,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
           }
           if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo crear la orden');
+          if (isBinancePay && data.binance_pay_url) {
+            window.location.href = data.binance_pay_url;
+            return;
+          }
           window.location.href = `/gracias/${encodeURIComponent(data.order_id)}`;
         } catch (err) {
           const msg = (err && err.name === 'AbortError') ? 'La solicitud tardó demasiado. Intenta de nuevo.' : (err.message || 'No se pudo crear la orden');

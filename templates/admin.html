@@ -1061,6 +1061,24 @@
                     </div>
                   </div>
                   <div class="form-row" style="margin-top:12px;">
+                    <label>Binance Pay (pasarela)</label>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <label class="toggle-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input id="binance-pay-enabled" type="checkbox">
+                        <span>Cobrar directo con Binance Pay (sin referencia ni comprobante)</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <label for="binance-pay-fee-percent">Comisión Binance Pay que paga el cliente (%)</label>
+                    <input id="binance-pay-fee-percent" type="number" min="0" max="20" step="0.01" value="1" placeholder="1">
+                  </div>
+                  <div id="binance-pay-note" class="pay-config-note pay-config-note--green">
+                    Requiere variables de entorno: <b>BINANCE_PAY_API_KEY</b> y <b>BINANCE_PAY_SECRET_KEY</b> (credenciales de comerciante). Opcional: <b>PUBLIC_BASE_URL</b>.<br>
+                    Estado: <b id="binance-pay-configured">...</b> · Webhook: <code id="binance-pay-webhook">/webhook-binance-pay</code><br>
+                    El cliente paga en la pantalla de Binance y la orden se aprueba sola al confirmarse el pago.
+                  </div>
+                  <div class="form-row" style="margin-top:12px;">
                     <label>Autoaprobación Binance</label>
                     <div style="display:flex; align-items:center; gap:10px;">
                       <label class="toggle-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">

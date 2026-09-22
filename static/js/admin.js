@@ -779,6 +779,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const binQrImage = document.getElementById('binance-qr-image');
   const binAutoEnabled = document.getElementById('binance-auto-enabled');
   const binAutoNote = document.getElementById('binance-auto-note');
+  const binPayEnabled = document.getElementById('binance-pay-enabled');
+  const binPayConfigured = document.getElementById('binance-pay-configured');
+  const binPayFeePercent = document.getElementById('binance-pay-fee-percent');
+  const binPayWebhook = document.getElementById('binance-pay-webhook');
   const paymentVerificationProvider = document.getElementById('payment-verification-provider');
   const pabiloAutoVerifyEnabled = document.getElementById('pabilo-auto-verify-enabled');
   const pabiloMethod = document.getElementById('pabilo-method');
@@ -1704,6 +1708,8 @@ window.fetchPayments = fetchPayments;
       pm_qr_path: pmQrImage ? pmQrImage.value.trim() : '',
       binance_qr_path: binQrImage ? binQrImage.value.trim() : '',
       binance_auto_enabled: binAutoEnabled ? binAutoEnabled.checked : false,
+      binance_pay_enabled: binPayEnabled ? binPayEnabled.checked : false,
+      binance_pay_fee_percent: binPayFeePercent ? binPayFeePercent.value.trim() : '1',
       payment_verification_provider: paymentVerificationProvider ? paymentVerificationProvider.value : '',
       pabilo_auto_verify_enabled: pabiloAutoVerifyEnabled ? pabiloAutoVerifyEnabled.checked : false,
       pabilo_method: pabiloMethod ? pabiloMethod.value : 'pm',
@@ -1747,6 +1753,19 @@ window.fetchPayments = fetchPayments;
     if (binAutoEnabled) {
       binAutoEnabled.checked = (data.binance_auto_enabled === '1' || data.binance_auto_enabled === 1 || data.binance_auto_enabled === true);
       if (binAutoNote) binAutoNote.style.display = binAutoEnabled.checked ? '' : 'none';
+    }
+    if (binPayEnabled) {
+      binPayEnabled.checked = (data.binance_pay_enabled === '1' || data.binance_pay_enabled === 1 || data.binance_pay_enabled === true);
+    }
+    if (binPayFeePercent && data.binance_pay_fee_percent !== undefined && data.binance_pay_fee_percent !== null) {
+      binPayFeePercent.value = String(data.binance_pay_fee_percent);
+    }
+    if (binPayConfigured && typeof data.binance_pay_configured !== 'undefined') {
+      binPayConfigured.textContent = data.binance_pay_configured ? 'credenciales configuradas ✓' : 'faltan credenciales en el servidor';
+      binPayConfigured.style.color = data.binance_pay_configured ? '#3ee07f' : '#f87171';
+    }
+    if (binPayWebhook && data.binance_pay_webhook_path) {
+      binPayWebhook.textContent = window.location.origin + data.binance_pay_webhook_path;
     }
     if (paymentVerificationProvider) paymentVerificationProvider.value = (data.payment_verification_provider || '').toLowerCase();
     if (pabiloAutoVerifyEnabled) pabiloAutoVerifyEnabled.checked = (data.pabilo_auto_verify_enabled === '1' || data.pabilo_auto_verify_enabled === 1 || data.pabilo_auto_verify_enabled === true);
