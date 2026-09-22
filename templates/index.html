@@ -33,12 +33,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         *{box-sizing:border-box}
-        html { overflow-y: auto; background-color: #050706; }
-        html,body{margin:0;padding:0;background:#050706;color:#eaeaea;font-family:'Outfit',Helvetica,sans-serif}
+        html { overflow-y: auto; background-color: #050609; }
+        html,body{margin:0;padding:0;background:#050609;color:#eaeaea;font-family:'Outfit',Helvetica,sans-serif}
         a{color:#3ee07f;text-decoration:none}
         a:hover{color:#7af0a6}
         input,button{font-family:inherit}
-        ::selection{background:#3ee07f;color:#050706}
+        ::selection{background:#3ee07f;color:#050609}
         body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:1;background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.07' stroke-width='1.2'%3E%3Cpath d='M40 18 L58 34 L40 62 L22 34 Z'/%3E%3Cpath d='M22 34 L58 34 M40 18 L33 34 L40 62 M40 18 L47 34'/%3E%3Ccircle cx='168' cy='44' r='15'/%3E%3Ccircle cx='168' cy='44' r='9'/%3E%3Cpath d='M232 100 L244 111 L232 130 L220 111 Z'/%3E%3Cpath d='M96 128 L110 141 L96 164 L82 141 Z'/%3E%3Cpath d='M82 141 L110 141'/%3E%3Ccircle cx='36' cy='196' r='13'/%3E%3Ccircle cx='36' cy='196' r='7'/%3E%3Cpath d='M188 178 L200 189 L188 208 L176 189 Z'/%3E%3Ccircle cx='128' cy='226' r='10'/%3E%3Cpath d='M244 214 L252 222 L244 236 L236 222 Z'/%3E%3Cpath d='M8 92 L18 101 L8 118 L-2 101 Z'/%3E%3C/g%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Ccircle cx='168' cy='44' r='7'/%3E%3Ccircle cx='36' cy='196' r='5'/%3E%3Ccircle cx='128' cy='226' r='8'/%3E%3C/g%3E%3C/svg%3E");background-size:260px 260px}
         @keyframes push{0%{transform:translateY(120%);opacity:0}55%{transform:translateY(-8%);opacity:1}100%{transform:translateY(0);opacity:1}}
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -53,19 +53,19 @@
         #bg-video-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.82); }
 
         /* ============ BARRA SUPERIOR ============ */
-        .st-topbar{position:sticky;top:0;z-index:50;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #1c2320;background:#050706d9;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+        .st-topbar{position:sticky;top:0;z-index:50;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #202124;background:#050609d9;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
         .st-logo{font-family:'Outfit';font-size:22px;letter-spacing:.22em;font-weight:700;white-space:nowrap;flex:none;color:#eaeaea}
         .st-logo span{color:#3ee07f}
         .st-logo-img{height:16px;object-fit:contain;display:block}
         .st-ticker-wrap{flex:1;min-width:0;display:flex;justify-content:center;padding:0 24px}
-        .st-ticker-box{height:30px;overflow:hidden;border:1px solid #1c2320;border-radius:8px;background:#0d120e;padding:0 14px;display:flex;align-items:center;min-width:340px;justify-content:center}
+        .st-ticker-box{height:30px;overflow:hidden;border:1px solid #202124;border-radius:8px;background:#0f1013;padding:0 14px;display:flex;align-items:center;min-width:340px;justify-content:center}
         .st-ticker-item{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:11.5px;color:#8a8a8a;animation:push .55s cubic-bezier(.2,.85,.2,1);overflow:hidden}
         .st-ticker-item .tk-dot{width:5px;height:5px;border-radius:50%;background:#3ee07f;flex:none}
         .st-ticker-item .tk-user{font-family:ui-monospace,monospace;color:#3ee07f}
         .st-ticker-item .tk-item{color:#eaeaea;font-weight:600}
         .st-ticker-item .tk-game{color:#6e6e6e}
         .st-ticker-item .tk-time{color:#4f4f4f}
-        .st-avatar{width:32px;height:32px;flex:none;border-radius:50%;border:1px solid #2d362f;background:transparent;display:flex;align-items:center;justify-content:center;font-size:11px;color:#8a8a8a;cursor:pointer;padding:0;transition:border-color .2s}
+        .st-avatar{width:32px;height:32px;flex:none;border-radius:50%;border:1px solid #323336;background:transparent;display:flex;align-items:center;justify-content:center;font-size:11px;color:#8a8a8a;cursor:pointer;padding:0;transition:border-color .2s}
         .st-avatar:hover{border-color:#3ee07f}
         @media (max-width:859px){
           .st-topbar{padding:0 14px}
@@ -82,17 +82,17 @@
         /* El icono de regalo abre el canje de CÓDIGOS DE REGALO (gift cards / cupones
            que el admin genera). Los demás sectores quedan libres para futuras acciones. */
         #fan-wrap{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:45;width:118px;height:208px;overflow:hidden;pointer-events:none;display:none}
-        #fan-disc{position:absolute;left:-1px;top:8px;width:96px;height:192px;border-radius:96px 0 0 96px;border:1px solid #2d362f;border-right:none;background:#0d120ef2;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:transform .35s cubic-bezier(.3,.9,.25,1),opacity .3s;transform:translateX(118px);opacity:0}
-        .fan-line{position:absolute;left:-1px;top:104px;width:96px;height:1px;transform-origin:right center;background:linear-gradient(to left,transparent 0 26px,#2d362f 26px,#262c27);opacity:0;transition:all .35s}
+        #fan-disc{position:absolute;left:-1px;top:8px;width:96px;height:192px;border-radius:96px 0 0 96px;border:1px solid #323336;border-right:none;background:#0f1013f2;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:transform .35s cubic-bezier(.3,.9,.25,1),opacity .3s;transform:translateX(118px);opacity:0}
+        .fan-line{position:absolute;left:-1px;top:104px;width:96px;height:1px;transform-origin:right center;background:linear-gradient(to left,transparent 0 26px,#323336 26px,#292a2d);opacity:0;transition:all .35s}
         #fan-gift{position:absolute;left:54px;top:141px;width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;border:none;background:none;color:#3ee07f;cursor:pointer;transition:all .3s .12s;transform:scale(.3);opacity:0;pointer-events:none}
         #fan-ruleta{position:absolute;left:54px;top:31px;width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;border:none;background:none;color:#ef4444;cursor:pointer;transition:all .3s .12s;transform:scale(.3);opacity:0;pointer-events:none}
         #fan-gift[hidden],#fan-ruleta[hidden]{display:none !important}
         #fan-wrap.open #fan-ruleta{transform:scale(1);opacity:1;pointer-events:auto}
-        #fan-tab{position:absolute;z-index:2;right:0;top:50%;transform:translateY(-50%);pointer-events:auto;width:26px;height:52px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid #212a24;border-right:none;border-radius:9px 0 0 9px;background:#10160f;color:#3ee07f;font-size:15px;line-height:1;transition:all .3s}
+        #fan-tab{position:absolute;z-index:2;right:0;top:50%;transform:translateY(-50%);pointer-events:auto;width:26px;height:52px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid #26272a;border-right:none;border-radius:9px 0 0 9px;background:#121316;color:#3ee07f;font-size:15px;line-height:1;transition:all .3s}
         #fan-wrap.open #fan-disc{transform:translateX(0);opacity:1}
         #fan-wrap.open .fan-line{opacity:1}
         #fan-wrap.open #fan-gift{transform:scale(1);opacity:1;pointer-events:auto}
-        #fan-wrap.open #fan-tab{right:6px;top:104px;width:34px;height:34px;border:1px solid #2d362f;border-radius:50%}
+        #fan-wrap.open #fan-tab{right:6px;top:104px;width:34px;height:34px;border:1px solid #323336;border-radius:50%}
 
         /* ============ LAYOUT PRINCIPAL ============ */
         .st-page{position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:14px 24px 20px;display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:28px;align-items:start}
@@ -103,19 +103,19 @@
         }
 
         /* ============ CARRUSEL DE BANNERS (imagen + textos desde el admin) ============ */
-        .st-banner{position:relative;border-radius:12px;overflow:hidden;border:1px solid #212a24;background:#0d120e;height:118px;box-shadow:0 10px 26px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04)}
+        .st-banner{position:relative;border-radius:12px;overflow:hidden;border:1px solid #26272a;background:#0f1013;height:118px;box-shadow:0 10px 26px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04)}
         #banner-track{display:flex;height:100%;transition:transform .45s cubic-bezier(.3,.9,.25,1)}
-        .st-slide{flex:0 0 100%;height:100%;cursor:pointer;position:relative;background:repeating-linear-gradient(135deg,#181e19 0 10px,#11150f 10px 20px);display:flex;align-items:center;justify-content:space-between;gap:20px;padding:0 48px;background-size:cover;background-position:center;overflow:hidden}
-        .st-slide-shade{position:absolute;inset:0;background:linear-gradient(90deg,#050706cc 0%,#05070666 55%,#05070622 100%);pointer-events:none}
+        .st-slide{flex:0 0 100%;height:100%;cursor:pointer;position:relative;background:repeating-linear-gradient(135deg,#1b1c1f 0 10px,#121316 10px 20px);display:flex;align-items:center;justify-content:space-between;gap:20px;padding:0 48px;background-size:cover;background-position:center;overflow:hidden}
+        .st-slide-shade{position:absolute;inset:0;background:linear-gradient(90deg,#050609cc 0%,#05060966 55%,#05060922 100%);pointer-events:none}
         .st-slide-copy{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
         .st-slide-tag{font-size:10px;letter-spacing:.18em;color:#3ee07f}
         .st-slide-title{font-family:'Outfit';font-size:26px;line-height:1.05;font-weight:700;overflow:hidden;text-overflow:ellipsis;color:#eaeaea}
         .st-slide-sub{font-size:12px;color:#8a8a8a}
-        .st-banner-arrow{position:absolute;top:50%;transform:translateY(-50%);width:26px;height:26px;border-radius:50%;background:#050706b3;border:1px solid #282f2a;display:flex;align-items:center;justify-content:center;font-size:13px;color:#c4c4c4;cursor:pointer;z-index:2}
+        .st-banner-arrow{position:absolute;top:50%;transform:translateY(-50%);width:26px;height:26px;border-radius:50%;background:#050609b3;border:1px solid #2b2c2f;display:flex;align-items:center;justify-content:center;font-size:13px;color:#c4c4c4;cursor:pointer;z-index:2}
         .st-banner-arrow.prev{left:8px}
         .st-banner-arrow.next{right:8px}
         #carousel-dots{position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:6px;z-index:2}
-        #carousel-dots .dot{width:6px;height:6px;border-radius:3px;cursor:pointer;background:#3c433d;transition:all .3s}
+        #carousel-dots .dot{width:6px;height:6px;border-radius:3px;cursor:pointer;background:#3f4043;transition:all .3s}
         #carousel-dots .dot.on{width:16px;background:#3ee07f}
         @media (max-width:859px){
           .st-banner{height:92px}
@@ -134,7 +134,7 @@
         .st-headline.l{background:linear-gradient(90deg,transparent,#3ee07f4d)}
         .st-headline.r{background:linear-gradient(90deg,#3ee07f4d,transparent)}
         .st-headmid{display:flex;align-items:center;gap:10px}
-        .st-headnum{width:20px;height:20px;flex:none;border-radius:6px;background:#3ee07f;color:#020a05;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+        .st-headnum{width:20px;height:20px;flex:none;border-radius:6px;background:#3ee07f;color:#06070a;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
         .st-headtitle{font-family:'Outfit';font-size:19px;letter-spacing:.06em;white-space:nowrap}
         .st-headdiamond{width:6px;height:6px;flex:none;background:#3ee07f;transform:rotate(45deg)}
 
@@ -148,7 +148,7 @@
         .st-tab.on .lbl{color:#3ee07f}
         .st-tabsep{color:#333333}
         .st-socials{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
-        .st-social{width:26px;height:26px;border-radius:7px;border:1px solid #212a24;background:#10160f;display:flex;align-items:center;justify-content:center;color:#8a8a8a;transition:all .2s}
+        .st-social{width:26px;height:26px;border-radius:7px;border:1px solid #26272a;background:#121316;display:flex;align-items:center;justify-content:center;color:#8a8a8a;transition:all .2s}
         .st-social:hover{border-color:#3ee07f;color:#3ee07f}
 
         /* Selector de productos */
@@ -156,15 +156,15 @@
         #mosaic-expanded{display:flex;flex-direction:column;gap:10px}
         #mosaic-scroll{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
         .st-prod{cursor:pointer;flex:none;display:flex;flex-direction:column;align-items:center;gap:7px}
-        .st-prod-art{width:100px;height:100px;border-radius:10px;background:repeating-linear-gradient(135deg,#171d18 0 6px,#11150f 6px 12px);border:1px solid transparent;display:flex;align-items:center;justify-content:center;font-family:'Outfit';font-size:12px;color:#5a5a5a;transition:border-color .2s,box-shadow .2s;overflow:hidden}
-        .st-prod-art img{width:100%;height:100%;object-fit:contain;background:#0d120e}
+        .st-prod-art{width:100px;height:100px;border-radius:10px;background:repeating-linear-gradient(135deg,#1a1b1e 0 6px,#121316 6px 12px);border:1px solid transparent;display:flex;align-items:center;justify-content:center;font-family:'Outfit';font-size:12px;color:#5a5a5a;transition:border-color .2s,box-shadow .2s;overflow:hidden}
+        .st-prod-art img{width:100%;height:100%;object-fit:contain;background:#0f1013}
         .st-prod.on .st-prod-art{border-color:#3ee07f;box-shadow:0 0 0 3px #3ee07f1f}
         .st-prod-name{width:108px;font-size:11px;text-align:center;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .st-prod.on .st-prod-name{color:#eaeaea}
         .st-extra-art{width:100px;height:100px;display:flex;align-items:center;justify-content:center}
-        .st-extra-circle{width:36px;height:36px;border-radius:50%;background:repeating-linear-gradient(135deg,#1c2320 0 4px,#141a16 4px 8px);border:1px solid #282f2a;display:flex;align-items:center;justify-content:center;font-size:10px;color:#8a8a8a;overflow:hidden}
+        .st-extra-circle{width:36px;height:36px;border-radius:50%;background:repeating-linear-gradient(135deg,#202124 0 4px,#17181b 4px 8px);border:1px solid #2b2c2f;display:flex;align-items:center;justify-content:center;font-size:10px;color:#8a8a8a;overflow:hidden}
         .st-extra-circle img{width:100%;height:100%;object-fit:contain}
-        .st-extra-plus{width:36px;height:36px;border-radius:50%;margin-left:-10px;border:1px solid #3ee07f;color:#3ee07f;background:#050706;display:flex;align-items:center;justify-content:center;font-size:15px}
+        .st-extra-plus{width:36px;height:36px;border-radius:50%;margin-left:-10px;border:1px solid #3ee07f;color:#3ee07f;background:#050609;display:flex;align-items:center;justify-content:center;font-size:15px}
         .st-extra-label{width:108px;text-align:center;font-size:11px;color:#8a8a8a}
         .st-verless{align-self:center;font-size:12px;color:#8a8a8a;cursor:pointer}
         .st-verless:hover{color:#3ee07f}
@@ -176,37 +176,37 @@
 
         /* ID de jugador */
         .st-id-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
-        .st-id-row{width:100%;max-width:420px;display:flex;align-items:center;gap:6px;border:1px solid #2d362f;background:#0d120e;border-radius:10px;padding:5px 5px 5px 14px;transition:border-color .2s,box-shadow .2s}
+        .st-id-row{width:100%;max-width:420px;display:flex;align-items:center;gap:6px;border:1px solid #323336;background:#0f1013;border-radius:10px;padding:5px 5px 5px 14px;transition:border-color .2s,box-shadow .2s}
         .st-id-row input{flex:1;min-width:0;padding:8px 0;border:none;background:transparent;color:#eaeaea;font-size:14px;outline:none}
         .st-id-row input::placeholder{color:#6e6e6e}
-        .st-verify-btn{padding:9px 16px;border-radius:7px;border:none;background:#3ee07f;color:#020a05;font-size:12px;font-weight:700;letter-spacing:.04em;cursor:pointer;flex:none}
+        .st-verify-btn{padding:9px 16px;border-radius:7px;border:none;background:#3ee07f;color:#06070a;font-size:12px;font-weight:700;letter-spacing:.04em;cursor:pointer;flex:none}
         .st-verify-btn:hover{background:#5cf094}
         .st-verify-btn:disabled{opacity:.6;cursor:wait}
         .st-id-error{border-color:#ff5d5d !important;box-shadow:0 0 0 3px #ff5d5d22}
-        #verification-status{width:100%;max-width:420px;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;border:1px solid #1f3a2a;background:linear-gradient(135deg,#0f2416b3 0%,#0d120ee6 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
-        .vf-avatar{position:relative;width:40px;height:40px;flex:none;border-radius:50%;background:repeating-linear-gradient(135deg,#171d18 0 6px,#11150f 6px 12px);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:13px;font-weight:700;color:#8a8a8a}
+        #verification-status{width:100%;max-width:420px;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;border:1px solid #2f3033;background:linear-gradient(135deg,#1b1c1fb3 0%,#0f1013e6 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+        .vf-avatar{position:relative;width:40px;height:40px;flex:none;border-radius:50%;background:repeating-linear-gradient(135deg,#1a1b1e 0 6px,#121316 6px 12px);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:13px;font-weight:700;color:#8a8a8a}
         .vf-avatar img{width:100%;height:100%;object-fit:contain}
-        .vf-check{position:absolute;right:-2px;bottom:-2px;width:16px;height:16px;border-radius:50%;background:#3ee07f;color:#020a05;display:flex;align-items:center;justify-content:center;font-size:9px;border:2px solid #0d120e}
+        .vf-check{position:absolute;right:-2px;bottom:-2px;width:16px;height:16px;border-radius:50%;background:#3ee07f;color:#06070a;display:flex;align-items:center;justify-content:center;font-size:9px;border:2px solid #0f1013}
         .vf-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left}
         .vf-nick{font-size:14px;font-weight:700;color:#eaeaea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .vf-sub{font-size:12px;color:#3ee07f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .vf-close{flex:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:#6e6e6e;cursor:pointer;border-radius:8px;transition:all .2s}
-        .vf-close:hover{color:#eaeaea;background:#1c2320}
+        .vf-close:hover{color:#eaeaea;background:#202124}
 
         /* Paquetes */
-        #subcat-tabs{display:flex;gap:6px;white-space:nowrap;flex:none;background:#10160f;border:1px solid #212a24;border-radius:9px;padding:4px}
+        #subcat-tabs{display:flex;gap:6px;white-space:nowrap;flex:none;background:#121316;border:1px solid #26272a;border-radius:9px;padding:4px}
         .st-subcat{padding:6px 14px;border-radius:6px;color:#8a8a8a;font-size:12px;cursor:pointer;user-select:none}
-        .st-subcat.on{background:#0f2416;color:#3ee07f;font-weight:600}
+        .st-subcat.on{background:#1b1c1f;color:#3ee07f;font-weight:600}
         .st-promo-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
         .st-promo-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:#8a8a8a;cursor:pointer;user-select:none;transition:color .2s}
         .st-promo-toggle:hover{color:#3ee07f}
         .st-promo-toggle .caret{font-size:9px;line-height:1;transition:transform .2s}
         .st-promo-toggle.open .caret{transform:rotate(180deg)}
-        .st-promo{display:flex;align-items:center;gap:5px;border:1px solid #212a24;background:#0d120e;border-radius:8px;padding:3px 3px 3px 10px;width:210px}
+        .st-promo{display:flex;align-items:center;gap:5px;border:1px solid #26272a;background:#0f1013;border-radius:8px;padding:3px 3px 3px 10px;width:210px}
         .st-promo input{flex:1;min-width:0;padding:5px 0;border:none;background:transparent;color:#eaeaea;font-size:12px;outline:none;text-transform:uppercase}
         .st-promo input::placeholder{color:#6e6e6e;text-transform:none}
-        .st-promo button{flex:none;padding:5px 11px;border:none;border-radius:6px;background:#1c2320;color:#3ee07f;font-size:11px;font-weight:600;cursor:pointer;transition:all .2s}
-        .st-promo button:hover{background:#3ee07f;color:#020a05}
+        .st-promo button{flex:none;padding:5px 11px;border:none;border-radius:6px;background:#202124;color:#3ee07f;font-size:11px;font-weight:600;cursor:pointer;transition:all .2s}
+        .st-promo button:hover{background:#3ee07f;color:#06070a}
         #discount-status{font-size:11px;text-align:center}
         #discount-status.ok{color:#3ee07f}
         #discount-status.err{color:#ff5d5d}
@@ -228,7 +228,7 @@
 
         /* CTA inline (solo móvil) */
         #inline-cta{display:none;justify-content:center;margin-top:4px}
-        #inline-cta button{width:100%;max-width:320px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border:none;border-radius:10px;background:#3ee07f;color:#020a05;cursor:pointer}
+        #inline-cta button{width:100%;max-width:320px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border:none;border-radius:10px;background:#3ee07f;color:#06070a;cursor:pointer}
         #inline-cta .cta-label{display:flex;flex-direction:column;align-items:flex-start;gap:0}
         #inline-cta .cta-total-tag{font-size:9px;letter-spacing:.12em;opacity:.72}
         #inline-cta .cta-total{font-family:'Outfit';font-size:22px;font-weight:700;line-height:1}
@@ -236,20 +236,20 @@
         @media (max-width:859px){ #inline-cta{display:flex} }
 
         /* Resumen (escritorio) */
-        .st-summary{position:sticky;top:70px;display:flex;flex-direction:column;gap:14px;border:1px solid #212a24;background:#0d120e;border-radius:16px;padding:20px;box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04)}
+        .st-summary{position:sticky;top:70px;display:flex;flex-direction:column;gap:14px;border:1px solid #26272a;background:#0f1013;border-radius:16px;padding:20px;box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04)}
         @media (max-width:859px){ .st-summary{display:none} }
         .st-summary-head{display:flex;align-items:center;gap:8px}
         .st-summary-bar{width:3px;height:16px;background:#3ee07f}
         .st-summary-title{font-family:'Outfit';font-size:19px;letter-spacing:.08em}
         .st-summary-title span{color:#3ee07f}
-        .st-summary-item{display:flex;flex-direction:column;gap:12px;padding-bottom:14px;border-bottom:1px dashed #212a24}
+        .st-summary-item{display:flex;flex-direction:column;gap:12px;padding-bottom:14px;border-bottom:1px dashed #26272a}
         .st-summary-prod{display:flex;gap:12px;align-items:center}
-        #summary-game-badge{width:44px;height:44px;border-radius:9px;background:repeating-linear-gradient(135deg,#171d18 0 6px,#11150f 6px 12px);flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#8a8a8a;overflow:hidden}
+        #summary-game-badge{width:44px;height:44px;border-radius:9px;background:repeating-linear-gradient(135deg,#1a1b1e 0 6px,#121316 6px 12px);flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#8a8a8a;overflow:hidden}
         #summary-game-badge img{width:100%;height:100%;object-fit:contain}
         .st-summary-prodinfo{flex:1;min-width:0}
         #summary-item-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         #summary-game-name{font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .st-qty{display:flex;align-items:center;gap:8px;border:1px solid #2d362f;border-radius:8px;padding:4px 8px;flex:none}
+        .st-qty{display:flex;align-items:center;gap:8px;border:1px solid #323336;border-radius:8px;padding:4px 8px;flex:none}
         .st-qty .q-btn{cursor:pointer;font-size:14px;user-select:none;line-height:1}
         .st-qty .q-minus{color:#8a8a8a}
         .st-qty .q-plus{color:#3ee07f}
@@ -260,16 +260,16 @@
         .st-summary-row{display:flex;justify-content:space-between;color:#8a8a8a}
         .st-summary-row .val{color:#eaeaea}
         .st-summary-row .val.disc{color:#3ee07f}
-        .st-summary-total{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;padding-top:12px;border-top:1px solid #212a24}
+        .st-summary-total{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;padding-top:12px;border-top:1px solid #26272a}
         .st-summary-total .tag{font-size:12px;letter-spacing:.1em;color:#8a8a8a}
         #summary-total-bs{font-family:'Outfit';font-size:28px;font-weight:700;color:#3ee07f}
         #summary-total-usd{font-size:11px;color:#8a8a8a;font-weight:400}
-        .st-next-btn{margin-top:4px;padding:15px;border:none;border-radius:10px;background:#3ee07f;color:#020a05;font-size:15px;font-weight:700;letter-spacing:.06em;cursor:pointer}
+        .st-next-btn{margin-top:4px;padding:15px;border:none;border-radius:10px;background:#3ee07f;color:#06070a;font-size:15px;font-weight:700;letter-spacing:.06em;cursor:pointer}
         .st-next-btn:hover{background:#5cf094}
         .st-summary-note{font-size:11px;color:#6e6e6e;text-align:center}
 
         /* Barra flotante móvil */
-        #mobile-checkout-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:none;flex-direction:column;gap:0;padding:10px 14px calc(12px + env(safe-area-inset-bottom));background:#050706f2;border-top:1px solid #212a24;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+        #mobile-checkout-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:none;flex-direction:column;gap:0;padding:10px 14px calc(12px + env(safe-area-inset-bottom));background:#050609f2;border-top:1px solid #26272a;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
         body.has-mob-bar #mobile-checkout-bar{display:flex;animation:push .35s cubic-bezier(.2,.85,.2,1)}
         @media (min-width:860px){ body.has-mob-bar #mobile-checkout-bar{display:none} }
         .st-mob-row{display:flex;align-items:center;gap:12px}
@@ -282,12 +282,12 @@
         #mob-item-badge{font-size:11px;color:#8a8a8a}
         #mob-price{font-size:13px;font-weight:600;color:#3ee07f}
         #mob-game-name{font-size:11px;color:#6e6e6e;overflow:hidden;text-overflow:ellipsis}
-        .st-mob-qty{flex:none;display:flex;align-items:center;gap:12px;border:1px solid #2d362f;border-radius:9px;padding:7px 14px}
+        .st-mob-qty{flex:none;display:flex;align-items:center;gap:12px;border:1px solid #323336;border-radius:9px;padding:7px 14px}
         .st-mob-qty .q-btn{cursor:pointer;font-size:17px;line-height:1;user-select:none}
         .st-mob-qty .q-minus{color:#8a8a8a}
         .st-mob-qty .q-plus{color:#3ee07f}
         #mob-qty{font-size:14px;min-width:16px;text-align:center}
-        .st-mob-go{flex:none;width:38px;height:38px;display:flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:9px;background:#3ee07f;color:#020a05;font-size:17px;font-weight:700;cursor:pointer}
+        .st-mob-go{flex:none;width:38px;height:38px;display:flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:9px;background:#3ee07f;color:#06070a;font-size:17px;font-weight:700;cursor:pointer}
 
         /* ============ RULETA DE PUNTOS (colores de la web) ============ */
         @keyframes rl-neon{0%,100%{box-shadow:0 0 25px rgba(62,224,127,.35),inset 0 0 15px rgba(62,224,127,.12)}50%{box-shadow:0 0 45px rgba(34,197,94,.6),inset 0 0 25px rgba(34,197,94,.25)}}
@@ -296,26 +296,26 @@
         .rl-card{animation:rl-neon 4s infinite ease-in-out}
         .rl-shake{animation:rl-shake .5s ease-in-out infinite}
         .rl-pop{animation:rl-pop .5s cubic-bezier(.175,.885,.32,1.275) forwards}
-        .rl-frame{background:radial-gradient(circle,#141a16 0%,#050706 70%),conic-gradient(from 0deg,#3ee07f,#16803f,#7af0a6,#0f5c2c,#3ee07f);box-shadow:0 0 35px rgba(62,224,127,.45),inset 0 0 20px rgba(22,128,63,.4);border:4px solid #050706;transition:box-shadow .3s ease}
+        .rl-frame{background:radial-gradient(circle,#17181b 0%,#050609 70%),conic-gradient(from 0deg,#3ee07f,#16803f,#7af0a6,#0f5c2c,#3ee07f);box-shadow:0 0 35px rgba(62,224,127,.45),inset 0 0 20px rgba(22,128,63,.4);border:4px solid #050609;transition:box-shadow .3s ease}
         .rl-frame.spinning{box-shadow:0 0 75px rgba(62,224,127,.85),inset 0 0 40px rgba(62,224,127,.65)}
-        .rl-btn{background:linear-gradient(135deg,#5cf094 0%,#3ee07f 50%,#16a34a 100%);box-shadow:0 0 25px rgba(62,224,127,.55);color:#020a05}
+        .rl-btn{background:linear-gradient(135deg,#5cf094 0%,#3ee07f 50%,#16a34a 100%);box-shadow:0 0 25px rgba(62,224,127,.55);color:#06070a}
         .rl-btn:hover{background:linear-gradient(135deg,#7af0a6 0%,#5cf094 50%,#22c55e 100%);box-shadow:0 0 35px rgba(62,224,127,.75)}
 
         /* ============ FOOTER ============ */
-        .st-footer{position:relative;z-index:1;border-top:1px solid #1c2320;background:#070a08;padding:36px 24px 22px}
+        .st-footer{position:relative;z-index:1;border-top:1px solid #202124;background:#08090c;padding:36px 24px 22px}
         body.has-mob-bar .st-footer{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
         @media (min-width:860px){ body.has-mob-bar .st-footer{padding-bottom:22px} }
         @media (max-width:859px){ .st-footer{padding:30px 18px 22px} }
         .st-footer-inner{max-width:760px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:18px}
         .st-footer-desc{font-size:14px;line-height:1.6;color:#c4c4c4;text-align:center;max-width:460px;text-wrap:pretty}
         .st-footer-chips{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;width:100%}
-        .st-chip{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:999px;background:#0f2416;color:#3ee07f;font-size:12px;font-weight:600;white-space:nowrap;flex:none}
-        .st-footer-div{width:100%;height:1px;background:#181e19;margin:6px 0;flex:none}
+        .st-chip{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:999px;background:#1b1c1f;color:#3ee07f;font-size:12px;font-weight:600;white-space:nowrap;flex:none}
+        .st-footer-div{width:100%;height:1px;background:#1b1c1f;margin:6px 0;flex:none}
         .st-footer-contact{display:flex;flex-direction:column;align-items:center;gap:12px}
         .st-footer-contact-title{font-size:12px;letter-spacing:.14em;font-weight:700;color:#eaeaea}
         .st-footer-mail{display:flex;align-items:center;gap:8px;font-size:15px;color:#eaeaea}
-        .st-footer-wa{display:flex;align-items:center;gap:10px;padding:13px 26px;border-radius:10px;border:1px solid #3ee07f;background:#0b1a11;color:#3ee07f;font-size:14px;font-weight:700;letter-spacing:.04em}
-        .st-footer-wa:hover{background:#0f2416;color:#3ee07f}
+        .st-footer-wa{display:flex;align-items:center;gap:10px;padding:13px 26px;border-radius:10px;border:1px solid #3ee07f;background:#131417;color:#3ee07f;font-size:14px;font-weight:700;letter-spacing:.04em}
+        .st-footer-wa:hover{background:#1b1c1f;color:#3ee07f}
         .st-footer-bottom{width:100%;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;font-size:12px;color:#6e6e6e}
         .st-footer-terms{color:#8a8a8a;text-decoration:underline}
     </style>
@@ -583,15 +583,15 @@
 
     <!-- MODAL DE LOGIN -->
     <div id="login-modal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
-        <div class="bg-[#0d120e] border border-[#212a24] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
-            <div class="p-5 border-b border-[#1c2320] flex justify-between items-center">
+        <div class="bg-[#0f1013] border border-[#26272a] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="p-5 border-b border-[#202124] flex justify-between items-center">
                 <h3 class="font-black text-white tracking-wide text-sm" id="login-modal-title">Iniciar Sesión</h3>
                 <button onclick="closeLoginModal()" class="text-gray-400 hover:text-white text-lg leading-none">&times;</button>
             </div>
             <div class="p-5 space-y-4">
-                <input type="text" id="login-email" placeholder="Email" class="w-full bg-[#10160f] border border-[#2d362f] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <input type="text" id="login-email" placeholder="Email" class="w-full bg-[#121316] border border-[#323336] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                 <div class="relative">
-                    <input type="password" id="login-password" placeholder="Contraseña" class="w-full bg-[#10160f] border border-[#2d362f] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all pr-10">
+                    <input type="password" id="login-password" placeholder="Contraseña" class="w-full bg-[#121316] border border-[#323336] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all pr-10">
                     <button onclick="toggleLoginPassword()" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
                         <i id="login-eye" class="fa-solid fa-eye text-xs"></i>
                     </button>
@@ -610,8 +610,8 @@
 
     <!-- MODAL DE REGISTRO MINI INFLUENCER -->
     <div id="mini-modal" class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
-        <div class="bg-[#0d120e] border border-[#212a24] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
-            <div class="p-5 border-b border-[#1c2320] flex justify-between items-center bg-gradient-to-r from-purple-950/30 to-transparent flex-shrink-0">
+        <div class="bg-[#0f1013] border border-[#26272a] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
+            <div class="p-5 border-b border-[#202124] flex justify-between items-center bg-gradient-to-r from-purple-950/30 to-transparent flex-shrink-0">
                 <h3 class="font-black text-white tracking-wide text-sm flex items-center gap-2">
                     <i class="fa-solid fa-star text-purple-400"></i> MINI INFLUENCER
                 </h3>
@@ -623,17 +623,17 @@
                     Ganas comisión por cada recarga hecha con tu código, más bonos por tus videos.
                     <span class="text-purple-300 font-bold">Tu perfil pasa por revisión antes de activarse.</span>
                 </p>
-                <input type="text" id="mini-name" placeholder="Tu nombre o nombre de creador" class="w-full bg-[#10160f] border border-[#2d362f] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
-                <input type="email" id="mini-email" placeholder="Email (para entrar a tu panel)" class="w-full bg-[#10160f] border border-[#2d362f] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <input type="text" id="mini-name" placeholder="Tu nombre o nombre de creador" class="w-full bg-[#121316] border border-[#323336] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <input type="email" id="mini-email" placeholder="Email (para entrar a tu panel)" class="w-full bg-[#121316] border border-[#323336] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                 <div class="relative">
-                    <input type="password" id="mini-password" placeholder="Contraseña (mín. 6 caracteres)" class="w-full bg-[#10160f] border border-[#2d362f] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all pr-10">
+                    <input type="password" id="mini-password" placeholder="Contraseña (mín. 6 caracteres)" class="w-full bg-[#121316] border border-[#323336] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all pr-10">
                     <button onclick="toggleMiniPassword()" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
                         <i id="mini-eye" class="fa-solid fa-eye text-xs"></i>
                     </button>
                 </div>
-                <input type="text" id="mini-channel" placeholder="Link de tu canal (TikTok, YouTube...)" class="w-full bg-[#10160f] border border-[#2d362f] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                <input type="text" id="mini-channel" placeholder="Link de tu canal (TikTok, YouTube...)" class="w-full bg-[#121316] border border-[#323336] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                 <div>
-                    <input type="text" id="mini-code" placeholder="Código que quieres usar (ej: TUNOMBRE)" maxlength="20" class="w-full bg-[#10160f] border border-[#2d362f] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all uppercase">
+                    <input type="text" id="mini-code" placeholder="Código que quieres usar (ej: TUNOMBRE)" maxlength="20" class="w-full bg-[#121316] border border-[#323336] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all uppercase">
                     <p class="text-[10px] text-gray-500 mt-1">Solo letras, números, guion y guion bajo.</p>
                 </div>
                 <div id="mini-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
@@ -650,7 +650,7 @@
 
     <!-- POPUP CANAL DE WHATSAPP -->
     <div id="wa-popup" class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
-        <div id="wa-popup-card" class="relative bg-[#0d120e] border border-[#212a24] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl transition-all transform scale-95 opacity-0 duration-300">
+        <div id="wa-popup-card" class="relative bg-[#0f1013] border border-[#26272a] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl transition-all transform scale-95 opacity-0 duration-300">
             <!-- Contador y cierre -->
             <div class="absolute top-4 right-4 flex items-center gap-3 z-10">
                 <div id="wa-countdown" class="relative w-7 h-7 flex items-center justify-center">
@@ -680,7 +680,7 @@
                 </a>
 
                 <button onclick="closeWaPopup()" type="button"
-                        class="w-full mt-3 py-3 bg-[#10160f] border border-[#2d362f] text-gray-300 font-bold text-xs rounded-xl transition-all-custom hover:border-emerald-500/40 hover:text-white active:scale-[0.98]">
+                        class="w-full mt-3 py-3 bg-[#121316] border border-[#323336] text-gray-300 font-bold text-xs rounded-xl transition-all-custom hover:border-emerald-500/40 hover:text-white active:scale-[0.98]">
                     Continuar a la página
                 </button>
 
@@ -694,9 +694,9 @@
 
     <!-- MODAL DE CANJE DE CODIGOS DE REGALO -->
     <div id="gift-modal" class="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" style="display:none">
-        <div class="bg-[#0d120e] border border-[#212a24] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
+        <div class="bg-[#0f1013] border border-[#26272a] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
 
-            <div class="p-5 border-b border-[#1c2320] flex justify-between items-center shrink-0">
+            <div class="p-5 border-b border-[#202124] flex justify-between items-center shrink-0">
                 <h3 class="font-black text-white tracking-wide text-sm flex items-center gap-2">
                     <i class="fa-solid fa-gift text-emerald-400"></i> Redimir código
                 </h3>
@@ -712,7 +712,7 @@
                     </p>
                     <input id="gift-code-input" type="text" inputmode="latin" autocomplete="off" autocapitalize="characters"
                            spellcheck="false" maxlength="14" placeholder="ABCD-EFGH-JKMN"
-                           class="w-full bg-[#10160f] border border-[#2d362f] focus:border-emerald-500 rounded-xl px-3 py-3 text-center text-base font-black tracking-[0.2em] text-white placeholder-gray-700 focus:outline-none transition-all uppercase">
+                           class="w-full bg-[#121316] border border-[#323336] focus:border-emerald-500 rounded-xl px-3 py-3 text-center text-base font-black tracking-[0.2em] text-white placeholder-gray-700 focus:outline-none transition-all uppercase">
                     <div id="gift-code-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
                     <button onclick="giftValidateCode()" id="gift-btn-check"
                             class="w-full py-3 bg-gradient-verde text-[#0c0c0e] font-black text-xs rounded-xl tracking-wider uppercase transition-all active:scale-[0.98]">
@@ -725,7 +725,7 @@
 
                 <!-- PASO 2: el ID del jugador -->
                 <div id="gift-step-player" class="space-y-4" style="display:none">
-                    <div class="flex items-center gap-3 bg-[#10160f] border border-emerald-500/25 rounded-xl p-3">
+                    <div class="flex items-center gap-3 bg-[#121316] border border-emerald-500/25 rounded-xl p-3">
                         <img id="gift-prize-img" src="" alt="" class="w-12 h-12 rounded-lg object-cover shrink-0 bg-[#1a1a1e]">
                         <div class="min-w-0 flex-1">
                             <div id="gift-prize-game" class="text-[10px] font-extrabold text-white truncate uppercase tracking-wide">---</div>
@@ -737,14 +737,14 @@
                     <div class="space-y-2">
                         <label for="gift-player-input" class="block text-[11px] font-bold text-gray-300">Tu ID de jugador</label>
                         <input id="gift-player-input" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 123456789"
-                               class="w-full bg-[#10160f] border border-[#2d362f] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                               class="w-full bg-[#121316] border border-[#323336] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                         <p class="text-[10px] text-gray-500">Revisa bien tu ID: la recarga se envía a ese ID y el canje no se puede deshacer.</p>
                     </div>
 
                     <div id="gift-zone-wrap" class="space-y-2" style="display:none">
                         <label for="gift-zone-input" class="block text-[11px] font-bold text-gray-300">Zona ID</label>
                         <input id="gift-zone-input" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 2001"
-                               class="w-full bg-[#10160f] border border-[#2d362f] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                               class="w-full bg-[#121316] border border-[#323336] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                     </div>
 
                     <div id="gift-player-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
@@ -767,7 +767,7 @@
                         <div id="gift-done-title" class="text-sm font-black text-white">¡Listo!</div>
                         <p id="gift-done-message" class="text-[11px] text-gray-400 leading-relaxed"></p>
                     </div>
-                    <div class="bg-[#10160f] border border-[#2d362f] rounded-xl p-3 space-y-1">
+                    <div class="bg-[#121316] border border-[#323336] rounded-xl p-3 space-y-1">
                         <div id="gift-done-prize" class="text-sm font-black text-emerald-400"></div>
                         <div id="gift-done-order" class="text-[10px] text-gray-500 font-semibold"></div>
                     </div>
@@ -785,7 +785,7 @@
                     <p class="text-[11px] text-gray-400 leading-relaxed">Escribe el ID de jugador con el que canjeaste para ver tus últimos canjes.</p>
                     <div class="flex gap-2">
                         <input id="gift-history-input" type="text" inputmode="numeric" autocomplete="off" placeholder="ID de jugador"
-                               class="flex-1 min-w-0 bg-[#10160f] border border-[#2d362f] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                               class="flex-1 min-w-0 bg-[#121316] border border-[#323336] focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                         <button onclick="giftSearchHistory()" id="gift-btn-history" class="px-4 py-2.5 bg-[#222226] text-white font-black text-[11px] rounded-xl uppercase tracking-wider hover:bg-[#2a2a30] transition-all">Buscar</button>
                     </div>
                     <div id="gift-history-error" style="display:none" class="text-[11px] font-semibold text-red-400"></div>
@@ -801,8 +801,8 @@
 
     <!-- RULETA DE PUNTOS: cada juego tiene su ruleta; giros pagados con puntos -->
     <div id="ruleta-modal" class="fixed inset-0 z-[85] items-center justify-center p-4 bg-black/90 backdrop-blur-md overflow-y-auto" style="display:none">
-        <div class="rl-card w-full max-w-md bg-[#0d120e] border border-[#3ee07f]/30 rounded-3xl overflow-hidden relative shadow-2xl my-6">
-            <div class="p-5 border-b border-[#3ee07f]/20 flex items-center justify-between bg-[#070a08]/80">
+        <div class="rl-card w-full max-w-md bg-[#0f1013] border border-[#3ee07f]/30 rounded-3xl overflow-hidden relative shadow-2xl my-6">
+            <div class="p-5 border-b border-[#3ee07f]/20 flex items-center justify-between bg-[#08090c]/80">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 rounded-xl bg-[#3ee07f]/10 border border-[#3ee07f]/40 flex items-center justify-center text-[#3ee07f] font-black text-xl">⚡</div>
                     <div>
@@ -810,7 +810,7 @@
                         <p id="rl-sub" class="text-xs text-[#3ee07f] font-semibold tracking-wide">Gira con tus puntos</p>
                     </div>
                 </div>
-                <button onclick="closeRuletaModal()" class="w-9 h-9 rounded-xl bg-[#171d18] border border-gray-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer" aria-label="Cerrar">
+                <button onclick="closeRuletaModal()" class="w-9 h-9 rounded-xl bg-[#1a1b1e] border border-gray-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer" aria-label="Cerrar">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
@@ -825,16 +825,16 @@
                     </div>
                 </div>
 
-                <div class="w-full mb-3 flex items-center justify-between bg-[#10160f] border border-[#212a24] rounded-xl px-3 py-2">
+                <div class="w-full mb-3 flex items-center justify-between bg-[#121316] border border-[#26272a] rounded-xl px-3 py-2">
                     <span class="text-[11px] text-gray-400 uppercase tracking-wider">Tus puntos</span>
                     <span id="rl-points" class="text-sm font-black text-yellow-400">--</span>
                 </div>
 
                 <div class="w-full mb-2 space-y-2">
                     <input id="rl-player" type="text" inputmode="numeric" autocomplete="off" placeholder="Tu ID de jugador"
-                           class="w-full bg-[#10160f] border border-[#2d362f] focus:border-[#3ee07f] rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                           class="w-full bg-[#121316] border border-[#323336] focus:border-[#3ee07f] rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                     <input id="rl-zone" type="text" inputmode="numeric" autocomplete="off" placeholder="Zona ID" style="display:none"
-                           class="w-full bg-[#10160f] border border-[#2d362f] focus:border-[#3ee07f] rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
+                           class="w-full bg-[#121316] border border-[#323336] focus:border-[#3ee07f] rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all">
                 </div>
 
                 <div class="relative w-72 h-72 my-2 flex items-center justify-center">
@@ -844,7 +844,7 @@
                     </div>
                     <canvas id="rl-canvas" width="320" height="320" class="w-full h-full rounded-full relative z-10 p-3"></canvas>
                     <div class="absolute z-20 flex items-center justify-center">
-                        <button id="rl-go" onclick="ruletaSpin()" class="w-16 h-16 rl-btn rounded-full border-4 border-[#050706] flex items-center justify-center font-black text-base tracking-widest hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer">GO</button>
+                        <button id="rl-go" onclick="ruletaSpin()" class="w-16 h-16 rl-btn rounded-full border-4 border-[#050609] flex items-center justify-center font-black text-base tracking-widest hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer">GO</button>
                     </div>
                 </div>
 
@@ -857,7 +857,7 @@
 
     <!-- Resultado de la ruleta -->
     <div id="rl-result" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[95] items-center justify-center p-4 flex" style="display:none">
-        <div class="bg-[#0d120e] border border-[#3ee07f]/40 rounded-3xl p-7 max-w-sm w-full text-center relative overflow-hidden" style="box-shadow:0 0 50px rgba(62,224,127,.3)">
+        <div class="bg-[#0f1013] border border-[#3ee07f]/40 rounded-3xl p-7 max-w-sm w-full text-center relative overflow-hidden" style="box-shadow:0 0 50px rgba(62,224,127,.3)">
             <div class="absolute -top-16 left-1/2 -translate-x-1/2 w-40 h-40 bg-[#3ee07f]/20 rounded-full blur-3xl pointer-events-none"></div>
             <div class="my-5 relative flex items-center justify-center min-h-[120px]">
                 <div id="rl-emoji" class="text-7xl transition-transform duration-300">🎁</div>
@@ -2463,7 +2463,7 @@
                         var estado = item.delivered
                             ? '<span class="text-[9px] font-black text-emerald-400 uppercase tracking-wider">Entregado</span>'
                             : '<span class="text-[9px] font-black text-amber-400 uppercase tracking-wider">En proceso</span>';
-                        return '<div class="bg-[#10160f] border border-[#2d362f] rounded-xl p-3 flex items-center justify-between gap-3">' +
+                        return '<div class="bg-[#121316] border border-[#323336] rounded-xl p-3 flex items-center justify-between gap-3">' +
                                '<div class="min-w-0">' +
                                '<div class="text-[11px] font-bold text-white truncate">' + esc(item.prize) + '</div>' +
                                '<div class="text-[9px] text-gray-500 font-semibold tracking-widest">' + esc(item.code) + '</div>' +
@@ -2545,7 +2545,7 @@
                 ctx.moveTo(centerX, centerY);
                 ctx.arc(centerX, centerY, radius, startAngle, endAngle);
                 ctx.closePath();
-                ctx.fillStyle = (i % 2 === 0) ? '#0d120e' : '#171d18';
+                ctx.fillStyle = (i % 2 === 0) ? '#0f1013' : '#1a1b1e';
                 ctx.fill();
                 ctx.strokeStyle = '#3ee07f';
                 ctx.lineWidth = 2;
@@ -2561,7 +2561,7 @@
             }
             ctx.beginPath();
             ctx.arc(centerX, centerY, 38, 0, 2 * Math.PI);
-            ctx.fillStyle = '#050706';
+            ctx.fillStyle = '#050609';
             ctx.fill();
             ctx.lineWidth = 4;
             ctx.strokeStyle = '#3ee07f';
