@@ -4,6 +4,109 @@
 <style>
 </style>
 {% endblock %}
+{% block topbar_actions %}
+<button type="button" id="maint-btn" class="maint-btn" hidden>
+  <span aria-hidden="true">🛠️</span> <span id="maint-btn-label">Mantenimiento</span>
+</button>
+<div id="maint-modal" class="maint-modal" hidden>
+  <div class="maint-modal-box" role="dialog" aria-modal="true" aria-labelledby="maint-modal-title">
+    <div class="maint-modal-head">
+      <h3 id="maint-modal-title">Modo mantenimiento</h3>
+      <button type="button" class="maint-modal-close" data-maint-close aria-label="Cerrar">✕</button>
+    </div>
+    <div id="maint-status" class="maint-status"><span class="maint-dot"></span><span id="maint-status-text"></span></div>
+    <p id="maint-help" class="maint-help"></p>
+    <p id="maint-error" class="maint-error" hidden></p>
+    <div class="maint-actions">
+      <button type="button" id="maint-toggle" class="maint-action"></button>
+      <button type="button" class="maint-cancel" data-maint-close>Cancelar</button>
+    </div>
+  </div>
+</div>
+<style>
+  .topbar .maint-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(148,163,184,.3); background: rgba(15,23,42,.5); color: #cbd5e1; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .topbar .maint-btn:hover { border-color: #10b981; color: #d1fae5; }
+  .topbar .maint-btn.is-on { border-color: rgba(248,113,113,.6); background: rgba(248,113,113,.14); color: #fca5a5; }
+  .maint-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.7); }
+  .maint-modal[hidden] { display: none; }
+  .maint-modal-box { width: 100%; max-width: 440px; background: #111827; color: #e5e7eb; border: 1px solid rgba(148,163,184,.25); border-radius: 14px; padding: 18px; }
+  .maint-modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .maint-modal-head h3 { margin: 0; font-size: 17px; }
+  .maint-modal-close { background: none; border: 0; color: #94a3b8; font-size: 16px; cursor: pointer; }
+  .maint-status { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 8px; font-size: 13px; font-weight: 700; border: 1px solid rgba(16,185,129,.4); background: rgba(16,185,129,.12); color: #6ee7b7; }
+  .maint-status.is-on { border-color: rgba(248,113,113,.45); background: rgba(248,113,113,.12); color: #fca5a5; }
+  .maint-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .maint-help { font-size: 13px; line-height: 1.6; color: #94a3b8; margin: 12px 0 16px; }
+  .maint-error { font-size: 13px; color: #fca5a5; margin: -6px 0 12px; }
+  .maint-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .maint-action, .maint-cancel { padding: 9px 14px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .maint-action { border: 1px solid rgba(248,113,113,.5); background: rgba(248,113,113,.14); color: #fca5a5; }
+  .maint-action.is-open { border-color: #10b981; background: #10b981; color: #04130d; }
+  .maint-action:disabled { opacity: .5; cursor: not-allowed; }
+  .maint-cancel { border: 1px solid rgba(148,163,184,.3); background: transparent; color: #cbd5e1; }
+</style>
+<script>
+(function () {
+  // Botón de modo mantenimiento: con él prendido el público ve una pantalla
+  // de "volvemos en unos minutos"; el panel y los webhooks siguen andando.
+  var btn = document.getElementById('maint-btn');
+  var modal = document.getElementById('maint-modal');
+  var toggle = document.getElementById('maint-toggle');
+  var errorBox = document.getElementById('maint-error');
+  var enabled = false;
+
+  function render() {
+    btn.classList.toggle('is-on', enabled);
+    document.getElementById('maint-btn-label').textContent = enabled ? 'En mantenimiento' : 'Mantenimiento';
+    document.getElementById('maint-status').classList.toggle('is-on', enabled);
+    document.getElementById('maint-status-text').textContent = enabled ? 'La tienda está en mantenimiento' : 'La tienda está activa';
+    document.getElementById('maint-help').textContent = enabled
+      ? 'Los visitantes ven una pantalla de mantenimiento en vez de la tienda. El panel sigue funcionando normal, y tú (como admin) puedes seguir entrando a la tienda para revisarla.'
+      : 'Al activarlo, los visitantes van a ver una pantalla de mantenimiento en vez de la tienda hasta que lo desactives. El panel, los webhooks de pago y las recargas en curso siguen funcionando.';
+    toggle.textContent = enabled ? 'Desactivar y abrir la tienda' : 'Activar mantenimiento';
+    toggle.classList.toggle('is-open', enabled);
+  }
+
+  function close() { modal.hidden = true; errorBox.hidden = true; }
+
+  fetch('/admin/maintenance', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data || !data.ok) return;
+      enabled = !!data.enabled;
+      render();
+      btn.hidden = false;
+    })
+    .catch(function () {});
+
+  btn.addEventListener('click', function () { render(); modal.hidden = false; });
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal || e.target.hasAttribute('data-maint-close')) close();
+  });
+  toggle.addEventListener('click', function () {
+    toggle.disabled = true;
+    errorBox.hidden = true;
+    fetch('/admin/maintenance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !enabled })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) throw new Error((res.data && res.data.error) || 'No se pudo guardar');
+        enabled = !!res.data.enabled;
+        render();
+        close();
+      })
+      .catch(function (err) {
+        errorBox.textContent = err.message || 'No se pudo guardar';
+        errorBox.hidden = false;
+      })
+      .finally(function () { toggle.disabled = false; });
+  });
+})();
+</script>
+{% endblock %}
 {% block content %}
 <style>
   /* Softer green styling for payment method selector */

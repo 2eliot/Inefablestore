@@ -119,6 +119,60 @@ def _make_session_permanent():
         pass
 
 
+# ─── Modo mantenimiento ──────────────────────────────────────────────────────
+# Se prende y apaga con el botón del panel (/admin/maintenance). Con él puesto
+# el público ve maintenance.html (503); el panel, su login, los estáticos, las
+# imágenes subidas y los webhooks de pago/Revendedores siguen andando, y el
+# admin logueado puede recorrer la tienda para revisarla antes de abrirla.
+MAINTENANCE_CFG_KEY = "maintenance_mode"
+MAINTENANCE_ALLOWED_PREFIXES = (
+    "/admin", "/auth/login", "/auth/logout", "/auth/session",
+    "/static/", "/uploads/", "/favicon.ico",
+    "/webhook-ubii", "/webhook-binance-pay", "/api/v1/webhook-status",
+)
+# Cache corto por worker: sin esto cada request pegaría una consulta a la base
+# (que está en el servidor A, por túnel). El worker que cambia el valor lo
+# actualiza al instante; los demás lo ven en unos segundos.
+_MAINTENANCE_CACHE_TTL = 5.0
+_maintenance_cache = {"value": False, "at": 0.0}
+
+
+def _maintenance_enabled(force: bool = False) -> bool:
+    now = time.monotonic()
+    if not force and now - _maintenance_cache["at"] < _MAINTENANCE_CACHE_TTL:
+        return _maintenance_cache["value"]
+    try:
+        value = (get_config_value(MAINTENANCE_CFG_KEY, "0") or "0").strip() == "1"
+    except Exception:
+        # Si la base no responde, mejor seguir con el último valor conocido
+        # que tumbar la tienda o abrirla por error.
+        db.session.rollback()
+        value = _maintenance_cache["value"]
+    _maintenance_cache.update(value=value, at=now)
+    return value
+
+
+@app.before_request
+def _maintenance_gate():
+    path = request.path or "/"
+    upload_prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/uploads").rstrip("/") + "/"
+    if path.startswith(MAINTENANCE_ALLOWED_PREFIXES) or path.startswith(upload_prefix):
+        return None
+    if not _maintenance_enabled():
+        return None
+    user = session.get("user") or {}
+    if user.get("role") == "admin":
+        return None
+    message = "La tienda está en mantenimiento. Vuelve a intentarlo en unos minutos."
+    wants_html = request.method == "GET" and "text/html" in (request.headers.get("Accept") or "")
+    if not wants_html:
+        return jsonify({"ok": False, "error": message, "maintenance": True}), 503
+    site_name = get_config_value("site_name", "InefableStore")
+    response = make_response(render_template("maintenance.html", site_name=site_name), 503)
+    response.headers["Retry-After"] = "300"
+    return response
+
+
 @app.after_request
 def _disable_admin_cache(response):
     try:
@@ -9646,6 +9700,21 @@ def _attach_maintenance_pass(response):
             secure=True, httponly=True, samesite="Lax", path="/",
         )
     return response
+
+
+@app.route("/admin/maintenance", methods=["GET", "POST"])
+def admin_maintenance():
+    """Estado y botón del modo mantenimiento (ver _maintenance_gate)."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        enabled = bool(data.get("enabled"))
+        set_config_value(MAINTENANCE_CFG_KEY, "1" if enabled else "0")
+        _maintenance_cache.update(value=enabled, at=time.monotonic())
+        return jsonify({"ok": True, "enabled": enabled})
+    return jsonify({"ok": True, "enabled": _maintenance_enabled(force=True)})
 
 
 @app.route("/admin")
