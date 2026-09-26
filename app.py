@@ -113,6 +113,12 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=3)
 
 @app.before_request
 def _make_session_permanent():
+    # Marcar la sesión la da por modificada y Flask manda Set-Cookie; en imágenes
+    # y estáticos eso impedía que Cloudflare los cacheara (BYPASS).
+    path = request.path or ""
+    upload_prefix = (app.config.get("UPLOAD_URL_PREFIX") or "/uploads").rstrip("/") + "/"
+    if path.startswith(("/static/", "/uploads/", "/favicon.ico")) or path.startswith(upload_prefix):
+        return
     try:
         session.permanent = True
     except Exception:
