@@ -26,7 +26,6 @@
     <title>{{ site_name|default('InefableStore') }} - Recargas y Tarjetas de Regalo</title>
     <link rel="icon" href="{{ url_for('static', filename='561553627_18409264204136226_1099017029378111495_n.ico') }}" type="image/x-icon">
     <link rel="shortcut icon" href="{{ url_for('static', filename='561553627_18409264204136226_1099017029378111495_n.ico') }}" type="image/x-icon">
-    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -324,6 +323,11 @@
         .st-footer-bottom{width:100%;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;font-size:12px;color:#6e6e6e}
         .st-footer-terms{color:#8a8a8a;text-decoration:underline}
     </style>
+    <!-- Tailwind compilado (antes cdn.tailwindcss.com, 400 KB de JS que armaba el CSS en
+         cada visita). Va al final del head, donde lo insertaba el CDN, para conservar el
+         orden de estilos. Si agregas clases de Tailwind nuevas hay que regenerarlo:
+         scripts/build_tailwind.sh -->
+    <link rel="stylesheet" href="{{ static_url('css/tailwind.css') }}">
 </head>
 <body class="text-gray-100">
 
