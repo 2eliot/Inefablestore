@@ -185,6 +185,10 @@ def _disable_admin_cache(response):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
+        elif req_path.startswith("/static/") and request.args.get("v") and response.status_code == 200:
+            # static_url() agrega ?v=<deploy>: cada deploy cambia la URL, así que
+            # el archivo versionado se puede cachear sin miedo a servir uno viejo.
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     except Exception:
         pass
     return response
@@ -1314,7 +1318,14 @@ if prefix == "":
     prefix = "/uploads"
 
 def _serve_upload_file(filename):
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+    # Cada subida lleva timestamp en el nombre y nunca se reescribe, así que se
+    # puede cachear un año. Sin esto cada visita volvía a bajar todas las
+    # imágenes desde el servidor (Kansas) y Cloudflare no las guardaba.
+    # Los comprobantes de pago quedan solo en el navegador, no en Cloudflare.
+    response = send_from_directory(app.config["UPLOAD_FOLDER"], filename, max_age=31536000)
+    scope = "private" if filename.startswith("captures/") else "public"
+    response.headers["Cache-Control"] = f"{scope}, max-age=31536000, immutable"
+    return response
 
 
 @app.route(f"{prefix}/<path:filename>")

@@ -2271,7 +2271,9 @@
             }, {passive: false});
         })();
 
-        window.onload = function () {
+        // DOMContentLoaded y no window.onload: onload espera a que bajen todas las
+        // imágenes, fuentes y el pixel de Facebook antes de pedir los paquetes.
+        document.addEventListener('DOMContentLoaded', function () {
             checkSession();
             loadAllData();
             loadRecentRecharges();
@@ -2280,7 +2282,7 @@
             initWaPopup();
             // Ya no hay boton visible: solo se abre para quien entra por /mini
             {% if auto_open_mini %}openMiniModal();{% endif %}
-        };
+        });
     </script>
     <!-- CANJE DE CODIGOS DE REGALO -->
     <script>
