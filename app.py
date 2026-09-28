@@ -1670,7 +1670,11 @@ def _acquire_singleton_lock(lock_key: int) -> bool:
         with app.app_context():
             if db.engine.dialect.name != "postgresql":
                 return True
-            conn = db.engine.connect()
+            # AUTOCOMMIT: el advisory lock es de SESIÓN (sobrevive sin transacción
+            # abierta). Sin esto, SQLAlchemy deja la conexión "idle in transaction"
+            # de por vida, fijando el horizonte xmin y bloqueando el autovacuum
+            # de toda la base de datos.
+            conn = db.engine.connect().execution_options(isolation_level="AUTOCOMMIT")
             got = conn.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": lock_key}).scalar()
         # conn is a raw checked-out Connection independent of the app context /
         # Flask-SQLAlchemy scoped session — it stays open (and the lock held)
@@ -6642,7 +6646,10 @@ def _order_dispatch_lock_acquire(order_id: int):
         if db.engine.dialect.name != "postgresql":
             return True  # SQLite: single-process, nothing to arbitrate
         from sqlalchemy import text
-        conn = db.engine.connect()
+        # AUTOCOMMIT: mismo motivo que _acquire_singleton_lock — el lock es de
+        # sesión; sin esto la conexión queda "idle in transaction" mientras se
+        # despacha la orden, reteniendo el horizonte xmin del autovacuum.
+        conn = db.engine.connect().execution_options(isolation_level="AUTOCOMMIT")
         got = conn.execute(
             text("SELECT pg_try_advisory_lock(:k)"),
             {"k": _ORDER_DISPATCH_LOCK_BASE + int(order_id)},
