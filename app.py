@@ -8322,6 +8322,18 @@ def store_sorteo_register():
         return jsonify({"ok": False, "error": "El sorteo de hoy ya se realizó. Vuelve a registrarte después de las " + _sorteo_hour_label(cfg["hour"]) + "."}), 409
     if SorteoEntry.query.filter_by(draw_key=key, player_id=player_id).first():
         return jsonify({"ok": False, "error": f"Este ID ya está registrado en el sorteo del {label}. Solo se permite 1 registro por sorteo."}), 409
+    # Un ID que sigue dentro de un sorteo sin resultado (ej. son las 8:00 PM y aún se
+    # está sorteando) espera a que termine antes de entrar al del día siguiente.
+    pendientes = (
+        SorteoEntry.query.filter(SorteoEntry.player_id == player_id, SorteoEntry.draw_key < key)
+        .order_by(SorteoEntry.draw_key.desc()).limit(3).all()
+    )
+    for prev in pendientes:
+        prev_draw = SorteoDraw.query.filter_by(draw_key=prev.draw_key).first()
+        # Si nunca se sorteó (sorteo apagado), deja de bloquear 2 h después de su hora.
+        stale = datetime.now(VE_TIMEZONE) > _sorteo_due_at(prev.draw_key, cfg["hour"]) + timedelta(hours=2)
+        if (not prev_draw or prev_draw.status == "running") and not stale:
+            return jsonify({"ok": False, "error": f"Este ID ya está en el sorteo del {_sorteo_key_label(prev.draw_key)}. Podrás registrarte para el siguiente cuando ese sorteo finalice."}), 409
     if SorteoEntry.query.filter_by(draw_key=key, ip=ip).count() >= SORTEO_MAX_REGS_PER_IP:
         return jsonify({"ok": False, "error": "Ya se registraron varios IDs desde esta conexión para este sorteo."}), 429
 
