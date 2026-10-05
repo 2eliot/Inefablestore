@@ -41,11 +41,6 @@
 
         /* Hero */
         .sx-hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px}
-        .sx-prize{display:flex;align-items:center;gap:12px;padding:10px 16px 10px 10px;border-radius:14px;background:var(--surface2);border:1px solid #3ee07f40;text-align:left;max-width:100%}
-        .sx-prize img{width:48px;height:48px;border-radius:10px;object-fit:cover;background:#1a1a1e;flex:none}
-        .sx-prize-game{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .sx-prize-title{font-size:16px;font-weight:800;color:var(--acc);line-height:1.15}
-        .sx-prize-meta{font-size:11px;color:var(--dim)}
 
         /* Cuenta regresiva */
         .sx-cd{display:flex;gap:10px;justify-content:center}
@@ -141,7 +136,7 @@
             .sx-cell{padding:0 44px}
             .sx-pill{left:20px;right:20px}
         }
-        @media (prefers-reduced-motion:reduce){.sx-pop-card,#sx-wall.idle{animation:none}}
+        @media (prefers-reduced-motion:reduce){.sx-pop-card{animation:none}}
     </style>
 </head>
 <body>
@@ -169,14 +164,6 @@
             <!-- HERO + CUENTA REGRESIVA -->
             <section class="sx-hero">
                 <div class="sx-kicker">Sorteo diario · gratis</div>
-                <div class="sx-prize">
-                    <img id="sx-prize-img" src="" alt="">
-                    <div style="min-width:0">
-                        <div id="sx-prize-game" class="sx-prize-game">---</div>
-                        <div id="sx-prize-title" class="sx-prize-title">---</div>
-                        <div id="sx-prize-meta" class="sx-prize-meta">---</div>
-                    </div>
-                </div>
                 <div class="sx-cd" aria-live="off">
                     <div class="sx-cd-box"><span id="cd-h" class="sx-cd-num">00</span><span class="sx-cd-lbl">Horas</span></div>
                     <div class="sx-cd-box"><span id="cd-m" class="sx-cd-num">00</span><span class="sx-cd-lbl">Min</span></div>
@@ -285,11 +272,6 @@
 
         // ---------- Render ----------
         function renderStatic() {
-            $('sx-prize-img').src = st.prize.image || '';
-            $('sx-prize-img').style.visibility = st.prize.image ? 'visible' : 'hidden';
-            $('sx-prize-game').textContent = st.game || st.prize.game || '';
-            $('sx-prize-title').textContent = st.prize.title || '';
-            $('sx-prize-meta').textContent = st.winners_count + (st.winners_count === 1 ? ' ganador' : ' ganadores') + ' cada día · ' + st.hour_label + ' (hora Venezuela)';
             $('sx-reg-kicker').textContent = 'Registro · sorteo del ' + st.draw_label;
             $('sx-close-info').textContent = 'El registro cierra a las ' + st.hour_label;
             $('sx-count').textContent = st.participants;
