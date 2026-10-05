@@ -68,6 +68,9 @@
         .sx-reel-frame{position:relative;padding:3px;border-radius:28px;background:linear-gradient(115deg,var(--acc),var(--acc-deep) 50%,var(--teal));box-shadow:0 0 40px #3ee07f40,0 0 60px #2dd4bf26}
         .sx-reel-inner{position:relative;border-radius:25px;background:radial-gradient(120% 90% at 50% 50%,#0f2a1b,var(--bg) 70%);padding:18px 0;overflow:hidden}
         .sx-wall{position:absolute;inset:0;padding:0 20px;overflow:hidden;opacity:.22;pointer-events:none;-webkit-mask:linear-gradient(to bottom,#000 0,#000 92px,transparent 100px,transparent 172px,#000 180px,#000 100%);mask:linear-gradient(to bottom,#000 0,#000 92px,transparent 100px,transparent 172px,#000 180px,#000 100%)}
+        /* En reposo los nombres suben lento y en bucle: hay dos bloques iguales, así que -50% empalma */
+        #sx-wall.idle{animation:sx-wall-scroll var(--wall-dur,45s) linear infinite}
+        @keyframes sx-wall-scroll{from{transform:translateY(0)}to{transform:translateY(-50%)}}
         .sx-wall-blk{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 20px;padding-bottom:8px}
         .sx-wall-blk span{font-size:13px;font-weight:600;line-height:18px;white-space:nowrap;color:var(--acc2)}
         .sx-dots{height:10px;margin:0 22px 12px;background:radial-gradient(circle,var(--acc) 2.5px,transparent 3.5px) 0 50%/22px 10px repeat-x;filter:drop-shadow(0 0 4px var(--acc))}
@@ -138,7 +141,7 @@
             .sx-cell{padding:0 44px}
             .sx-pill{left:20px;right:20px}
         }
-        @media (prefers-reduced-motion:reduce){.sx-pop-card{animation:none}}
+        @media (prefers-reduced-motion:reduce){.sx-pop-card,#sx-wall.idle{animation:none}}
     </style>
 </head>
 <body>
@@ -259,6 +262,7 @@
         var animating = false;
         var pollTimer = null, pollAt = 0;
         var popResolve = null, popAuto = null;
+        var wallKey = '';         // nombres pintados en el muro (no reiniciar el bucle si no cambian)
 
         function $(id) { return document.getElementById(id); }
         function esc(s) {
@@ -302,10 +306,26 @@
         function renderWall(names) {
             var list = (names || []).slice();
             if (!list.length) list = ['Inefable', 'Sorteo diario', 'Registra tu ID'];
-            var out = list.slice();
-            while (out.length < 90) out = out.concat(list);
-            var blk = '<div class="sx-wall-blk">' + out.map(function (n) { return '<span>' + esc(n) + '</span>'; }).join('') + '</div>';
-            $('sx-wall').innerHTML = blk + blk;
+            var key = list.join('');
+            if (key !== wallKey) {
+                wallKey = key;
+                var out = list.slice();
+                while (out.length < 90) out = out.concat(list);
+                var blk = '<div class="sx-wall-blk">' + out.map(function (n) { return '<span>' + esc(n) + '</span>'; }).join('') + '</div>';
+                $('sx-wall').innerHTML = blk + blk;
+            }
+            wallIdle(!animating);
+        }
+
+        // Bucle lento del muro (~16 px/s); durante el giro lo mueve spin()
+        function wallIdle(on) {
+            var wall = $('sx-wall');
+            if (!on) { wall.classList.remove('idle'); return; }
+            if (wall.classList.contains('idle')) return;
+            wall.style.transform = '';
+            var blk = wall.children[0];
+            wall.style.setProperty('--wall-dur', Math.max(20, ((blk && blk.offsetHeight) || 600) / 16) + 's');
+            wall.classList.add('idle');
         }
 
         function setStrip(names) {
@@ -471,6 +491,7 @@
         async function playDraw(draw, replay) {
             if (animating || !draw || !draw.winners.length) return;
             animating = true;
+            wallIdle(false);
             $('sx-replay').disabled = true;
             $('sx-live').classList.add('on');
             var pool = (draw.pool && draw.pool.length ? draw.pool : st.names).slice();
