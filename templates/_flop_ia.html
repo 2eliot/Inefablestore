@@ -1,0 +1,3 @@
+{# Flop IA: burbuja de chat con el asistente de la tienda (servicio chatbot-hibrido).
+   La ruta del bot es /flop-ia (nginx la reenvía al servicio); FLOP_IA_API en la config de Flask la cambia. #}
+<script src="{{ url_for('static', filename='js/flop-ia.js') }}?v=6" data-api="{{ config.get('FLOP_IA_API') or '/flop-ia' }}" defer></script>

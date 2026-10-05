@@ -10214,7 +10214,6 @@ def _render_storefront(**extra):
                            sorteo_gid=sorteo_gid, **extra)
 
 
-
 @app.route("/")
 def index():
     """Public storefront index page with header and configurable logo."""
@@ -13162,6 +13161,9 @@ def admin_orders_list():
     status_filter = (request.args.get("status") or "").strip().lower()
     if status_filter in ("pending", "approved", "rejected", "delivered"):
         base_query = base_query.filter(Order.status == status_filter)
+    # Filtro "Solo IA": órdenes creadas por Flop IA (clave de idempotencia "ia-…" o la etiqueta en el nombre)
+    if (request.args.get("origen") or "").strip().lower() == "ia":
+        base_query = base_query.filter(db.or_(Order.idempotency_key.like("ia-%"), Order.name.like("%ORDEN IA%")))
     if q:
         # % y _ son comodines de LIKE: se escapan para que se busquen literales
         safe = q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

@@ -891,6 +891,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const ordersPerPage = 20;
   let ordersQuery = '';
   let ordersStatusFilter = '';
+  let ordersSoloIA = false;  // botón "🤖 Solo IA": órdenes creadas por Flop IA
   const ordersStatusFilterWrap = document.getElementById('orders-status-filter');
   // Revendedores mapping elements
   const btnRevSync = document.getElementById('btn-rev-sync');
@@ -3506,6 +3507,7 @@ window.refreshGallery = refreshGallery;
       const params = new URLSearchParams({ page: normalizedPage, per_page: ordersPerPage });
       if (ordersQuery) params.set('q', ordersQuery);
       if (ordersStatusFilter) params.set('status', ordersStatusFilter);
+      if (ordersSoloIA) params.set('origen', 'ia');
       const res = await fetch(`/admin/orders?${params.toString()}`);
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo listar');
@@ -3572,6 +3574,16 @@ window.refreshGallery = refreshGallery;
       ordersStatusFilterWrap.querySelectorAll('.orders-status-btn').forEach(b => {
         b.classList.toggle('primary', b === btn);
       });
+      ordersCurrentPage = 1;
+      fetchOrders(1);
+    });
+  }
+
+  const btnOrdersIA = document.getElementById('btn-orders-ia');
+  if (btnOrdersIA) {
+    btnOrdersIA.addEventListener('click', () => {
+      ordersSoloIA = !ordersSoloIA;
+      btnOrdersIA.classList.toggle('primary', ordersSoloIA);
       ordersCurrentPage = 1;
       fetchOrders(1);
     });
@@ -3674,7 +3686,7 @@ window.refreshGallery = refreshGallery;
       tile.innerHTML = `
         <div class="row-head">
           <div class="box-left">
-            <div class="game-name">${gameName} <span class="state ${statusClass}">${statusIcon}</span></div>
+            <div class="game-name">${gameName} <span class="state ${statusClass}">${statusIcon}</span>${String(o.name || '').includes('ORDEN IA') ? ' <span class="state" title="Orden creada por Flop IA" style="background:rgba(62,224,127,.15);color:#3ee07f;border:1px solid rgba(62,224,127,.45);">🤖 IA</span>' : ''}</div>
             <div class="package-name">${diam || ''}</div>
             ${playerNick && playerNick !== (o.name||'').trim() && playerNick !== (o.email||'').trim() ? `<div class="package-name" style="color:#86efac;font-size:12px;">👤 ${playerNick}</div>` : ''}
             ${autoSummaryText ? `<div class="package-name" style="color:#93c5fd;font-size:12px;">${autoSummaryText}</div>` : ''}
