@@ -10206,11 +10206,12 @@ def _render_storefront(**extra):
     site_name = get_config_value("site_name", "InefableStore")
     try:
         _scfg = _sorteo_config()
-        sorteo_on = bool(_scfg["enabled"] and _sorteo_prize(_scfg))
+        # El 🏆 solo se muestra con el juego del sorteo seleccionado
+        sorteo_gid = int(_scfg["gid"]) if (_scfg["enabled"] and _sorteo_prize(_scfg)) else 0
     except Exception:
-        sorteo_on = False
+        sorteo_gid = 0
     return render_template("index.html", logo_url=logo_url, banner_url=banner_url, site_name=site_name,
-                           sorteo_on=sorteo_on, **extra)
+                           sorteo_gid=sorteo_gid, **extra)
 
 
 

@@ -166,7 +166,6 @@
             <!-- HERO + CUENTA REGRESIVA -->
             <section class="sx-hero">
                 <div class="sx-kicker">Sorteo diario · gratis</div>
-                <h1 class="sx-h1">Registra tu ID y gana <em id="sx-prize-h">premios</em> todos los días</h1>
                 <div class="sx-prize">
                     <img id="sx-prize-img" src="" alt="">
                     <div style="min-width:0">
@@ -282,7 +281,6 @@
 
         // ---------- Render ----------
         function renderStatic() {
-            $('sx-prize-h').textContent = st.prize.title || 'premios';
             $('sx-prize-img').src = st.prize.image || '';
             $('sx-prize-img').style.visibility = st.prize.image ? 'visible' : 'hidden';
             $('sx-prize-game').textContent = st.game || st.prize.game || '';
