@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sorteo diario - {{ site_name|default('InefableStore') }}</title>
+    <link rel="icon" href="{{ url_for('static', filename='561553627_18409264204136226_1099017029378111495_n.ico') }}" type="image/x-icon">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root{
+            --bg:#050609;--surface:#0f1013;--surface2:#121316;--line:#26272a;--line2:#323336;
+            --text:#eaeaea;--muted:#8a8a8a;--dim:#6e6e6e;
+            --acc:#3ee07f;--acc2:#7af0a6;--acc-deep:#16a34a;--teal:#2dd4bf;--gold:#fbbf24;
+        }
+        *{box-sizing:border-box}
+        html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Outfit',Helvetica,sans-serif}
+        a{color:var(--acc);text-decoration:none}
+        a:hover{color:var(--acc2)}
+        input,button{font-family:inherit}
+        ::selection{background:var(--acc);color:var(--bg)}
+        body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(900px 500px at 10% -10%,#3ee07f1f,transparent 60%),radial-gradient(700px 400px at 100% 0%,#2dd4bf14,transparent 60%)}
+
+        /* Barra superior (igual que la tienda) */
+        .st-topbar{position:sticky;top:0;z-index:50;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #202124;background:#050609d9;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+        .st-logo{font-size:22px;letter-spacing:.22em;font-weight:700;white-space:nowrap;color:var(--text)}
+        .st-logo span{color:var(--acc)}
+        .st-logo-img{height:16px;object-fit:contain;display:block}
+        .sx-back{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line2);border-radius:999px;padding:7px 14px;transition:all .2s}
+        .sx-back:hover{color:var(--acc);border-color:var(--acc)}
+        @media (max-width:859px){.st-topbar{padding:0 14px}.st-logo{font-size:15px;letter-spacing:.14em}.st-logo-img{height:11px}}
+
+        .sx-page{position:relative;z-index:1;max-width:860px;margin:0 auto;padding:22px 16px 64px;display:flex;flex-direction:column;gap:30px}
+        .sx-kicker{font-size:11px;letter-spacing:.18em;font-weight:700;text-transform:uppercase;color:var(--acc)}
+        .sx-h1{margin:0;font-size:clamp(26px,5vw,38px);line-height:1.08;font-weight:800;text-wrap:balance}
+        .sx-h1 em{font-style:normal;color:var(--acc)}
+        .sx-h2{margin:0;font-size:22px;font-weight:800;letter-spacing:.01em}
+        .sx-muted{color:var(--muted)}
+        .sx-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 26px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04)}
+
+        /* Hero */
+        .sx-hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px}
+        .sx-prize{display:flex;align-items:center;gap:12px;padding:10px 16px 10px 10px;border-radius:14px;background:var(--surface2);border:1px solid #3ee07f40;text-align:left;max-width:100%}
+        .sx-prize img{width:48px;height:48px;border-radius:10px;object-fit:cover;background:#1a1a1e;flex:none}
+        .sx-prize-game{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .sx-prize-title{font-size:16px;font-weight:800;color:var(--acc);line-height:1.15}
+        .sx-prize-meta{font-size:11px;color:var(--dim)}
+
+        /* Cuenta regresiva */
+        .sx-cd{display:flex;gap:10px;justify-content:center}
+        .sx-cd-box{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 16px;min-width:84px;border-radius:12px;background:var(--surface);border:1px solid var(--line)}
+        .sx-cd-box.on{border-color:#3ee07f80;box-shadow:0 0 24px #3ee07f26}
+        .sx-cd-num{font-size:clamp(34px,6vw,48px);font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+        .sx-cd-box.on .sx-cd-num{color:var(--acc2)}
+        .sx-cd-lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+        .sx-cd-info{font-size:13px;color:var(--muted)}
+
+        /* Ruleta en vivo (tragamonedas de nombres) */
+        .sx-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+        .sx-btn{min-height:44px;padding:0 18px;border-radius:12px;border:none;cursor:pointer;font-weight:800;font-size:12px;letter-spacing:.08em;text-transform:uppercase;transition:all .2s;white-space:nowrap}
+        .sx-btn:disabled{opacity:.55;cursor:not-allowed}
+        .sx-btn-primary{background:linear-gradient(135deg,#5cf094 0%,#3ee07f 50%,#16a34a 100%);color:#06070a;box-shadow:0 0 22px #3ee07f55}
+        .sx-btn-primary:hover:not(:disabled){box-shadow:0 0 32px #3ee07fa0}
+        .sx-btn-ghost{background:#1a1b1e;color:var(--text);border:1px solid var(--line2)}
+        .sx-btn-ghost:hover:not(:disabled){border-color:var(--acc);color:var(--acc)}
+
+        .sx-reel-frame{position:relative;padding:3px;border-radius:28px;background:linear-gradient(115deg,var(--acc),var(--acc-deep) 50%,var(--teal));box-shadow:0 0 40px #3ee07f40,0 0 60px #2dd4bf26}
+        .sx-reel-inner{position:relative;border-radius:25px;background:radial-gradient(120% 90% at 50% 50%,#0f2a1b,var(--bg) 70%);padding:18px 0;overflow:hidden}
+        .sx-wall{position:absolute;inset:0;padding:0 20px;overflow:hidden;opacity:.22;pointer-events:none;-webkit-mask:linear-gradient(to bottom,#000 0,#000 92px,transparent 100px,transparent 172px,#000 180px,#000 100%);mask:linear-gradient(to bottom,#000 0,#000 92px,transparent 100px,transparent 172px,#000 180px,#000 100%)}
+        .sx-wall-blk{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 20px;padding-bottom:8px}
+        .sx-wall-blk span{font-size:13px;font-weight:600;line-height:18px;white-space:nowrap;color:var(--acc2)}
+        .sx-dots{height:10px;margin:0 22px 12px;background:radial-gradient(circle,var(--acc) 2.5px,transparent 3.5px) 0 50%/22px 10px repeat-x;filter:drop-shadow(0 0 4px var(--acc))}
+        .sx-dots.b{margin:12px 22px 0;background:radial-gradient(circle,var(--teal) 2.5px,transparent 3.5px) 11px 50%/22px 10px repeat-x;filter:drop-shadow(0 0 4px var(--teal))}
+        .sx-window{position:relative;height:192px;overflow:hidden;-webkit-mask:linear-gradient(transparent,#000 30%,#000 70%,transparent);mask:linear-gradient(transparent,#000 30%,#000 70%,transparent)}
+        .sx-strip{will-change:transform}
+        .sx-cell{height:64px;display:flex;align-items:center;justify-content:center;padding:0 56px;font-size:clamp(20px,3.4vw,28px);font-weight:800;font-style:italic;letter-spacing:.01em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .sx-pill{position:absolute;left:28px;right:28px;top:62px;height:68px;border-radius:999px;padding:2px;background:linear-gradient(90deg,var(--acc),var(--teal));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 10px #3ee07f99);pointer-events:none}
+        .sx-arrow{position:absolute;top:82px;width:0;height:0;border-top:14px solid transparent;border-bottom:14px solid transparent;pointer-events:none}
+        .sx-arrow.l{left:6px;border-left:18px solid var(--acc);filter:drop-shadow(0 0 8px var(--acc))}
+        .sx-arrow.r{right:6px;border-right:18px solid var(--teal);filter:drop-shadow(0 0 8px var(--teal))}
+        .sx-live{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:3px 12px;border-radius:999px;background:var(--bg);box-shadow:0 0 0 1px var(--acc);font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--acc)}
+        .sx-live i{width:7px;height:7px;border-radius:50%;background:var(--acc);box-shadow:0 0 8px var(--acc)}
+        .sx-live.on i{animation:sx-blink 1s infinite}
+        @keyframes sx-blink{50%{opacity:.2}}
+
+        .sx-winners{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
+        .sx-wcard{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+        .sx-wcard.won{border-color:#3ee07f66;box-shadow:0 0 18px #3ee07f1f}
+        .sx-wtop{display:flex;justify-content:space-between;align-items:center;gap:8px}
+        .sx-wlabel{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--acc);font-weight:700}
+        .sx-wstate{font-size:12px;color:var(--muted)}
+        .sx-wname{font-size:16px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .sx-wmeta{font-size:12px;color:var(--muted)}
+
+        /* Registro */
+        .sx-field{display:flex;flex-direction:column;gap:6px}
+        .sx-field label{font-size:12px;font-weight:700;color:#c4c4c4}
+        .sx-inputs{display:flex;gap:8px;flex-wrap:wrap}
+        .sx-input{flex:1 1 180px;min-width:0;min-height:44px;font-size:16px;background:var(--surface2);border:1px solid var(--line2);border-radius:12px;padding:0 14px;color:var(--text);outline:none;transition:border-color .2s}
+        .sx-input:focus{border-color:var(--acc)}
+        .sx-input::placeholder{color:#4f4f4f}
+        .sx-msg{display:none;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;font-size:14px}
+        .sx-msg i{width:8px;height:8px;margin-top:7px;flex:none;border-radius:50%}
+        .sx-msg.ok{display:flex;background:#3ee07f14;border:1px solid #3ee07f55;color:var(--acc2)}
+        .sx-msg.ok i{background:var(--acc);box-shadow:0 0 8px var(--acc)}
+        .sx-msg.err{display:flex;background:#ef44441a;border:1px solid #ef444466;color:#fca5a5}
+        .sx-msg.err i{background:#ef4444}
+        .sx-meta{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--dim)}
+
+        /* Historial */
+        .sx-hist{display:flex;flex-direction:column;gap:10px}
+        .sx-hday{border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+        .sx-hhead{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid #202124;font-size:12px;color:var(--muted)}
+        .sx-hhead b{color:var(--text);font-weight:700}
+        .sx-hrow{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;font-size:14px}
+        .sx-hrow+.sx-hrow{border-top:1px solid #17181b}
+        .sx-hpos{font-weight:800;color:var(--acc)}
+        .sx-hname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+        .sx-hname small{display:block;font-weight:400;color:var(--dim);font-size:11px;font-variant-numeric:tabular-nums}
+        .sx-tag{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:#3ee07f1a;color:var(--acc);border:1px solid #3ee07f40;white-space:nowrap}
+        .sx-tag.wait{background:#fbbf241a;color:var(--gold);border-color:#fbbf2440}
+        .sx-empty{padding:18px;text-align:center;font-size:13px;color:var(--dim);border:1px dashed var(--line2);border-radius:14px}
+
+        /* Ganador (popup) */
+        .sx-pop{position:fixed;inset:0;z-index:95;display:none;align-items:center;justify-content:center;padding:16px;background:#000000e0;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+        .sx-pop.on{display:flex}
+        .sx-pop-card{position:relative;overflow:hidden;width:min(420px,100%);padding:28px;border-radius:24px;background:var(--surface);border:1px solid #3ee07f66;box-shadow:0 0 50px #3ee07f4d;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;animation:sx-pop .45s cubic-bezier(.175,.885,.32,1.275)}
+        @keyframes sx-pop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}
+        .sx-pop-glow{position:absolute;top:-70px;left:50%;transform:translateX(-50%);width:180px;height:180px;border-radius:50%;background:#3ee07f33;filter:blur(50px);pointer-events:none}
+        .sx-pop-gem{width:54px;height:54px;margin:12px 0 6px;transform:rotate(45deg);border:2px solid var(--acc);border-radius:6px;background:#0f2a1b;box-shadow:0 0 30px #3ee07f99}
+        .sx-pop-name{font-size:30px;line-height:1.15;font-weight:800;word-break:break-word}
+        .sx-pop-prize{padding:10px 18px;border-radius:12px;background:#3ee07f14;border:1px solid #3ee07f55;font-size:20px;font-weight:800;color:var(--acc2)}
+        .sx-off{text-align:center;padding:40px 18px}
+
+        @media (max-width:520px){
+            .sx-cd-box{min-width:0;flex:1;padding:12px 8px}
+            .sx-cell{padding:0 44px}
+            .sx-pill{left:20px;right:20px}
+        }
+        @media (prefers-reduced-motion:reduce){.sx-pop-card{animation:none}}
+    </style>
+</head>
+<body>
+    <header class="st-topbar">
+        <a href="/" aria-label="Volver a la tienda">
+            {% if logo_url %}
+            <img src="{{ logo_url }}" alt="{{ site_name|default('InefableStore') }}" class="st-logo-img">
+            {% else %}
+            <div class="st-logo">INEFABL<span>E</span></div>
+            {% endif %}
+        </a>
+        <a href="/" class="sx-back">‹ Tienda</a>
+    </header>
+
+    <main class="sx-page">
+        <div id="sx-loading" class="sx-off sx-muted">Cargando sorteo...</div>
+
+        <div id="sx-off" class="sx-card sx-off" style="display:none">
+            <div class="sx-kicker" style="margin-bottom:8px">Sorteo diario</div>
+            <h1 class="sx-h1" style="font-size:24px">El sorteo no está disponible por ahora</h1>
+            <p class="sx-muted">Vuelve pronto. <a href="/">Ir a la tienda</a></p>
+        </div>
+
+        <div id="sx-app" style="display:none;flex-direction:column;gap:30px">
+            <!-- HERO + CUENTA REGRESIVA -->
+            <section class="sx-hero">
+                <div class="sx-kicker">Sorteo diario · gratis</div>
+                <h1 class="sx-h1">Registra tu ID y gana <em id="sx-prize-h">premios</em> todos los días</h1>
+                <div class="sx-prize">
+                    <img id="sx-prize-img" src="" alt="">
+                    <div style="min-width:0">
+                        <div id="sx-prize-game" class="sx-prize-game">---</div>
+                        <div id="sx-prize-title" class="sx-prize-title">---</div>
+                        <div id="sx-prize-meta" class="sx-prize-meta">---</div>
+                    </div>
+                </div>
+                <div class="sx-cd" aria-live="off">
+                    <div class="sx-cd-box"><span id="cd-h" class="sx-cd-num">00</span><span class="sx-cd-lbl">Horas</span></div>
+                    <div class="sx-cd-box"><span id="cd-m" class="sx-cd-num">00</span><span class="sx-cd-lbl">Min</span></div>
+                    <div class="sx-cd-box on"><span id="cd-s" class="sx-cd-num">00</span><span class="sx-cd-lbl">Seg</span></div>
+                </div>
+                <div id="sx-cd-info" class="sx-cd-info">---</div>
+            </section>
+
+            <!-- RULETA EN VIVO -->
+            <section style="display:flex;flex-direction:column;gap:16px">
+                <div class="sx-row">
+                    <div style="display:flex;flex-direction:column;gap:4px">
+                        <h2 class="sx-h2">Ruleta en vivo</h2>
+                        <span id="sx-status" class="sx-muted" style="font-size:14px">---</span>
+                    </div>
+                    <button id="sx-replay" class="sx-btn sx-btn-ghost" type="button" style="display:none">Ver último sorteo</button>
+                </div>
+                <div class="sx-reel-frame">
+                    <div class="sx-reel-inner">
+                        <div class="sx-wall"><div id="sx-wall"></div></div>
+                        <div class="sx-dots"></div>
+                        <div class="sx-window">
+                            <div id="sx-strip" class="sx-strip"></div>
+                            <div class="sx-pill"></div>
+                            <div class="sx-arrow l"></div>
+                            <div class="sx-arrow r"></div>
+                        </div>
+                        <div class="sx-dots b"></div>
+                        <div id="sx-live" class="sx-live"><i></i><span>EN VIVO</span></div>
+                    </div>
+                </div>
+                <div id="sx-winners" class="sx-winners"></div>
+            </section>
+
+            <!-- REGISTRO -->
+            <section id="registro" class="sx-card" style="display:flex;flex-direction:column;gap:14px">
+                <div class="sx-kicker" id="sx-reg-kicker">Registro</div>
+                <div style="font-size:20px;font-weight:800">Participa con tu ID</div>
+                <p class="sx-muted" style="margin:0;font-size:14px;line-height:1.5">Verificamos tu ID antes de entrar y solo mostramos el nombre asociado. Un registro por ID en cada sorteo. Si ganas, la recarga se envía sola a ese ID.</p>
+                <div class="sx-field">
+                    <label for="sx-id">ID de jugador</label>
+                    <div class="sx-inputs">
+                        <input id="sx-id" class="sx-input" inputmode="numeric" autocomplete="off" placeholder="Ej. 48213977" maxlength="20">
+                        <input id="sx-zone" class="sx-input" inputmode="numeric" autocomplete="off" placeholder="Zona ID" maxlength="10" style="display:none;flex:0 1 120px">
+                        <button id="sx-register" class="sx-btn sx-btn-primary" type="button">Verificar y participar</button>
+                    </div>
+                </div>
+                <div id="sx-msg" class="sx-msg"><i></i><span id="sx-msg-text"></span></div>
+                <div class="sx-meta">
+                    <span><b id="sx-count" style="color:var(--text)">0</b> participantes verificados</span>
+                    <span id="sx-close-info">El registro cierra a las 8:00 PM</span>
+                </div>
+            </section>
+
+            <!-- HISTORIAL -->
+            <section style="display:flex;flex-direction:column;gap:14px">
+                <h2 class="sx-h2">Historial de ganadores</h2>
+                <div id="sx-hist" class="sx-hist"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- GANADOR -->
+    <div id="sx-pop" class="sx-pop" role="dialog" aria-modal="true" aria-labelledby="sx-pop-name">
+        <div class="sx-pop-card">
+            <div class="sx-pop-glow"></div>
+            <span id="sx-pop-tag" class="sx-tag">Ganador 1 de 3</span>
+            <div class="sx-pop-gem"></div>
+            <div id="sx-pop-name" class="sx-pop-name">---</div>
+            <div id="sx-pop-id" class="sx-muted" style="font-size:14px;font-variant-numeric:tabular-nums">---</div>
+            <div id="sx-pop-prize" class="sx-pop-prize">---</div>
+            <p id="sx-pop-text" class="sx-muted" style="margin:0;font-size:13px">---</p>
+            <button id="sx-pop-btn" class="sx-btn sx-btn-primary" type="button" style="width:100%;margin-top:6px">Continuar</button>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        var ROW = 64;
+        var st = null;            // /store/sorteo/state
+        var offset = 0;           // reloj del servidor - reloj local
+        var waiting = null;       // {key, since}: sorteo que llegó a cero y aún no tiene resultado
+        var animating = false;
+        var pollTimer = null, pollAt = 0;
+        var popResolve = null, popAuto = null;
+
+        function $(id) { return document.getElementById(id); }
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+        function pad(n) { return String(n).padStart(2, '0'); }
+        function now() { return Date.now() + offset; }
+        function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+        function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+        function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+        async function fetchState() {
+            var res = await fetch('/store/sorteo/state', { cache: 'no-store' });
+            var data = await res.json();
+            if (data && data.server_ms) offset = data.server_ms - Date.now();
+            return data;
+        }
+
+        // ---------- Render ----------
+        function renderStatic() {
+            $('sx-prize-h').textContent = st.prize.title || 'premios';
+            $('sx-prize-img').src = st.prize.image || '';
+            $('sx-prize-img').style.visibility = st.prize.image ? 'visible' : 'hidden';
+            $('sx-prize-game').textContent = st.game || st.prize.game || '';
+            $('sx-prize-title').textContent = st.prize.title || '';
+            $('sx-prize-meta').textContent = st.winners_count + (st.winners_count === 1 ? ' ganador' : ' ganadores') + ' cada día · ' + st.hour_label + ' (hora Venezuela)';
+            $('sx-reg-kicker').textContent = 'Registro · sorteo del ' + st.draw_label;
+            $('sx-close-info').textContent = 'El registro cierra a las ' + st.hour_label;
+            $('sx-count').textContent = st.participants;
+            $('sx-zone').style.display = st.requires_zone ? '' : 'none';
+            $('sx-replay').style.display = (st.draws.length && st.draws[0].winners.length) ? '' : 'none';
+            renderWall(st.names);
+            renderHistory();
+            var reg = load('sorteo_reg_' + st.draw_key);
+            if (reg && reg.nickname && !$('sx-msg').classList.contains('err')) {
+                showMsg('ok', 'Ya estás dentro del sorteo del ' + st.draw_label + ' como ' + reg.nickname + '. ¡Suerte!');
+            }
+        }
+
+        function renderWall(names) {
+            var list = (names || []).slice();
+            if (!list.length) list = ['Inefable', 'Sorteo diario', 'Registra tu ID'];
+            var out = list.slice();
+            while (out.length < 90) out = out.concat(list);
+            var blk = '<div class="sx-wall-blk">' + out.map(function (n) { return '<span>' + esc(n) + '</span>'; }).join('') + '</div>';
+            $('sx-wall').innerHTML = blk + blk;
+        }
+
+        function setStrip(names) {
+            $('sx-strip').innerHTML = names.map(function (n) { return '<div class="sx-cell">' + esc(n) + '</div>'; }).join('');
+        }
+
+        function renderCards(draw, revealed, states) {
+            var n = draw ? Math.max(draw.winners.length, 1) : st.winners_count;
+            var html = '';
+            for (var i = 0; i < n; i++) {
+                var w = draw && draw.winners[i];
+                var show = w && i < revealed;
+                html += '<div class="sx-wcard' + (show ? ' won' : '') + '">' +
+                    '<div class="sx-wtop"><span class="sx-wlabel">Ganador ' + (i + 1) + '</span>' +
+                    '<span class="sx-wstate">' + esc((states && states[i]) || (show ? (w.delivered ? 'Recarga enviada' : 'Procesando') : 'En espera')) + '</span></div>' +
+                    '<span class="sx-wname">' + (show ? esc(w.nickname) : '—') + '</span>' +
+                    '<span class="sx-wmeta">' + (show ? 'ID ' + esc(w.id_mask) + ' · ' + esc(draw.prize || st.prize.title) : 'Ganador por definir') + '</span>' +
+                    '</div>';
+            }
+            $('sx-winners').innerHTML = html;
+        }
+
+        function renderHistory() {
+            var draws = st.draws || [];
+            if (!draws.length) {
+                $('sx-hist').innerHTML = '<div class="sx-empty">Todavía no hay sorteos. ¡El primero puede ser tuyo!</div>';
+                return;
+            }
+            $('sx-hist').innerHTML = draws.map(function (d) {
+                var rows = d.winners.length ? d.winners.map(function (w) {
+                    return '<div class="sx-hrow"><span class="sx-hpos">' + w.pos + 'º</span>' +
+                        '<span class="sx-hname">' + esc(w.nickname) + '<small>ID ' + esc(w.id_mask) + '</small></span>' +
+                        '<span class="sx-tag' + (w.delivered ? '' : ' wait') + '">' + (w.delivered ? 'Acreditada' : 'Procesando') + '</span></div>';
+                }).join('') : '<div class="sx-hrow"><span></span><span class="sx-muted" style="font-size:13px">Sin participantes ese día</span><span></span></div>';
+                return '<div class="sx-hday"><div class="sx-hhead"><span><b>' + esc(d.label) + '</b> · ' + esc(d.prize) + '</span>' +
+                    '<span>' + d.participants + ' participantes</span></div>' + rows + '</div>';
+            }).join('');
+        }
+
+        function setStatus(t) { $('sx-status').textContent = t; }
+
+        function idleStatus() {
+            var last = st.draws[0];
+            if (last && last.winners.length) {
+                setStatus('Último sorteo: ' + last.label + '. Próximo: ' + st.draw_label + ', ' + st.hour_label + '.');
+                renderCards(last, last.winners.length);
+                setStrip(['· · ·', last.winners[0].nickname, '· · ·']);
+            } else {
+                setStatus('Esperando las ' + st.hour_label + ' (hora Venezuela)');
+                renderCards(null, 0);
+                setStrip(['· · ·', 'Inefable', '· · ·']);
+            }
+            $('sx-strip').style.transform = 'translateY(0)';
+        }
+
+        // ---------- Cuenta regresiva ----------
+        function tick() {
+            if (!st) return;
+            var left = Math.max(0, st.target_ms - now());
+            var sec = Math.floor(left / 1000);
+            $('cd-h').textContent = pad(Math.floor(sec / 3600));
+            $('cd-m').textContent = pad(Math.floor(sec / 60) % 60);
+            $('cd-s').textContent = pad(sec % 60);
+            var v = new Date(now() - 4 * 3600e3);
+            var h = v.getUTCHours();
+            $('sx-cd-info').textContent = 'Próximo sorteo: ' + st.draw_label + ', ' + st.hour_label + ' VET · Ahora en Venezuela: ' +
+                ((h % 12) || 12) + ':' + pad(v.getUTCMinutes()) + ':' + pad(v.getUTCSeconds()) + (h < 12 ? ' AM' : ' PM');
+            if (left <= 0 && !animating && !waiting) {
+                waiting = { key: st.draw_key, since: Date.now() };
+                schedulePoll(4000);
+            }
+            if (waiting && !animating) {
+                setStatus('¡Sorteando ganadores! No cierres la página…');
+                $('sx-live').classList.add('on');
+            }
+        }
+
+        function schedulePoll(ms) {
+            clearTimeout(pollTimer);
+            pollAt = Date.now() + ms;
+            pollTimer = setTimeout(refresh, ms);
+        }
+
+        async function refresh() {
+            try {
+                var data = await fetchState();
+                if (!data || !data.enabled) { showOff(); return; }
+                st = data;
+                if (!animating) renderStatic();
+                if (waiting && !animating) {
+                    // ¿Ya salió el resultado del sorteo que llegó a cero?
+                    var done = st.draws.filter(function (d) { return d.key === waiting.key; })[0];
+                    if (done) {
+                        waiting = null;
+                        if (done.winners.length && !load('sorteo_seen_' + done.key)) await playDraw(done, false);
+                        else { $('sx-live').classList.remove('on'); idleStatus(); }
+                    } else if (Date.now() - waiting.since > 10 * 60 * 1000) {
+                        waiting = null;
+                        $('sx-live').classList.remove('on');
+                        idleStatus();
+                    }
+                } else if (!animating) {
+                    idleStatus();
+                }
+            } catch (e) { /* reintenta en el próximo ciclo */ }
+            schedulePoll(waiting ? 4000 : 30000);
+        }
+
+        // ---------- Animación del sorteo ----------
+        function spin(winnerName, pool) {
+            return new Promise(function (res) {
+                var strip = [];
+                for (var k = 0; k < 48; k++) strip.push(pick(pool));
+                var w = strip.length;
+                strip.push(winnerName, pick(pool), pick(pool));
+                var el = $('sx-strip');
+                el.style.transform = 'translateY(0)';
+                setStrip(strip);
+                var wall = $('sx-wall');
+                var dist = (w - 1) * ROW, dur = 5000, t0 = performance.now();
+                var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                if (reduce) dur = 600;
+                function step(t) {
+                    var p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 4);
+                    el.style.transform = 'translateY(' + (-dist * e) + 'px)';
+                    el.style.filter = reduce ? 'none' : 'blur(' + Math.min(2.5, 6 * Math.pow(1 - p, 3)).toFixed(2) + 'px)';
+                    var blk = wall.children[0];
+                    if (blk) {
+                        var bh = blk.offsetHeight || 1;
+                        wall.style.transform = 'translateY(' + (-((dist * e * 0.4) % bh)) + 'px)';
+                    }
+                    if (p < 1) requestAnimationFrame(step);
+                    else { el.style.filter = 'none'; res(); }
+                }
+                requestAnimationFrame(step);
+            });
+        }
+
+        function showPopup(i, total, w, prize) {
+            return new Promise(function (res) {
+                popResolve = res;
+                $('sx-pop-tag').textContent = 'Ganador ' + (i + 1) + ' de ' + total;
+                $('sx-pop-name').textContent = w.nickname;
+                $('sx-pop-id').textContent = 'ID ' + w.id_mask;
+                $('sx-pop-prize').textContent = '+ ' + prize;
+                $('sx-pop-text').textContent = w.delivered
+                    ? '¡Felicidades! La recarga se envió automáticamente a tu ID.'
+                    : '¡Felicidades! Tu premio se está procesando y llegará a tu ID.';
+                $('sx-pop-btn').textContent = i + 1 < total ? 'Continuar al sorteo ' + (i + 2) : 'Cerrar';
+                var card = $('sx-pop').querySelector('.sx-pop-card');
+                card.style.animation = 'none'; void card.offsetWidth; card.style.animation = '';
+                $('sx-pop').classList.add('on');
+                popAuto = setTimeout(closePopup, 6000);
+            });
+        }
+        function closePopup() {
+            clearTimeout(popAuto);
+            $('sx-pop').classList.remove('on');
+            var r = popResolve; popResolve = null;
+            if (r) r();
+        }
+
+        async function playDraw(draw, replay) {
+            if (animating || !draw || !draw.winners.length) return;
+            animating = true;
+            $('sx-replay').disabled = true;
+            $('sx-live').classList.add('on');
+            var pool = (draw.pool && draw.pool.length ? draw.pool : st.names).slice();
+            draw.winners.forEach(function (w) { pool.push(w.nickname); });
+            if (pool.length < 3) pool = pool.concat(['Inefable', 'Sorteo', 'Suerte']);
+            renderWall(pool);
+            var states = draw.winners.map(function () { return 'En espera'; });
+            renderCards(draw, 0, states);
+            for (var i = 0; i < draw.winners.length; i++) {
+                var w = draw.winners[i];
+                setStatus((replay ? 'Repetición · ' : '') + 'Sorteo ' + (i + 1) + ' de ' + draw.winners.length + ' en curso…');
+                states[i] = 'Girando…';
+                renderCards(draw, i, states);
+                await spin(w.nickname, pool);
+                states[i] = w.delivered ? 'Recarga enviada' : 'Procesando';
+                renderCards(draw, i + 1, states);
+                await showPopup(i, draw.winners.length, w, draw.prize || st.prize.title);
+            }
+            store('sorteo_seen_' + draw.key, 1);
+            animating = false;
+            $('sx-replay').disabled = false;
+            $('sx-live').classList.remove('on');
+            renderWall(st.names);
+            setStatus('Sorteo del ' + draw.label + ' finalizado. ¡Felicidades a los ganadores! Próximo: ' + st.draw_label + ', ' + st.hour_label + '.');
+        }
+
+        // ---------- Registro ----------
+        function showMsg(type, text) {
+            var box = $('sx-msg');
+            box.className = 'sx-msg' + (type ? ' ' + type : '');
+            $('sx-msg-text').textContent = text || '';
+        }
+
+        async function register() {
+            var id = ($('sx-id').value || '').replace(/\s/g, '');
+            var zone = ($('sx-zone').value || '').replace(/\s/g, '');
+            if (!id) { showMsg('err', 'Escribe tu ID para participar.'); return; }
+            if (st.requires_zone && !zone) { showMsg('err', 'Escribe tu Zona ID.'); return; }
+            var btn = $('sx-register');
+            btn.disabled = true;
+            btn.textContent = 'Verificando…';
+            showMsg('', '');
+            try {
+                var res = await fetch('/store/sorteo/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: id, zone_id: zone })
+                });
+                var data = await res.json().catch(function () { return {}; });
+                if (!res.ok || !data.ok) {
+                    showMsg('err', (data && data.error) || 'No pudimos verificar este ID. Intenta de nuevo.');
+                } else {
+                    store('sorteo_reg_' + data.draw_key, { id: id, nickname: data.nickname });
+                    showMsg('ok', data.message);
+                    $('sx-id').value = '';
+                    $('sx-zone').value = '';
+                    $('sx-count').textContent = data.participants;
+                    if (st && st.names.indexOf(data.nickname) < 0) { st.names.unshift(data.nickname); renderWall(st.names); }
+                }
+            } catch (e) {
+                showMsg('err', 'Error al verificar. Intenta de nuevo.');
+            }
+            btn.disabled = false;
+            btn.textContent = 'Verificar y participar';
+        }
+
+        function showOff() {
+            $('sx-loading').style.display = 'none';
+            $('sx-app').style.display = 'none';
+            $('sx-off').style.display = '';
+        }
+
+        // ---------- Arranque ----------
+        $('sx-register').addEventListener('click', register);
+        $('sx-id').addEventListener('keydown', function (e) { if (e.key === 'Enter') register(); });
+        $('sx-zone').addEventListener('keydown', function (e) { if (e.key === 'Enter') register(); });
+        $('sx-id').addEventListener('input', function () { if ($('sx-msg').classList.contains('err')) showMsg('', ''); });
+        $('sx-pop-btn').addEventListener('click', closePopup);
+        $('sx-pop').addEventListener('click', function (e) { if (e.target === $('sx-pop')) closePopup(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('sx-pop').classList.contains('on')) closePopup(); });
+        $('sx-replay').addEventListener('click', function () {
+            if (st && st.draws[0]) playDraw(st.draws[0], true);
+        });
+
+        (async function init() {
+            try {
+                st = await fetchState();
+            } catch (e) { st = null; }
+            if (!st || !st.enabled) { showOff(); return; }
+            $('sx-loading').style.display = 'none';
+            $('sx-app').style.display = 'flex';
+            renderStatic();
+            idleStatus();
+            tick();
+            setInterval(tick, 1000);
+            // Si el último sorteo fue hace poco y este navegador no lo vio, se reproduce
+            var last = st.draws[0];
+            if (last && last.winners.length && last.drawn_ms && now() - last.drawn_ms < 30 * 60 * 1000 && !load('sorteo_seen_' + last.key)) {
+                playDraw(last, false);
+            }
+            // Página abierta justo mientras el servidor sortea: esperar el resultado de hoy
+            if (st.drawing && !animating) {
+                waiting = { key: new Date(now() - 4 * 3600e3).toISOString().slice(0, 10), since: Date.now() };
+            }
+            schedulePoll(waiting ? 4000 : 30000);
+        })();
+    })();
+    </script>
+</body>
+</html>

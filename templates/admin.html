@@ -610,6 +610,7 @@
           <div style="display:flex; gap:6px; margin-left:12px;">
             <button class="btn primary suite-tab" data-pane="#suite-pane-gracias" type="button">Ruleta Gracias</button>
             <button class="btn suite-tab" data-pane="#suite-pane-puntos" type="button">Ruleta de Puntos</button>
+            <button class="btn suite-tab" data-pane="#suite-pane-sorteo" type="button">Sorteo diario</button>
           </div>
           <button id="ruleta-suite-close" class="btn" type="button" style="margin-left:auto;">✕ Cerrar</button>
         </div>
@@ -708,6 +709,61 @@
               <button id="btn-rl-reset-counter" class="btn" type="button" title="Vuelve a empezar el conteo de giros para el próximo premio">Reiniciar contador</button>
               <span id="rl-save-status" style="margin-left:8px; color:#64748b; font-size:13px;"></span>
             </div>
+          </div>
+        </div>
+        </div>
+
+        <div id="suite-pane-sorteo" class="minigame-grid" style="display:none">
+        <div class="minigame-card">
+          <h3>Sorteo diario (tienda)</h3>
+          <p style="margin:0 0 12px; color:#94a3b8; font-size:13px;">
+            Los clientes registran gratis su ID en <a href="/sorteo" target="_blank" rel="noopener">/sorteo</a> (botón 🏆 de la rueda lateral).
+            El ID se verifica con el verificador del juego elegido y solo se permite 1 registro por ID en cada sorteo.
+            A la hora indicada (hora Venezuela) salen los ganadores al azar y el premio se entrega como una orden
+            (automática si el ítem tiene recarga mapeada, manual si no). Los registros después de esa hora entran al sorteo del día siguiente.
+          </p>
+          <div class="form-row">
+            <label>Activo</label>
+            <input id="so-enabled" type="checkbox">
+          </div>
+          <div class="form-row">
+            <label for="so-game">Juego</label>
+            <select id="so-game"><option value="">— Elegir juego —</option></select>
+          </div>
+          <div class="form-row">
+            <label for="so-item">Premio de cada ganador</label>
+            <select id="so-item"><option value="">— Elegir paquete —</option></select>
+          </div>
+          <div class="form-row">
+            <label for="so-winners">Ganadores por día</label>
+            <input id="so-winners" type="number" min="1" max="10" step="1" placeholder="3">
+          </div>
+          <div class="form-row">
+            <label for="so-hour">Hora del sorteo (VET, 0-23)</label>
+            <input id="so-hour" type="number" min="0" max="23" step="1" placeholder="20">
+          </div>
+          <div class="form-row">
+            <label>&nbsp;</label>
+            <div>
+              <button id="btn-so-save" class="btn primary" type="button">Guardar sorteo</button>
+              <button id="btn-so-draw-now" class="btn" type="button" title="Sortea ya el sorteo en curso y cierra su registro">Sortear ahora</button>
+              <button id="btn-so-refresh" class="btn" type="button">Refrescar</button>
+              <span id="so-status" style="margin-left:8px; color:#64748b; font-size:13px;"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="minigame-card">
+          <h3>Participantes del sorteo en curso <span id="so-current-label" style="color:#94a3b8; font-weight:400; font-size:13px;"></span></h3>
+          <div id="so-entries" style="display:grid; gap:6px; max-height:320px; overflow-y:auto;">
+            <span style="color:#64748b; font-size:13px;">Cargando...</span>
+          </div>
+        </div>
+
+        <div class="minigame-card">
+          <h3>Resultados</h3>
+          <div id="so-draws" style="display:grid; gap:10px;">
+            <span style="color:#64748b; font-size:13px;">Cargando...</span>
           </div>
         </div>
         </div>

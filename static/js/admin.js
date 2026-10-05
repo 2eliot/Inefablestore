@@ -5767,13 +5767,162 @@ document.addEventListener('DOMContentLoaded', function () {
         b.classList.toggle('primary', b === tabBtn);
       });
       var target = tabBtn.getAttribute('data-pane');
-      ['#suite-pane-gracias', '#suite-pane-puntos'].forEach(function (sel) {
+      ['#suite-pane-gracias', '#suite-pane-puntos', '#suite-pane-sorteo'].forEach(function (sel) {
         var pane = document.querySelector(sel);
         // .minigame-grid fija display:grid, así que el atributo hidden no basta
         if (pane) pane.style.display = (sel === target) ? '' : 'none';
       });
+      if (target === '#suite-pane-sorteo') loadSorteo();
     });
   });
+
+  // ===== Sorteo diario =====
+  var soEnabled = document.getElementById('so-enabled');
+  var soGame = document.getElementById('so-game');
+  var soItem = document.getElementById('so-item');
+  var soWinners = document.getElementById('so-winners');
+  var soHour = document.getElementById('so-hour');
+  var soStatus = document.getElementById('so-status');
+  var soEntries = document.getElementById('so-entries');
+  var soDraws = document.getElementById('so-draws');
+  var soCurrentLabel = document.getElementById('so-current-label');
+  var btnSoSave = document.getElementById('btn-so-save');
+  var btnSoDrawNow = document.getElementById('btn-so-draw-now');
+  var btnSoRefresh = document.getElementById('btn-so-refresh');
+  var soGamesLoaded = false;
+
+  function soSetStatus(t) { if (soStatus) soStatus.textContent = t || ''; }
+
+  async function loadSorteoItems(gid, selected) {
+    if (!soItem) return;
+    soItem.innerHTML = '<option value="">— Elegir paquete —</option>';
+    if (!gid) return;
+    try {
+      var res = await fetch('/admin/package/' + gid + '/items');
+      var data = await res.json();
+      (data && data.items || []).forEach(function (it) {
+        var opt = document.createElement('option');
+        opt.value = it.id;
+        opt.textContent = it.title + (it.subtitle ? (' ' + it.subtitle) : '');
+        soItem.appendChild(opt);
+      });
+      if (selected) soItem.value = String(selected);
+    } catch (e) { /* silencioso */ }
+  }
+
+  async function loadSorteo() {
+    try {
+      if (!soGamesLoaded && soGame) {
+        var pr = await fetch('/admin/packages');
+        var pd = await pr.json();
+        soGame.innerHTML = '<option value="">— Elegir juego —</option>';
+        ((pd && pd.packages) || []).forEach(function (p) {
+          var opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.name;
+          soGame.appendChild(opt);
+        });
+        soGamesLoaded = true;
+      }
+      var res = await fetch('/admin/config/sorteo');
+      var cfg = await res.json();
+      if (cfg && cfg.ok) {
+        if (soEnabled) soEnabled.checked = !!cfg.enabled;
+        if (soGame) soGame.value = cfg.gid ? String(cfg.gid) : '';
+        if (soWinners) soWinners.value = cfg.winners;
+        if (soHour) soHour.value = cfg.hour;
+        if (soCurrentLabel) soCurrentLabel.textContent = '· ' + cfg.draw_label + ' · ' + cfg.participants + ' registrados';
+        await loadSorteoItems(cfg.gid, cfg.prize_item_id);
+      }
+    } catch (e) { soSetStatus('No se pudo cargar la configuración'); }
+    loadSorteoData();
+  }
+
+  async function loadSorteoData() {
+    try {
+      var res = await fetch('/admin/sorteo/data');
+      var data = await res.json();
+      if (!data || !data.ok) return;
+      if (soEntries) {
+        soEntries.innerHTML = data.entries.length ? data.entries.map(function (e) {
+          return '<div style="display:flex; gap:10px; align-items:center; border:1px solid rgba(148,163,184,.25); border-radius:8px; padding:6px 10px; font-size:13px;">' +
+            '<span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><strong>' + esc(e.nickname || '—') + '</strong> · ' + esc(e.player_id) + (e.zone_id ? ' (' + esc(e.zone_id) + ')' : '') + '</span>' +
+            '<span style="color:#64748b;">' + esc(e.date) + '</span></div>';
+        }).join('') : '<span style="color:#64748b; font-size:13px;">Nadie se ha registrado todavía.</span>';
+      }
+      if (soDraws) {
+        soDraws.innerHTML = data.draws.length ? data.draws.map(function (d) {
+          var st = d.status === 'running' ? '⏳ En curso' : (d.status === 'empty' ? 'Sin participantes' : '✓ Realizado');
+          var rows = (d.winners || []).map(function (w) {
+            return '<div style="display:flex; gap:10px; font-size:13px; padding:4px 0; border-top:1px solid rgba(148,163,184,.15);">' +
+              '<span style="width:28px; color:#22c55e; font-weight:700;">' + w.pos + 'º</span>' +
+              '<span style="flex:1; min-width:0;">' + esc(w.nickname || '—') + ' · ' + esc(w.player_id) + (w.zone_id ? ' (' + esc(w.zone_id) + ')' : '') + '</span>' +
+              '<span>' + (w.order_id ? 'Orden #' + w.order_id : 'Sin orden') + '</span>' +
+              '<span style="width:90px; text-align:right; color:' + (w.delivered ? '#22c55e' : '#f59e0b') + ';">' + (w.delivered ? 'Entregado' : 'Pendiente') + '</span></div>';
+          }).join('');
+          return '<div style="border:1px solid rgba(148,163,184,.25); border-radius:8px; padding:8px 10px;">' +
+            '<div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:13px; margin-bottom:4px;">' +
+            '<strong>' + esc(d.label) + ' · ' + esc(d.prize) + '</strong>' +
+            '<span style="color:#94a3b8;">' + st + ' · ' + d.participants + ' participantes' + (d.drawn_at ? ' · ' + esc(d.drawn_at) : '') + '</span></div>' +
+            rows + '</div>';
+        }).join('') : '<span style="color:#64748b; font-size:13px;">Todavía no hay sorteos realizados.</span>';
+      }
+    } catch (e) { /* silencioso */ }
+  }
+
+  if (soGame) soGame.addEventListener('change', function () { loadSorteoItems(soGame.value); });
+  if (btnSoRefresh) btnSoRefresh.addEventListener('click', loadSorteo);
+
+  if (btnSoSave) {
+    btnSoSave.addEventListener('click', async function () {
+      btnSoSave.disabled = true;
+      soSetStatus('Guardando...');
+      try {
+        var res = await fetch('/admin/config/sorteo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            enabled: soEnabled ? soEnabled.checked : false,
+            gid: soGame ? parseInt(soGame.value || '0', 10) : 0,
+            prize_item_id: soItem ? parseInt(soItem.value || '0', 10) : 0,
+            winners: soWinners ? parseInt(soWinners.value || '3', 10) : 3,
+            hour: soHour ? parseInt(soHour.value === '' ? '20' : soHour.value, 10) : 20
+          })
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo guardar');
+        soSetStatus('✓ Sorteo guardado');
+        setTimeout(function () { soSetStatus(''); }, 2500);
+        loadSorteo();
+      } catch (err) {
+        soSetStatus(err.message || 'Error al guardar');
+      }
+      btnSoSave.disabled = false;
+    });
+  }
+
+  if (btnSoDrawNow) {
+    btnSoDrawNow.addEventListener('click', async function () {
+      var ok = await showAdminConfirmDialog({
+        title: 'Sortear ahora',
+        message: 'Se elegirán los ganadores del sorteo en curso con los registrados hasta este momento y se enviarán sus premios. El registro de ese sorteo queda cerrado. ¿Continuar?',
+        confirmText: 'Sortear ahora'
+      });
+      if (!ok) return;
+      btnSoDrawNow.disabled = true;
+      try {
+        var res = await fetch('/admin/sorteo/draw-now', { method: 'POST' });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok || !data.ok) throw new Error((data && data.error) || 'No se pudo sortear');
+        soSetStatus('Sorteando... los resultados aparecen en unos segundos.');
+        setTimeout(loadSorteoData, 4000);
+        setTimeout(loadSorteoData, 15000);
+      } catch (err) {
+        soSetStatus(err.message || 'Error al sortear');
+      }
+      btnSoDrawNow.disabled = false;
+    });
+  }
 });
 
 function showAdminConfirmDialog(options) {

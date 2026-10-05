@@ -7972,6 +7972,526 @@ def store_ruleta_spin():
     })
 
 
+# ==============================
+# Sorteo diario
+# ==============================
+# Registro gratis con el ID de jugador (verificado en el servidor, 1 registro
+# por ID en cada sorteo). A la hora fija (VET) un hilo en segundo plano elige
+# los ganadores al azar y entrega el premio como una orden: recarga automática
+# si el ítem está mapeado, manual desde el admin si no (igual que la ruleta).
+# Los registros hechos después de la hora del sorteo entran al del día siguiente.
+
+SORTEO_DEFAULT_HOUR = 20
+SORTEO_MAX_WINNERS = 10
+SORTEO_MAX_REGS_PER_IP = 5
+_SORTEO_MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+
+
+class SorteoEntry(db.Model):
+    """Un ID registrado en el sorteo de un día (draw_key = 'YYYY-MM-DD' en VET)."""
+    __tablename__ = "sorteo_entries"
+    id = db.Column(db.Integer, primary_key=True)
+    draw_key = db.Column(db.String(10), nullable=False, index=True)
+    player_id = db.Column(db.String(120), nullable=False)
+    zone_id = db.Column(db.String(120), default="")
+    nickname = db.Column(db.String(200), default="")
+    ip = db.Column(db.String(64), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("draw_key", "player_id", name="uq_sorteo_entry_draw_player"),
+    )
+
+
+class SorteoDraw(db.Model):
+    """Resultado de un sorteo. draw_key único: dos workers no pueden sortear el mismo día."""
+    __tablename__ = "sorteo_draws"
+    id = db.Column(db.Integer, primary_key=True)
+    draw_key = db.Column(db.String(10), nullable=False, unique=True)
+    status = db.Column(db.String(20), default="running")  # running | done | empty
+    store_package_id = db.Column(db.Integer, nullable=True)
+    prize_item_id = db.Column(db.Integer, nullable=True)
+    prize_title = db.Column(db.String(250), default="")
+    participants = db.Column(db.Integer, default=0)
+    # [{"pos", "player_id", "zone_id", "nickname", "order_id", "delivered"}]
+    winners_json = db.Column(db.Text, default="")
+    drawn_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+def _sorteo_config() -> dict:
+    def _int(key, default):
+        try:
+            return int(float(get_config_value(key, str(default)) or default))
+        except Exception:
+            return default
+    return {
+        "enabled": get_config_value("sorteo_enabled", "0") == "1",
+        "gid": max(_int("sorteo_gid", 0), 0),
+        "prize_item_id": max(_int("sorteo_prize_item_id", 0), 0),
+        "winners": min(max(_int("sorteo_winners", 3), 1), SORTEO_MAX_WINNERS),
+        "hour": min(max(_int("sorteo_hour", SORTEO_DEFAULT_HOUR), 0), 23),
+    }
+
+
+def _sorteo_prize(cfg) -> dict:
+    """Premio configurado (payload de la ruleta) o {} si no hay o ya no está activo."""
+    if not cfg.get("prize_item_id"):
+        return {}
+    item = GamePackageItem.query.get(int(cfg["prize_item_id"]))
+    if not item or int(item.store_package_id or 0) != int(cfg.get("gid") or 0):
+        return {}
+    return _ruleta_prize_item_payload(item)
+
+
+def _sorteo_key_date(key: str):
+    return datetime.strptime(key, "%Y-%m-%d").date()
+
+
+def _sorteo_due_at(key: str, hour: int) -> datetime:
+    d = _sorteo_key_date(key)
+    return datetime(d.year, d.month, d.day, hour, tzinfo=VE_TIMEZONE)
+
+
+def _sorteo_current_key(hour: int) -> str:
+    """Sorteo al que entra un registro hecho ahora: hoy, o mañana si ya pasó la hora."""
+    now_ve = datetime.now(VE_TIMEZONE)
+    day = now_ve.date()
+    if now_ve.hour >= hour:
+        day += timedelta(days=1)
+    return day.isoformat()
+
+
+def _sorteo_key_label(key: str, with_year: bool = False) -> str:
+    d = _sorteo_key_date(key)
+    label = f"{d.day} {_SORTEO_MESES[d.month - 1]}"
+    return f"{label} {d.year}" if with_year else label
+
+
+def _sorteo_hour_label(hour: int) -> str:
+    return f"{hour % 12 or 12}:00 {'AM' if hour < 12 else 'PM'}"
+
+
+def _sorteo_mask_id(player_id: str) -> str:
+    pid = str(player_id or "")
+    if len(pid) <= 4:
+        return pid[:1] + "•" * max(len(pid) - 1, 0)
+    return pid[:3] + "•" * (len(pid) - 5) + pid[-2:]
+
+
+def _sorteo_public_name(entry_nick: str, player_id: str) -> str:
+    return (entry_nick or "").strip() or f"Jugador {_sorteo_mask_id(player_id)}"
+
+
+def _sorteo_draw_winners(draw) -> list:
+    try:
+        rows = json.loads(draw.winners_json or "[]")
+        return rows if isinstance(rows, list) else []
+    except Exception:
+        return []
+
+
+def _sorteo_deliver(entry, item, draw_key: str):
+    """Crea la orden del premio para un ganador y la despacha. Devuelve (order_id, entregado)."""
+    try:
+        order = Order(
+            status="pending",
+            store_package_id=int(item.store_package_id),
+            item_id=int(item.id),
+            customer_name=(entry.nickname or "").strip()[:200],
+            customer_id=entry.player_id,
+            customer_zone=entry.zone_id or "",
+            name=f"Sorteo diario {draw_key}",
+            method="sorteo",
+            currency="USD",
+            amount=0.0,
+            price=0.0,
+            reference=f"SORTEO-{uuid.uuid4().hex[:10].upper()}",
+            active=True,
+            points_awarded=-1,  # premio gratis: no acumula puntos
+        )
+        db.session.add(order)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        print(f"[Sorteo] No se pudo crear la orden de {entry.player_id}: {exc}")
+        return 0, False
+
+    entregado = False
+    try:
+        _try_transition_order_to_approved(order)
+        result = _dispatch_order_auto_recharges(order)
+        summary = (result or {}).get("summary") or {}
+        total_units = int(summary.get("total_units") or 0)
+        entregado = total_units > 0 and int(summary.get("completed_units") or 0) >= total_units
+    except Exception as exc:
+        print(f"[Sorteo] Error entregando el premio de la orden #{order.id}: {exc}")
+    return int(order.id), entregado
+
+
+def _sorteo_run_draw(draw_key: str, *, force: bool = False) -> bool:
+    """Sortea `draw_key` una sola vez. force=True lo corre antes de la hora (admin)."""
+    cfg = _sorteo_config()
+    prize = _sorteo_prize(cfg)
+    if not prize:
+        return False
+    if not force:
+        if not cfg["enabled"]:
+            return False
+        if datetime.now(VE_TIMEZONE) < _sorteo_due_at(draw_key, cfg["hour"]) + timedelta(seconds=5):
+            return False
+    if SorteoDraw.query.filter_by(draw_key=draw_key).first():
+        return False
+
+    # La fila se reserva primero: si otro worker ya la creó, el UNIQUE lo frena aquí.
+    draw = SorteoDraw(
+        draw_key=draw_key,
+        status="running",
+        store_package_id=cfg["gid"],
+        prize_item_id=int(prize["item_id"]),
+        prize_title=(prize.get("title") or "")[:250],
+    )
+    db.session.add(draw)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return False
+
+    entries = SorteoEntry.query.filter_by(draw_key=draw_key).all()
+    try:
+        blocked = {
+            (b.customer_id or "").strip().lower()
+            for b in BlockedCustomer.query.filter(BlockedCustomer.active == True).all()
+        }
+    except Exception:
+        blocked = set()
+    pool = [e for e in entries if (e.player_id or "").strip().lower() not in blocked]
+    elegidos = secrets.SystemRandom().sample(pool, min(cfg["winners"], len(pool)))
+
+    item = GamePackageItem.query.get(int(prize["item_id"]))
+    winners = []
+    for pos, entry in enumerate(elegidos, start=1):
+        order_id, entregado = _sorteo_deliver(entry, item, draw_key)
+        winners.append({
+            "pos": pos,
+            "player_id": entry.player_id,
+            "zone_id": entry.zone_id or "",
+            "nickname": entry.nickname or "",
+            "order_id": order_id,
+            "delivered": bool(entregado),
+        })
+        # Guardar al avanzar: si el proceso muere a mitad, lo ya entregado queda anotado.
+        draw.winners_json = json.dumps(winners, ensure_ascii=False)
+        db.session.commit()
+
+    draw.participants = len(entries)
+    draw.winners_json = json.dumps(winners, ensure_ascii=False)
+    draw.status = "done" if winners else "empty"
+    draw.drawn_at = datetime.utcnow()
+    db.session.commit()
+    print(f"[Sorteo] {draw_key}: {len(winners)} ganadores de {len(entries)} participantes")
+    return True
+
+
+def _sorteo_run_due_draws() -> None:
+    cfg = _sorteo_config()
+    if not cfg["enabled"]:
+        return
+    # Solo días recientes: si el sorteo estuvo apagado, no se sortean días viejos al reactivarlo.
+    since = (datetime.now(VE_TIMEZONE).date() - timedelta(days=2)).isoformat()
+    done = {k for (k,) in db.session.query(SorteoDraw.draw_key).filter(SorteoDraw.draw_key >= since).all()}
+    keys = {k for (k,) in db.session.query(SorteoEntry.draw_key).filter(SorteoEntry.draw_key >= since).distinct().all()}
+    for key in sorted(keys - done):
+        if datetime.now(VE_TIMEZONE) >= _sorteo_due_at(key, cfg["hour"]):
+            _sorteo_run_draw(key)
+
+
+_LOCK_SORTEO_DRAW = 911006
+
+
+def _sorteo_draw_loop():
+    """Background thread: corre el sorteo del día apenas llega la hora."""
+    import time as _t
+    _t.sleep(45)  # Wait for app startup
+    while not _acquire_singleton_lock(_LOCK_SORTEO_DRAW):
+        _t.sleep(30)
+    while True:
+        try:
+            with app.app_context():
+                _sorteo_run_due_draws()
+        except Exception as exc:
+            print(f"[Sorteo] Thread error: {exc}")
+        _t.sleep(15)
+
+
+_sorteo_thread = threading.Thread(target=_sorteo_draw_loop, daemon=True)
+_sorteo_thread.start()
+
+
+def _sorteo_public_draw(draw, *, with_pool: bool = False) -> dict:
+    out = {
+        "key": draw.draw_key,
+        "label": _sorteo_key_label(draw.draw_key, with_year=True),
+        "status": draw.status,
+        "participants": int(draw.participants or 0),
+        "prize": draw.prize_title or "",
+        "drawn_ms": int(draw.drawn_at.replace(tzinfo=timezone.utc).timestamp() * 1000) if draw.drawn_at else 0,
+        "winners": [
+            {
+                "pos": int(w.get("pos") or 0),
+                "nickname": _sorteo_public_name(w.get("nickname"), w.get("player_id")),
+                "id_mask": _sorteo_mask_id(w.get("player_id")),
+                "delivered": bool(w.get("delivered")),
+            }
+            for w in _sorteo_draw_winners(draw)
+        ],
+    }
+    if with_pool:
+        rows = (
+            SorteoEntry.query.filter_by(draw_key=draw.draw_key)
+            .order_by(SorteoEntry.id.desc()).limit(60).all()
+        )
+        out["pool"] = [_sorteo_public_name(e.nickname, e.player_id) for e in rows]
+    return out
+
+
+@app.route("/store/sorteo/state")
+def store_sorteo_state():
+    """Estado público del sorteo: premio, cuenta regresiva, participantes y últimos resultados."""
+    cfg = _sorteo_config()
+    prize = _sorteo_prize(cfg)
+    if not cfg["enabled"] or not prize:
+        return jsonify({"ok": True, "enabled": False})
+
+    key = _sorteo_current_key(cfg["hour"])
+    rows = (
+        SorteoEntry.query.filter_by(draw_key=key)
+        .order_by(SorteoEntry.id.desc()).limit(60).all()
+    )
+    draws = (
+        SorteoDraw.query.filter(SorteoDraw.status.in_(("done", "empty")))
+        .order_by(SorteoDraw.draw_key.desc()).limit(7).all()
+    )
+    game = StorePackage.query.get(cfg["gid"])
+    return jsonify({
+        "ok": True,
+        "enabled": True,
+        "game": game.name if game else "",
+        "prize": prize,
+        "requires_zone": bool(_package_effective_requires_zone(cfg["gid"])),
+        "winners_count": cfg["winners"],
+        "hour_label": _sorteo_hour_label(cfg["hour"]),
+        "draw_key": key,
+        "draw_label": _sorteo_key_label(key),
+        "target_ms": int(_sorteo_due_at(key, cfg["hour"]).timestamp() * 1000),
+        "server_ms": int(time.time() * 1000),
+        "participants": SorteoEntry.query.filter_by(draw_key=key).count(),
+        "names": [_sorteo_public_name(e.nickname, e.player_id) for e in rows],
+        "drawing": SorteoDraw.query.filter_by(status="running").count() > 0,
+        "draws": [_sorteo_public_draw(d, with_pool=(i == 0)) for i, d in enumerate(draws)],
+    })
+
+
+@app.route("/store/sorteo/register", methods=["POST"])
+def store_sorteo_register():
+    """Registra un ID verificado en el sorteo en curso (uno por ID y por sorteo)."""
+    cfg = _sorteo_config()
+    if not cfg["enabled"] or not _sorteo_prize(cfg):
+        return jsonify({"ok": False, "error": "El sorteo no está disponible por ahora."}), 403
+
+    ip = _gift_client_ip()
+    if _gift_is_rate_limited(ip):
+        return jsonify({"ok": False, "error": GIFT_RATE_LIMIT_MESSAGE}), 429
+
+    data = request.get_json(silent=True) or request.form
+    player_id = (data.get("player_id") or "").strip()
+    zone_id = (data.get("zone_id") or "").strip()
+    if not player_id:
+        return jsonify({"ok": False, "error": "Escribe tu ID para participar."}), 400
+    if len(player_id) > 120 or not player_id.isdigit():
+        return jsonify({"ok": False, "error": "Ese ID no es válido."}), 400
+    if zone_id and not zone_id.isdigit():
+        return jsonify({"ok": False, "error": "La Zona ID debe ser numérica."}), 400
+    if _package_effective_requires_zone(cfg["gid"]) and not zone_id:
+        return jsonify({"ok": False, "error": "La Zona ID es requerida para participar."}), 400
+
+    key = _sorteo_current_key(cfg["hour"])
+    label = _sorteo_key_label(key)
+    if SorteoDraw.query.filter_by(draw_key=key).first():
+        return jsonify({"ok": False, "error": "El sorteo de hoy ya se realizó. Vuelve a registrarte después de las " + _sorteo_hour_label(cfg["hour"]) + "."}), 409
+    if SorteoEntry.query.filter_by(draw_key=key, player_id=player_id).first():
+        return jsonify({"ok": False, "error": f"Este ID ya está registrado en el sorteo del {label}. Solo se permite 1 registro por sorteo."}), 409
+    if SorteoEntry.query.filter_by(draw_key=key, ip=ip).count() >= SORTEO_MAX_REGS_PER_IP:
+        return jsonify({"ok": False, "error": "Ya se registraron varios IDs desde esta conexión para este sorteo."}), 429
+
+    try:
+        blk = BlockedCustomer.query.filter(
+            db.func.lower(BlockedCustomer.customer_id) == player_id.lower(),
+            BlockedCustomer.active == True,
+        ).first()
+        if blk:
+            return jsonify({"ok": False, "error": "Este ID de jugador está bloqueado. Contacta soporte"}), 403
+    except Exception:
+        pass
+
+    # El premio se recarga a este ID: se verifica igual que en el checkout.
+    estado, nick = _server_verify_player(cfg["gid"], player_id, zone_id)
+    ver_error = _verified_player_error(estado)
+    if ver_error:
+        if estado == "not_found":
+            _gift_register_failed_attempt(ip)
+        return ver_error
+
+    entry = SorteoEntry(
+        draw_key=key,
+        player_id=player_id,
+        zone_id=zone_id,
+        nickname=(nick or "").strip()[:200],
+        ip=ip[:64],
+    )
+    db.session.add(entry)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": f"Este ID ya está registrado en el sorteo del {label}."}), 409
+
+    nombre = _sorteo_public_name(entry.nickname, player_id)
+    return jsonify({
+        "ok": True,
+        "draw_key": key,
+        "nickname": nombre,
+        "participants": SorteoEntry.query.filter_by(draw_key=key).count(),
+        "message": f"ID verificado: {nombre}. Ya estás dentro del sorteo del {label} a las {_sorteo_hour_label(cfg['hour'])}. ¡Suerte!",
+    })
+
+
+@app.route("/admin/config/sorteo", methods=["GET"])
+def admin_config_sorteo_get():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    cfg = _sorteo_config()
+    key = _sorteo_current_key(cfg["hour"])
+    return jsonify({
+        "ok": True,
+        **cfg,
+        "prize": _sorteo_prize(cfg),
+        "draw_key": key,
+        "draw_label": _sorteo_key_label(key, with_year=True) + ", " + _sorteo_hour_label(cfg["hour"]) + " VET",
+        "participants": SorteoEntry.query.filter_by(draw_key=key).count(),
+    })
+
+
+@app.route("/admin/config/sorteo", methods=["POST"])
+def admin_config_sorteo_set():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    data = request.get_json(silent=True) or {}
+
+    def _int(v, default=0):
+        try:
+            return int(float(v))
+        except Exception:
+            return default
+
+    gid = _int(data.get("gid"))
+    item_id = _int(data.get("prize_item_id"))
+    winners = min(max(_int(data.get("winners"), 3), 1), SORTEO_MAX_WINNERS)
+    hour = min(max(_int(data.get("hour"), SORTEO_DEFAULT_HOUR), 0), 23)
+    enabled = bool(data.get("enabled"))
+
+    if gid and not StorePackage.query.get(gid):
+        return jsonify({"ok": False, "error": "Ese juego no existe"}), 400
+    if item_id:
+        item = GamePackageItem.query.get(item_id)
+        if not item or int(item.store_package_id or 0) != gid:
+            return jsonify({"ok": False, "error": "El premio tiene que ser un paquete del mismo juego del sorteo"}), 400
+    if enabled and not (gid and item_id):
+        return jsonify({"ok": False, "error": "Elige el juego y el premio antes de activar el sorteo"}), 400
+
+    try:
+        set_config_values({
+            "sorteo_enabled": "1" if enabled else "0",
+            "sorteo_gid": str(gid),
+            "sorteo_prize_item_id": str(item_id),
+            "sorteo_winners": str(winners),
+            "sorteo_hour": str(hour),
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"No se pudo guardar el sorteo: {exc}"}), 500
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/sorteo/data", methods=["GET"])
+def admin_sorteo_data():
+    """Participantes del sorteo en curso y últimos resultados (con IDs completos y órdenes)."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    cfg = _sorteo_config()
+    key = _sorteo_current_key(cfg["hour"])
+    entries = (
+        SorteoEntry.query.filter_by(draw_key=key)
+        .order_by(SorteoEntry.id.desc()).limit(300).all()
+    )
+    draws = SorteoDraw.query.order_by(SorteoDraw.draw_key.desc()).limit(30).all()
+    return jsonify({
+        "ok": True,
+        "draw_key": key,
+        "entries": [
+            {
+                "player_id": e.player_id,
+                "zone_id": e.zone_id or "",
+                "nickname": e.nickname or "",
+                "date": _gift_fmt_ve(e.created_at),
+            }
+            for e in entries
+        ],
+        "draws": [
+            {
+                "key": d.draw_key,
+                "label": _sorteo_key_label(d.draw_key, with_year=True),
+                "status": d.status,
+                "participants": int(d.participants or 0),
+                "prize": d.prize_title or "",
+                "drawn_at": _gift_fmt_ve(d.drawn_at) if d.drawn_at else "",
+                "winners": _sorteo_draw_winners(d),
+            }
+            for d in draws
+        ],
+    })
+
+
+@app.route("/admin/sorteo/draw-now", methods=["POST"])
+def admin_sorteo_draw_now():
+    """Sortea ya el sorteo en curso (cierra el registro de ese día)."""
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    cfg = _sorteo_config()
+    if not _sorteo_prize(cfg):
+        return jsonify({"ok": False, "error": "Configura el juego y el premio primero"}), 400
+    key = _sorteo_current_key(cfg["hour"])
+    if SorteoDraw.query.filter_by(draw_key=key).first():
+        return jsonify({"ok": False, "error": "Ese sorteo ya se realizó"}), 409
+    if not SorteoEntry.query.filter_by(draw_key=key).count():
+        return jsonify({"ok": False, "error": "Todavía no hay participantes"}), 400
+
+    # Entregar las recargas puede tardar: se corre aparte y el admin refresca la lista.
+    def _runner():
+        try:
+            with app.app_context():
+                _sorteo_run_draw(key, force=True)
+        except Exception as exc:
+            print(f"[Sorteo] Error en sorteo manual {key}: {exc}")
+
+    threading.Thread(target=_runner, daemon=True, name=f"sorteo-{key}").start()
+    return jsonify({"ok": True, "draw_key": key})
+
+
 # --- Rutas de administración ---
 
 @app.route("/admin/gift-codes", methods=["GET"])
@@ -9672,7 +10192,14 @@ def _render_storefront(**extra):
     logo_url = get_config_value("logo_path", "")
     banner_url = get_config_value("mid_banner_path", "")
     site_name = get_config_value("site_name", "InefableStore")
-    return render_template("index.html", logo_url=logo_url, banner_url=banner_url, site_name=site_name, **extra)
+    try:
+        _scfg = _sorteo_config()
+        sorteo_on = bool(_scfg["enabled"] and _sorteo_prize(_scfg))
+    except Exception:
+        sorteo_on = False
+    return render_template("index.html", logo_url=logo_url, banner_url=banner_url, site_name=site_name,
+                           sorteo_on=sorteo_on, **extra)
+
 
 
 @app.route("/")
@@ -9686,6 +10213,16 @@ def mini_landing():
     """Enlace privado para el registro de mini influencer: ya no hay boton en
     el home, solo se llega abriendo este link directamente."""
     return _render_storefront(auto_open_mini=True)
+
+
+@app.route("/sorteo")
+def sorteo_page():
+    """Página del sorteo diario (se llega con el botón 🏆 de la rueda lateral)."""
+    return render_template(
+        "sorteo.html",
+        logo_url=get_config_value("logo_path", ""),
+        site_name=get_config_value("site_name", "InefableStore"),
+    )
 
 @app.route("/terms")
 def terms_page():
