@@ -374,9 +374,11 @@
     var startedAt = Date.now();
     var currentOutcome = null;   // null (buscando) | 'success' | 'review' | 'failed'
     var lastPayload = null;
+    var bankDownActive = false;  // el banco no responde → seguir con la animación de búsqueda
 
     var MIN_SEARCH_MS = 3800;    // animación mínima de búsqueda
     var MAX_SEARCH_MS = 20000;   // tras esto, sin resultado definitivo → EN REVISIÓN
+    var BANK_DOWN_LINE = 'El banco no responde. Reintentando…';
 
     var LINES = [
       'Buscando pago en el sistema…',
@@ -414,8 +416,12 @@
     function startScanLines() {
       if (lineTimer) return;
       lineTimer = setInterval(function () {
-        lineIdx = Math.min(lineIdx + 1, LINES.length - 1);
-        if (scanTxt) scanTxt.textContent = LINES[lineIdx];
+        if (bankDownActive) {
+          if (scanTxt) scanTxt.textContent = BANK_DOWN_LINE;
+        } else {
+          lineIdx = Math.min(lineIdx + 1, LINES.length - 1);
+          if (scanTxt) scanTxt.textContent = LINES[lineIdx];
+        }
       }, 900);
     }
 
@@ -588,12 +594,19 @@
       var key = resolveOutcomeKey(payload);
       var elapsed = Date.now() - startedAt;
       var searching = card.classList.contains('searching');
+      var status = String((payload && payload.status) || '').toLowerCase();
+      var bankDown = !!(payload && payload.bank_unavailable);
+      bankDownActive = searching && bankDown;
 
       if (searching) {
         var definitive = (key === 'success' || key === 'failed');
-        if (elapsed >= MIN_SEARCH_MS && (definitive || elapsed >= MAX_SEARCH_MS)) {
+        // El admin aprobó la orden: salir de la búsqueda hacia "Recarga en proceso".
+        var adminApproved = (status === 'approved');
+        // Solo salir por timeout si el banco respondió (no está caído).
+        var exitByTimeout = (!bankDown && elapsed >= MAX_SEARCH_MS);
+        if (elapsed >= MIN_SEARCH_MS && (definitive || adminApproved || exitByTimeout)) {
           applyOutcome(key, payload);
-        } else if (definitive) {
+        } else if (definitive || adminApproved) {
           // Respetar la animación mínima de búsqueda antes de revelar el resultado
           setTimeout(function () {
             if (card.classList.contains('searching') && lastPayload) {
@@ -636,11 +649,13 @@
         .catch(function () { /* keep polling silently */ });
     }
 
-    // Si nunca llega respuesta, tras el máximo de búsqueda pasar a EN REVISIÓN
+    // Si nunca llega respuesta, tras el máximo de búsqueda pasar a EN REVISIÓN.
+    // Pero si el banco no responde (502/timeout) se sigue buscando: el polling
+    // reintenta y un resultado definitivo o la aprobación saldrán por su cuenta.
     setTimeout(function () {
-      if (card.classList.contains('searching')) {
-        applyOutcome(lastPayload ? resolveOutcomeKey(lastPayload) : 'review', lastPayload);
-      }
+      if (!card.classList.contains('searching')) return;
+      if (lastPayload && lastPayload.bank_unavailable) return;
+      applyOutcome(lastPayload ? resolveOutcomeKey(lastPayload) : 'review', lastPayload);
     }, MAX_SEARCH_MS + 400);
 
     startScanLines();
@@ -1012,6 +1027,7 @@
     timer = setInterval(fetchState, 6000);
   })();
 </script>
+{% include '_pago_pendiente.html' %}
 {% include '_flop_ia.html' %}
 </body>
 </html>

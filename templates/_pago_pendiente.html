@@ -1,0 +1,126 @@
+{# Pago incompleto: si el banco reportó un pago menor al total, el cliente completa lo que falta desde aquí.
+   Lo pide /gracias/<id>/pago-pendiente (solo responde al dueño de la orden). #}
+<style>
+  #pp-modal{position:fixed;inset:0;z-index:2147482000;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.78);backdrop-filter:blur(3px)}
+  #pp-modal.open{display:flex}
+  #pp-card{width:100%;max-width:400px;max-height:92vh;overflow:auto;background:#0f1013;border:1px solid #26272a;border-radius:16px;padding:18px;color:#eaeaea;font-family:inherit;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+  #pp-card h3{margin:0 0 4px;font-size:16px;font-weight:800;color:#f0a52a}
+  #pp-card p{margin:0;font-size:12.5px;line-height:1.45;color:#a9a9a9}
+  .pp-sum{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
+  .pp-sum div{background:#121316;border:1px solid #232428;border-radius:10px;padding:8px 10px}
+  .pp-sum span{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6e6e6e}
+  .pp-sum b{font-size:14px;color:#eaeaea}
+  .pp-falta{grid-column:1/-1;border-color:#3ee07f66 !important;background:#0f1a13 !important;text-align:center}
+  .pp-falta b{font-size:22px;color:#3ee07f}
+  .pp-datos{background:#121316;border:1px solid #232428;border-radius:10px;padding:4px 10px;margin-bottom:10px}
+  .pp-fila{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #1c1d20;font-size:13px}
+  .pp-fila:last-child{border-bottom:0}
+  .pp-fila span{color:#7d7d7d;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+  .pp-fila b{font-weight:700;text-align:right;word-break:break-all}
+  .pp-btn{width:100%;border:0;border-radius:10px;padding:11px;font-weight:800;font-size:13px;cursor:pointer;letter-spacing:.04em}
+  #pp-copiar{background:#1b1c1f;color:#eaeaea;border:1px solid #323336;margin-bottom:12px}
+  #pp-copiar.ok{border-color:#3ee07f;color:#3ee07f}
+  #pp-ref{width:100%;box-sizing:border-box;background:#121316;border:1px solid #323336;border-radius:10px;padding:11px 12px;color:#eaeaea;font-size:16px;outline:none;margin:6px 0 10px}
+  #pp-ref:focus{border-color:#3ee07f}
+  #pp-enviar{background:linear-gradient(90deg,#3ee07f,#2bc46a);color:#06130b}
+  #pp-enviar:disabled{opacity:.55;cursor:wait}
+  #pp-msg{min-height:18px;margin-top:10px;font-size:12.5px;text-align:center}
+  #pp-msg.err{color:#ff8f8f}#pp-msg.ok{color:#3ee07f}
+  #pp-luego{background:none;border:0;color:#7d7d7d;font-size:12px;margin-top:6px;cursor:pointer;width:100%}
+  #pp-aviso{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:2147481999;display:none;background:#f0a52a;color:#1a1205;border:0;border-radius:999px;padding:11px 18px;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+</style>
+<div id="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-titulo">
+  <div id="pp-card">
+    <h3 id="pp-titulo">Tu pago quedó incompleto</h3>
+    <p>Recibimos un pago menor al total de tu orden. Paga solo lo que falta y escribe la referencia de ese nuevo pago para continuar.</p>
+    <div class="pp-sum">
+      <div><span>Total</span><b id="pp-total">–</b></div>
+      <div><span>Recibido</span><b id="pp-pagado">–</b></div>
+      <div class="pp-falta"><span>Falta por pagar</span><b id="pp-falta">–</b></div>
+    </div>
+    <div class="pp-datos" id="pp-datos"></div>
+    <button class="pp-btn" id="pp-copiar" type="button">COPIAR TODO</button>
+    <label for="pp-ref" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#7d7d7d">Referencia del pago nuevo</label>
+    <input id="pp-ref" type="text" inputmode="numeric" autocomplete="off" placeholder="Mínimo los últimos 6 dígitos">
+    <button class="pp-btn" id="pp-enviar" type="button">YA PAGUÉ LO QUE FALTA</button>
+    <div id="pp-msg" role="status"></div>
+    <button id="pp-luego" type="button">Lo haré más tarde</button>
+  </div>
+</div>
+<button id="pp-aviso" type="button">⚠️ Completa tu pago</button>
+<script>
+(function () {
+  var root = document.getElementById('ty-progress');
+  var orderId = root ? root.getAttribute('data-order-id') : '';
+  if (!orderId) return;
+  var modal = document.getElementById('pp-modal'), aviso = document.getElementById('pp-aviso');
+  var msg = document.getElementById('pp-msg'), refInput = document.getElementById('pp-ref');
+  var btnEnviar = document.getElementById('pp-enviar'), btnCopiar = document.getElementById('pp-copiar');
+  var estado = null, cerradoPorUsuario = false, timer = null;
+  function bs(n) { return 'Bs ' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function montoPlano(n) { return Number(n || 0).toFixed(2).replace('.', ','); }
+  function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function pintar(d) {
+    estado = d;
+    document.getElementById('pp-total').textContent = bs(d.total);
+    document.getElementById('pp-pagado').textContent = bs(d.paid);
+    document.getElementById('pp-falta').textContent = bs(d.remaining);
+    var pm = d.pago_movil || {};
+    var filas = [['Banco', pm.banco], ['Teléfono', pm.telefono], ['Cédula/RIF', pm.documento], ['Monto', bs(d.remaining)]];
+    document.getElementById('pp-datos').innerHTML = filas.filter(function (f) { return f[1]; }).map(function (f) {
+      return '<div class="pp-fila"><span>' + esc(f[0]) + '</span><b>' + esc(f[1]) + '</b></div>';
+    }).join('');
+  }
+  function abrir() { modal.classList.add('open'); aviso.style.display = 'none'; }
+  function cerrar() { modal.classList.remove('open'); aviso.style.display = estado ? 'block' : 'none'; }
+  function consultar() {
+    fetch('/gracias/' + encodeURIComponent(orderId) + '/pago-pendiente', { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.underpaid) {
+          pintar(d);
+          if (!cerradoPorUsuario) abrir(); else aviso.style.display = 'block';
+        } else {
+          estado = null;
+          modal.classList.remove('open');
+          aviso.style.display = 'none';
+        }
+      }).catch(function () {});
+  }
+  btnCopiar.addEventListener('click', function () {
+    if (!estado) return;
+    var pm = estado.pago_movil || {};
+    var texto = [pm.banco, pm.documento, pm.telefono, montoPlano(estado.remaining)].filter(Boolean).join('\n');
+    var listo = function () { btnCopiar.textContent = 'COPIADO ✓'; btnCopiar.classList.add('ok');
+      setTimeout(function () { btnCopiar.textContent = 'COPIAR TODO'; btnCopiar.classList.remove('ok'); }, 1800); };
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(texto).then(listo).catch(function () {}); }
+    else { var t = document.createElement('textarea'); t.value = texto; document.body.appendChild(t); t.select();
+      try { document.execCommand('copy'); listo(); } catch (_) {} t.remove(); }
+  });
+  btnEnviar.addEventListener('click', function () {
+    var ref = (refInput.value || '').replace(/\D/g, '');
+    msg.className = ''; msg.textContent = '';
+    if (ref.length < 6) { msg.className = 'err'; msg.textContent = 'Escribe al menos los últimos 6 dígitos de la referencia'; refInput.focus(); return; }
+    btnEnviar.disabled = true; btnEnviar.textContent = 'VERIFICANDO...';
+    fetch('/gracias/' + encodeURIComponent(orderId) + '/completar-pago', {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reference: ref })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.ok) {
+        msg.className = 'ok'; msg.textContent = d.message || 'Pago recibido';
+        refInput.value = '';
+        if (d.completed) { setTimeout(function () { estado = null; cerrar(); location.reload(); }, 1800); }
+        else { consultar(); }
+      } else {
+        msg.className = 'err'; msg.textContent = (d && d.error) || 'No pudimos verificar ese pago todavía';
+      }
+    }).catch(function () { msg.className = 'err'; msg.textContent = 'Sin conexión. Intenta de nuevo.'; })
+      .finally(function () { btnEnviar.disabled = false; btnEnviar.textContent = 'YA PAGUÉ LO QUE FALTA'; });
+  });
+  refInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); btnEnviar.click(); } });
+  document.getElementById('pp-luego').addEventListener('click', function () { cerradoPorUsuario = true; cerrar(); });
+  aviso.addEventListener('click', function () { cerradoPorUsuario = false; abrir(); });
+  consultar();
+  timer = setInterval(consultar, 8000);
+})();
+</script>

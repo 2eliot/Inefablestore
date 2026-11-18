@@ -325,6 +325,47 @@ document.addEventListener('DOMContentLoaded', () => {
   let paymentsCfg = null;
   let countdownId = null;
 
+  // ── Verificación Banco de Venezuela: datos del pagador ──
+  // El banco no se pide: el servidor lo deduce (comprobante, último pago o probando bancos).
+  // El teléfono de contacto es el teléfono desde el que se paga (queda guardado en el perfil).
+  const bdvBox = document.getElementById('co-bdv-box');
+  const BDV_MIN_REF_DIGITS = 6;
+  let bdvActive = false;
+  function setupBdvPayerBox() {
+    const usesBs = (computeTotals().usedCurrency === 'BSD');
+    bdvActive = !!(paymentsCfg && paymentsCfg.payment_verification_provider === 'bdv' && usesBs);
+    if (bdvBox) {
+      bdvBox.hidden = !bdvActive;
+      bdvBox.style.display = bdvActive ? 'block' : 'none';
+    }
+    if (!bdvActive) return;
+    const refInput = document.getElementById('co-ref');
+    if (refInput) refInput.placeholder = 'Referencia (mínimo 6 dígitos)';
+    const phoneLocal = document.getElementById('checkout-phone-local');
+    if (phoneLocal) phoneLocal.placeholder = 'Teléfono desde el que pagaste';
+  }
+  function bdvPhoneDigits() {
+    let digits = (typeof getCheckoutPhoneValue === 'function' ? getCheckoutPhoneValue() : '').replace(/\D/g, '');
+    if (digits.startsWith('580') && digits.length === 13) digits = digits.slice(2);
+    else if (digits.startsWith('58') && digits.length === 12) digits = '0' + digits.slice(2);
+    if (digits.length === 10 && digits.startsWith('4')) digits = '0' + digits;
+    return digits;
+  }
+  function collectBdvPayer() {
+    // Devuelve { error } o { fields }
+    if (!bdvActive) return { fields: null };
+    const refEl = document.getElementById('co-ref');
+    const refDigits = (refEl ? refEl.value : '').replace(/\D/g, '');
+    if (refDigits.length < BDV_MIN_REF_DIGITS) {
+      return { error: `Escribe al menos los últimos ${BDV_MIN_REF_DIGITS} dígitos de la referencia`, el: refEl };
+    }
+    const phoneDigits = bdvPhoneDigits();
+    if (!/^04\d{9}$/.test(phoneDigits)) {
+      return { error: 'Escribe el teléfono desde el que hiciste el Pago Móvil (04XX...)', el: document.getElementById('checkout-phone-local') };
+    }
+    return { fields: { payer_phone: phoneDigits } };
+  }
+
   function openQrModal(src, title) {
     if (!coQrModal || !coQrModalImage) return;
     coQrModalImage.src = src || '';
@@ -430,7 +471,15 @@ document.addEventListener('DOMContentLoaded', () => {
   (function initCheckoutContactFields() {
     const savedEmail = contactState && contactState.save ? String(contactState.email || '').trim() : '';
     const savedPhone = contactState && contactState.save ? String(contactState.phone || '').trim() : '';
-    const phoneParts = splitPhoneParts(qPhone || savedPhone || '');
+    // Con sesión iniciada, el correo y el teléfono vienen del perfil del usuario.
+    const profileEmail = String(root.getAttribute('data-profile-email') || '').trim();
+    let profilePhone = String(root.getAttribute('data-profile-phone') || '').replace(/\D/g, '');
+    if (profilePhone.length === 11 && profilePhone.startsWith('0')) profilePhone = '+58 ' + profilePhone;
+    const phoneParts = splitPhoneParts(profilePhone || qPhone || savedPhone || '');
+    if (profileEmail && checkoutEmail) {
+      checkoutEmail.value = profileEmail;
+      checkoutEmail.style.display = 'none';
+    }
     if (checkoutSaveContact) {
       checkoutSaveContact.checked = !!(contactState && contactState.save);
       checkoutSaveContact.addEventListener('change', () => {
@@ -442,7 +491,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
     if (checkoutEmail) {
-      checkoutEmail.value = qEmail || savedEmail || '';
+      // El correo del perfil (sesión iniciada) manda sobre el guardado en el navegador
+      checkoutEmail.value = profileEmail || qEmail || savedEmail || '';
       checkoutEmail.addEventListener('input', () => {
         if (checkoutSaveContact && checkoutSaveContact.checked) persistCheckoutContact();
       });
@@ -570,11 +620,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (currency === 'BSD') {
       if (rate && rate > 0) {
+        // La comisión bancaria del Pago Móvil la paga el cliente (mismo redondeo que el servidor)
+        const baseBs = Math.round(totalUsd * rate);
+        const pmFee = pmFeeFor(baseBs);
+        const beforeBs = Math.round(baseUsd * rate);
         return {
-          amount: Math.round(totalUsd * rate),
+          amount: baseBs + pmFee,
           displayCurrency: 'BSD',
           usedCurrency: 'BSD',
-          baseBeforeDiscount: Math.round(baseUsd * rate)
+          baseBeforeDiscount: beforeBs + pmFeeFor(beforeBs),
+          pmFee: pmFee
         };
       }
       // Fallback to USD if rate is not available to avoid showing 0
@@ -590,6 +645,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function roundCents(value) {
     return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+  }
+
+  function pmFeePercent() {
+    const pct = Number(paymentsCfg && paymentsCfg.pm_fee_percent);
+    return (isFinite(pct) && pct > 0) ? Math.min(pct, 20) : 0;
+  }
+  function pmFeeFor(bs) {
+    return Math.round((Number(bs || 0) * pmFeePercent() / 100) + Number.EPSILON);
   }
 
   function binancePayFeePercent() {
@@ -730,6 +793,7 @@ document.addEventListener('DOMContentLoaded', () => {
       addField('CÉDULA', cedula);
       addField('TELÉFONO', phone);
       addQrTile(qr, 'QR de Pago Móvil');
+      // La comisión bancaria ya va dentro del total (no se muestra aparte).
       copyValues = () => {
         const t = computeTotals();
         const monto = String(Math.round(Number(t.amount || 0)));
@@ -821,6 +885,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selectedIndex < 0 && allItems.length > 0) selectedIndex = 0;
     rate = Number((rateRes && rateRes.rate_bsd_per_usd) || 0);
     paymentsCfg = (payRes && payRes.ok && payRes.payments) ? payRes.payments : null;
+    setupBdvPayerBox();
     // Detect Binance auto-verification mode PER ITEM
     const globalBinanceAuto = (qMethod === 'binance' && paymentsCfg && paymentsCfg.binance_auto_enabled === '1');
     isBinanceAuto = false; // will be set after item auto-check
@@ -1252,6 +1317,13 @@ document.addEventListener('DOMContentLoaded', () => {
         releaseCheckoutRequest();
         return;
       }
+      const bdvPayer = collectBdvPayer();
+      if (bdvPayer.error) {
+        alert(bdvPayer.error);
+        if (bdvPayer.el) bdvPayer.el.focus();
+        releaseCheckoutRequest();
+        return;
+      }
       // Prepare order payload
       const item = (allItems && selectedIndex >= 0 && selectedIndex < allItems.length) ? allItems[selectedIndex] : null;
       const totals = computeTotals();
@@ -1298,6 +1370,9 @@ document.addEventListener('DOMContentLoaded', () => {
       fd.append('special_code', getValidatedSpecialCode());
       fd.append('nn', nn);
       fd.append('idempotency_key', idempotencyKey);
+      if (bdvPayer.fields) {
+        Object.entries(bdvPayer.fields).forEach(([k, v]) => fd.append(k, v));
+      }
       const selectedCaptureFile = proofInput.files[0];
       const originalText = btnConfirm.textContent;
       btnConfirm.textContent = 'Procesando...';

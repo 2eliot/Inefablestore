@@ -135,6 +135,7 @@ MAINTENANCE_ALLOWED_PREFIXES = (
     "/admin", "/auth/login", "/auth/logout", "/auth/session",
     "/static/", "/uploads/", "/favicon.ico",
     "/webhook-ubii", "/webhook-binance-pay", "/api/v1/webhook-status",
+    "/webhook-bdv", "/contador",
 )
 # Cache corto por worker: sin esto cada request pegaría una consulta a la base
 # (que está en el servidor A, por túnel). El worker que cambia el valor lo
@@ -216,6 +217,40 @@ BG_VIDEO_MAX_BYTES = 50 * 1024 * 1024  # 50MB máximo para el video de fondo
 FAVICON_FILENAME = "561553627_18409264204136226_1099017029378111495_n.ico"
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@inefablestore.com")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "123456")
+# Usuario del contador: solo puede ver y descargar el libro de ventas (/contador).
+CONTADOR_EMAIL = (os.environ.get("CONTADOR_EMAIL") or "").strip()
+CONTADOR_PASSWORD = os.environ.get("CONTADOR_PASSWORD") or ""
+# Login con Google vía Firebase Authentication. Son los datos públicos de la
+# "app web" del proyecto Firebase; sin ellos el botón de Google no aparece.
+FIREBASE_API_KEY = (os.environ.get("FIREBASE_API_KEY") or "").strip()
+FIREBASE_AUTH_DOMAIN = (os.environ.get("FIREBASE_AUTH_DOMAIN") or "").strip()
+FIREBASE_PROJECT_ID = (os.environ.get("FIREBASE_PROJECT_ID") or "").strip()
+FIREBASE_APP_ID = (os.environ.get("FIREBASE_APP_ID") or "").strip()
+
+
+def _google_login_enabled() -> bool:
+    return bool(FIREBASE_API_KEY and FIREBASE_AUTH_DOMAIN and FIREBASE_PROJECT_ID)
+
+
+def _firebase_web_config() -> dict:
+    if not _google_login_enabled():
+        return {}
+    cfg = {"apiKey": FIREBASE_API_KEY, "authDomain": FIREBASE_AUTH_DOMAIN, "projectId": FIREBASE_PROJECT_ID}
+    if FIREBASE_APP_ID:
+        cfg["appId"] = FIREBASE_APP_ID
+    return cfg
+
+
+def _login_required_to_buy() -> bool:
+    return (get_config_value("require_login_to_buy", "1") or "1") == "1"
+
+
+def _safe_next_path(raw) -> str:
+    """Solo rutas internas (evita redirecciones a otros sitios)."""
+    value = str(raw or "").strip()
+    if not value.startswith("/") or value.startswith("//") or "\\" in value:
+        return "/"
+    return value[:500]
 # Email settings (use app password)
 MAIL_USER = os.environ.get("MAIL_USER", "")
 MAIL_APP_PASSWORD = os.environ.get("MAIL_APP_PASSWORD", "")
@@ -1420,6 +1455,75 @@ class Order(db.Model):
     payment_verified_at = db.Column(db.DateTime, nullable=True)
     payment_verification_attempts = db.Column(db.Integer, default=0)
     payment_last_verification_at = db.Column(db.DateTime, nullable=True)
+    # Contabilidad: tasa Bs/USD vigente al crear la orden y monto equivalente en Bs.
+    # Se fijan una sola vez para que el libro de ventas no cambie si luego se edita la tasa.
+    rate_bs_per_usd = db.Column(db.Float, default=0.0)
+    amount_bs = db.Column(db.Float, default=0.0)
+    # Comisión que pagó el cliente sobre el precio (Pago Móvil: Bs; Binance Pay: USD)
+    fee_amount = db.Column(db.Float, default=0.0)
+
+
+class FiscalSale(db.Model):
+    """Libro de ventas: una fila por orden cobrada (approved/delivered).
+
+    Es el registro que usa el contador. NO se borra cuando la limpieza elimina
+    órdenes viejas; las órdenes anuladas después de registradas quedan marcadas
+    como "anulada" en vez de desaparecer."""
+    __tablename__ = "fiscal_sales"
+    id = db.Column(db.Integer, primary_key=True)  # número de control interno correlativo
+    order_id = db.Column(db.Integer, nullable=False, unique=True)
+    sale_at = db.Column(db.DateTime, nullable=True)  # fecha de la orden (UTC)
+    recorded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    status = db.Column(db.String(20), default="vigente")  # vigente | anulada
+    voided_at = db.Column(db.DateTime, nullable=True)
+    void_reason = db.Column(db.String(300), default="")
+    customer_name = db.Column(db.String(200), default="")
+    customer_doc = db.Column(db.String(30), default="")  # V12345678 / J123456789
+    customer_email = db.Column(db.String(200), default="")
+    customer_phone = db.Column(db.String(80), default="")
+    product = db.Column(db.String(300), default="")
+    description = db.Column(db.Text, default="")
+    quantity = db.Column(db.Integer, default=1)
+    method = db.Column(db.String(20), default="")
+    currency = db.Column(db.String(10), default="USD")
+    amount_paid = db.Column(db.Float, default=0.0)  # en la moneda cobrada
+    price_usd = db.Column(db.Float, default=0.0)
+    rate_bs_per_usd = db.Column(db.Float, default=0.0)
+    rate_source = db.Column(db.String(20), default="")  # orden | derivada | actual
+    amount_bs = db.Column(db.Float, default=0.0)
+    reference = db.Column(db.String(120), default="")
+    payer_bank = db.Column(db.String(10), default="")
+    payer_phone = db.Column(db.String(30), default="")
+    payment_date = db.Column(db.String(10), default="")
+    verified_by = db.Column(db.String(20), default="")  # bdv | pabilo | ubii | binance | manual
+    verification_id = db.Column(db.String(120), default="")
+    bank_response_json = db.Column(db.Text, default="")
+    payment_capture = db.Column(db.String(500), default="")  # comprobante (se conserva)
+    fee_bs = db.Column(db.Float, default=0.0)  # comisión bancaria cobrada al cliente, en Bs
+
+
+class BankPayment(db.Model):
+    """Pagos recibidos en la cuenta según el propio banco: llegan por la API
+    Notificación de Pago (webhook) o por la API Consulta de Movimientos.
+    Con esto una orden se valida solo con la referencia y el monto, y el
+    contador ve también los pagos que no tienen orden."""
+    __tablename__ = "bank_payments"
+    id = db.Column(db.Integer, primary_key=True)
+    source = db.Column(db.String(20), default="")  # notificacion | movimientos
+    dedup_key = db.Column(db.String(120), unique=True, nullable=False)
+    reference = db.Column(db.String(40), default="")
+    reference_digits = db.Column(db.String(40), default="")
+    bank_code = db.Column(db.String(4), default="")
+    payer_id = db.Column(db.String(20), default="")
+    payer_phone = db.Column(db.String(20), default="")
+    pay_date = db.Column(db.String(10), default="")  # YYYY-MM-DD (hora VE)
+    pay_time = db.Column(db.String(8), default="")
+    amount = db.Column(db.Float, default=0.0)
+    description = db.Column(db.String(300), default="")
+    raw_json = db.Column(db.Text, default="")
+    received_at = db.Column(db.DateTime, default=datetime.utcnow)
+    order_id = db.Column(db.Integer, nullable=True)  # orden a la que se aplicó (un pago, una orden)
+    matched_at = db.Column(db.DateTime, nullable=True)
 
 
 class OrderSummary(db.Model):
@@ -1570,9 +1674,185 @@ def _snapshot_closed_periods_from_orders(orders: list['Order']) -> None:
         ))
 
 
+# ==============================
+# Libro de ventas (contabilidad)
+# ==============================
+
+_FISCAL_RECORDED_STATUSES = ("approved", "delivered")
+_BS_CURRENCIES = ("BSD", "VES", "BS")
+
+
+def _current_rate_bs_per_usd() -> float:
+    try:
+        rate = float(get_config_value("exchange_rate_bsd_per_usd", "0") or 0)
+    except Exception:
+        rate = 0.0
+    return rate if rate > 0 else 0.0
+
+
+def _order_is_bs(order_obj) -> bool:
+    return str(getattr(order_obj, "currency", "") or "").strip().upper() in _BS_CURRENCIES
+
+
+def _fill_order_fiscal_amounts(order_obj) -> None:
+    """Fija en la orden la tasa vigente y el monto en Bs (una sola vez, al crearla)."""
+    rate = _current_rate_bs_per_usd()
+    order_obj.rate_bs_per_usd = rate
+    amount = float(order_obj.amount or 0.0)
+    if _order_is_bs(order_obj):
+        order_obj.amount_bs = round(amount, 2)
+    else:
+        order_obj.amount_bs = round(amount * rate, 2) if rate > 0 else 0.0
+
+
+def _fiscal_rate_for_order(order_obj) -> tuple[float, str]:
+    rate = float(getattr(order_obj, "rate_bs_per_usd", 0.0) or 0.0)
+    if rate > 0:
+        return rate, "orden"
+    amount = float(order_obj.amount or 0.0)
+    price = float(order_obj.price or 0.0)
+    if _order_is_bs(order_obj) and amount > 0 and price > 0:
+        # Órdenes anteriores a este registro: la tasa se deduce de lo cobrado.
+        return round(amount / price, 4), "derivada"
+    return _current_rate_bs_per_usd(), "actual"
+
+
+def _fiscal_order_should_record(order_obj) -> bool:
+    if str(order_obj.status or "").lower() not in _FISCAL_RECORDED_STATUSES:
+        return False
+    method = str(order_obj.method or "").strip().lower()
+    if method == "gift":
+        return False  # canje de código de regalo: no hubo cobro
+    try:
+        if _order_paid_with_credit(order_obj):
+            return False  # pagada con saldo de influencer, no entra dinero
+    except Exception:
+        pass
+    return float(order_obj.amount or 0.0) > 0
+
+
+def _fiscal_order_product(order_obj, packages: dict, items: dict) -> tuple[str, str, int]:
+    pkg = packages.get(int(order_obj.store_package_id or 0))
+    pkg_name = str(getattr(pkg, "name", "") or "").strip()
+    lines = []
+    total_qty = 0
+    try:
+        parsed = json.loads(order_obj.items_json or "[]") if (order_obj.items_json or "").strip() else []
+    except Exception:
+        parsed = []
+    if isinstance(parsed, list):
+        for ent in parsed:
+            if not isinstance(ent, dict):
+                continue
+            qty = max(int(ent.get("qty") or 1), 1)
+            total_qty += qty
+            lines.append(f"{qty} x {str(ent.get('title') or '').strip()} (${float(ent.get('price') or 0):.2f})")
+    if not lines and order_obj.item_id:
+        it = items.get(int(order_obj.item_id))
+        total_qty = 1
+        lines.append(f"1 x {str(getattr(it, 'title', '') or '').strip()}")
+    description = "; ".join(lines)
+    return pkg_name, description, max(total_qty, 1)
+
+
+def _fiscal_build_sale(order_obj, packages: dict, items: dict) -> 'FiscalSale':
+    rate, rate_source = _fiscal_rate_for_order(order_obj)
+    # La comisión que paga el cliente solo cubre la del banco: no es venta
+    # declarable, así que el libro registra el monto sin ella.
+    fee = float(getattr(order_obj, "fee_amount", 0) or 0)
+    amount = float(order_obj.amount or 0.0) - fee
+    if _order_is_bs(order_obj):
+        amount_bs = round(amount, 2)
+    else:
+        amount_bs = round(float(order_obj.amount_bs or 0.0) or (amount * rate), 2)
+    pay_state = {}
+    try:
+        pay_state = _pabilo_get_payment_state(order_obj) or {}
+    except Exception:
+        pay_state = {}
+    if pay_state.get("verified"):
+        verified_by = str(pay_state.get("provider") or "").lower() or "auto"
+    elif str(order_obj.method or "").lower() == "binance" and order_obj.payment_verified_at:
+        verified_by = "binance"
+    else:
+        verified_by = "manual"
+    bank_response = pay_state.get("last_response") if isinstance(pay_state, dict) else None
+    doc = ""
+    if str(order_obj.payer_dni_number or "").strip():
+        doc = f"{str(order_obj.payer_dni_type or 'V').strip().upper()}{re.sub(r'[^0-9]', '', str(order_obj.payer_dni_number or ''))}"
+    product, description, qty = _fiscal_order_product(order_obj, packages, items)
+    return FiscalSale(
+        order_id=order_obj.id,
+        sale_at=order_obj.created_at,
+        status="vigente",
+        customer_name=str(order_obj.name or order_obj.customer_name or "")[:200],
+        customer_doc=doc[:30],
+        customer_email=str(order_obj.email or "")[:200],
+        customer_phone=str(order_obj.phone or "")[:80],
+        product=product[:300],
+        description=description,
+        quantity=qty,
+        method=str(order_obj.method or "")[:20],
+        currency=str(order_obj.currency or "USD")[:10],
+        amount_paid=amount,
+        price_usd=float(order_obj.price or 0.0),
+        rate_bs_per_usd=rate,
+        rate_source=rate_source,
+        amount_bs=amount_bs,
+        reference=str(order_obj.reference or "")[:120],
+        payer_bank=str(order_obj.payer_bank_origin or "")[:10],
+        payer_phone=str(order_obj.payer_phone or "")[:30],
+        payment_date=str(order_obj.payer_payment_date or "")[:10],
+        verified_by=verified_by[:20],
+        verification_id=str(order_obj.payment_verification_id or pay_state.get("verification_id") or "")[:120],
+        bank_response_json=json.dumps(bank_response, ensure_ascii=False) if bank_response else "",
+        payment_capture=str(order_obj.payment_capture or "")[:500],
+        fee_bs=round(float(getattr(order_obj, "fee_amount", 0) or 0) * (1.0 if _order_is_bs(order_obj) else rate), 2),
+    )
+
+
+def _fiscal_sync_orders(orders=None, *, commit: bool = True) -> int:
+    """Registra en el libro de ventas las órdenes cobradas que aún no estén y
+    marca como anuladas las que se rechazaron después de registradas.
+    Devuelve cuántas ventas nuevas se registraron."""
+    if orders is None:
+        orders = Order.query.filter(Order.status.in_(("approved", "delivered", "rejected"))).all()
+    orders = [o for o in (orders or []) if o is not None and o.id]
+    if not orders:
+        return 0
+    ids = [o.id for o in orders]
+    existing = {}
+    for chunk_start in range(0, len(ids), 500):
+        chunk = ids[chunk_start:chunk_start + 500]
+        for row in FiscalSale.query.filter(FiscalSale.order_id.in_(chunk)).all():
+            existing[int(row.order_id)] = row
+    to_create = [o for o in orders if o.id not in existing and _fiscal_order_should_record(o)]
+    created = 0
+    if to_create:
+        packages = {p.id: p for p in StorePackage.query.all()}
+        item_ids = {int(o.item_id) for o in to_create if o.item_id}
+        items = {it.id: it for it in GamePackageItem.query.filter(GamePackageItem.id.in_(item_ids)).all()} if item_ids else {}
+        for o in sorted(to_create, key=lambda x: (x.created_at or datetime.min, x.id)):
+            try:
+                db.session.add(_fiscal_build_sale(o, packages, items))
+                created += 1
+            except Exception as exc:
+                print(f"[Fiscal] No se pudo registrar la orden #{o.id}: {exc}")
+    for o in orders:
+        row = existing.get(o.id)
+        if row and row.status == "vigente" and str(o.status or "").lower() == "rejected":
+            row.status = "anulada"
+            row.voided_at = datetime.utcnow()
+            row.void_reason = "Orden rechazada después de cobrada"
+    if commit:
+        db.session.commit()
+    return created
+
+
 def _aggregate_and_cleanup_orders():
     """Aggregate old terminal-state orders into OrderSummary, then delete them.
-    Keeps ALL pending orders and recent orders (< ORDER_CLEANUP_DAYS days)."""
+    Keeps ALL pending orders and recent orders (< ORDER_CLEANUP_DAYS days).
+    Las ventas cobradas quedan antes registradas en el libro de ventas (FiscalSale)."""
     try:
         cutoff = datetime.utcnow() - timedelta(days=_ORDER_CLEANUP_DAYS)
         terminal = ("approved", "rejected", "delivered")
@@ -1583,6 +1863,9 @@ def _aggregate_and_cleanup_orders():
 
         if not old_orders:
             return 0
+
+        # Nunca borrar una venta cobrada sin dejarla en el libro de ventas.
+        _fiscal_sync_orders(old_orders, commit=True)
 
         _snapshot_closed_periods_from_orders(old_orders)
 
@@ -1629,7 +1912,8 @@ def _aggregate_and_cleanup_orders():
 
         count = len(old_orders)
         for o in old_orders:
-            _delete_capture(o.payment_capture)
+            if not _fiscal_order_should_record(o):
+                _delete_capture(o.payment_capture)  # el comprobante de una venta cobrada se conserva
             db.session.delete(o)
 
         db.session.commit()
@@ -1649,6 +1933,7 @@ _LOCK_BINANCE_VERIFY = 911002
 _LOCK_REV_VERIFY = 911003
 _LOCK_PABILO_VERIFY = 911004
 _LOCK_BINANCE_PAY_SYNC = 911005
+_LOCK_FISCAL_SYNC = 911006
 _SINGLETON_LOCK_CONNS = {}
 
 
@@ -2075,6 +2360,21 @@ def _binance_pay_fee_for(amount_usd: float) -> float:
     """Comisión que se suma al total, redondeada al centavo (mitad hacia arriba, igual que el checkout)."""
     fee = Decimal(str(amount_usd or 0)) * Decimal(str(_binance_pay_fee_percent())) / Decimal("100")
     return float(fee.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _pm_fee_percent() -> float:
+    """Comisión bancaria del Pago Móvil que se suma al total (la cobra el BDV al comercio)."""
+    try:
+        pct = float(get_config_value("pm_fee_percent", "0") or 0)
+    except Exception:
+        pct = 0.0
+    return min(max(pct, 0.0), 20.0)
+
+
+def _pm_fee_for(amount_bs) -> int:
+    """Comisión en Bs enteros, redondeo mitad hacia arriba (igual que el checkout)."""
+    fee = Decimal(str(amount_bs or 0)) * Decimal(str(_pm_fee_percent())) / Decimal("100")
+    return int(fee.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _is_binance_pay_order(order_obj) -> bool:
@@ -4085,7 +4385,7 @@ def _save_order_automation_state(order_obj, state):
 
 def _payment_verification_provider() -> str:
     provider = (get_config_value("payment_verification_provider", "") or "").strip().lower()
-    if provider in ("pabilo", "ubii"):
+    if provider in ("pabilo", "ubii", "bdv"):
         return provider
     if get_config_value("ubii_auto_verify_enabled", "0") == "1":
         return "ubii"
@@ -4100,6 +4400,8 @@ def _payment_verification_provider_label(provider: str) -> str:
         return "Ubii"
     if normalized == "pabilo":
         return "Pabilo"
+    if normalized == "bdv":
+        return "BDV"
     return ""
 
 
@@ -4179,6 +4481,1127 @@ def _ubii_config():
 def _pabilo_normalize_method(raw_method: str) -> str:
     method = (raw_method or "pm").strip().lower()
     return method if method in ("pm", "binance") else "pm"
+
+
+# ==============================
+# Banco de Venezuela — API Conciliación (Pago Móvil P2C)
+# ==============================
+# Documentación: "API Conciliación (Producción)" v1.01 del BDV (APIMarket).
+# 1) POST {base}/am/oauth2/token  Authorization: Basic <API KEY>  -> access_token (3600 s)
+# 2) POST {base}/gw/conciliate/1.0.0/getMovement  Authorization: Bearer <token>
+#    code 1000 = pago conciliado; code 1010 = no conciliado (motivo en message/data).
+# Cada pago se concilia UNA sola vez: una segunda consulta responde "ya fue
+# conciliado anteriormente". Solo valida pagos de hoy y hasta 3 días atrás.
+# La API key vive solo en el entorno (BDV_API_KEY), nunca en la base ni en git.
+
+_BDV_DEFAULT_BASE_URL = "https://apimarketbdv.banvenez.com"
+_BDV_TOKEN_LOCK = threading.Lock()
+_BDV_TOKEN_CACHE = {}  # huella de la clave -> {"token", "expires_at"}
+_BDV_MAX_PAYMENT_AGE_DAYS = 3
+_BDV_MIN_REFERENCE_DIGITS = 6
+_BDV_AUTO_RETRY_MAX_ATTEMPTS = 4  # cada intento puede probar varios bancos
+
+# Códigos de banco (SUDEBAN) para "bancoOrigen".
+BDV_BANKS = [
+    ("0102", "Banco de Venezuela"),
+    ("0104", "Venezolano de Crédito"),
+    ("0105", "Mercantil"),
+    ("0108", "Provincial (BBVA)"),
+    ("0114", "Bancaribe"),
+    ("0115", "Exterior"),
+    ("0128", "Banco Caroní"),
+    ("0134", "Banesco"),
+    ("0137", "Sofitasa"),
+    ("0138", "Banco Plaza"),
+    ("0146", "Bangente"),
+    ("0151", "BFC Banco Fondo Común"),
+    ("0156", "100% Banco"),
+    ("0157", "DelSur"),
+    ("0163", "Banco del Tesoro"),
+    ("0166", "Banco Agrícola de Venezuela"),
+    ("0168", "Bancrecer"),
+    ("0169", "R4 Banco Microfinanciero"),
+    ("0171", "Banco Activo"),
+    ("0172", "Bancamiga"),
+    ("0173", "Banco Internacional de Desarrollo"),
+    ("0174", "Banplus"),
+    ("0175", "Banco Digital de los Trabajadores"),
+    ("0177", "BANFANB"),
+    ("0178", "N58 Banco Digital"),
+    ("0191", "BNC Banco Nacional de Crédito"),
+]
+_BDV_BANK_CODES = {code for code, _ in BDV_BANKS}
+
+
+def _bdv_normalize_phone(raw) -> str:
+    """Devuelve el teléfono en formato 04XXXXXXXXX (11 dígitos) o ''."""
+    digits = re.sub(r"\D", "", str(raw or ""))
+    if digits.startswith("580") and len(digits) == 13:  # "+58 0412..."
+        digits = digits[2:]
+    elif digits.startswith("58") and len(digits) == 12:
+        digits = "0" + digits[2:]
+    elif len(digits) == 10 and digits.startswith("4"):
+        digits = "0" + digits
+    return digits if (len(digits) == 11 and digits.startswith("04")) else ""
+
+
+def _bdv_normalize_reference(raw) -> str:
+    """La API acepta de 4 a 8 dígitos: se envían los últimos 8."""
+    digits = re.sub(r"\D", "", str(raw or ""))
+    if len(digits) < 4:
+        return ""
+    return digits[-8:]
+
+
+def _bdv_config() -> dict:
+    base_url = (os.environ.get("BDV_BASE_URL") or _BDV_DEFAULT_BASE_URL).strip().rstrip("/")
+    try:
+        timeout = max(int(os.environ.get("BDV_TIMEOUT", "30") or 30), 5)
+    except Exception:
+        timeout = 30
+    phone_raw = get_config_value("bdv_phone_destino", "") or get_config_value("pm_phone", "")
+    return {
+        "enabled": _payment_verification_provider() == "bdv",
+        "api_key": (os.environ.get("BDV_API_KEY") or "").strip(),
+        "base_url": base_url,
+        "token_url": base_url + (os.environ.get("BDV_TOKEN_PATH") or "/am/oauth2/token"),
+        "movement_url": base_url + (os.environ.get("BDV_MOVEMENT_PATH") or "/gw/conciliate/1.0.0/getMovement"),
+        "timeout": timeout,
+        "phone_destino": _bdv_normalize_phone(phone_raw),
+        "phone_destino_raw": str(phone_raw or ""),
+        # API Consulta de Movimientos (estado de cuenta)
+        "movements_api_key": (os.environ.get("BDV_MOVIMIENTOS_API_KEY") or os.environ.get("BDV_API_KEY") or "").strip(),
+        "account": re.sub(r"\D", "", os.environ.get("BDV_CUENTA") or ""),
+        "movements_url": base_url + (os.environ.get("BDV_MOVEMENTS_PATH") or "/gw/transactions/1.0.0/apis/bdv/consulta/movimientos"),
+        # API Notificación de Pago (webhook): clave que la tienda le da al BDV
+        "webhook_key": (os.environ.get("BDV_WEBHOOK_KEY") or "").strip(),
+    }
+
+
+def _bdv_get_token(cfg: dict, *, force: bool = False, api_key: str = ""):
+    """Devuelve (token, error). Reutiliza el token hasta 60 s antes de vencer.
+    Cada clave (Conciliación, Movimientos) tiene su propio token."""
+    api_key = str(api_key or cfg.get("api_key") or "")
+    if not api_key:
+        return "", "Falta la clave del BDV en el servidor"
+    key_fp = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
+    shared_key = f"bdv_token_{key_fp}"
+    with _BDV_TOKEN_LOCK:
+        entry = _BDV_TOKEN_CACHE.get(key_fp) or {}
+        if not force and entry.get("token") and float(entry.get("expires_at") or 0) - 60 > time.time():
+            return entry["token"], ""
+        # Token que ya pidió otro proceso de la tienda: si el BDV anula el anterior
+        # al dar uno nuevo, cada proceso con su propio token se anularía entre sí.
+        if not force:
+            try:
+                shared = json.loads(get_config_value(shared_key, "") or "{}")
+                if shared.get("token") and float(shared.get("expires_at") or 0) - 60 > time.time():
+                    _BDV_TOKEN_CACHE[key_fp] = shared
+                    return shared["token"], ""
+            except Exception:
+                db.session.rollback()
+        try:
+            resp = _requests_lib.post(
+                cfg["token_url"],
+                headers={"Authorization": "Basic " + api_key, "Content-Type": "application/json"},
+                json={"grant_type": "client_credentials"},
+                timeout=cfg.get("timeout") or 30,
+            )
+        except Exception as exc:
+            return "", f"No se pudo conectar con el BDV ({type(exc).__name__})"
+        try:
+            data = resp.json()
+        except Exception:
+            data = {}
+        token = str((data or {}).get("access_token") or "")
+        if resp.status_code != 200 or not token:
+            detail = str((data or {}).get("error_description") or (data or {}).get("error") or f"HTTP {resp.status_code}")
+            _BDV_TOKEN_CACHE.pop(key_fp, None)
+            return "", f"El BDV rechazó la clave: {detail}"
+        try:
+            expires_in = int(data.get("expires_in") or 3600)
+        except Exception:
+            expires_in = 3600
+        _BDV_TOKEN_CACHE[key_fp] = {"token": token, "expires_at": time.time() + expires_in}
+        try:
+            set_config_values({shared_key: json.dumps(_BDV_TOKEN_CACHE[key_fp])})
+        except Exception:
+            db.session.rollback()
+        return token, ""
+
+
+def _bdv_invalidate_token() -> None:
+    with _BDV_TOKEN_LOCK:
+        _BDV_TOKEN_CACHE.clear()
+
+
+def _bdv_order_amount_text(order_obj) -> str:
+    if not _order_is_bs(order_obj):
+        return ""
+    try:
+        amount = Decimal(str(order_obj.amount or 0))
+    except (InvalidOperation, ValueError, TypeError):
+        return ""
+    if amount <= 0:
+        return ""
+    return str(amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _bdv_order_payment_date(order_obj) -> str:
+    raw = str(order_obj.payer_payment_date or "").strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+        return raw
+    created = order_obj.created_at or datetime.utcnow()
+    try:
+        return created.replace(tzinfo=timezone.utc).astimezone(VE_TIMEZONE).strftime("%Y-%m-%d")
+    except Exception:
+        return now_ve().strftime("%Y-%m-%d")
+
+
+def _bdv_build_payload(order_obj, reference_value: str, cfg: dict, payment_date: str = "", bank: str = "",
+                       amount_text: str = "") -> dict:
+    bank = re.sub(r"\D", "", str(bank or order_obj.payer_bank_origin or ""))[:4]
+    dni_number = re.sub(r"\D", "", str(order_obj.payer_dni_number or ""))
+    dni_type = str(order_obj.payer_dni_type or "V").strip().upper() or "V"
+    cedula = f"{dni_type}{dni_number}" if dni_number else ""
+    return {
+        "cedulaPagador": cedula,
+        "telefonoPagador": _bdv_normalize_phone(order_obj.payer_phone or order_obj.phone),
+        "telefonoDestino": cfg.get("phone_destino") or "",
+        "referencia": _bdv_normalize_reference(reference_value),
+        "fechaPago": payment_date or _bdv_order_payment_date(order_obj),
+        "importe": amount_text or _bdv_order_amount_text(order_obj),
+        "bancoOrigen": bank,
+        # La cédula solo se puede validar en pagos BDV -> BDV.
+        "reqCed": bool(cedula and bank == "0102"),
+    }
+
+
+def _bdv_request_info_with_reference(order_obj, reference_value: str) -> dict:
+    cfg = _bdv_config()
+    order_method = _pabilo_normalize_method(order_obj.method or "")
+    reasons = []
+    base = {
+        "enabled": bool(cfg.get("enabled")),
+        "expected_method": "pm",
+        "order_method": order_method,
+        "has_api_key": bool(cfg.get("api_key")),
+        "user_bank_id": "",
+        "provider": "bdv",
+    }
+    if _order_paid_with_credit(order_obj):
+        return {**base, "requestable": False, "reason": "Orden pagada con credito de mini influencer",
+                "reasons": ["Orden pagada con credito de mini influencer"]}
+    if not cfg.get("enabled"):
+        reasons.append("La verificación BDV está desactivada")
+    if order_method != "pm":
+        reasons.append(f"Metodo incompatible: la orden usa {order_method.upper() or 'N/A'} y el BDV solo verifica Pago Móvil")
+    if not cfg.get("api_key"):
+        reasons.append("Falta BDV_API_KEY en el servidor")
+    if not cfg.get("phone_destino"):
+        reasons.append("Falta el teléfono de Pago Móvil de la tienda (formato 04XXXXXXXXX)")
+    if not _bdv_normalize_reference(reference_value):
+        reasons.append("La referencia debe tener al menos 4 dígitos")
+    if not _bdv_order_amount_text(order_obj):
+        reasons.append("La orden no tiene un monto en Bs válido")
+    if not _bdv_normalize_phone(order_obj.payer_phone or order_obj.phone) and not _bdv_reference_only_available(cfg):
+        reasons.append("Falta el teléfono desde el que se hizo el pago")
+    return {**base, "requestable": len(reasons) == 0, "reason": "; ".join(reasons), "reasons": reasons}
+
+
+def _bdv_classify_1010(message: str, detail) -> str:
+    text = str(message or "").lower()
+    detail_text = str(detail or "").lower() if isinstance(detail, str) else ""
+    if "conciliado anteriormente" in text:
+        return "already_conciliated"
+    if detail_text.startswith("campo") or "invalido" in detail_text or "inválido" in detail_text:
+        return "invalid_field"
+    if "importe no coincide" in text or ("monto" in text and "transacc" in text):
+        return "amount_mismatch"
+    if "no existe" in text:
+        return "not_found"
+    return "other"
+
+
+# Orden en que se prueban los bancos cuando no se conoce el de origen.
+_BDV_BANK_PRIORITY = [
+    "0102", "0134", "0105", "0108", "0172", "0191", "0114", "0175", "0163", "0169",
+    "0171", "0174", "0138", "0151", "0115", "0104", "0128", "0137", "0156", "0157",
+    "0166", "0168", "0173", "0177", "0178", "0146",
+]
+
+
+def _bdv_user_saved_bank(order_obj) -> str:
+    try:
+        if order_obj.user_id:
+            user_obj = User.query.get(int(order_obj.user_id))
+            return str(getattr(user_obj, "pm_bank", "") or "") if user_obj else ""
+    except Exception:
+        pass
+    return ""
+
+
+def _bdv_capture_bank(order_obj) -> str:
+    """Banco de origen leído del comprobante (se guarda en el estado de pago)."""
+    state = _pabilo_get_payment_state(order_obj)
+    if "capture_bank" in state:
+        return str(state.get("capture_bank") or "")
+    code = ""
+    if str(order_obj.payment_capture or "").strip():
+        try:
+            code = _extract_capture_bank(order_obj.payment_capture)
+        except Exception as exc:
+            print(f"[BDV] No se pudo leer el banco del comprobante de la orden #{order_obj.id}: {exc}")
+            code = ""
+    _pabilo_set_payment_state(order_obj, {**_pabilo_get_payment_state(order_obj), "capture_bank": code})
+    return code
+
+
+def _bdv_payment_dates(order_obj) -> list:
+    """Fecha del pago y, solo si la orden se hizo entre 00:00 y 01:59 (hora VE)
+    sin fecha indicada, también la del día anterior."""
+    first = _bdv_order_payment_date(order_obj)
+    dates = [first]
+    if str(order_obj.payer_payment_date or "").strip():
+        return dates
+    try:
+        created = (order_obj.created_at or datetime.utcnow()).replace(tzinfo=timezone.utc).astimezone(VE_TIMEZONE)
+        if created.hour < 2:
+            dates.append((datetime.strptime(first, "%Y-%m-%d").date() - timedelta(days=1)).isoformat())
+    except Exception:
+        pass
+    return dates
+
+
+def _bdv_payment_taken_by_other(order_obj, reference_value: str, amount) -> int | None:
+    """¿Ese pago (referencia + monto) ya está aplicado a OTRA orden en los pagos del banco?
+    Evita que un pago visto en el estado de cuenta se use de nuevo vía Conciliación."""
+    amt = _bdv_amount_of(amount)
+    if amt is None or not _bdv_ref_digits(reference_value):
+        return None
+    rows = BankPayment.query.filter(
+        BankPayment.order_id.isnot(None),
+        BankPayment.order_id != order_obj.id,
+        BankPayment.amount >= float(amt) - 0.005,
+        BankPayment.amount <= float(amt) + 0.005,
+    ).all()
+    for row in rows:
+        if _bdv_refs_match(reference_value, row.reference_digits):
+            return int(row.order_id)
+    return None
+
+
+def _bdv_verify_payment_once(
+    order_obj,
+    *,
+    reference_override: str = "",
+    reference_source: str = "manual",
+    max_attempts: int = 2,
+    retry_delay_seconds: int = 2,
+    expected_amount=None,
+):
+    result = _bdv_verify_payment_once_inner(
+        order_obj, reference_override=reference_override, reference_source=reference_source,
+        max_attempts=max_attempts, retry_delay_seconds=retry_delay_seconds, expected_amount=expected_amount,
+    )
+    confirmed = result.get("verified") or result.get("underpaid")
+    from_statement = isinstance(result.get("response"), dict) and "bank_payment_id" in result["response"]
+    if order_obj is not None and confirmed and not from_statement:
+        paid = (result.get("paid_amount") or ((result.get("validation") or {}).get("matched_amount"))
+                or (expected_amount if expected_amount is not None else order_obj.amount))
+        ref = str(reference_override or order_obj.reference or "")
+        other = _bdv_payment_taken_by_other(order_obj, ref, paid)
+        if other:
+            return {
+                "ok": True, "verified": False, "bdv_result": "already_conciliated",
+                "payment_used_by_order": int(other),
+                "message": f"Ese pago ya se usó en la orden #{other}",
+                "matched_reference": ref, "matched_reference_source": reference_source,
+            }
+    return result
+
+
+def _bdv_verify_payment_once_inner(
+    order_obj,
+    *,
+    reference_override: str = "",
+    reference_source: str = "manual",
+    max_attempts: int = 2,
+    retry_delay_seconds: int = 2,
+    expected_amount=None,
+):
+    """Busca el pago probando bancos de origen (el BDV exige el banco exacto).
+
+    Orden: banco indicado en la orden -> último banco con el que pagó el
+    cliente -> banco leído del comprobante -> resto por popularidad.
+    Una consulta que responde "no existe" no consume el pago, así que probar
+    varios bancos es seguro; se detiene en la primera respuesta que no sea
+    "no existe" (pago encontrado, ya conciliado, monto distinto o error)."""
+    if order_obj is None:
+        return {"ok": False, "verified": False, "message": "Orden inválida"}
+    candidate_reference = str(reference_override or order_obj.reference or "").strip()
+    # 1) Pago avisado por el banco (webhook) o visto en el estado de cuenta:
+    #    basta la referencia y el monto.
+    expected_dec = _bdv_amount_of(expected_amount) if expected_amount is not None else _bdv_amount_of(order_obj.amount)
+    amount_text = f"{expected_dec:.2f}" if (expected_amount is not None and expected_dec is not None) else ""
+    by_reference = _bdv_verify_by_bank_payments(order_obj, candidate_reference, reference_source, expected_dec)
+    if by_reference is not None:
+        return by_reference
+    # 2) Conciliación: necesita el teléfono desde el que se pagó.
+    if not _bdv_normalize_phone(order_obj.payer_phone or order_obj.phone):
+        return {
+            "ok": True, "verified": False, "bdv_result": "not_found", "payment_not_found": True,
+            "message": "El pago aún no aparece en el BDV con esa referencia y ese monto.",
+            "matched_reference": candidate_reference, "matched_reference_source": reference_source,
+        }
+    tried = []
+
+    def _banks():
+        seen = set()
+        def _valid(code):
+            code = re.sub(r"\D", "", str(code or ""))[:4]
+            return code if code in _BDV_BANK_CODES and code not in seen else ""
+        for getter in (lambda: order_obj.payer_bank_origin, lambda: _bdv_user_saved_bank(order_obj),
+                       lambda: _bdv_capture_bank(order_obj)):
+            code = _valid(getter())
+            if code:
+                seen.add(code)
+                yield code
+        for code in _BDV_BANK_PRIORITY:
+            if _valid(code):
+                seen.add(code)
+                yield code
+
+    last_result = None
+    first_call = True
+    dates = _bdv_payment_dates(order_obj)
+    for bank in _banks():
+        for pay_date in dates:
+            result = _bdv_verify_payment_single(
+                order_obj,
+                reference_override=reference_override,
+                reference_source=reference_source,
+                max_attempts=max_attempts if first_call else 1,
+                retry_delay_seconds=retry_delay_seconds if first_call else 0,
+                payment_date=pay_date,
+                bank=bank,
+                amount_text=amount_text,
+            )
+            first_call = False
+            tried.append(bank)
+            last_result = result
+            # Pagó menos: se confirma ese pago por su monto real (queda conciliado
+            # y no se puede reutilizar) y la orden pasa a "pago incompleto".
+            paid = result.get("paid_amount")
+            if (result.get("bdv_result") == "amount_mismatch" and paid is not None and expected_dec is not None
+                    and _bdv_overpay_allowed(expected_dec, paid)):
+                over = _bdv_verify_payment_single(
+                    order_obj, reference_override=reference_override, reference_source=reference_source,
+                    max_attempts=1, retry_delay_seconds=0, payment_date=pay_date, bank=bank,
+                    amount_text=f"{Decimal(str(paid)):.2f}",
+                )
+                if over.get("verified"):
+                    order_obj.payer_bank_origin = bank
+                    excess = Decimal(str(paid)) - expected_dec
+                    over["message"] = f"Pago verificado en BDV (Bs {Decimal(str(paid)):.2f}) · PAGÓ Bs {excess:.2f} DE MÁS"
+                    over["overpaid_amount"] = float(excess)
+                    return over
+            if (result.get("bdv_result") == "amount_mismatch" and paid is not None and expected_dec is not None
+                    and 0 < Decimal(str(paid)) < expected_dec):
+                partial = _bdv_verify_payment_single(
+                    order_obj, reference_override=reference_override, reference_source=reference_source,
+                    max_attempts=1, retry_delay_seconds=0, payment_date=pay_date, bank=bank,
+                    amount_text=f"{Decimal(str(paid)):.2f}",
+                )
+                if partial.get("verified"):
+                    order_obj.payer_bank_origin = bank
+                    return {
+                        "ok": True, "verified": False, "underpaid": True, "bdv_result": "underpaid",
+                        "paid_amount": float(paid), "partial_reference": candidate_reference, "partial_source": "conciliacion",
+                        "message": f"Pago incompleto: el BDV confirmó Bs {Decimal(str(paid)):.2f}",
+                        "response": partial.get("response"), "request_meta": partial.get("request_meta"),
+                        "matched_reference": candidate_reference, "matched_reference_source": reference_source,
+                    }
+            if not result.get("payment_not_found"):
+                if result.get("ok") and result.get("bdv_result") in ("conciliated", "already_conciliated", "amount_mismatch"):
+                    # Banco correcto: queda en la orden y en el perfil del cliente.
+                    order_obj.payer_bank_origin = bank
+                    if result.get("verified") and order_obj.user_id:
+                        try:
+                            user_obj = User.query.get(int(order_obj.user_id))
+                            if user_obj is not None:
+                                user_obj.pm_bank = bank
+                        except Exception:
+                            pass
+                result["banks_tried"] = len(tried)
+                return result
+            time.sleep(0.3)
+    if last_result is not None:
+        last_result["banks_tried"] = len(tried)
+        if last_result.get("payment_not_found"):
+            last_result["message"] = (
+                f"El pago aún no aparece en el BDV (se probaron {len(set(tried))} bancos). "
+                "Revisa la referencia, el monto y el teléfono desde el que se pagó."
+            )
+        return last_result
+    return {"ok": False, "verified": False, "message": "No se pudo consultar el BDV"}
+
+
+def _bdv_verify_payment_single(
+    order_obj,
+    *,
+    reference_override: str = "",
+    reference_source: str = "manual",
+    max_attempts: int = 2,
+    retry_delay_seconds: int = 2,
+    payment_date: str = "",
+    bank: str = "",
+    amount_text: str = "",
+):
+    """Una consulta a la API Conciliación del BDV. Mismo formato de resultado
+    que _pabilo_verify_payment_once para reutilizar todo el flujo."""
+    if not order_obj:
+        return {"ok": False, "verified": False, "message": "Orden inválida"}
+    candidate_reference = str(reference_override or order_obj.reference or "").strip()
+    request_info = _bdv_request_info_with_reference(order_obj, candidate_reference)
+    if not request_info.get("requestable"):
+        return {
+            "ok": False,
+            "verified": False,
+            "message": request_info.get("reason") or "La orden no se puede consultar en el BDV",
+            "request": request_info,
+        }
+    cfg = _bdv_config()
+    payload = _bdv_build_payload(order_obj, candidate_reference, cfg, payment_date=payment_date, bank=bank,
+                                 amount_text=amount_text)
+    expected_amount = payload["importe"]
+    request_meta = {"url": cfg["movement_url"], "payload": payload, "status_code": 0, "attempt": 0, "max_attempts": max_attempts}
+    validation = {"expected_amount": expected_amount, "matched_amount": "", "amount_candidates": []}
+    last_result = None
+    force_token = False
+    retried_401 = False
+    attempt = 0
+    while attempt < max(int(max_attempts or 1), 1):
+        attempt += 1
+        request_meta = {**request_meta, "attempt": attempt}
+        token, token_error = _bdv_get_token(cfg, force=force_token)
+        if not token:
+            last_result = {"ok": False, "verified": False, "message": token_error, "request_meta": request_meta}
+            break  # sin credenciales válidas no sirve reintentar
+        try:
+            resp = _requests_lib.post(
+                cfg["movement_url"],
+                headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+                json=payload,
+                timeout=cfg.get("timeout") or 30,
+            )
+        except Exception as exc:
+            last_result = {"ok": False, "verified": False,
+                           "message": f"No se pudo conectar con el BDV ({type(exc).__name__})",
+                           "request_meta": request_meta}
+            if attempt < max_attempts and retry_delay_seconds:
+                time.sleep(retry_delay_seconds)
+            continue
+        try:
+            data = resp.json()
+        except Exception:
+            data = {}
+        request_meta = {**request_meta, "status_code": resp.status_code}
+        body_status = str((data or {}).get("status") or "") if isinstance(data, dict) else ""
+        if resp.status_code == 401 or body_status == "401":
+            _bdv_invalidate_token()
+            force_token = True
+            if not retried_401:
+                # token anulado por otro proceso: uno nuevo y se repite esta misma consulta
+                retried_401 = True
+                max_attempts = max(int(max_attempts or 1), attempt + 1)
+            last_result = {"ok": False, "verified": False,
+                           "message": f"El BDV no autorizó la consulta: {str((data or {}).get('message') or 'credenciales inválidas')}",
+                           "response": data, "request_meta": request_meta}
+            continue
+        if resp.status_code >= 500 or not isinstance(data, dict) or "code" not in data:
+            detail = str((data or {}).get("message") or (data or {}).get("error") or f"HTTP {resp.status_code}") if isinstance(data, dict) else f"HTTP {resp.status_code}"
+            last_result = {"ok": False, "verified": False, "message": f"El BDV no respondió correctamente: {detail}",
+                           "response": data if isinstance(data, dict) else {}, "request_meta": request_meta}
+            if attempt < max_attempts and retry_delay_seconds:
+                time.sleep(retry_delay_seconds)
+            continue
+
+        code = str(data.get("code") or "")
+        message = str(data.get("message") or "")
+        detail = data.get("data")
+        if code == "1000":
+            detail_dict = detail if isinstance(detail, dict) else {}
+            paid_amount = str(detail_dict.get("amount") or "")
+            validation = {**validation, "matched_amount": paid_amount, "amount_candidates": [paid_amount] if paid_amount else []}
+            try:
+                amount_ok = (not paid_amount) or Decimal(paid_amount) == Decimal(expected_amount)
+            except Exception:
+                amount_ok = True
+            if not amount_ok:
+                # El banco lo concilió con otro monto: no se aprueba solo.
+                return {"ok": True, "verified": False, "bdv_result": "amount_mismatch",
+                        "message": f"BDV concilió el pago pero con monto Bs {paid_amount} (la orden es Bs {expected_amount}). Revisar a mano.",
+                        "response": data, "request_meta": request_meta, "validation": validation,
+                        "matched_reference": candidate_reference, "matched_reference_source": reference_source}
+            bank_ref = str(detail_dict.get("referencia") or payload["referencia"])
+            return {
+                "ok": True,
+                "verified": True,
+                "bdv_result": "conciliated",
+                "verification_id": f"bdv:{payload['fechaPago']}:{bank_ref}",
+                "message": f"Pago verificado en BDV (Bs {paid_amount or expected_amount})",
+                "response": data,
+                "request_meta": request_meta,
+                "validation": validation,
+                "matched_reference": candidate_reference,
+                "matched_reference_source": reference_source,
+            }
+
+        kind = _bdv_classify_1010(message, detail)
+        detail_text = detail if isinstance(detail, str) else ""
+        paid_amount = _bdv_amount_in_message(message) if kind == "amount_mismatch" else None
+        human = {
+            "already_conciliated": "El BDV indica que este pago YA fue conciliado antes (posible referencia reutilizada). Revisar a mano.",
+            "invalid_field": f"El BDV rechazó un dato del pago: {detail_text or message}",
+            "amount_mismatch": f"El monto no coincide con el pago en el BDV: {message}",
+            "not_found": "El pago aún no aparece en el BDV con esos datos (revisa referencia, fecha, banco y teléfono)",
+        }.get(kind, f"BDV: {message or 'pago no conciliado'}")
+        return {
+            "ok": True,
+            "verified": False,
+            "bdv_result": kind,
+            "payment_not_found": kind == "not_found",
+            "paid_amount": float(paid_amount) if paid_amount is not None else None,
+            "message": human,
+            "response": data,
+            "request_meta": request_meta,
+            "validation": validation,
+            "matched_reference": candidate_reference,
+            "matched_reference_source": reference_source,
+        }
+
+    return last_result or {"ok": False, "verified": False, "message": "No se pudo completar la verificación en el BDV",
+                           "request_meta": request_meta}
+
+
+_BDV_REFERENCE_MIN_MATCH = 6
+_BDV_REFERENCE_MAX_MATCH = 8  # el BDV valida con 4 a 8 dígitos; el prefijo cambia entre bancos
+# Pago de más: se acepta siempre que sea mayor al total (el excedente queda anotado
+# para el admin). Poner un número aquí (ej. Decimal("50")) limitaría el % aceptado.
+_BDV_OVERPAY_MAX_PERCENT = None
+
+
+def _bdv_overpay_allowed(expected, paid) -> bool:
+    """¿Se acepta este pago mayor al esperado?"""
+    try:
+        expected, paid = Decimal(str(expected)), Decimal(str(paid))
+    except Exception:
+        return False
+    if paid <= expected:
+        return False
+    if _BDV_OVERPAY_MAX_PERCENT is None:
+        return True
+    return paid <= expected * (Decimal("1") + _BDV_OVERPAY_MAX_PERCENT / Decimal("100"))
+
+
+def _bdv_refs_match(a, b) -> bool:
+    """Misma operación si coinciden los últimos 6-8 dígitos (ej. 730852614585 y 0050952614585)."""
+    a, b = _bdv_ref_digits(a), _bdv_ref_digits(b)
+    n = min(len(a), len(b), _BDV_REFERENCE_MAX_MATCH)
+    return n >= _BDV_REFERENCE_MIN_MATCH and a[-n:] == b[-n:]
+_BDV_MOVEMENTS_SYNC_LOCK = threading.Lock()
+_BDV_MOVEMENTS_LAST_SYNC = {}  # (desde, hasta) -> time.time()
+_BDV_MOVEMENTS_MIN_INTERVAL = 20  # segundos entre consultas iguales al estado de cuenta
+
+
+def _bdv_reference_only_available(cfg: dict | None = None) -> bool:
+    cfg = cfg or _bdv_config()
+    return bool(cfg.get("webhook_key") or (cfg.get("account") and cfg.get("movements_api_key")))
+
+
+def _bdv_ref_digits(value) -> str:
+    return re.sub(r"\D", "", str(value or ""))
+
+
+def _bdv_amount_of(value):
+    """Monto en Bs. Acepta "2000.0", "1500.00" y el formato venezolano del
+    estado de cuenta real: "2.358,00" (punto de miles, coma decimal)."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float, Decimal)):
+        try:
+            return Decimal(str(value)).quantize(Decimal("0.01"))
+        except Exception:
+            return None
+    raw = str(value).strip().replace(" ", "").replace("Bs", "").replace("bs", "")
+    if not raw:
+        return None
+    negative = raw.startswith("-")
+    raw = raw.lstrip("+-")
+    if "," in raw:
+        raw = raw.replace(".", "").replace(",", ".")
+    elif raw.count(".") > 1:
+        raw = raw.replace(".", "")
+    try:
+        amount = Decimal(raw).quantize(Decimal("0.01"))
+    except Exception:
+        return None
+    return -amount if negative else amount
+
+
+def _bdv_store_bank_payment(*, source: str, reference: str, amount, pay_date: str, pay_time: str = "",
+                            bank_code: str = "", payer_id: str = "", payer_phone: str = "",
+                            description: str = "", raw=None):
+    """Guarda un pago recibido. Devuelve (fila, es_nueva)."""
+    ref = str(reference or "").strip()
+    amt = _bdv_amount_of(amount)
+    if not ref or amt is None:
+        return None, False
+    # Un mismo pago puede llegar por webhook y por movimientos: la clave usa
+    # los últimos 8 dígitos para que ambos coincidan aunque el largo varíe.
+    dedup = f"{pay_date}:{_bdv_ref_digits(ref)[-8:]}:{amt}"
+    row = BankPayment.query.filter_by(dedup_key=dedup).first()
+    if row:
+        return row, False
+    row = BankPayment(
+        source=source, dedup_key=dedup, reference=ref[:40], reference_digits=_bdv_ref_digits(ref)[:40],
+        bank_code=str(bank_code or "")[:4], payer_id=str(payer_id or "")[:20],
+        payer_phone=_bdv_normalize_phone(payer_phone) or str(payer_phone or "")[:20],
+        pay_date=pay_date, pay_time=str(pay_time or "")[:8], amount=float(amt),
+        description=str(description or "")[:300],
+        raw_json=json.dumps(raw, ensure_ascii=False) if raw is not None else "",
+    )
+    db.session.add(row)
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        return BankPayment.query.filter_by(dedup_key=dedup).first(), False
+    return row, True
+
+
+def _bdv_amount_in_message(message):
+    """Monto real que menciona el BDV cuando el importe no coincide ("monto : 120.00")."""
+    m = re.search(r"monto\s*:?\s*([\d.,]+)", str(message or ""), re.IGNORECASE)
+    if not m:
+        return None
+    raw = m.group(1).strip(".,")
+    if "," in raw and "." in raw:
+        raw = raw.replace(".", "").replace(",", ".")
+    elif "," in raw:
+        raw = raw.replace(",", ".")
+    return _bdv_amount_of(raw)
+
+
+def _bdv_find_bank_payment(order_obj, reference_value: str, expected=None):
+    """Pago del banco aún sin usar con la misma referencia (al menos los últimos
+    6 dígitos), de los últimos días. Devuelve (fila, "exacto"|"menor") o (None, None):
+    "menor" es un pago incompleto (el cliente pagó menos de lo esperado)."""
+    ref = _bdv_ref_digits(reference_value)
+    if len(ref) < _BDV_REFERENCE_MIN_MATCH:
+        return None, None
+    expected = _bdv_amount_of(expected if expected is not None else order_obj.amount)
+    if expected is None or not _order_is_bs(order_obj):
+        return None, None
+    try:
+        base_day = datetime.strptime(_bdv_order_payment_date(order_obj), "%Y-%m-%d").date()
+    except Exception:
+        base_day = now_ve().date()
+    since = (base_day - timedelta(days=_BDV_MAX_PAYMENT_AGE_DAYS)).isoformat()
+    until = max(base_day + timedelta(days=1), now_ve().date()).isoformat()
+    rows_q = BankPayment.query.filter(
+        db.or_(BankPayment.order_id.is_(None), BankPayment.order_id == order_obj.id),
+        BankPayment.pay_date >= since,
+        BankPayment.pay_date <= until,
+        BankPayment.amount > 0,
+    )
+    if _BDV_OVERPAY_MAX_PERCENT is not None:
+        max_amount = expected * (Decimal("1") + _BDV_OVERPAY_MAX_PERCENT / Decimal("100"))
+        rows_q = rows_q.filter(BankPayment.amount <= float(max_amount) + 0.005)
+    rows = rows_q.all()
+    exact, less, more = [], [], []
+    for row in rows:
+        if not _bdv_refs_match(ref, row.reference_digits):
+            continue
+        diff = row.amount - float(expected)
+        (exact if abs(diff) < 0.005 else less if diff < 0 else more).append(row)
+    if len(exact) == 1:
+        return exact[0], "exacto"
+    if not exact and len(less) + len(more) == 1:
+        return (less[0], "menor") if less else (more[0], "mayor")
+    if exact or less or more:
+        print(f"[BDV] Orden #{order_obj.id}: varios pagos coinciden con la referencia; queda para revisión")
+    return None, None
+
+
+def _bdv_sync_movements(date_from, date_to, *, force: bool = False) -> dict:
+    """Trae del estado de cuenta (API Consulta de Movimientos) los créditos de
+    las fechas indicadas y los guarda como pagos recibidos."""
+    cfg = _bdv_config()
+    if not (cfg.get("account") and cfg.get("movements_api_key")):
+        return {"ok": False, "message": "Consulta de Movimientos no configurada (BDV_CUENTA)"}
+    key = (date_from.isoformat(), date_to.isoformat())
+    with _BDV_MOVEMENTS_SYNC_LOCK:
+        last = _BDV_MOVEMENTS_LAST_SYNC.get(key, 0)
+        if not force and time.time() - last < _BDV_MOVEMENTS_MIN_INTERVAL:
+            return {"ok": True, "skipped": True}
+        _BDV_MOVEMENTS_LAST_SYNC[key] = time.time()
+    token, err = _bdv_get_token(cfg, api_key=cfg["movements_api_key"])
+    if not token:
+        return {"ok": False, "message": err}
+    nro = ""
+    nuevos = 0
+    for _page in range(50):  # tope de seguridad: 5.000 movimientos
+        body = {
+            "cuenta": cfg["account"],
+            "fechaIni": date_from.strftime("%d/%m/%Y"),
+            "fechaFin": date_to.strftime("%d/%m/%Y"),
+            "tipoMoneda": "VES",
+            "nroMovimiento": nro,
+        }
+        try:
+            resp = _requests_lib.post(cfg["movements_url"], json=body, timeout=cfg.get("timeout") or 30,
+                                      headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+            data = resp.json()
+        except Exception as exc:
+            return {"ok": False, "message": f"No se pudo consultar el estado de cuenta ({type(exc).__name__})"}
+        if resp.status_code == 401:
+            _bdv_invalidate_token()
+        if resp.status_code != 200 or str((data or {}).get("code")) != "1000":
+            return {"ok": False, "message": f"BDV movimientos: {str((data or {}).get('message') or (data or {}).get('description') or resp.status_code)}"}
+        movs = ((data.get("data") or {}).get("movs")) or []
+        for m in movs:
+            if str(m.get("mov") or "").upper() != "CREDITO":
+                continue
+            obs = str(m.get("observacion") or "")
+            payer = re.search(r"\b([VEJPG])0*(\d{5,10})\b", obs)
+            # "PAGOMOVIL OTROS BANCOS 0104 04142698301 J000029709" trae banco y teléfono del pagador
+            otro = re.search(r"OTROS\s+BANCOS?\s+(\d{4})\s+(0\d{10})", obs, re.IGNORECASE)
+            bank_code = otro.group(1) if otro else ("0102" if "PAGOMOVIL BDV" in obs.upper() else "")
+            _row, nuevo = _bdv_store_bank_payment(
+                source="movimientos",
+                reference=str(m.get("referencia") or "").strip(),
+                amount=m.get("importe"),
+                pay_date=str(m.get("fecha") or "")[:10],
+                pay_time=str(m.get("hora") or ""),
+                payer_id=f"{payer.group(1)}{payer.group(2)}" if payer else "",
+                bank_code=bank_code,
+                payer_phone=otro.group(2) if otro else "",
+                description=(str(m.get("descripcion") or "").strip() + " | " + obs.strip())[:300],
+                raw=m,
+            )
+            nuevos += 1 if nuevo else 0
+        db.session.commit()
+        if len(movs) < 100:
+            break
+        nro = str(movs[-1].get("nroMov") or "")
+        if not nro:
+            break
+    return {"ok": True, "nuevos": nuevos}
+
+
+def _bdv_ref_used_by_other(order_obj, reference_value: str):
+    """Pago del banco con esta referencia ya aplicado a OTRA orden (de los últimos días)."""
+    ref = _bdv_ref_digits(reference_value)
+    if len(ref) < _BDV_REFERENCE_MIN_MATCH:
+        return None
+    since = (now_ve().date() - timedelta(days=_BDV_MAX_PAYMENT_AGE_DAYS + 4)).isoformat()
+    for row in BankPayment.query.filter(BankPayment.order_id.isnot(None), BankPayment.order_id != order_obj.id,
+                                        BankPayment.pay_date >= since).all():
+        if _bdv_refs_match(ref, row.reference_digits):
+            return row
+    return None
+
+
+def _bdv_used_result(order_obj, row, reference_value: str, reference_source: str) -> dict:
+    return {
+        "ok": True, "verified": False, "bdv_result": "already_conciliated",
+        "payment_used_by_order": int(row.order_id),
+        "message": f"Ese pago (ref {row.reference}, Bs {row.amount:.2f}) ya se usó en la orden #{row.order_id}",
+        "matched_reference": reference_value, "matched_reference_source": reference_source,
+    }
+
+
+def _bdv_verify_by_bank_payments(order_obj, reference_value: str, reference_source: str, expected=None):
+    """Valida la orden solo con referencia + monto contra los pagos que el
+    propio banco reportó. Devuelve el resultado o None si no hubo coincidencia."""
+    row, kind = _bdv_find_bank_payment(order_obj, reference_value, expected)
+    if row is None:
+        used = _bdv_ref_used_by_other(order_obj, reference_value)
+        if used is not None:
+            return _bdv_used_result(order_obj, used, reference_value, reference_source)
+    if row is None:
+        cfg = _bdv_config()
+        if cfg.get("account") and cfg.get("movements_api_key"):
+            try:
+                day = datetime.strptime(_bdv_order_payment_date(order_obj), "%Y-%m-%d").date()
+            except Exception:
+                day = now_ve().date()
+            today = now_ve().date()
+            sync = _bdv_sync_movements(min(day - timedelta(days=1), today), today)
+            if not sync.get("ok"):
+                print(f"[BDV] Movimientos: {sync.get('message')}")
+            row, kind = _bdv_find_bank_payment(order_obj, reference_value, expected)
+    if row is None:
+        return None
+    row.order_id = order_obj.id
+    row.matched_at = datetime.utcnow()
+    if row.bank_code and not order_obj.payer_bank_origin:
+        order_obj.payer_bank_origin = row.bank_code
+    origen = "notificación del BDV" if row.source == "notificacion" else "estado de cuenta del BDV"
+    expected_amt = _bdv_amount_of(expected if expected is not None else order_obj.amount) or Decimal("0")
+    overpaid = Decimal(str(row.amount)) - expected_amt if kind == "mayor" else Decimal("0")
+    if kind == "menor":
+        return {
+            "ok": True, "verified": False, "underpaid": True, "bdv_result": "underpaid",
+            "paid_amount": float(row.amount), "partial_reference": row.reference, "partial_source": row.source,
+            "message": f"Pago incompleto según {origen}: se recibieron Bs {row.amount:.2f}",
+            "matched_reference": reference_value, "matched_reference_source": reference_source,
+        }
+    return {
+        "ok": True,
+        "verified": True,
+        "bdv_result": "conciliated",
+        "verification_id": f"bdv-{row.source}:{row.pay_date}:{row.reference}",
+        "message": (f"Pago verificado por {origen} (Bs {row.amount:.2f}, ref {row.reference})"
+                    + (f" · PAGÓ Bs {overpaid:.2f} DE MÁS" if overpaid > 0 else "")),
+        "overpaid_amount": float(overpaid) if overpaid > 0 else 0.0,
+        "response": {"bank_payment_id": row.id, "source": row.source, "reference": row.reference,
+                     "amount": row.amount, "date": row.pay_date, "time": row.pay_time, "bank": row.bank_code,
+                     "payer_id": row.payer_id, "payer_phone": row.payer_phone},
+        "request_meta": {"url": "bank_payments", "payload": {}, "status_code": 200},
+        "validation": {"expected_amount": f"{float(order_obj.amount or 0):.2f}", "matched_amount": f"{row.amount:.2f}",
+                       "amount_candidates": [f"{row.amount:.2f}"]},
+        "matched_reference": reference_value,
+        "matched_reference_source": reference_source,
+    }
+
+
+def _order_partial_summary(order_obj, state: dict | None = None) -> dict:
+    state = state if isinstance(state, dict) else _pabilo_get_payment_state(order_obj)
+    parts = [p for p in (state.get("partial_payments") or []) if isinstance(p, dict)]
+    paid = sum((_bdv_amount_of(p.get("amount")) or Decimal("0")) for p in parts)
+    total = _bdv_amount_of(order_obj.amount) or Decimal("0")
+    remaining = total - paid if total > paid else Decimal("0")
+    return {"parts": parts, "paid": paid, "total": total, "remaining": remaining}
+
+
+def _bdv_apply_partial_result(order_obj, state: dict, result: dict, previous: dict, now_iso: str) -> None:
+    """Si el resultado es un pago incompleto, lo suma a los pagos parciales de la orden."""
+    if result.get("overpaid_amount") and result.get("verified"):
+        state["overpaid_amount"] = float(result["overpaid_amount"])
+    elif not previous.get("verified"):
+        state.pop("overpaid_amount", None)
+    if previous.get("underpaid") and not result.get("verified") and not result.get("underpaid"):
+        # Una nueva consulta del pago principal no borra el estado de pago incompleto.
+        for key in ("underpaid", "partial_payments", "paid_total", "remaining", "message", "bdv_result"):
+            if key in previous:
+                state[key] = previous[key]
+        return
+    if not result.get("underpaid"):
+        return
+    parts = [p for p in (previous.get("partial_payments") or []) if isinstance(p, dict)]
+    ref = str(result.get("partial_reference") or "")
+    if not any(_bdv_ref_digits(p.get("reference"))[-8:] == _bdv_ref_digits(ref)[-8:] for p in parts):
+        parts.append({"reference": ref, "amount": float(result.get("paid_amount") or 0),
+                      "source": str(result.get("partial_source") or ""), "at": now_iso})
+    state["partial_payments"] = parts
+    summary = _order_partial_summary(order_obj, state)
+    state["underpaid"] = True
+    state["verified"] = False
+    state["bdv_result"] = "underpaid"
+    state["paid_total"] = float(summary["paid"])
+    state["remaining"] = float(summary["remaining"])
+    state["message"] = (f"Pago incompleto: recibido Bs {summary['paid']:.2f} de Bs {summary['total']:.2f}. "
+                        f"Falta Bs {summary['remaining']:.2f} (el cliente puede completarlo desde su página de pedido)")
+    if not state.get("underpaid_email_sent") and str(order_obj.email or "").strip():
+        state["underpaid_email_sent"] = now_iso
+        _send_underpaid_email(order_obj, summary)
+
+
+def _order_public_url(order_obj) -> str:
+    base = PUBLIC_BASE_URL
+    if not base:
+        try:
+            from flask import has_request_context
+            base = _public_base_url() if has_request_context() else ""
+        except Exception:
+            base = ""
+    return f"{base or 'https://inefablestor.com'}/gracias/{order_obj.id}"
+
+
+def _send_underpaid_email(order_obj, summary: dict) -> None:
+    """Avisa al cliente que su pago quedó incompleto, con el enlace para completarlo."""
+    to = str(order_obj.email or "").strip()
+    if not to:
+        return
+    brand = _email_brand()
+    link = _order_public_url(order_obj)
+    st = _email_style()
+    falta = f"Bs {summary['remaining']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    recibido = f"Bs {summary['paid']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    total = f"Bs {summary['total']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    subject = f"[{brand}] Te faltan {falta} para completar tu pedido #{order_obj.id}"
+    html = f"""<div style="background:{st['bg']};padding:24px;font-family:{st['font']};color:{st['text']}">
+<div style="max-width:520px;margin:0 auto;background:{st['card_bg']};border:1px solid {st['border']};border-radius:14px;padding:22px">
+<h2 style="margin:0 0 8px;color:{st['warning']};font-size:19px">Tu pago quedó incompleto</h2>
+<p style="margin:0 0 14px;color:{st['muted']};font-size:14px;line-height:1.5">Recibimos un pago menor al total de tu pedido #{order_obj.id}. Paga solo lo que falta y escribe la referencia de ese pago nuevo en tu página de pedido.</p>
+<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px">
+<tr><td style="padding:6px 0;color:{st['muted']}">Total del pedido</td><td style="text-align:right">{total}</td></tr>
+<tr><td style="padding:6px 0;color:{st['muted']}">Recibido</td><td style="text-align:right">{recibido}</td></tr>
+<tr><td style="padding:6px 0;color:{st['muted']};font-weight:700">Falta por pagar</td><td style="text-align:right;font-weight:800;color:{st['success']};font-size:17px">{falta}</td></tr>
+</table>
+<a href="{link}" style="display:block;text-align:center;background:{st['success']};color:#06130b;text-decoration:none;font-weight:800;padding:12px;border-radius:10px">Completar mi pago</a>
+<p style="margin:14px 0 0;color:{st['muted']};font-size:12px">También lo encuentras en la tienda: al iniciar sesión verás el aviso "Completa tu pago".</p>
+</div></div>"""
+    text = (f"Tu pago del pedido #{order_obj.id} quedó incompleto.\nTotal: {total}\nRecibido: {recibido}\n"
+            f"Falta por pagar: {falta}\n\nCompleta tu pago aquí: {link}\n")
+
+    def _runner():
+        try:
+            if not send_email_html(to, subject, html, text):
+                send_email(to, subject, text)
+        except Exception as exc:
+            print(f"[BDV] No se pudo enviar el correo de pago incompleto de la orden #{order_obj.id}: {exc}")
+    threading.Thread(target=_runner, daemon=True, name=f"pago-incompleto-{order_obj.id}").start()
+
+
+def _underpaid_orders_for_viewer() -> list:
+    """Órdenes con pago incompleto del usuario logueado (o creadas en este navegador)."""
+    user = session.get("user") or {}
+    ids = set()
+    try:
+        ids.update(int(x) for x in (session.get(THANKS_SESSION_ORDERS_KEY) or []) if str(x).isdigit())
+    except Exception:
+        pass
+    since = datetime.utcnow() - timedelta(days=_BDV_MAX_PAYMENT_AGE_DAYS + 4)
+    q = Order.query.filter(Order.status == "pending", Order.method == "pm", Order.created_at >= since)
+    conds = []
+    if user.get("role") == "user" and user.get("user_id"):
+        conds.append(Order.user_id == int(user["user_id"]))
+    if ids:
+        conds.append(Order.id.in_(list(ids)))
+    if not conds:
+        return []
+    out = []
+    for o in q.filter(db.or_(*conds)).order_by(Order.id.desc()).limit(10).all():
+        st = _pabilo_get_payment_state(o)
+        if st.get("underpaid"):
+            summary = _order_partial_summary(o, st)
+            out.append({"order_id": o.id, "remaining": float(summary["remaining"]), "url": f"/gracias/{o.id}"})
+    return out
+
+
+def _bdv_complete_partial_payment(order_obj, reference: str) -> dict:
+    """El cliente pagó lo que faltaba: verifica ese segundo pago por el monto pendiente."""
+    state = _pabilo_get_payment_state(order_obj)
+    if (order_obj.status or "").lower() != "pending" or not state.get("underpaid"):
+        return {"ok": False, "error": "Esta orden no tiene un pago pendiente por completar"}
+    ref = _bdv_ref_digits(reference)
+    if len(ref) < _BDV_REFERENCE_MIN_MATCH:
+        return {"ok": False, "error": f"Escribe al menos los últimos {_BDV_REFERENCE_MIN_MATCH} dígitos de la referencia"}
+    summary = _order_partial_summary(order_obj, state)
+    used = [_bdv_ref_digits(p.get("reference")) for p in summary["parts"]] + [_bdv_ref_digits(order_obj.reference)]
+    for u in used:
+        if u and _bdv_refs_match(u, ref):
+            return {"ok": False, "error": "Esa referencia ya se usó en esta orden. Escribe la del pago nuevo."}
+    tries = int(state.get("complement_attempts") or 0)
+    if tries >= 15:
+        return {"ok": False, "error": "Demasiados intentos. Escríbele al soporte para revisar tu pago."}
+    state["complement_attempts"] = tries + 1
+    _pabilo_set_payment_state(order_obj, state)
+    db.session.commit()
+
+    remaining = summary["remaining"]
+    result = _bdv_verify_payment_once(order_obj, reference_override=ref, reference_source="complemento",
+                                      expected_amount=remaining)
+    now_iso = datetime.utcnow().isoformat()
+    state = _pabilo_get_payment_state(order_obj)
+    parts = [p for p in (state.get("partial_payments") or []) if isinstance(p, dict)]
+    if result.get("verified"):
+        parts.append({"reference": ref, "amount": float(remaining), "source": "complemento", "at": now_iso})
+    elif result.get("underpaid"):
+        parts.append({"reference": ref, "amount": float(result.get("paid_amount") or 0), "source": "complemento", "at": now_iso})
+    else:
+        db.session.commit()
+        print(f"[BDV] Complemento de la orden #{order_obj.id} sin confirmar: {result.get('message')}")
+        if result.get("ok") and result.get("bdv_result") == "amount_mismatch":
+            error = (f"Encontramos ese pago, pero el monto no coincide. Debe ser exactamente Bs {remaining:.2f}. "
+                     "Si pagaste otro monto, escríbele al soporte.")
+        else:
+            error = ("Todavía no encontramos ese pago. Si acabas de pagar, espera un minuto e intenta de nuevo, "
+                     "y revisa que la referencia sea la del pago nuevo.")
+        return {"ok": False, "error": error}
+    state["partial_payments"] = parts
+    summary = _order_partial_summary(order_obj, state)
+    state["paid_total"] = float(summary["paid"])
+    state["remaining"] = float(summary["remaining"])
+    if summary["remaining"] <= Decimal("0.005"):
+        state.update({
+            "underpaid": False, "verified": True, "bdv_result": "conciliated",
+            "verification_id": f"bdv-partes:{'+'.join(_bdv_ref_digits(p.get('reference'))[-6:] for p in parts)}",
+            "message": f"Pago completado en {len(parts)} pagos (Bs {summary['paid']:.2f})",
+        })
+        order_obj.payment_verified_at = datetime.utcnow()
+        order_obj.payment_verification_id = state["verification_id"][:120]
+        _pabilo_set_payment_state(order_obj, state)
+        db.session.commit()
+        if bool(_pabilo_eligibility_info(order_obj).get("eligible")) and (order_obj.status or "").lower() == "pending":
+            _auto_approve_order(order_obj, source_label="BDVComplemento", binance_auto=False)
+        return {"ok": True, "completed": True, "message": "¡Listo! Tu pago quedó completo y tu orden sigue su curso."}
+    state["message"] = (f"Pago incompleto: recibido Bs {summary['paid']:.2f} de Bs {summary['total']:.2f}. "
+                        f"Falta Bs {summary['remaining']:.2f}")
+    _pabilo_set_payment_state(order_obj, state)
+    db.session.commit()
+    return {"ok": True, "completed": False, "remaining": float(summary["remaining"]),
+            "message": f"Recibimos ese pago, pero todavía faltan Bs {summary['remaining']:.2f}."}
+
+
+def _bdv_try_orders_for_payment(payment_id: int) -> None:
+    """Llegó un pago nuevo: busca la orden pendiente con esa referencia y monto
+    y la verifica (y aprueba si es recarga automática)."""
+    row = BankPayment.query.get(payment_id)
+    if not row or row.order_id:
+        return
+    since = datetime.utcnow() - timedelta(days=_BDV_MAX_PAYMENT_AGE_DAYS)
+    candidates_q = Order.query.filter(
+        Order.status == "pending",
+        Order.method == "pm",
+        Order.created_at >= since,
+    )
+    # el monto se valida al verificar (exacto, incompleto o de más)
+    if _BDV_OVERPAY_MAX_PERCENT is not None:
+        candidates_q = candidates_q.filter(
+            Order.amount * (1 + float(_BDV_OVERPAY_MAX_PERCENT) / 100) >= float(row.amount) - 0.005)
+    candidates = candidates_q.all()
+    bank_ref = str(row.reference_digits or "")
+    for order_obj in candidates:
+        for ref in (order_obj.reference, order_obj.capture_reference):
+            if _bdv_refs_match(ref, bank_ref):
+                try:
+                    _pabilo_verify_and_update_order(
+                        order_obj,
+                        auto_approve_on_verified=bool(_pabilo_eligibility_info(order_obj).get("eligible")),
+                        source="bdv_notificacion",
+                    )
+                except Exception as exc:
+                    print(f"[BDV] Error verificando la orden #{order_obj.id} por notificación: {exc}")
+                return
+
+
+def _bdv_connection_test() -> dict:
+    """Pide un token (sin consultar pagos). Sirve para el botón 'Probar conexión'."""
+    cfg = _bdv_config()
+    token, error = _bdv_get_token(cfg, force=True)
+    return {
+        "ok": bool(token),
+        "message": "Conexión con el BDV correcta (token generado)" if token else error,
+        "base_url": cfg.get("base_url"),
+        "has_api_key": bool(cfg.get("api_key")),
+        "phone_destino": cfg.get("phone_destino") or "",
+        "phone_destino_ok": bool(cfg.get("phone_destino")),
+    }
 
 
 def _pabilo_user_bank_id_for_method(method: str) -> str:
@@ -4639,7 +6062,11 @@ def _reset_order_payment_verification_state(order_obj, *, message: str, source: 
     active_provider = _payment_verification_provider() or "pabilo"
     _pabilo_set_payment_state(order_obj, {
         "provider": active_provider,
-        "enabled": bool(_pabilo_config().get("enabled")) if active_provider == "pabilo" else bool(_ubii_config().get("enabled")),
+        "enabled": (
+            bool(_pabilo_config().get("enabled")) if active_provider == "pabilo"
+            else bool(_bdv_config().get("enabled")) if active_provider == "bdv"
+            else bool(_ubii_config().get("enabled"))
+        ),
         "method": _pabilo_normalize_method(order_obj.method or ""),
         "attempts": 0,
         "verified": False,
@@ -4866,6 +6293,8 @@ def _pabilo_request_info(order_obj) -> dict:
 
 
 def _pabilo_request_info_with_reference(order_obj, reference_value: str) -> dict:
+    if _payment_verification_provider() == "bdv":
+        return _bdv_request_info_with_reference(order_obj, reference_value)
     cfg = _pabilo_config()
     order_method = _pabilo_normalize_method(order_obj.method or "")
     expected_method = _pabilo_normalize_method(cfg.get("method") or "pm")
@@ -4933,11 +6362,8 @@ def _pabilo_build_payload_with_reference(order_obj, reference_value: str) -> dic
         payload["phone_pagador"] = str(order_obj.payer_phone or "").strip()
     if str(order_obj.payer_bank_origin or "").strip():
         payload["bank_origin"] = str(order_obj.payer_bank_origin or "").strip()
-    if order_obj.payer_payment_date:
-        try:
-            payload["fecha_pago"] = order_obj.payer_payment_date.strftime("%Y-%m-%d")
-        except Exception:
-            payload["fecha_pago"] = str(order_obj.payer_payment_date)
+    # Pabilo exige fecha_pago: la del cliente o, si no la dio, el día de la orden (hora VE).
+    payload["fecha_pago"] = _bdv_order_payment_date(order_obj)
 
     movement_type = _pabilo_payload_movement_type(order_obj)
     if movement_type:
@@ -4979,6 +6405,14 @@ def _pabilo_verify_payment_once(
     max_attempts: int = 3,
     retry_delay_seconds: int = 2,
 ):
+    if _payment_verification_provider() == "bdv":
+        return _bdv_verify_payment_once(
+            order_obj,
+            reference_override=reference_override,
+            reference_source=reference_source,
+            max_attempts=min(int(max_attempts or 1), 2),
+            retry_delay_seconds=retry_delay_seconds,
+        )
     if not order_obj:
         return {"ok": False, "verified": False, "message": "Orden inválida"}
     candidate_reference = str(reference_override or order_obj.reference or "").strip()
@@ -5290,6 +6724,12 @@ _PABILO_NOT_FOUND_REJECT_MINUTES = 4
 
 
 def _pabilo_should_try_capture_reference_fallback(result: dict) -> bool:
+    if result.get("payment_not_found"):
+        # BDV: probar con la referencia leída del comprobante. (No cuenta como
+        # "no encontrado" para el auto-rechazo: con el BDV un dato mal escrito
+        # —banco, teléfono, fecha— también da "no existe", así que la orden
+        # queda pendiente para revisión en lugar de rechazarse sola.)
+        return True
     validation = result.get("validation") or {}
     if isinstance(validation, dict) and bool(
         validation.get("reference_present")
@@ -5323,6 +6763,35 @@ def _pabilo_result_is_payment_not_found(result: dict) -> bool:
         status_code == 404
         or any(hint in message for hint in _PABILO_NOT_FOUND_HINTS)
     )
+
+
+_PABILO_BANK_ERROR_HINTS = (
+    "http 502",
+    "http 503",
+    "http 504",
+    "bad gateway",
+    "service unavailable",
+    "gateway timeout",
+    "no se pudo conectar",
+)
+
+
+def _pabilo_result_bank_error(result: dict) -> str:
+    """Devuelve un código corto si la consulta falló por transporte (banco
+    caído, HTTP 5xx o timeout) y '' en cualquier otro caso.
+
+    Un error de transporte viene con ok=False. Un 401 (clave rechazada) o un
+    "no existe" (ok=True) NO cuentan como banco caído."""
+    if not isinstance(result, dict) or result.get("ok"):
+        return ""
+    request_meta = result.get("request_meta") or {}
+    status_code = int((request_meta.get("status_code") or 0)) if isinstance(request_meta, dict) else 0
+    if 500 <= status_code <= 599:
+        return f"http_{status_code}"
+    message = str(result.get("message") or "").strip().lower()
+    if any(hint in message for hint in _PABILO_BANK_ERROR_HINTS):
+        return "transport"
+    return ""
 
 
 def _pabilo_result_confirms_payment_missing(order_obj, result: dict) -> bool:
@@ -5409,6 +6878,18 @@ def _pabilo_verify_payment(order_obj):
     return fallback_result
 
 
+def _order_conflict_blocks(conflicting_order) -> bool:
+    """Una orden con la misma referencia/comprobante solo bloquea si ya está
+    aprobada/entregada o si su pago ya fue verificado. Si es otra orden pendiente
+    sin pago verificado (el cliente repitió el pedido), no bloquea."""
+    if str(conflicting_order.status or "").lower() in ("approved", "delivered"):
+        return True
+    try:
+        return bool(_pabilo_get_payment_state(conflicting_order).get("verified"))
+    except Exception:
+        return True
+
+
 def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool = False, source: str = "manual"):
     current = _pabilo_get_payment_state(order_obj)
     attempts = 0
@@ -5461,6 +6942,10 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
                 exclude_order_id=order_obj.id,
                 statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
             )
+        if conflicting_order is not None and not _order_conflict_blocks(conflicting_order):
+            # La otra orden (duplicada del mismo cliente) no tiene su pago verificado:
+            # gana la primera que se verifica con el banco.
+            conflicting_order = None
         if conflicting_order:
             duplicate_capture_error = "La referencia extraída del comprobante ya fue utilizada en otra orden"
             duplicate_capture_order_id = conflicting_order.id
@@ -5471,6 +6956,8 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
                 exclude_order_id=order_obj.id,
                 statuses=_ACTIVE_REFERENCE_ORDER_STATUSES,
             )
+            if conflicting_order is not None and not _order_conflict_blocks(conflicting_order):
+                conflicting_order = None
             if conflicting_order:
                 duplicate_capture_error = "Este comprobante ya fue utilizado en otra orden"
                 duplicate_capture_order_id = conflicting_order.id
@@ -5487,10 +6974,14 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         order_obj.payment_verification_id = str(result.get("verification_id") or order_obj.payment_verification_id or "")
 
     latest_payment_state = _pabilo_get_payment_state(order_obj)
+    active_provider = _payment_verification_provider() or "pabilo"
+    bank_error_code = _pabilo_result_bank_error(result)
     state = {
         **latest_payment_state,
-        "provider": "pabilo",
-        "enabled": bool(_pabilo_config().get("enabled")),
+        "provider": active_provider,
+        "enabled": bool(_bdv_config().get("enabled")) if active_provider == "bdv" else bool(_pabilo_config().get("enabled")),
+        "bdv_result": str(result.get("bdv_result") or ""),
+        "last_response": result.get("response") if active_provider == "bdv" else latest_payment_state.get("last_response"),
         "method": _pabilo_normalize_method(order_obj.method or ""),
         "attempts": attempts + 1,
         "last_checked_at": now_iso,
@@ -5517,9 +7008,24 @@ def _pabilo_verify_and_update_order(order_obj, *, auto_approve_on_verified: bool
         "last_request_url": str(((result.get("request_meta") or {}).get("url") or "")),
         "last_request_payload": (result.get("request_meta") or {}).get("payload") or {},
         "last_response_status": int(((result.get("request_meta") or {}).get("status_code") or 0)),
+        "bank_error": bank_error_code,
+        "bank_error_at": now_iso if bank_error_code else str(latest_payment_state.get("bank_error_at") or ""),
+        "bank_unavailable": bool(bank_error_code),
     }
+    _bdv_apply_partial_result(order_obj, state, result, latest_payment_state, now_iso)
     _pabilo_set_payment_state(order_obj, state)
     db.session.commit()
+
+    # El pago del banco ya se usó en otra orden aprobada/entregada: esta es una
+    # orden repetida del cliente (o una referencia ajena) y se rechaza sola.
+    used_by = result.get("payment_used_by_order")
+    if used_by and (order_obj.status or "").lower() == "pending":
+        other_order = Order.query.get(int(used_by))
+        if other_order is not None and (other_order.status or "").lower() in ("approved", "delivered"):
+            _auto_reject_order(order_obj, reason=f"Ese pago ya se usó en la orden #{used_by}",
+                               source_label=f"AutoReject:{source}")
+            return {"ok": True, "verified": False, "message": f"Ese pago ya se usó en la orden #{used_by}",
+                    "order_status": order_obj.status}
 
     # Referencia/comprobante ya usados en una orden aprobada: rebotar de una vez
     # en lugar de dejar la orden pendiente en el admin.
@@ -5759,6 +7265,8 @@ def _thanks_progress_payload(order_obj):
     """
     auto_mapped = _order_has_auto_recharges(order_obj)
     pay_state = _pabilo_get_payment_state(order_obj)
+    bank_unavailable = bool(pay_state.get("bank_unavailable"))
+    last_bank_error = str(pay_state.get("bank_error") or "")
     active_provider = _payment_verification_provider()
     provider = str(pay_state.get("provider") or active_provider or "").strip().lower()
     pabilo_cfg = _pabilo_config()
@@ -5843,6 +7351,8 @@ def _thanks_progress_payload(order_obj):
             "status": order_status,
             "method": method,
             "provider": provider,
+            "bank_unavailable": bank_unavailable,
+            "last_bank_error": last_bank_error,
             "configured_method": "",
             "steps": [
                 {
@@ -5966,6 +7476,8 @@ def _thanks_progress_payload(order_obj):
         "status": order_status,
         "method": method,
         "provider": provider,
+        "bank_unavailable": bank_unavailable,
+        "last_bank_error": last_bank_error,
         "configured_method": ubii_cfg.get("method") if is_ubii_flow else pabilo_cfg.get("method"),
         "steps": steps,
         "summary": summary,
@@ -6186,7 +7698,10 @@ def _order_status_from_auto_summary(summary, fallback_status="approved"):
         return fallback_status
     if int(summary.get("completed_units") or 0) >= total_units:
         return "delivered"
-    return "pending"
+    # La orden ya está aprobada: solo falta que la recarga termine en segundo
+    # plano. Mantenerla "approved" (Procesando) en vez de "pending", que el
+    # historial y la página de gracias muestran como "no aprobada todavía".
+    return "approved"
 
 
 def _minigame_normalize_state(raw_state):
@@ -6720,7 +8235,7 @@ def _dispatch_order_auto_recharges_locked(order_obj, *, binance_auto=False):
     if needs_revendedores and (not webb_url or not webb_api_key):
         state["error"] = "Falta configurar REVENDEDORES_BASE_URL y REVENDEDORES_API_KEY"
         state["pending_verification"] = False
-        order_obj.status = "pending"
+        order_obj.status = "approved"
         _save_order_automation_state(order_obj, state)
         db.session.commit()
         return {
@@ -6734,7 +8249,7 @@ def _dispatch_order_auto_recharges_locked(order_obj, *, binance_auto=False):
     if needs_connection_api and not webb_api_key:
         state["error"] = "Falta configurar REVENDEDORES_API_KEY (necesaria para Connection API)"
         state["pending_verification"] = False
-        order_obj.status = "pending"
+        order_obj.status = "approved"
         _save_order_automation_state(order_obj, state)
         db.session.commit()
         return {
@@ -6748,7 +8263,7 @@ def _dispatch_order_auto_recharges_locked(order_obj, *, binance_auto=False):
     if has_non_pin_units and not player_id:
         state["error"] = "No se encontró ID de jugador para recarga automática"
         state["pending_verification"] = False
-        order_obj.status = "pending"
+        order_obj.status = "approved"
         _save_order_automation_state(order_obj, state)
         db.session.commit()
         return {
@@ -7021,6 +8536,10 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # Puntos acumulados por compras entregadas (se gastan en la ruleta de la tienda)
     points = db.Column(db.Integer, default=0)
+    # Banco con el que pagó por Pago Móvil la última vez (lo aprende la verificación BDV)
+    pm_bank = db.Column(db.String(4), default="")
+    # Cuenta creada con Google (id "sub" de Google)
+    google_sub = db.Column(db.String(64), default="")
 
 
 class RouletteSpin(db.Model):
@@ -8847,6 +10366,9 @@ with app.app_context():
             add_order_col('payment_verification_attempts', "payment_verification_attempts INTEGER DEFAULT 0")
             add_order_col('payment_last_verification_at', f"payment_last_verification_at {'TIMESTAMP' if _is_pg else 'TEXT'}")
             add_order_col('points_awarded', "points_awarded INTEGER DEFAULT 0")
+            add_order_col('rate_bs_per_usd', "rate_bs_per_usd REAL DEFAULT 0")
+            add_order_col('amount_bs', "amount_bs REAL DEFAULT 0")
+            add_order_col('fee_amount', "fee_amount REAL DEFAULT 0")
             db.session.commit()
             try:
                 db.session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_idempotency_key ON orders (idempotency_key)"))
@@ -8971,6 +10493,19 @@ with app.app_context():
             u_cols = {row[1] for row in db.session.execute(text("PRAGMA table_info(users)")).fetchall()}
         if u_cols and "points" not in u_cols:
             db.session.execute(text("ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0"))
+            db.session.commit()
+        if db.engine.dialect.name == "postgresql":
+            fs_cols = {row[0] for row in db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'fiscal_sales'")).fetchall()}
+        else:
+            fs_cols = {row[1] for row in db.session.execute(text("PRAGMA table_info(fiscal_sales)")).fetchall()}
+        if fs_cols and "fee_bs" not in fs_cols:
+            db.session.execute(text("ALTER TABLE fiscal_sales ADD COLUMN fee_bs REAL DEFAULT 0"))
+            db.session.commit()
+        if u_cols and "pm_bank" not in u_cols:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN pm_bank TEXT DEFAULT ''"))
+            db.session.commit()
+        if u_cols and "google_sub" not in u_cols:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN google_sub TEXT DEFAULT ''"))
             db.session.commit()
     except Exception:
         try:
@@ -10245,6 +11780,8 @@ def terms_page():
 def user_page():
     u = session.get("user") or {}
     role = u.get("role")
+    if role == "contador":
+        return redirect("/contador")
     is_admin = (role == "admin")
     is_affiliate = (role == "affiliate")
     # Mini influencers are affiliates with their own panel; read the live row so an
@@ -10430,7 +11967,7 @@ def store_rate():
         rate = float(rate_str) if rate_str else 0.0
     except Exception:
         rate = 0.0
-    resp = jsonify({"rate_bsd_per_usd": rate})
+    resp = jsonify({"rate_bsd_per_usd": rate, "pm_fee_percent": _pm_fee_percent()})
     # Avoid browser/proxy caching so updates from Admin reflect immediately
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
@@ -10454,6 +11991,7 @@ def store_payments():
         "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
         "binance_pay_enabled": "1" if _binance_pay_enabled() else "0",
         "binance_pay_fee_percent": _binance_pay_fee_percent(),
+        "pm_fee_percent": _pm_fee_percent(),
         "payment_verification_provider": _payment_verification_provider(),
         "pabilo_auto_verify_enabled": get_config_value("pabilo_auto_verify_enabled", "0"),
         "pabilo_method": get_config_value("pabilo_method", "pm"),
@@ -10461,6 +11999,9 @@ def store_payments():
         "pabilo_default_movement_type": get_config_value("pabilo_default_movement_type", ""),
         "ubii_method": get_config_value("ubii_method", "pm"),
     }
+    if data["payment_verification_provider"] == "bdv":
+        data["bdv_banks"] = [{"code": code, "name": name} for code, name in BDV_BANKS]
+        data["bdv_max_payment_age_days"] = _BDV_MAX_PAYMENT_AGE_DAYS
     return jsonify({"ok": True, "payments": data})
 
 
@@ -10821,6 +12362,7 @@ def admin_config_payments_get():
         "binance_auto_enabled": get_config_value("binance_auto_enabled", "0"),
         "binance_pay_enabled": get_config_value("binance_pay_enabled", "0"),
         "binance_pay_fee_percent": _binance_pay_fee_percent(),
+        "pm_fee_percent": _pm_fee_percent(),
         "binance_pay_configured": _binance_pay_configured(),
         "binance_pay_webhook_path": "/webhook-binance-pay",
         "payment_verification_provider": _payment_verification_provider(),
@@ -10840,6 +12382,9 @@ def admin_config_payments_get():
         "ubii_reference_regex": _ubii_normalize_reference_regex(get_config_value("ubii_reference_regex", r"referencia\D*(\d+)")),
         "ubii_webhook_secret": get_config_value("ubii_webhook_secret", ""),
         "ubii_webhook_path": "/webhook-ubii",
+        "bdv_has_api_key": bool(_bdv_config().get("api_key")),
+        "bdv_phone_destino": _bdv_config().get("phone_destino") or "",
+        "bdv_base_url": _bdv_config().get("base_url") or "",
     })
 
 
@@ -10863,6 +12408,7 @@ def admin_config_payments_set():
         "binance_auto_enabled": "1" if data.get("binance_auto_enabled") else "0",
         "binance_pay_enabled": "1" if data.get("binance_pay_enabled") else "0",
         "binance_pay_fee_percent": _normalize_fee_percent(data.get("binance_pay_fee_percent")),
+        "pm_fee_percent": _normalize_fee_percent(data.get("pm_fee_percent", "0")),
         "pabilo_auto_verify_enabled": "1" if data.get("pabilo_auto_verify_enabled") else "0",
         "pabilo_api_key": (data.get("pabilo_api_key") or "").strip(),
         "pabilo_user_bank_id": (data.get("pabilo_user_bank_id") or "").strip(),
@@ -10874,7 +12420,7 @@ def admin_config_payments_set():
         "ubii_webhook_secret": (data.get("ubii_webhook_secret") or "").strip(),
     }
     provider = (data.get("payment_verification_provider") or "").strip().lower()
-    if provider not in ("", "pabilo", "ubii"):
+    if provider not in ("", "pabilo", "ubii", "bdv"):
         provider = ""
     values["payment_verification_provider"] = provider
     values["ubii_auto_verify_enabled"] = "1" if provider == "ubii" else "0"
@@ -11579,7 +13125,7 @@ def _is_genai_retryable_error(exc: Exception) -> bool:
     )
 
 
-def _genai_extract_reference_with_retries(uploaded_file):
+def _genai_extract_reference_with_retries(uploaded_file, prompt: str = ""):
     last_model_error = None
     last_retryable_error = None
 
@@ -11588,7 +13134,7 @@ def _genai_extract_reference_with_retries(uploaded_file):
         for model_name in _genai_candidate_model_names():
             model = genai.GenerativeModel(model_name)
             try:
-                response = model.generate_content([_receipt_reference_prompt(), uploaded_file])
+                response = model.generate_content([prompt or _receipt_reference_prompt(), uploaded_file])
             except Exception as exc:
                 if _is_genai_model_not_found_error(exc):
                     last_model_error = exc
@@ -11696,6 +13242,22 @@ def _extract_capture_reference(relative_path: str):
     cached_result = _capture_reference_cache_get(cache_key)
     if cached_result is not None:
         return cached_result.get("reference") or "", cached_result.get("status") or "not_detected"
+    if DEEPSEEK_API_KEY:
+        try:
+            with open(capture_path, "rb") as fh:
+                ds_bytes = fh.read()
+            ds_text = _deepseek_vision_text(
+                ds_bytes, mimetypes.guess_type(capture_path)[0] or "image/jpeg", _receipt_reference_prompt()
+            )
+            ds_reference = _normalize_extracted_capture_reference(ds_text)
+            if ds_reference:
+                _capture_reference_cache_set(cache_key, ds_reference, "ok")
+                return ds_reference, "ok"
+            if str(ds_text or "").strip().upper() == "ERROR_NO_DETECTADO":
+                _capture_reference_cache_set(cache_key, "", "not_detected")
+                return "", "not_detected"
+        except Exception as exc:
+            print(f"[CaptureAI] DeepSeek falló leyendo la referencia, se usa Gemini: {exc}")
     cooldown_remaining = _genai_cooldown_remaining_seconds()
     if cooldown_remaining > 0:
         status = f"error:cooldown_active:{cooldown_remaining}"
@@ -11737,6 +13299,81 @@ def _extract_capture_reference(relative_path: str):
                 genai.delete_file(name=uploaded_file.name)
             except Exception:
                 pass
+
+
+DEEPSEEK_API_KEY = (os.environ.get("DEEPSEEK_API_KEY") or "").strip()
+DEEPSEEK_VISION_MODEL = (os.environ.get("DEEPSEEK_VISION_MODEL") or "deepseek-flash").strip()
+DEEPSEEK_BASE_URL = (os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com").strip().rstrip("/")
+
+
+def _deepseek_vision_text(image_bytes: bytes, mime_type: str, prompt: str) -> str:
+    """Envía una imagen (base64 inline) a DeepSeek y devuelve el texto de la respuesta."""
+    import base64
+    data_url = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
+    resp = _requests_lib.post(
+        DEEPSEEK_BASE_URL + "/chat/completions",
+        headers={"Authorization": "Bearer " + DEEPSEEK_API_KEY, "Content-Type": "application/json"},
+        json={
+            "model": DEEPSEEK_VISION_MODEL,
+            "temperature": 0,
+            "max_tokens": 300,
+            # sin razonamiento: responde directo (probado: 1.8 s y ~12 tokens de salida)
+            "thinking": {"type": "disabled"},
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }],
+        },
+        timeout=60,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"DeepSeek HTTP {resp.status_code}: {resp.text[:200]}")
+    data = resp.json()
+    return str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+
+
+def _capture_vision_text(capture_path: str, prompt: str) -> tuple[str, str]:
+    """Lee un comprobante con IA. Devuelve (texto, proveedor). DeepSeek primero
+    (más barato); si falla o no hay clave, Gemini."""
+    with open(capture_path, "rb") as fh:
+        image_bytes = fh.read()
+    mime_type = mimetypes.guess_type(capture_path)[0] or "image/jpeg"
+    if DEEPSEEK_API_KEY:
+        try:
+            return _deepseek_vision_text(image_bytes, mime_type, prompt), "deepseek"
+        except Exception as exc:
+            print(f"[CaptureAI] DeepSeek falló, se usa Gemini: {exc}")
+    if not GENAI_API_KEY or _genai_cooldown_remaining_seconds() > 0:
+        return "", ""
+    _genai_model()
+    _, response = _genai_extract_reference_with_retries({"mime_type": mime_type, "data": image_bytes}, prompt=prompt)
+    return (str(getattr(response, "text", "") or "") if response is not None else ""), "gemini"
+
+
+def _receipt_bank_prompt() -> str:
+    banks = "\n".join(f"{code} = {name}" for code, name in BDV_BANKS)
+    return (
+        "Esta imagen es un comprobante de Pago Movil de Venezuela.\n"
+        "Identifica el banco DESDE el que se hizo el pago (el banco del pagador, normalmente el de la app "
+        "o el logo del comprobante). NO respondas el banco destino/receptor.\n"
+        "Responde UNICAMENTE con el codigo de 4 digitos de esta lista:\n"
+        f"{banks}\n"
+        "Si no estas seguro o no es un comprobante, responde exactamente NO."
+    )
+
+
+def _extract_capture_bank(relative_path: str) -> str:
+    """Devuelve el código del banco de origen leído del comprobante, o ''."""
+    capture_path = _capture_absolute_path(relative_path)
+    if not capture_path or not os.path.exists(capture_path):
+        return ""
+    text, _provider = _capture_vision_text(capture_path, _receipt_bank_prompt())
+    match = re.search(r"\b(0\d{3})\b", text)
+    code = match.group(1) if match else ""
+    return code if code in _BDV_BANK_CODES else ""
 
 
 def _capture_reference_status_error_message(status: str) -> str:
@@ -12130,11 +13767,28 @@ def store_checkout(gid: int):
     game = StorePackage.query.get(gid)
     if not game or not game.active:
         return redirect(url_for("index"))
+    session_user = session.get("user") or {}
+    if _login_required_to_buy() and not session_user:
+        next_path = request.full_path.rstrip("?")
+        return redirect("/?login=1&next=" + urllib.parse.quote(next_path, safe=""))
+    profile_email = str(session_user.get("email") or "")
+    profile_phone = ""
+    if session_user.get("role") == "user" and session_user.get("user_id"):
+        try:
+            u_obj = User.query.get(int(session_user["user_id"]))
+            if u_obj:
+                profile_email = u_obj.email or profile_email
+                profile_phone = u_obj.phone or ""
+        except Exception:
+            pass
     logo_url = get_config_value("logo_path", "")
     site_name = get_config_value("site_name", "InefableStore")
     whatsapp_url = get_config_value("whatsapp_url", "https://api.whatsapp.com/send?phone=%2B584125712917")
     return render_template(
         "checkout.html",
+        profile_email=profile_email,
+        profile_phone=profile_phone,
+        logged_in=bool(session_user),
         gid=gid,
         logo_url=logo_url,
         site_name=site_name,
@@ -12255,6 +13909,58 @@ def thanks_order_progress(oid: int):
         payload["pins"] = []
         payload["pins_hidden"] = True
     return jsonify(payload)
+
+
+@app.route("/gracias/<int:oid>/pago-pendiente", methods=["GET"])
+def thanks_partial_payment_state(oid: int):
+    """Pago incompleto: cuánto falta y a dónde pagarlo (solo para el dueño de la orden)."""
+    o = Order.query.get(oid)
+    if not o or not _thanks_viewer_owns_order(o):
+        return jsonify({"ok": True, "underpaid": False})
+    state = _pabilo_get_payment_state(o)
+    if (o.status or "").lower() != "pending" or not state.get("underpaid"):
+        return jsonify({"ok": True, "underpaid": False})
+    summary = _order_partial_summary(o, state)
+    return jsonify({
+        "ok": True,
+        "underpaid": True,
+        "total": float(summary["total"]),
+        "paid": float(summary["paid"]),
+        "remaining": float(summary["remaining"]),
+        "pago_movil": {
+            "banco": get_config_value("pm_bank", ""),
+            "telefono": get_config_value("pm_phone", ""),
+            "documento": get_config_value("pm_id", ""),
+            "titular": get_config_value("pm_name", ""),
+        },
+    })
+
+
+@app.route("/auth/me/pagos-pendientes", methods=["GET"])
+def auth_me_pending_payments():
+    try:
+        items = _underpaid_orders_for_viewer()
+    except Exception:
+        db.session.rollback()
+        items = []
+    resp = jsonify({"ok": True, "pendientes": items})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/gracias/<int:oid>/completar-pago", methods=["POST"])
+def thanks_complete_partial_payment(oid: int):
+    o = Order.query.get(oid)
+    if not o or not _thanks_viewer_owns_order(o):
+        return jsonify({"ok": False, "error": "No autorizado"}), 403
+    reference = str((request.get_json(silent=True) or {}).get("reference") or "")
+    try:
+        result = _bdv_complete_partial_payment(o, reference)
+    except Exception as exc:
+        db.session.rollback()
+        print(f"[BDV] Error completando el pago de la orden #{oid}: {exc}")
+        return jsonify({"ok": False, "error": "No se pudo verificar ahora mismo. Intenta en un minuto."}), 500
+    return jsonify(result), (200 if result.get("ok") else 400)
 
 
 @app.route("/gracias/<int:oid>/minijuego", methods=["GET"])
@@ -12829,6 +14535,59 @@ def create_order():
         if payer_movement_type and payer_movement_type not in ("GENERIC", "MOVIL_PAY", "TRANSFER"):
             payer_movement_type = ""
 
+        # Flop IA (chat) crea órdenes desde su servidor: entra con su clave interna
+        flop_token = (os.environ.get("FLOP_IA_ORDER_TOKEN") or "").strip()
+        sent_flop_token = str(request.headers.get("X-Flop-Token") or "").strip()
+        is_flop_order = bool(flop_token and sent_flop_token
+                             and _hmac_module.compare_digest(sent_flop_token.encode(), flop_token.encode()))
+        if _login_required_to_buy() and not session_user and not is_flop_order:
+            return jsonify({"ok": False, "error": "Inicia sesión para comprar", "login_required": True}), 401
+        profile_user = None
+        if session_user.get("role") == "user" and session_user.get("user_id"):
+            try:
+                profile_user = User.query.get(int(session_user["user_id"]))
+            except Exception:
+                profile_user = None
+        if profile_user is not None:
+            if not email:
+                email = profile_user.email or ""
+            if not phone:
+                phone = profile_user.phone or ""
+            if not name:
+                name = profile_user.name or ""
+
+        # BDV (API Conciliación): para Pago Móvil hacen falta los datos del pagador.
+        if method == "pm" and _payment_verification_provider() == "bdv":
+            # El banco es opcional: si no viene, la verificación prueba los bancos.
+            payer_bank_origin = re.sub(r"\D", "", payer_bank_origin)[:4]
+            if payer_bank_origin not in _BDV_BANK_CODES:
+                payer_bank_origin = ""
+            normalized_payer_phone = _bdv_normalize_phone(payer_phone or phone)
+            if not normalized_payer_phone:
+                return jsonify({"ok": False, "error": "Escribe el teléfono desde el que hiciste el Pago Móvil (04XX...)"}), 400
+            payer_phone = normalized_payer_phone
+            # El teléfono de Pago Móvil queda guardado en el perfil para la próxima compra.
+            if profile_user is not None and profile_user.phone != normalized_payer_phone:
+                profile_user.phone = normalized_payer_phone
+            # Con menos dígitos el BDV no encuentra el pago (probado: 5 dígitos fallan).
+            if len(re.sub(r"\D", "", reference)) < _BDV_MIN_REFERENCE_DIGITS:
+                return jsonify({"ok": False, "error": f"Escribe la referencia completa del comprobante (mínimo {_BDV_MIN_REFERENCE_DIGITS} dígitos)"}), 400
+            # Cédula opcional: el BDV no la exige y sin ella la venta va al libro como consumidor final.
+            payer_dni_number = re.sub(r"\D", "", payer_dni_number)
+            if payer_dni_number and not payer_dni_type:
+                payer_dni_type = "V"
+            # Fecha opcional: si no viene, se usa la de la orden (y ayer como segundo intento).
+            if payer_payment_date:
+                today_ve = now_ve().date()
+                try:
+                    pay_day = datetime.strptime(payer_payment_date, "%Y-%m-%d").date()
+                except Exception:
+                    return jsonify({"ok": False, "error": "La fecha de pago es inválida"}), 400
+                if pay_day > today_ve:
+                    return jsonify({"ok": False, "error": "La fecha de pago no puede ser futura"}), 400
+                if (today_ve - pay_day).days > _BDV_MAX_PAYMENT_AGE_DAYS:
+                    return jsonify({"ok": False, "error": f"Solo se aceptan pagos de los últimos {_BDV_MAX_PAYMENT_AGE_DAYS} días. Escribe al soporte."}), 400
+
         if not email:
             return jsonify({"ok": False, "error": "Correo requerido"}), 400
 
@@ -13041,6 +14800,14 @@ def create_order():
         if use_binance_pay:
             binance_pay_fee = _binance_pay_fee_for(o.amount)
             o.amount = float(Decimal(str(o.amount)) + Decimal(str(binance_pay_fee)))
+            o.fee_amount = float(binance_pay_fee or 0)
+        # Pago Móvil: la comisión bancaria la paga el cliente (mismo cálculo que el checkout)
+        if method == "pm" and _order_is_bs(o) and _pm_fee_percent() > 0:
+            pm_fee = _pm_fee_for(o.amount)
+            o.amount = float(int(Decimal(str(o.amount))) + pm_fee)
+            o.fee_amount = float(pm_fee)
+        # Contabilidad: tasa del día y monto en Bs quedan fijos en la orden.
+        _fill_order_fiscal_amounts(o)
 
         # Optional enforcement: mapped auto-recharge orders must use selected Pabilo method.
         if not use_binance_pay and _is_pabilo_payment_method_enforced_for_order(o):
@@ -13111,19 +14878,24 @@ def create_order():
             _start_checkout_automation(o.id, current_app._get_current_object())
         except Exception:
             pass
-        # Purge per-user beyond latest 30 (by email or customer_id)
+        # Purge per-user beyond latest 30.
+        # Seguridad (2026-11-18): antes filtraba por email + customer_id, datos que pone
+        # quien compra: cualquiera podía borrar el historial de otro cliente creando 30
+        # pedidos con su email e ID de juego, y si ambos venían vacíos el filtro quedaba
+        # vacío y borraba TODOS los pedidos de la tienda salvo los 30 últimos. Ahora solo
+        # se limpian pedidos de la propia cuenta (user_id); los de invitado no se tocan.
         try:
-            uq = Order.query
-            if email:
-                uq = uq.filter(Order.email == email)
-            if customer_id:
-                uq = uq.filter(Order.customer_id == customer_id)
-            ids = [r.id for r in uq.order_by(Order.created_at.desc()).limit(30).all()]
+            purge_uid = getattr(o, "user_id", None)
+            uq = Order.query.filter(Order.user_id == purge_uid) if purge_uid else None
+            ids = [r.id for r in uq.order_by(Order.created_at.desc()).limit(30).all()] if uq is not None else []
             if ids:
                 del_q = uq.filter(~Order.id.in_(ids))
                 to_purge = del_q.all()
+                if to_purge:
+                    _fiscal_sync_orders(to_purge, commit=False)
                 for op in to_purge:
-                    _delete_capture(op.payment_capture)
+                    if not _fiscal_order_should_record(op):
+                        _delete_capture(op.payment_capture)
                     db.session.delete(op)
                 db.session.commit()
         except Exception:
@@ -13413,15 +15185,21 @@ def orders_my():
             q = q.filter(Order.customer_id == customer_id)
         q = q.order_by(Order.created_at.desc()).limit(50)
     elif role == "user":
-        email = (user.get("email") or "").strip()
         uid = user.get("user_id")
-        filters = []
-        if email:
-            filters.append(Order.email == email)
-        if uid:
-            filters.append(Order.user_id == uid)
-        if not filters:
+        if not uid:
             return jsonify({"ok": True, "orders": []})
+        filters = [Order.user_id == uid]
+        # Seguridad (2026-11-18): antes se mostraban también todos los pedidos con el
+        # mismo email, pero el registro y /auth/profile no verifican el email, así que
+        # bastaba ponerse el email de otro cliente para ver sus pedidos y códigos.
+        # Ahora los pedidos de invitado (sin user_id) por email solo se muestran si la
+        # cuenta está enlazada a Google (email verificado por Google y no editable).
+        u_self = User.query.get(uid)
+        if u_self and (u_self.google_sub or "").strip() and (u_self.email or "").strip():
+            filters.append(db.and_(
+                Order.user_id.is_(None),
+                db.func.lower(Order.email) == u_self.email.strip().lower(),
+            ))
         q = q.filter(db.or_(*filters)).order_by(Order.created_at.desc()).limit(50)
     else:
         # Affiliates or other roles: do not expose buyer orders
@@ -13450,7 +15228,17 @@ def orders_my():
             delivery_codes = []
         if not delivery_codes and (x.delivery_code or '').strip():
             delivery_codes = [x.delivery_code.strip()]
+        underpaid_info = {}
+        try:
+            if (x.status or "").lower() == "pending":
+                x_state = _pabilo_get_payment_state(x)
+                if x_state.get("underpaid"):
+                    underpaid_info = {"underpaid": True,
+                                      "remaining": float(_order_partial_summary(x, x_state)["remaining"])}
+        except Exception:
+            underpaid_info = {}
         out.append({
+            **underpaid_info,
             "id": x.id,
             "created_at": (x.created_at.isoformat() if hasattr(x.created_at, 'isoformat') else str(x.created_at)),
             "status": x.status,
@@ -13603,11 +15391,6 @@ def admin_orders_set_status(oid: int):
             auto_summary = auto_dispatch.get("summary") or {}
             if auto_summary.get("total_units", 0) > 0 and auto_summary.get("completed_units", 0) >= auto_summary.get("total_units", 0):
                 _send_order_completed_email_if_needed(o)
-            # Si el admin aprobó manualmente (skip_payment_verification) y el dispatch
-            # falló revirtiendo la orden a "pending", la volvemos a "approved".
-            if skip_payment_verification and not auto_dispatch.get("ok") and (o.status or "").lower() == "pending":
-                o.status = "approved"
-                db.session.commit()
     except Exception as exc:
         auto_dispatch = {
             "ok": False,
@@ -13616,10 +15399,6 @@ def admin_orders_set_status(oid: int):
             "order_id": o.id,
             "summary": _summarize_order_auto_recharges(_build_order_auto_recharge_units(o)),
         }
-        # También aquí, si skip_payment_verification, aseguramos que la orden quede approved
-        if skip_payment_verification and (o.status or "").lower() == "pending":
-            o.status = "approved"
-            db.session.commit()
 
     response_payload = {"ok": True}
     if skip_payment_verification:
@@ -13913,7 +15692,7 @@ def admin_orders_verify_recharge(oid: int):
     o = Order.query.get(oid)
     if not o:
         return jsonify({"ok": False, "error": "No existe"}), 404
-    if o.status not in ("pending",):
+    if o.status not in ("pending", "approved"):
         return jsonify({"ok": True, "result": "already_processed", "order_status": o.status})
 
     auto_resp = _load_order_automation_state(o)
@@ -14017,7 +15796,7 @@ def _revendedores_pending_verification_loop():
             with app.app_context():
                 cutoff = datetime.utcnow() - timedelta(hours=48)
                 pending_orders = Order.query.filter(
-                    Order.status == "pending",
+                    Order.status.in_(("pending", "approved")),
                     Order.created_at >= cutoff,
                 ).all()
                 for order in pending_orders:
@@ -14085,7 +15864,7 @@ def _pabilo_pending_verification_loop():
     while True:
         try:
             with app.app_context():
-                if _payment_verification_provider() == "pabilo":
+                if _payment_verification_provider() in ("pabilo", "bdv"):
                     cutoff = datetime.utcnow() - timedelta(minutes=_PABILO_AUTO_RETRY_WINDOW_MINUTES)
                     candidates = Order.query.filter(
                         Order.status == "pending",
@@ -14097,7 +15876,17 @@ def _pabilo_pending_verification_loop():
                             if payment_state.get("verified"):
                                 continue
                             attempts = int(payment_state.get("attempts") or 0)
-                            if attempts >= _PABILO_AUTO_RETRY_MAX_ATTEMPTS:
+                            max_auto_attempts = (
+                                _BDV_AUTO_RETRY_MAX_ATTEMPTS if _payment_verification_provider() == "bdv"
+                                else _PABILO_AUTO_RETRY_MAX_ATTEMPTS
+                            )
+                            if attempts >= max_auto_attempts:
+                                continue
+                            # BDV: si el banco ya dio una respuesta definitiva (dato
+                            # inválido, monto distinto, ya conciliado) reintentar no
+                            # cambia nada; la orden queda para revisión del admin.
+                            if (str(payment_state.get("bdv_result") or "") in ("already_conciliated", "invalid_field", "amount_mismatch", "underpaid")
+                                    or payment_state.get("underpaid")):
                                 continue
                             request_info = _pabilo_request_info(order)
                             if not request_info.get("requestable"):
@@ -15152,7 +16941,8 @@ def get_config_value(key: str, default: str = "") -> str:
 @app.context_processor
 def inject_cfg_helpers():
     # Expose get_config_value so templates can access AppConfig values
-    return dict(get_config_value=get_config_value)
+    return dict(get_config_value=get_config_value, google_login_enabled=_google_login_enabled(),
+                firebase_config_json=json.dumps(_firebase_web_config()))
 
 
 @app.template_global()
@@ -15756,12 +17546,18 @@ def auth_login():
     if not email or not password:
         return jsonify({"ok": False, "error": "Email y contraseña requeridos"}), 400
     # Admin login (env credentials)
-    if email.lower() == (ADMIN_EMAIL or "").lower() and password == (ADMIN_PASSWORD or ""):
+    if (ADMIN_PASSWORD and email.lower() == (ADMIN_EMAIL or "").lower()
+            and _hmac_module.compare_digest(password.encode("utf-8"), ADMIN_PASSWORD.encode("utf-8"))):
         session["user"] = {"email": ADMIN_EMAIL, "role": "admin"}
         response = jsonify({"ok": True, "user": session["user"]})
         # Pase de mantenimiento: nginx deja ver la tienda cerrada solo a quien traiga esta cookie.
         # Se entrega únicamente al admin, para que un cliente no pueda comprar antes de la apertura.
         return _attach_maintenance_pass(response)
+    # Contador (env credentials): acceso de solo lectura al libro de ventas
+    if (CONTADOR_EMAIL and CONTADOR_PASSWORD and email.lower() == CONTADOR_EMAIL.lower()
+            and _hmac_module.compare_digest(password.encode("utf-8"), CONTADOR_PASSWORD.encode("utf-8"))):
+        session["user"] = {"email": CONTADOR_EMAIL, "role": "contador"}
+        return jsonify({"ok": True, "user": session["user"]})
     # Affiliate / mini influencer login (by email, or by their own code)
     su = SpecialUser.query.filter(db.func.lower(SpecialUser.email) == email.lower()).first()
     if not su:
@@ -15858,6 +17654,13 @@ def auth_profile_set():
             return jsonify({"ok": False, "error": "Usuario no encontrado"}), 404
         # Email change: ensure unique
         if email.lower() != (u.email or '').lower():
+            # Seguridad (2026-11-18): en cuentas de Google el email lo verificó Google y
+            # es el que da acceso a los pedidos de invitado: no se puede cambiar a mano.
+            if (u.google_sub or "").strip():
+                return jsonify({"ok": False, "error": "Tu cuenta usa Google: el email no se puede cambiar"}), 400
+            reserved = {(ADMIN_EMAIL or "").lower(), (CONTADOR_EMAIL or "").lower()} - {""}
+            if email.lower() in reserved:
+                return jsonify({"ok": False, "error": "Email ya está en uso"}), 400
             exists = User.query.filter(db.func.lower(User.email) == email.lower()).first()
             if exists:
                 return jsonify({"ok": False, "error": "Email ya está en uso"}), 400
@@ -15879,6 +17682,9 @@ def auth_register():
     password = data.get("password") or ""
     if not email or not password:
         return jsonify({"ok": False, "error": "Email y contraseña requeridos"}), 400
+    phone = _bdv_normalize_phone(phone)
+    if not phone:
+        return jsonify({"ok": False, "error": "Escribe tu teléfono de Pago Móvil (04XX...)"}), 400
     # Unique email
     exists = User.query.filter(db.func.lower(User.email) == email.lower()).first()
     if exists or email.lower() == ADMIN_EMAIL.lower():
@@ -15890,6 +17696,414 @@ def auth_register():
     db.session.commit()
     session["user"] = {"email": u.email, "role": "user", "user_id": u.id, "name": u.name}
     return jsonify({"ok": True, "user": session["user"]})
+
+
+# ==============================
+# Login con Google vía Firebase Authentication
+# ==============================
+# El navegador inicia sesión con Firebase (ventana de Google) y manda aquí el
+# ID token. Se valida con la API de Firebase (accounts:lookup): si el token es
+# falso, vencido o de otro proyecto, Firebase lo rechaza.
+
+@app.route("/auth/firebase", methods=["POST"])
+def auth_firebase():
+    if not _google_login_enabled():
+        return jsonify({"ok": False, "error": "Login con Google no disponible"}), 400
+    id_token = str((request.get_json(silent=True) or {}).get("idToken") or "").strip()
+    if not id_token or len(id_token) > 5000:
+        return jsonify({"ok": False, "error": "Token inválido"}), 400
+    try:
+        resp = _requests_lib.post(
+            "https://identitytoolkit.googleapis.com/v1/accounts:lookup",
+            params={"key": FIREBASE_API_KEY},
+            json={"idToken": id_token},
+            timeout=20,
+        )
+        data = resp.json() if resp.content else {}
+    except Exception as exc:
+        print(f"[FirebaseLogin] Error: {exc}")
+        return jsonify({"ok": False, "error": "No se pudo verificar con Google. Intenta de nuevo."}), 502
+    users = data.get("users") if isinstance(data, dict) else None
+    if resp.status_code != 200 or not users:
+        return jsonify({"ok": False, "error": "Sesión de Google inválida o vencida"}), 401
+    info = users[0]
+    email = str(info.get("email") or "").strip()
+    uid = str(info.get("localId") or "").strip()
+    if not email or not uid or not info.get("emailVerified"):
+        return jsonify({"ok": False, "error": "Tu cuenta de Google no tiene un correo verificado"}), 401
+    if email.lower() == (ADMIN_EMAIL or "").lower():
+        return jsonify({"ok": False, "error": "El administrador entra por /admin"}), 403
+    if CONTADOR_EMAIL and email.lower() == CONTADOR_EMAIL.lower():
+        session["user"] = {"email": CONTADOR_EMAIL, "role": "contador"}
+        return jsonify({"ok": True, "user": session["user"], "redirect": "/contador"})
+    u = User.query.filter(User.google_sub == uid).first()
+    if not u:
+        u = User.query.filter(db.func.lower(User.email) == email.lower()).first()
+    if not u:
+        u = User(
+            name=str(info.get("displayName") or email.split("@")[0])[:200],
+            email=email,
+            phone="",
+            password_hash=generate_password_hash(secrets.token_urlsafe(32)),
+        )
+        db.session.add(u)
+    elif not (u.google_sub or "").strip():
+        # Seguridad (2026-11-18): la cuenta existía con contraseña y se enlaza a Google
+        # por primera vez. Cualquiera pudo registrarla con este email sin verificarlo
+        # (robo de cuenta anticipado), así que la contraseña anterior se anula: desde
+        # ahora solo entra quien demuestre ser dueño del correo con Google.
+        u.password_hash = generate_password_hash(secrets.token_urlsafe(32))
+    u.google_sub = uid  # uid de Firebase
+    db.session.commit()
+    session["user"] = {"email": u.email, "role": "user", "user_id": u.id, "name": u.name}
+    return jsonify({"ok": True, "user": session["user"], "has_phone": bool(_bdv_normalize_phone(u.phone))})
+
+
+@app.route("/auth/me/contact")
+def auth_me_contact():
+    """Estado de la cuenta para el chat de Flop IA: sesión iniciada y teléfono."""
+    user = session.get("user") or {}
+    resp = {"ok": True, "logged_in": bool(user), "has_phone": False, "google": _google_login_enabled()}
+    if user and user.get("role") == "user" and user.get("user_id"):
+        u = User.query.get(int(user["user_id"]))
+        resp["has_phone"] = bool(u and _bdv_normalize_phone(u.phone))
+        resp["name"] = (u.name if u else "") or ""
+    elif user:
+        resp["has_phone"] = True  # admin/afiliado: no se les pide
+    return jsonify(resp)
+
+
+@app.route("/auth/me/phone", methods=["POST"])
+def auth_me_phone():
+    user = session.get("user") or {}
+    if not user or user.get("role") != "user" or not user.get("user_id"):
+        return jsonify({"ok": False, "error": "Inicia sesión primero"}), 401
+    phone = _bdv_normalize_phone((request.get_json(silent=True) or {}).get("phone"))
+    if not phone:
+        return jsonify({"ok": False, "error": "Escribe un teléfono válido (04XX XXX XXXX)"}), 400
+    u = User.query.get(int(user["user_id"]))
+    if not u:
+        return jsonify({"ok": False, "error": "Usuario no encontrado"}), 404
+    u.phone = phone
+    db.session.commit()
+    return jsonify({"ok": True, "phone": phone})
+
+# ==============================
+# Panel del contador (libro de ventas)
+# ==============================
+
+def _contador_user_ok() -> bool:
+    user = session.get("user") or {}
+    return user.get("role") in ("admin", "contador")
+
+
+def _contador_parse_range():
+    """Rango de fechas en hora de Venezuela -> (desde_utc, hasta_utc, desde_txt, hasta_txt)."""
+    today = now_ve().date()
+
+    def _parse(raw, default):
+        try:
+            return datetime.strptime(str(raw or "").strip(), "%Y-%m-%d").date()
+        except Exception:
+            return default
+
+    desde = _parse(request.args.get("desde"), today.replace(day=1))
+    hasta = _parse(request.args.get("hasta"), today)
+    if hasta < desde:
+        desde, hasta = hasta, desde
+    # 00:00 en Venezuela (GMT-4) = 04:00 UTC
+    start_utc = datetime(desde.year, desde.month, desde.day) + timedelta(hours=4)
+    end_utc = datetime(hasta.year, hasta.month, hasta.day) + timedelta(days=1, hours=4)
+    return start_utc, end_utc, desde.isoformat(), hasta.isoformat()
+
+
+def _contador_sales_in_range(start_utc, end_utc):
+    return FiscalSale.query.filter(
+        FiscalSale.sale_at >= start_utc,
+        FiscalSale.sale_at < end_utc,
+    ).order_by(FiscalSale.sale_at.asc(), FiscalSale.id.asc()).all()
+
+
+def _contador_sync_ledger() -> None:
+    try:
+        _fiscal_sync_orders()
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print(f"[Fiscal] Error sincronizando: {exc}")
+
+
+def _ve_datetime_text(dt) -> str:
+    if not dt:
+        return ""
+    try:
+        return dt.replace(tzinfo=timezone.utc).astimezone(VE_TIMEZONE).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return str(dt)
+
+
+_METHOD_LABELS = {"pm": "Pago Móvil", "binance": "Binance", "gift": "Código regalo"}
+
+
+def _fiscal_sale_payload(row) -> dict:
+    return {
+        "control": row.id,
+        "orden": row.order_id,
+        "fecha": _ve_datetime_text(row.sale_at),
+        "estado": row.status,
+        "cliente": row.customer_name,
+        "documento": row.customer_doc or "Consumidor final",
+        "correo": row.customer_email,
+        "telefono": row.customer_phone,
+        "producto": row.product,
+        "detalle": row.description,
+        "cantidad": row.quantity,
+        "metodo": _METHOD_LABELS.get(str(row.method or "").lower(), row.method),
+        "moneda": row.currency,
+        "monto_cobrado": round(float(row.amount_paid or 0), 2),
+        "precio_usd": round(float(row.price_usd or 0), 2),
+        "tasa": round(float(row.rate_bs_per_usd or 0), 4),
+        "tasa_origen": row.rate_source,
+        "monto_bs": round(float(row.amount_bs or 0), 2),
+        "referencia": row.reference,
+        "banco_origen": row.payer_bank,
+        "telefono_pagador": row.payer_phone,
+        "fecha_pago": row.payment_date,
+        "verificado_por": row.verified_by,
+        "tiene_comprobante": bool(row.payment_capture),
+        "motivo_anulacion": row.void_reason,
+    }
+
+
+@app.route("/contador")
+def contador_page():
+    site_name = get_config_value("site_name", "InefableStore")
+    response = make_response(render_template("contador.html", site_name=site_name, logged=_contador_user_ok()))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/contador/api/resumen")
+def contador_api_resumen():
+    if not _contador_user_ok():
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    _contador_sync_ledger()
+    start_utc, end_utc, desde, hasta = _contador_parse_range()
+    rows = _contador_sales_in_range(start_utc, end_utc)
+    vigentes = [r for r in rows if r.status == "vigente"]
+    anuladas = [r for r in rows if r.status != "vigente"]
+    by_method = {}
+    for r in vigentes:
+        key = _METHOD_LABELS.get(str(r.method or "").lower(), r.method or "Otro")
+        agg = by_method.setdefault(key, {"metodo": key, "ventas": 0, "monto_bs": 0.0, "precio_usd": 0.0})
+        agg["ventas"] += 1
+        agg["monto_bs"] += float(r.amount_bs or 0)
+        agg["precio_usd"] += float(r.price_usd or 0)
+    for agg in by_method.values():
+        agg["monto_bs"] = round(agg["monto_bs"], 2)
+        agg["precio_usd"] = round(agg["precio_usd"], 2)
+    return jsonify({
+        "ok": True,
+        "desde": desde,
+        "hasta": hasta,
+        "ventas": len(vigentes),
+        "anuladas": len(anuladas),
+        "total_bs": round(sum(float(r.amount_bs or 0) for r in vigentes), 2),
+        "total_usd": round(sum(float(r.price_usd or 0) for r in vigentes), 2),
+        "verificadas_banco": sum(1 for r in vigentes if r.verified_by not in ("", "manual")),
+        "por_metodo": sorted(by_method.values(), key=lambda a: -a["monto_bs"]),
+        "filas": [_fiscal_sale_payload(r) for r in rows[-500:]],
+        "filas_total": len(rows),
+        **_contador_bank_summary(desde, hasta),
+    })
+
+
+def _contador_bank_summary(desde: str, hasta: str) -> dict:
+    pagos = BankPayment.query.filter(BankPayment.pay_date >= desde, BankPayment.pay_date <= hasta).all()
+    sin_orden = [p for p in pagos if not p.order_id]
+    return {
+        "banco_pagos": len(pagos),
+        "banco_total_bs": round(sum(p.amount for p in pagos), 2),
+        "banco_sin_orden": len(sin_orden),
+        "banco_sin_orden_bs": round(sum(p.amount for p in sin_orden), 2),
+        "banco_sin_orden_filas": [
+            {"fecha": p.pay_date, "hora": p.pay_time, "referencia": p.reference, "monto_bs": p.amount,
+             "banco": p.bank_code, "pagador": p.payer_id, "telefono": p.payer_phone, "origen": p.source}
+            for p in sorted(sin_orden, key=lambda x: (x.pay_date, x.pay_time))[-200:]
+        ],
+    }
+
+
+@app.route("/contador/banco.csv")
+def contador_banco_csv():
+    """Pagos recibidos según el banco y a qué orden se aplicaron (conciliación)."""
+    if not _contador_user_ok():
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    _s, _e, desde, hasta = _contador_parse_range()
+    pagos = BankPayment.query.filter(BankPayment.pay_date >= desde, BankPayment.pay_date <= hasta)         .order_by(BankPayment.pay_date.asc(), BankPayment.pay_time.asc()).all()
+    import csv
+    import io
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow(["Fecha", "Hora", "Referencia", "Monto Bs", "Banco origen", "Cédula pagador", "Teléfono pagador",
+                "Origen del dato", "N° orden", "N° control libro", "Descripción"])
+    controles = {f.order_id: f.id for f in FiscalSale.query.filter(
+        FiscalSale.order_id.in_([p.order_id for p in pagos if p.order_id] or [0])).all()}
+    for p in pagos:
+        w.writerow([p.pay_date, p.pay_time, p.reference, f"{p.amount:.2f}".replace(".", ","), p.bank_code, p.payer_id,
+                    p.payer_phone, p.source, p.order_id or "SIN ORDEN", controles.get(p.order_id, ""), p.description])
+    resp = Response("﻿" + buf.getvalue(), mimetype="text/csv; charset=utf-8")
+    resp.headers["Content-Disposition"] = f'attachment; filename="pagos-banco_{desde}_a_{hasta}.csv"'
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/contador/ventas.csv")
+def contador_ventas_csv():
+    if not _contador_user_ok():
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    _contador_sync_ledger()
+    start_utc, end_utc, desde, hasta = _contador_parse_range()
+    rows = _contador_sales_in_range(start_utc, end_utc)
+    import csv
+    import io
+    buf = io.StringIO()
+    # Excel en español: separador ";" y coma decimal.
+    writer = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+
+    def _num(value, decimals=2):
+        return f"{float(value or 0):.{decimals}f}".replace(".", ",")
+
+    writer.writerow([
+        "N° control", "N° orden", "Fecha (hora VE)", "Estado", "Cliente", "Cédula/RIF", "Correo", "Teléfono",
+        "Producto", "Detalle", "Cantidad", "Método de pago", "Moneda cobrada", "Monto cobrado",
+        "Precio USD", "Tasa Bs/USD", "Origen de la tasa", "Monto Bs", "Referencia", "Banco origen",
+        "Teléfono pagador", "Fecha del pago", "Verificado por", "Comprobante", "Motivo anulación",
+    ])
+    for r in rows:
+        p = _fiscal_sale_payload(r)
+        writer.writerow([
+            p["control"], p["orden"], p["fecha"], p["estado"], p["cliente"], p["documento"], p["correo"], p["telefono"],
+            p["producto"], p["detalle"], p["cantidad"], p["metodo"], p["moneda"], _num(p["monto_cobrado"]),
+            _num(p["precio_usd"]), _num(p["tasa"], 4), p["tasa_origen"], _num(p["monto_bs"]), p["referencia"],
+            p["banco_origen"], p["telefono_pagador"], p["fecha_pago"], p["verificado_por"],
+            "sí" if p["tiene_comprobante"] else "no", p["motivo_anulacion"],
+        ])
+    body = "﻿" + buf.getvalue()  # BOM para que Excel lea bien los acentos
+    resp = Response(body, mimetype="text/csv; charset=utf-8")
+    resp.headers["Content-Disposition"] = f'attachment; filename="libro-ventas_{desde}_a_{hasta}.csv"'
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/contador/comprobante/<int:control>")
+def contador_comprobante(control: int):
+    if not _contador_user_ok():
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    row = FiscalSale.query.get(control)
+    if not row or not row.payment_capture:
+        return jsonify({"ok": False, "error": "Sin comprobante"}), 404
+    rel = str(row.payment_capture or "").replace("\\", "/")
+    if ".." in rel.split("/") or not rel.startswith("captures/"):
+        return jsonify({"ok": False, "error": "Ruta inválida"}), 400
+    folder = os.path.join(app.config["UPLOAD_FOLDER"], "captures")
+    resp = send_from_directory(folder, rel[len("captures/"):])
+    resp.headers["Cache-Control"] = "private, no-store"
+    return resp
+
+
+@app.route("/webhook-bdv", methods=["POST"])
+def webhook_bdv_notificacion():
+    """API Notificación de Pago del BDV: el banco avisa cada pago recibido.
+    Respuestas que espera el banco (siempre HTTP 200): 00 nuevo, 01 repetido, 99 clave errada."""
+    cfg = _bdv_config()
+    sent_key = str(request.headers.get("X-API-Key") or "").strip()
+    expected = str(cfg.get("webhook_key") or "")
+    if not expected or not _hmac_module.compare_digest(sent_key.encode("utf-8"), expected.encode("utf-8")):
+        return jsonify({"codigo": "99", "mensajeCliente": "Corrija el API KEY", "mensajeSistema": "Error en API KEY"}), 200
+    data = request.get_json(silent=True) or {}
+    fecha = re.sub(r"\D", "", str(data.get("fecha") or ""))
+    pay_date = f"{fecha[:4]}-{fecha[4:6]}-{fecha[6:8]}" if len(fecha) == 8 else now_ve().strftime("%Y-%m-%d")
+    hora = re.sub(r"\D", "", str(data.get("hora") or ""))
+    try:
+        row, nuevo = _bdv_store_bank_payment(
+            source="notificacion",
+            reference=str(data.get("referenciaBancoOrdenante") or ""),
+            amount=data.get("monto"),
+            pay_date=pay_date,
+            pay_time=f"{hora[:2]}:{hora[2:4]}" if len(hora) >= 4 else "",
+            bank_code=str(data.get("bancoOrdenante") or "")[:4],
+            payer_id=str(data.get("idCliente") or ""),
+            payer_phone=str(data.get("numeroCliente") or ""),
+            description="Notificación Pago Móvil",
+            raw=data,
+        )
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        print(f"[BDVWebhook] Error guardando notificación: {exc}")
+        return jsonify({"codigo": "99", "mensajeCliente": "Error procesando", "mensajeSistema": "error"}), 200
+    if row is None:
+        return jsonify({"codigo": "99", "mensajeCliente": "Datos incompletos", "mensajeSistema": "error"}), 200
+    if not nuevo:
+        return jsonify({"codigo": "01", "mensajeCliente": "pago previamente recibido", "mensajeSistema": "renotificado"}), 200
+    payment_id = row.id
+    app_obj = current_app._get_current_object()
+
+    def _match():
+        try:
+            with app_obj.app_context():
+                _bdv_try_orders_for_payment(payment_id)
+        except Exception as exc:
+            print(f"[BDVWebhook] Error buscando la orden del pago {payment_id}: {exc}")
+    threading.Thread(target=_match, daemon=True, name=f"bdv-notif-{payment_id}").start()
+    return jsonify({"codigo": "00", "mensajeCliente": "Aprobado", "mensajeSistema": "Notificado"}), 200
+
+
+@app.route("/admin/bdv/test", methods=["POST"])
+def admin_bdv_test():
+    user = session.get("user")
+    if not user or user.get("role") != "admin":
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+    return jsonify(_bdv_connection_test())
+
+
+def _fiscal_sync_loop():
+    """Registra las ventas cobradas en el libro cada pocos minutos, para que el
+    número de control siga el orden de las ventas."""
+    import time as _t
+    _t.sleep(90)
+    while not _acquire_singleton_lock(_LOCK_FISCAL_SYNC):
+        _t.sleep(60)
+    while True:
+        try:
+            with app.app_context():
+                n = _fiscal_sync_orders()
+                if n:
+                    print(f"[Fiscal] {n} venta(s) registradas en el libro")
+                if _bdv_config().get("account"):
+                    today = now_ve().date()
+                    sync = _bdv_sync_movements(today - timedelta(days=1), today, force=True)
+                    if not sync.get("ok"):
+                        print(f"[BDV] Movimientos: {sync.get('message')}")
+                    elif sync.get("nuevos"):
+                        print(f"[BDV] {sync['nuevos']} pago(s) nuevos del estado de cuenta")
+                        for row in BankPayment.query.filter(BankPayment.order_id.is_(None),
+                                                            BankPayment.pay_date >= (today - timedelta(days=1)).isoformat()).all():
+                            _bdv_try_orders_for_payment(row.id)
+        except Exception as exc:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            print(f"[Fiscal] Error: {exc}")
+        _t.sleep(300)
+
+
+_fiscal_sync_thread = threading.Thread(target=_fiscal_sync_loop, daemon=True)
+_fiscal_sync_thread.start()
 
 
 if __name__ == "__main__":

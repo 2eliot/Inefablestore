@@ -579,11 +579,19 @@ document.addEventListener('DOMContentLoaded', () => {
     return Math.max(0, Math.min(1, frac));
   }
 
+  // Precio final en Bs (incluye el recargo del Pago Móvil; mismo redondeo que el servidor)
+  let pmFeePct = 0;
+  function bsFinal(usd) {
+    const base = Math.round(Number(usd || 0) * (rate || 0));
+    const pct = pmFeePct > 0 ? pmFeePct : 0;
+    return base + Math.round((base * pct / 100) + Number.EPSILON);
+  }
+
   // Returns unit price in the currently selected currency (WITHOUT discount)
   function currentUnitValue(it) {
     if (!it) return 0;
     const base = Number((it && it.price) || 0);
-    return (currency === 'BSD') ? (base * (rate || 0)) : base;
+    return (currency === 'BSD') ? bsFinal(base) : base;
   }
 
   // Computes total applying discount ONLY to 1 unit (not to all quantity),
@@ -598,7 +606,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (frac > 0) {
       totalUsd = baseTotal - (unitPrice * frac);
     }
-    return (currency === 'BSD') ? (totalUsd * (rate || 0)) : totalUsd;
+    return (currency === 'BSD') ? bsFinal(totalUsd) : totalUsd;
   }
 
   function getMobilePreviewLimit(orderedItems, specialItems) {
@@ -822,6 +830,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Fetch exchange rate (BsD per 1 USD)
   fetch('/store/rate').then(r => r.json()).then(data => {
     rate = Number((data && data.rate_bsd_per_usd) || 0);
+    pmFeePct = Number((data && data.pm_fee_percent) || 0);
     renderItems(allItems);
   }).catch(() => { rate = 0; renderItems(allItems); });
   // Fetch payments configuration (Admin-configured)

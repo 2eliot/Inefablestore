@@ -1230,6 +1230,10 @@
                     </div>
                   </div>
                   <div class="form-row">
+                    <label for="pm-fee-percent">Comisión bancaria de Pago Móvil que paga el cliente (%)</label>
+                    <input id="pm-fee-percent" type="number" min="0" max="20" step="0.01" value="0" placeholder="1.5">
+                  </div>
+                  <div class="form-row">
                     <label for="binance-pay-fee-percent">Comisión Binance Pay que paga el cliente (%)</label>
                     <input id="binance-pay-fee-percent" type="number" min="0" max="20" step="0.01" value="1" placeholder="1">
                   </div>
@@ -1266,6 +1270,7 @@
                   <option value="">Desactivado</option>
                   <option value="pabilo">Pabilo</option>
                   <option value="ubii">Ubii Webhook</option>
+                  <option value="bdv">Banco de Venezuela (API Conciliación)</option>
                 </select>
               </div>
               <div class="pay-config-note">
@@ -1332,6 +1337,20 @@
                     <span>Solo aceptar ese método en juegos con mapeo automático</span>
                   </label>
                 </div>
+              </div>
+            </div>
+
+            <div id="bdv-verify-box" class="pay-config-card pay-config-card--blue" style="display:none;">
+              <div class="pay-config-head">
+                <h4>Banco de Venezuela</h4>
+                <p>Verifica cada Pago Móvil directo con el BDV. Aprueba sola las recargas automáticas cuando el banco confirma el pago.</p>
+              </div>
+              <div class="pay-config-note" id="bdv-status-note">
+                La clave (BDV_API_KEY) se guarda solo en el archivo .env del servidor. El teléfono que recibe los pagos es el "Teléfono" de Pago Móvil configurado arriba.
+              </div>
+              <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+                <button id="btn-bdv-test" type="button" class="btn">Probar conexión con el BDV</button>
+                <span id="bdv-test-result" style="font-size:13px;"></span>
               </div>
             </div>
 

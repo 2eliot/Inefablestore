@@ -230,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div style="font-size:12px; color:#93c5b1;">Ref: ${o.reference} • ${new Date(o.created_at).toLocaleString()}</div>
         <div style="font-size:12px; color:#93c5b1;">Precio: $${Number(o.item_price_usd||0).toFixed(2)} (${o.method})</div>
+        ${o.underpaid ? `<a href="/gracias/${encodeURIComponent(o.id)}" style="display:block;margin-top:8px;text-align:center;background:#f0a52a;color:#1a1205;font-weight:800;font-size:12px;padding:8px;border-radius:8px;text-decoration:none;">⚠️ Completar pago · faltan Bs ${Number(o.remaining || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</a>` : ''}
       `;
       myOrders.appendChild(row);
     });

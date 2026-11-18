@@ -47,6 +47,7 @@
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok && data.user && data.user.role === 'admin') { location.replace('/admin'); return; }
+        if (res.ok && data.ok && data.user && data.user.role === 'contador') { location.replace('/contador'); return; }
         if (res.ok && data.ok) {
           await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
           msg.textContent = 'Esa cuenta no es de administrador.';

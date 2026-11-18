@@ -240,7 +240,7 @@
     </div>
   </div>
 
-  <section class="co-wrap" id="checkout" data-gid="{{ gid }}" data-whatsapp="{{ whatsapp_url }}" data-gname="{{ game_name }}" data-gimg="{{ game_image }}" data-direct-pin="{{ direct_to_pin | lower }}">
+  <section class="co-wrap" id="checkout" data-gid="{{ gid }}" data-whatsapp="{{ whatsapp_url }}" data-gname="{{ game_name }}" data-gimg="{{ game_image }}" data-direct-pin="{{ direct_to_pin | lower }}" data-profile-email="{{ profile_email }}" data-profile-phone="{{ profile_phone }}">
 
     <!-- RESUMEN DE LA COMPRA (colapsable) -->
     <div class="co-card co-sum-card" id="co-sum-card">
@@ -321,6 +321,12 @@
             </div>
             <input id="checkout-phone-local" class="co-input" type="tel" inputmode="tel" placeholder="Teléfono" autocomplete="tel-national">
             <input id="checkout-phone" type="hidden">
+          </div>
+          <!-- Aviso: solo con verificación del Banco de Venezuela -->
+          <div id="co-bdv-box" hidden style="display:none" class="co-form-lab">
+            <span style="text-transform:none;letter-spacing:0;font-size:10px;color:#8a8a8a">
+              El teléfono debe ser el número desde el que hiciste el Pago Móvil. En la referencia escribe al menos los últimos 6 dígitos del comprobante.
+            </span>
           </div>
         </div>
 

@@ -1,0 +1,5 @@
+{# Login con Google (Firebase). Solo se carga si el servidor tiene la configuración de Firebase. #}
+{% if google_login_enabled %}
+<script>window.INEFABLE_FIREBASE = {{ firebase_config_json | safe }};</script>
+<script type="module" src="{{ url_for('static', filename='js/firebase-login.js') }}?v=2"></script>
+{% endif %}

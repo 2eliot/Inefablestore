@@ -1,0 +1,38 @@
+{# Aviso en toda la tienda: el cliente tiene un pedido con pago incompleto. Lo lleva a /gracias/<id>, donde está el pop-up. #}
+<style>
+  #aviso-pago{position:fixed;left:0;right:0;top:0;z-index:2147480000;display:none;background:#f0a52a;color:#1a1205;
+    font-family:inherit;font-size:13px;font-weight:700;padding:9px 14px;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+  #aviso-pago .ap-in{max-width:960px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;text-align:center}
+  #aviso-pago a{background:#1a1205;color:#f0a52a;text-decoration:none;padding:6px 12px;border-radius:999px;font-weight:800;white-space:nowrap}
+  #aviso-pago button{background:none;border:0;color:#1a1205;font-size:18px;line-height:1;cursor:pointer;padding:0 4px}
+</style>
+<div id="aviso-pago" role="status">
+  <div class="ap-in">
+    <span id="aviso-pago-texto"></span>
+    <a id="aviso-pago-link" href="#">Completar pago</a>
+    <button type="button" id="aviso-pago-x" aria-label="Ocultar aviso">×</button>
+  </div>
+</div>
+<script>
+(function () {
+  if (/^\/gracias\//.test(location.pathname) || /^\/admin/.test(location.pathname)) return;
+  var caja = document.getElementById('aviso-pago');
+  if (!caja) return;
+  var CLAVE = 'aviso_pago_oculto';
+  fetch('/auth/me/pagos-pendientes', { credentials: 'same-origin', cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var p = d && d.pendientes && d.pendientes[0];
+      if (!p) return;
+      try { if (sessionStorage.getItem(CLAVE) === String(p.order_id) + ':' + p.remaining) return; } catch (_) {}
+      var falta = Number(p.remaining || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('aviso-pago-texto').textContent = '⚠️ Tu pedido #' + p.order_id + ' tiene un pago incompleto: faltan Bs ' + falta;
+      document.getElementById('aviso-pago-link').href = p.url;
+      caja.style.display = 'block';
+      document.getElementById('aviso-pago-x').addEventListener('click', function () {
+        caja.style.display = 'none';
+        try { sessionStorage.setItem(CLAVE, String(p.order_id) + ':' + p.remaining); } catch (_) {}
+      });
+    }).catch(function () {});
+})();
+</script>

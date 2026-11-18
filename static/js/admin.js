@@ -782,6 +782,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const binPayEnabled = document.getElementById('binance-pay-enabled');
   const binPayConfigured = document.getElementById('binance-pay-configured');
   const binPayFeePercent = document.getElementById('binance-pay-fee-percent');
+  const pmFeePercentInput = document.getElementById('pm-fee-percent');
   const binPayWebhook = document.getElementById('binance-pay-webhook');
   const paymentVerificationProvider = document.getElementById('payment-verification-provider');
   const pabiloAutoVerifyEnabled = document.getElementById('pabilo-auto-verify-enabled');
@@ -795,6 +796,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const pabiloEnforceMethod = document.getElementById('pabilo-enforce-method');
   const pabiloVerifyBox = document.getElementById('pabilo-verify-box');
   const ubiiVerifyBox = document.getElementById('ubii-verify-box');
+  const bdvVerifyBox = document.getElementById('bdv-verify-box');
+  const btnBdvTest = document.getElementById('btn-bdv-test');
+  const bdvTestResult = document.getElementById('bdv-test-result');
+  if (btnBdvTest) {
+    btnBdvTest.addEventListener('click', async () => {
+      btnBdvTest.disabled = true;
+      if (bdvTestResult) { bdvTestResult.textContent = 'Probando...'; bdvTestResult.style.color = '#cbd5e1'; }
+      try {
+        const res = await fetch('/admin/bdv/test', { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        let text = data.message || (res.ok ? 'Sin respuesta' : 'Error');
+        if (data.ok && !data.phone_destino_ok) text += ' · Falta el teléfono de Pago Móvil (04XXXXXXXXX)';
+        else if (data.ok) text += ` · Teléfono destino ${data.phone_destino}`;
+        if (bdvTestResult) { bdvTestResult.textContent = text; bdvTestResult.style.color = (data.ok && data.phone_destino_ok) ? '#6ee7b7' : '#fca5a5'; }
+      } catch (_) {
+        if (bdvTestResult) { bdvTestResult.textContent = 'Sin conexión con el servidor'; bdvTestResult.style.color = '#fca5a5'; }
+      }
+      btnBdvTest.disabled = false;
+    });
+  }
   const ubiiMethod = document.getElementById('ubii-method');
   const ubiiTextField = document.getElementById('ubii-text-field');
   const ubiiAmountRegex = document.getElementById('ubii-amount-regex');
@@ -839,6 +860,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (pabiloVerifyBox) pabiloVerifyBox.style.display = (value === 'pabilo') ? '' : 'none';
     if (ubiiVerifyBox) ubiiVerifyBox.style.display = (value === 'ubii') ? '' : 'none';
+    if (bdvVerifyBox) bdvVerifyBox.style.display = (value === 'bdv') ? '' : 'none';
   }
   if (paymentVerificationProvider) {
     paymentVerificationProvider.addEventListener('change', () => {
@@ -892,6 +914,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let ordersQuery = '';
   let ordersStatusFilter = '';
   let ordersSoloIA = false;  // botón "🤖 Solo IA": órdenes creadas por Flop IA
+  let lastKnownMaxOrderId = 0;  // id de orden más alto visto; para detectar órdenes nuevas
   const ordersStatusFilterWrap = document.getElementById('orders-status-filter');
   // Revendedores mapping elements
   const btnRevSync = document.getElementById('btn-rev-sync');
@@ -1711,6 +1734,7 @@ window.fetchPayments = fetchPayments;
       binance_auto_enabled: binAutoEnabled ? binAutoEnabled.checked : false,
       binance_pay_enabled: binPayEnabled ? binPayEnabled.checked : false,
       binance_pay_fee_percent: binPayFeePercent ? binPayFeePercent.value.trim() : '1',
+      pm_fee_percent: pmFeePercentInput ? pmFeePercentInput.value.trim() : '0',
       payment_verification_provider: paymentVerificationProvider ? paymentVerificationProvider.value : '',
       pabilo_auto_verify_enabled: pabiloAutoVerifyEnabled ? pabiloAutoVerifyEnabled.checked : false,
       pabilo_method: pabiloMethod ? pabiloMethod.value : 'pm',
@@ -1757,6 +1781,9 @@ window.fetchPayments = fetchPayments;
     }
     if (binPayEnabled) {
       binPayEnabled.checked = (data.binance_pay_enabled === '1' || data.binance_pay_enabled === 1 || data.binance_pay_enabled === true);
+    }
+    if (pmFeePercentInput && data.pm_fee_percent !== undefined && data.pm_fee_percent !== null) {
+      pmFeePercentInput.value = String(data.pm_fee_percent);
     }
     if (binPayFeePercent && data.binance_pay_fee_percent !== undefined && data.binance_pay_fee_percent !== null) {
       binPayFeePercent.value = String(data.binance_pay_fee_percent);
@@ -3514,6 +3541,10 @@ window.refreshGallery = refreshGallery;
       const pagination = data.pagination || {};
       ordersCurrentPage = Math.max(parseInt(pagination.page || normalizedPage, 10) || normalizedPage, 1);
       renderOrders(data.orders || []);
+      (data.orders || []).forEach((o) => {
+        const oid = parseInt(o && o.id, 10);
+        if (Number.isFinite(oid) && oid > lastKnownMaxOrderId) lastKnownMaxOrderId = oid;
+      });
       renderOrdersPagination(pagination);
       renderOrdersSearchInfo(pagination);
     } catch (e) {
@@ -3589,6 +3620,40 @@ window.refreshGallery = refreshGallery;
     });
   }
 
+  // ── Auto-actualización de órdenes nuevas ──
+  // Detecta órdenes nuevas comparando el id más alto visto y refresca la lista
+  // sola (sin recargar la página). Solo actúa con la pestaña de órdenes activa y
+  // sin que el admin esté editando un campo o con un diálogo de confirmación abierto.
+  function ordersTabActive() {
+    const panel = document.querySelector('#tab-orders');
+    return !!panel && panel.classList.contains('active');
+  }
+  function adminBusyEditingOrder() {
+    if (window.__adminDialogOpen) return true;
+    const ae = document.activeElement;
+    if (!ae || !ordersList || !ordersList.contains(ae)) return false;
+    const tag = ae.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+  async function pollForNewOrders() {
+    if (!ordersTabActive() || adminBusyEditingOrder()) return;
+    try {
+      const res = await fetch('/admin/orders?page=1&per_page=1', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) return;
+      const first = Array.isArray(data.orders) ? data.orders[0] : null;
+      const latest = first ? parseInt(first.id, 10) : 0;
+      if (Number.isFinite(latest) && latest > lastKnownMaxOrderId) {
+        lastKnownMaxOrderId = latest;
+        await fetchOrders(ordersCurrentPage);
+        toast(`🆕 Nueva orden #${latest}`, 'info');
+      }
+    } catch (e) {
+      // silencioso: el siguiente ciclo lo reintenta
+    }
+  }
+  setInterval(pollForNewOrders, 15000);
+
   function renderOrders(items) {
     function fixMb(s){ s = String(s==null?'':s); return s.replace(/ÃƒÆ’Ã‚Â¡|ÃƒÂ¡/g,'Ã¡').replace(/ÃƒÆ’Ã‚Â©|ÃƒÂ©/g,'Ã©').replace(/ÃƒÆ’Ã‚Â­|ÃƒÂ­/g,'Ã­').replace(/ÃƒÆ’Ã‚Â³|ÃƒÂ³/g,'Ã³').replace(/ÃƒÆ’Ã‚Âº|ÃƒÂº/g,'Ãº').replace(/ÃƒÆ’Ã‚Â±|ÃƒÂ±/g,'Ã±').replace(/Ãƒâ€šÃ‚Â·/g,'Â·').replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½/g,'-').replace(/ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢/g,'â€¢'); }
     function formatOrderAmount(amount, currency) {
@@ -3636,7 +3701,7 @@ window.refreshGallery = refreshGallery;
       const pabiloVerified = !!payVerify.verified;
       const payProvider = String(payVerify.provider || '').toLowerCase();
       const activeVerifyProvider = String(o.payment_verification_provider_active || '').toLowerCase();
-      const payProviderLabel = payProvider === 'ubii' ? 'Ubii' : 'Pabilo';
+      const payProviderLabel = payProvider === 'ubii' ? 'Ubii' : (payProvider === 'bdv' || (!payProvider && activeVerifyProvider === 'bdv') ? 'BDV' : 'Pabilo');
       const pabiloRequestable = (typeof pabiloRequest.requestable === 'boolean')
         ? !!pabiloRequest.requestable
         : pabiloEligible;
@@ -3654,15 +3719,15 @@ window.refreshGallery = refreshGallery;
         pabiloStateColor = pabiloVerified ? '#6ee7b7' : '#86efac';
       } else if (pabiloEligible) {
         pabiloStateText = pabiloVerified
-          ? `Pago verificado en Pabilo${payVerify.verification_id ? ` · ID ${payVerify.verification_id}` : ''}`
-          : `Pago no verificado en Pabilo${payVerify.message ? ` · ${payVerify.message}` : ''}`;
+          ? `Pago verificado en ${payProviderLabel}${payVerify.verification_id ? ` · ID ${payVerify.verification_id}` : ''}`
+          : `Pago no verificado en ${payProviderLabel}${payVerify.message ? ` · ${payVerify.message}` : ''}`;
         pabiloStateColor = pabiloVerified ? '#6ee7b7' : '#fca5a5';
       } else if (pabiloRequestable) {
-        pabiloStateText = `Solicitud Pabilo permitida${payVerify.message ? ` · ${payVerify.message}` : ''}`;
+        pabiloStateText = `Solicitud ${payProviderLabel} permitida${payVerify.message ? ` · ${payVerify.message}` : ''}`;
       } else if (pabiloRequest.reason && pabiloRequest.reason !== 'Pabilo esta desactivado') {
-        pabiloStateText = `Pabilo no consulta: ${pabiloRequest.reason}`;
+        pabiloStateText = `${payProviderLabel} no consulta: ${pabiloRequest.reason}`;
       } else if (pabiloEligibility.reason && pabiloEligibility.reason !== 'Pabilo esta desactivado') {
-        pabiloStateText = `Pabilo no aplica: ${pabiloEligibility.reason}`;
+        pabiloStateText = `${payProviderLabel} no aplica: ${pabiloEligibility.reason}`;
       }
       tile.setAttribute('data-is-auto', isAutoMapped ? '1' : '0');
       const when = new Date(o.created_at).toLocaleString();
@@ -5939,6 +6004,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 function showAdminConfirmDialog(options) {
   const config = options || {};
+  window.__adminDialogOpen = true;
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.style.position = 'fixed';
@@ -5997,6 +6063,7 @@ function showAdminConfirmDialog(options) {
     const finish = (result) => {
       if (settled) return;
       settled = true;
+      window.__adminDialogOpen = false;
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       document.removeEventListener('keydown', onKeyDown, true);
       resolve(result);
@@ -6028,6 +6095,7 @@ function showAdminConfirmDialog(options) {
 
 function showAdminPinDialog(options) {
   const config = options || {};
+  window.__adminDialogOpen = true;
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.style.position = 'fixed';
@@ -6108,6 +6176,7 @@ function showAdminPinDialog(options) {
     const finish = (result) => {
       if (settled) return;
       settled = true;
+      window.__adminDialogOpen = false;
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       document.removeEventListener('keydown', onKeyDown, true);
       resolve(result);

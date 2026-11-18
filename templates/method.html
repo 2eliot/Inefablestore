@@ -236,7 +236,11 @@
     document.getElementById('mt-total-usd').textContent =
       totalUsd.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
     document.getElementById('mt-total-bs').textContent = rate > 0
-      ? Math.round(totalUsd * rate).toLocaleString('es-VE', { style: 'currency', currency: 'VES', minimumFractionDigits: 0, maximumFractionDigits: 0 })
+      ? (function () {
+          var base = Math.round(totalUsd * rate);
+          var pct = Number((rateRes && rateRes.pm_fee_percent) || 0);
+          return base + (pct > 0 ? Math.round((base * pct / 100) + Number.EPSILON) : 0);
+        })().toLocaleString('es-VE', { style: 'currency', currency: 'VES', minimumFractionDigits: 0, maximumFractionDigits: 0 })
       : '--';
   });
 
