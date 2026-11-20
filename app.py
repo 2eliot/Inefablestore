@@ -8542,6 +8542,40 @@ class User(db.Model):
     google_sub = db.Column(db.String(64), default="")
 
 
+# Tope de cuentas CREADAS por IP (clientes y solicitudes de afiliado). Solo cuentan
+# las altas que llegan a crear la fila. Frena los registros masivos por script
+# (ataque del 17-18 nov 2026). Va en la base para que valga entre los workers.
+REGISTER_ACCOUNTS_PER_IP = max(int(os.environ.get("REGISTER_ACCOUNTS_PER_IP", "1") or 1), 1)
+REGISTER_ACCOUNTS_WINDOW_SECONDS = max(int(os.environ.get("REGISTER_ACCOUNTS_WINDOW_SECONDS", "86400") or 86400), 1)
+REGISTER_ACCOUNTS_LIMIT_MESSAGE = (
+    "Ya se creó una cuenta desde esta conexión. Si necesitas otra, intenta mañana o escríbenos."
+)
+
+
+class AccountCreation(db.Model):
+    __tablename__ = "account_creations"
+    id = db.Column(db.Integer, primary_key=True)
+    ip = db.Column(db.String(64), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+def _account_creation_limit_reached(ip: str) -> bool:
+    """True si esta IP ya creó el máximo de cuentas en la ventana."""
+    if not ip:
+        return False
+    since = datetime.utcnow() - timedelta(seconds=REGISTER_ACCOUNTS_WINDOW_SECONDS)
+    count = AccountCreation.query.filter(
+        AccountCreation.ip == ip, AccountCreation.created_at >= since
+    ).count()
+    return count >= REGISTER_ACCOUNTS_PER_IP
+
+
+def _account_creation_record(ip: str) -> None:
+    """Anota el alta en la sesión de BD (el commit lo hace quien crea la cuenta)."""
+    if ip:
+        db.session.add(AccountCreation(ip=ip[:64]))
+
+
 class RouletteSpin(db.Model):
     """Historial de giros de la ruleta de puntos."""
     __tablename__ = "roulette_spins"
@@ -11086,6 +11120,11 @@ def mini_register():
             "ok": False,
             "error": f"Ese link de canal ya tiene una solicitud que {detalle}. No se puede enviar otra con el mismo link.",
         }), 400
+
+    _signup_ip = _gift_client_ip()
+    if _account_creation_limit_reached(_signup_ip):
+        return jsonify({"ok": False, "error": REGISTER_ACCOUNTS_LIMIT_MESSAGE}), 429
+    _account_creation_record(_signup_ip)
 
     su = SpecialUser(
         name=name,
@@ -17691,6 +17730,10 @@ def auth_register():
         return jsonify({"ok": False, "error": "Este email ya está registrado"}), 400
     if len(password) < 6:
         return jsonify({"ok": False, "error": "La contraseña debe tener al menos 6 caracteres"}), 400
+    _signup_ip = _gift_client_ip()
+    if _account_creation_limit_reached(_signup_ip):
+        return jsonify({"ok": False, "error": REGISTER_ACCOUNTS_LIMIT_MESSAGE}), 429
+    _account_creation_record(_signup_ip)
     u = User(name=name, email=email, phone=phone, password_hash=generate_password_hash(password))
     db.session.add(u)
     db.session.commit()
@@ -17740,6 +17783,10 @@ def auth_firebase():
     if not u:
         u = User.query.filter(db.func.lower(User.email) == email.lower()).first()
     if not u:
+        _signup_ip = _gift_client_ip()
+        if _account_creation_limit_reached(_signup_ip):
+            return jsonify({"ok": False, "error": REGISTER_ACCOUNTS_LIMIT_MESSAGE}), 429
+        _account_creation_record(_signup_ip)
         u = User(
             name=str(info.get("displayName") or email.split("@")[0])[:200],
             email=email,
